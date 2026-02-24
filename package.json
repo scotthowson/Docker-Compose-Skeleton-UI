@@ -16,9 +16,14 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer && electron-builder",
     "preview": "vite preview",
-    "electron": "npm run build:main && electron ."
+    "electron": "npm run build:main && electron .",
+    "cap:sync": "npx cap sync android",
+    "build:android": "npm run build:renderer && npx cap sync android && cd android && JAVA_HOME=$HOME/jdk/jdk-21.0.6 ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
     "electron-store": "^8.2.0",
     "lucide-react": "^0.462.0",
     "react": "^18.3.1",
