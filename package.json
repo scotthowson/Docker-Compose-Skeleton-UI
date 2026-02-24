@@ -4,7 +4,10 @@
   "description": "Premium Electron desktop application for Docker Compose Skeleton management",
   "type": "module",
   "main": "dist/main/index.cjs",
-  "author": "Docker Compose Skeleton",
+  "author": {
+    "name": "Scott Howson",
+    "email": "scott@howson.dev"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "vite",
