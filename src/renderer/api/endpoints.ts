@@ -61,6 +61,21 @@ import type {
   BackupConfigResponse,
   BackupTriggerResponse,
   BackupRestoreResponse,
+  ContainerExecResponse,
+  TerminalExecResponse,
+  TerminalHistoryResponse,
+  ImageDeleteResponse,
+  ContainerRenameResponse,
+  StackServicesResponse,
+  SystemMetricsResponse,
+  TerminalAuthResponse,
+  TerminalAuthVerifyResponse,
+  TerminalLogoutResponse,
+  ContainerFilesResponse,
+  ContainerFileContentResponse,
+  AlertConfigResponse,
+  CrontabResponse,
+  LiveLogsResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -255,6 +270,14 @@ export function restartContainer(name: string): Promise<ContainerActionResponse>
 export function fetchContainerProcesses(name: string): Promise<ContainerProcessesResponse> {
   return apiClient.get<ContainerProcessesResponse>(
     `/containers/${encodeURIComponent(name)}/processes`,
+  )
+}
+
+/** POST /containers/:name/exec — Execute a command inside a container */
+export function execContainerCommand(name: string, command: string): Promise<ContainerExecResponse> {
+  return apiClient.post<ContainerExecResponse>(
+    `/containers/${encodeURIComponent(name)}/exec`,
+    { command },
   )
 }
 
@@ -556,4 +579,135 @@ export function triggerBackup(stack?: string): Promise<BackupTriggerResponse> {
 /** POST /backups/restore — Restore from archive */
 export function restoreBackup(filename: string): Promise<BackupRestoreResponse> {
   return apiClient.post<BackupRestoreResponse>('/backups/restore', { filename, confirm: 'RESTORE' })
+}
+
+// ---------------------------------------------------------------------------
+// v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
+// ---------------------------------------------------------------------------
+
+/** POST /terminal/exec — Execute a command on the host */
+export function execTerminalCommand(command: string, cwd?: string): Promise<TerminalExecResponse> {
+  return apiClient.post<TerminalExecResponse>('/terminal/exec', { command, cwd })
+}
+
+/** GET /terminal/history — Recent command audit log */
+export function fetchTerminalHistory(): Promise<TerminalHistoryResponse> {
+  return apiClient.get<TerminalHistoryResponse>('/terminal/history')
+}
+
+/** POST /images/:id/delete — Remove a Docker image */
+export function deleteImage(id: string): Promise<ImageDeleteResponse> {
+  return apiClient.post<ImageDeleteResponse>(`/images/${encodeURIComponent(id)}/delete`)
+}
+
+/** POST /containers/:name/rename — Rename a container */
+export function renameContainer(name: string, newName: string): Promise<ContainerRenameResponse> {
+  return apiClient.post<ContainerRenameResponse>(
+    `/containers/${encodeURIComponent(name)}/rename`,
+    { new_name: newName },
+  )
+}
+
+/** GET /stacks/:name/services — Per-service status within a stack */
+export function fetchStackServices(name: string): Promise<StackServicesResponse> {
+  return apiClient.get<StackServicesResponse>(
+    `/stacks/${encodeURIComponent(name)}/services`,
+  )
+}
+
+/** GET /system/metrics — Lightweight CPU/memory/disk snapshot */
+export function fetchSystemMetrics(): Promise<SystemMetricsResponse> {
+  return apiClient.get<SystemMetricsResponse>('/system/metrics')
+}
+
+// ---------------------------------------------------------------------------
+// v3.2: Terminal Auth, Container Files, Alerts, Cron, Live Logs
+// ---------------------------------------------------------------------------
+
+/** POST /terminal/auth — Authenticate with Linux credentials for terminal access */
+export function terminalAuth(username: string, password: string): Promise<TerminalAuthResponse> {
+  return apiClient.post<TerminalAuthResponse>('/terminal/auth', { username, password })
+}
+
+/** POST /terminal/auth/verify — Verify a terminal session token */
+export function terminalAuthVerify(token: string): Promise<TerminalAuthVerifyResponse> {
+  return apiClient.post<TerminalAuthVerifyResponse>('/terminal/auth/verify', { token })
+}
+
+/** POST /terminal/auth/logout — End a terminal session */
+export function terminalLogout(token: string): Promise<TerminalLogoutResponse> {
+  return apiClient.post<TerminalLogoutResponse>('/terminal/auth/logout', { token })
+}
+
+/** POST /terminal/exec — Execute a command (with terminal token) */
+export function execTerminalCommandAuth(
+  command: string,
+  terminalToken: string,
+  cwd?: string,
+): Promise<TerminalExecResponse> {
+  return apiClient.post<TerminalExecResponse>('/terminal/exec', {
+    command,
+    cwd,
+    terminal_token: terminalToken,
+  })
+}
+
+/** GET /containers/:name/files — List directory contents inside a container */
+export function fetchContainerFiles(name: string, path = '/'): Promise<ContainerFilesResponse> {
+  return apiClient.get<ContainerFilesResponse>(
+    `/containers/${encodeURIComponent(name)}/files?path=${encodeURIComponent(path)}`,
+  )
+}
+
+/** GET /containers/:name/files/content — Read file contents inside a container */
+export function fetchContainerFileContent(
+  name: string,
+  path: string,
+): Promise<ContainerFileContentResponse> {
+  return apiClient.get<ContainerFileContentResponse>(
+    `/containers/${encodeURIComponent(name)}/files/content?path=${encodeURIComponent(path)}`,
+  )
+}
+
+/** GET /alerts/config — Read alert thresholds */
+export function fetchAlertConfig(): Promise<AlertConfigResponse> {
+  return apiClient.get<AlertConfigResponse>('/alerts/config')
+}
+
+/** POST /alerts/config — Update alert thresholds */
+export function updateAlertConfig(thresholds: AlertConfigResponse['thresholds']): Promise<AlertConfigResponse> {
+  return apiClient.post<AlertConfigResponse>('/alerts/config', { thresholds })
+}
+
+/** GET /system/crontab — User crontab entries */
+export function fetchCrontab(): Promise<CrontabResponse> {
+  return apiClient.get<CrontabResponse>('/system/crontab')
+}
+
+/** GET /system/crontab/system — System-level cron entries */
+export function fetchSystemCrontab(): Promise<CrontabResponse> {
+  return apiClient.get<CrontabResponse>('/system/crontab/system')
+}
+
+/** POST /system/crontab — Update user crontab */
+export function updateCrontab(content: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.post('/system/crontab', { content })
+}
+
+/** GET /containers/:name/logs/live — Live log polling for a container */
+export function fetchContainerLogsLive(
+  name: string,
+  lines = 100,
+  since?: string,
+): Promise<LiveLogsResponse> {
+  let url = `/containers/${encodeURIComponent(name)}/logs/live?lines=${lines}`
+  if (since) url += `&since=${encodeURIComponent(since)}`
+  return apiClient.get<LiveLogsResponse>(url)
+}
+
+/** GET /logs/live — Live log polling for DCS application log */
+export function fetchAppLogsLive(lines = 100, since?: string): Promise<LiveLogsResponse> {
+  let url = `/logs/live?lines=${lines}`
+  if (since) url += `&since=${encodeURIComponent(since)}`
+  return apiClient.get<LiveLogsResponse>(url)
 }

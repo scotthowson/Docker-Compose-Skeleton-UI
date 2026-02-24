@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
   projectName: 'DCS Manager',
   projectSubtitle: 'Docker Compose Skeleton',
+  connectionProfiles: [],
+  customCSS: '',
 }
 
 interface SettingsState extends AppSettings {

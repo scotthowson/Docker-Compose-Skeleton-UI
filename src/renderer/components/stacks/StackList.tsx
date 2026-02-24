@@ -187,6 +187,36 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
 
         {/* Header actions */}
         <div className="flex items-center gap-2">
+          {/* Quick actions: Start All / Stop All */}
+          {!batchMode && stacks.length > 0 && (
+            <>
+              {stoppedCount > 0 && (
+                <button
+                  onClick={() => {
+                    const stopped = stacks.filter((s) => s.status === 'stopped').map((s) => s.name)
+                    stopped.forEach((name) => onAction(name, 'start'))
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
+                >
+                  <Play size={13} />
+                  Start All
+                </button>
+              )}
+              {runningCount > 0 && (
+                <button
+                  onClick={() => {
+                    const running = stacks.filter((s) => s.status === 'running').map((s) => s.name)
+                    running.forEach((name) => onAction(name, 'stop'))
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all"
+                >
+                  <Square size={13} />
+                  Stop All
+                </button>
+              )}
+            </>
+          )}
+
           {/* Batch mode toggle */}
           {onToggleBatchMode && (
             <button

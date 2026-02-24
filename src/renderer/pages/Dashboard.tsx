@@ -2,7 +2,7 @@
 // Dashboard — Advanced overview page with live data, disk mounts, quick actions
 // =============================================================================
 
-import React from 'react'
+import React, { useRef, useEffect } from 'react'
 import { WifiOff, Wifi, Loader2, Server, RefreshCw } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
@@ -16,12 +16,14 @@ import { useLogStore } from '../stores/logStore'
 import OverviewCards from '../components/dashboard/OverviewCards'
 import HealthSummary from '../components/dashboard/HealthSummary'
 import ResourceChart from '../components/dashboard/ResourceChart'
+import type { ResourceHistoryPoint } from '../components/dashboard/ResourceChart'
 import RecentEvents from '../components/dashboard/RecentEvents'
 import DiskMonitor from '../components/dashboard/DiskMonitor'
 import QuickActions from '../components/dashboard/QuickActions'
 import ContainerOverview from '../components/dashboard/ContainerOverview'
 import ServerInfo from '../components/dashboard/ServerInfo'
-import type { ContainerInfo, DiskInfo } from '../../shared/types'
+import { useNotificationStore } from '../stores/notificationStore'
+import type { ContainerInfo, DiskInfo, HealthReport } from '../../shared/types'
 import type { ContainerListResponse } from '../api/endpoints'
 
 // ---------------------------------------------------------------------------
@@ -148,12 +150,19 @@ export default function Dashboard() {
   const setSystemVersion = useSystemStore((s) => s.setVersion)
   const setSystemInfo = useSystemStore((s) => s.setSystem)
   const systemStatus = useSystemStore((s) => s.status)
+  const systemInfo = useSystemStore((s) => s.system)
 
   const setHealthReport = useHealthStore((s) => s.setReport)
   const healthReport = useHealthStore((s) => s.report)
 
   const setEvents = useLogStore((s) => s.setEvents)
   const events = useLogStore((s) => s.events)
+
+  // Resource history for trending charts (cap at 60 data points)
+  const resourceHistoryRef = useRef<ResourceHistoryPoint[]>([])
+
+  // Track previous health status for notification triggers
+  const prevHealthStatusRef = useRef<HealthReport['status'] | null>(null)
 
   // Poll success/error callbacks for connection health monitoring
   const onPollSuccess = React.useCallback(() => {
@@ -174,8 +183,35 @@ export default function Dashboard() {
     if (statusPoll.data) {
       setSystemStatus(statusPoll.data)
       onPollSuccess()
+
+      // Compute CPU% and Memory% and push to history
+      const status = statusPoll.data
+      const cpuCount = systemInfo?.cpu_count ?? 1
+      const loadAvg1 = status.system.load_average[0] ?? 0
+      const cpuPercent = Math.min(100, Math.round((loadAvg1 / cpuCount) * 100))
+
+      const memTotal = status.system.memory_mb.total
+      const memAvailable = status.system.memory_mb.available
+      const memUsed = Math.max(0, memTotal - memAvailable)
+      const memPercent = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
+
+      const now = new Date()
+      const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+
+      const point: ResourceHistoryPoint = {
+        time: timeLabel,
+        cpu: cpuPercent,
+        mem: memPercent,
+      }
+
+      const history = resourceHistoryRef.current
+      history.push(point)
+      // Cap at 60 data points
+      if (history.length > 60) {
+        history.splice(0, history.length - 60)
+      }
     }
-  }, [statusPoll.data, setSystemStatus, onPollSuccess])
+  }, [statusPoll.data, setSystemStatus, onPollSuccess, systemInfo])
 
   // --- Poll /health every 5s ---
   const healthPoll = usePolling(fetchHealthReport, 5000, {
@@ -189,6 +225,39 @@ export default function Dashboard() {
       onPollSuccess()
     }
   }, [healthPoll.data, setHealthReport, onPollSuccess])
+
+  // --- Health state change notifications ---
+  useEffect(() => {
+    if (!healthPoll.data) return
+    const current = healthPoll.data.status
+    const prev = prevHealthStatusRef.current
+
+    // Only fire on transitions (not on first load)
+    if (prev !== null && prev !== current) {
+      const { preferences, addNotification } = useNotificationStore.getState()
+      if (preferences.healthAlerts) {
+        if (current === 'degraded' || current === 'critical') {
+          addNotification({
+            type: current === 'critical' ? 'error' : 'warning',
+            title: current === 'critical' ? 'System Health Critical' : 'System Health Degraded',
+            message: `${healthPoll.data.summary.unhealthy} of ${healthPoll.data.summary.total} containers unhealthy`,
+            persist: true,
+            action: { label: 'View Health', page: 'health' },
+          })
+        } else if (current === 'healthy' && (prev === 'degraded' || prev === 'critical')) {
+          addNotification({
+            type: 'success',
+            title: 'System Health Restored',
+            message: `All ${healthPoll.data.summary.total} containers are healthy`,
+            persist: true,
+            action: { label: 'View Health', page: 'health' },
+          })
+        }
+      }
+    }
+
+    prevHealthStatusRef.current = current
+  }, [healthPoll.data])
 
   // --- Poll /events every 3s ---
   const eventsPoll = usePolling(fetchEvents, 3000, {
@@ -283,7 +352,7 @@ export default function Dashboard() {
           {/* Row 2: Health + Resources */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <HealthSummary />
-            <ResourceChart />
+            <ResourceChart history={resourceHistoryRef.current} />
           </div>
 
           {/* Row 3: Containers + Server Info + Disks */}

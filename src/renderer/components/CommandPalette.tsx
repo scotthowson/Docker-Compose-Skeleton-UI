@@ -8,14 +8,18 @@ import {
   ScrollText, Monitor, Settings2, Cog, ArrowRight, Trash2, Play, Square,
   RotateCw, Command, Wrench, Sun, Moon, PanelLeftClose, PanelLeft,
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
-  FileCode, Archive, Database,
+  FileCode, Archive, Database, TerminalSquare, CalendarClock,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
-import { startStack, stopStack, restartStack } from '../api/endpoints'
+import { useToast } from './common/Toast'
+import {
+  startStack, stopStack, restartStack,
+  runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
+} from '../api/endpoints'
 import type { PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -58,6 +62,8 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   maintenance: <Wrench size={16} />,
   environment: <FileCode size={16} />,
   backup: <Archive size={16} />,
+  terminal: <TerminalSquare size={16} />,
+  cronjobs: <CalendarClock size={16} />,
 }
 
 const pageLabels: Record<PageId, string> = {
@@ -74,12 +80,14 @@ const pageLabels: Record<PageId, string> = {
   maintenance: 'Maintenance',
   environment: 'Environment Variables',
   backup: 'Backup & Restore',
+  terminal: 'Terminal',
   logs: 'Log Viewer',
   system: 'System Info',
   diagnostics: 'Diagnostics',
   users: 'User Management',
   config: 'Server Config',
   settings: 'Settings',
+  cronjobs: 'Cron Jobs',
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +110,8 @@ export function CommandPalette() {
   const health = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
   const { logout } = useAuthStore()
+  const setHealthReport = useHealthStore((s) => s.setReport)
+  const { addToast } = useToast()
   const isConnected = connectionStatus === 'connected'
 
   // Global keyboard shortcut: Ctrl+K / Cmd+K
@@ -120,6 +130,13 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open])
 
+  // Ctrl+Shift+P alternative trigger via custom event from App.tsx
+  useEffect(() => {
+    const handler = () => setOpen(true)
+    window.addEventListener('open-command-palette', handler)
+    return () => window.removeEventListener('open-command-palette', handler)
+  }, [])
+
   // Focus input when opened
   useEffect(() => {
     if (open) {
@@ -134,7 +151,7 @@ export function CommandPalette() {
     const items: CommandItem[] = []
 
     // Navigation commands
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'maintenance', 'environment', 'backup', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'terminal', 'cronjobs', 'maintenance', 'environment', 'backup', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,
@@ -291,8 +308,87 @@ export function CommandPalette() {
       },
     })
 
+    // --- Server action commands (require connection) ---
+    if (isConnected) {
+      items.push({
+        id: 'action-prune',
+        label: 'Prune Docker Images',
+        description: 'Remove dangling and unused images',
+        icon: <Trash2 size={16} className="text-orange-400" />,
+        type: 'action',
+        keywords: ['prune', 'clean', 'docker', 'images', 'dangling', 'unused'],
+        onSelect: async () => {
+          setOpen(false)
+          try {
+            const r = await runImagePrune()
+            addToast({ type: r.success ? 'success' : 'error', message: r.success ? 'Stale images pruned' : 'Image prune failed' })
+          } catch { addToast({ type: 'error', message: 'Image prune failed' }) }
+        },
+      })
+
+      items.push({
+        id: 'action-rotate-logs',
+        label: 'Rotate Server Logs',
+        description: 'Archive and rotate the server log file',
+        icon: <Archive size={16} className="text-pink-400" />,
+        type: 'action',
+        keywords: ['rotate', 'logs', 'archive', 'clean', 'log'],
+        onSelect: async () => {
+          setOpen(false)
+          try {
+            const r = await triggerLogRotate()
+            addToast({
+              type: r.success ? 'success' : 'error',
+              message: r.success
+                ? `Logs rotated${r.archived_as ? ` — archived as ${r.archived_as}` : ''}`
+                : 'Log rotation failed',
+            })
+          } catch { addToast({ type: 'error', message: 'Log rotation failed' }) }
+        },
+      })
+
+      items.push({
+        id: 'action-check-health',
+        label: 'Run Health Check',
+        description: 'Fetch a fresh health report from the server',
+        icon: <HeartPulse size={16} className="text-emerald-400" />,
+        type: 'action',
+        keywords: ['health', 'check', 'diagnose', 'status', 'monitor'],
+        onSelect: async () => {
+          setOpen(false)
+          try {
+            const report = await fetchHealthReport()
+            setHealthReport(report)
+            addToast({
+              type: report.status === 'healthy' ? 'success' : report.status === 'degraded' ? 'warning' : 'error',
+              message: `Health: ${report.status} — ${report.summary.healthy}/${report.summary.total} healthy`,
+            })
+          } catch { addToast({ type: 'error', message: 'Health check failed' }) }
+        },
+      })
+
+      items.push({
+        id: 'action-backup',
+        label: 'Run Backup Now',
+        description: 'Trigger a full server backup',
+        icon: <Download size={16} className="text-cyan-400" />,
+        type: 'action',
+        keywords: ['backup', 'snapshot', 'save', 'export', 'archive'],
+        onSelect: async () => {
+          setOpen(false)
+          try {
+            const r = await triggerBackup()
+            addToast({
+              type: r.success ? 'success' : 'error',
+              message: r.success ? `Backup started: ${r.filename}` : 'Backup failed',
+            })
+          } catch { addToast({ type: 'error', message: 'Backup trigger failed' }) }
+        },
+      })
+    }
+
     return items
-  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout])
+  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport])
 
   // Filter commands
   const filtered = useMemo(() => {

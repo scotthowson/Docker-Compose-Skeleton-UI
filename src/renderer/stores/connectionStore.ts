@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ConnectionStatus } from '../../shared/types'
 import { apiClient } from '../api/client'
+import { useNotificationStore } from './notificationStore'
 
 const MAX_RECONNECT_ATTEMPTS = 50
 const BASE_RECONNECT_DELAY_MS = 1000
@@ -25,6 +26,13 @@ interface ConnectionState {
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
+/** Push a connection notification if the user has connection alerts enabled */
+function pushConnectionNotification(type: 'success' | 'error' | 'warning', title: string, message: string) {
+  const { preferences, addNotification } = useNotificationStore.getState()
+  if (!preferences.connectionAlerts) return
+  addNotification({ type, title, message, persist: true, action: { label: 'View Dashboard', page: 'dashboard' } })
+}
+
 function startHeartbeat(connectFn: () => Promise<boolean>) {
   stopHeartbeat()
   heartbeatTimer = setInterval(async () => {
@@ -35,6 +43,7 @@ function startHeartbeat(connectFn: () => Promise<boolean>) {
       if (store.status === 'connected') {
         store.setStatus('error')
         store.setError('Lost connection to API server')
+        pushConnectionNotification('error', 'Connection Lost', 'Lost connection to the API server. Attempting to reconnect...')
         connectFn()
       }
     }
@@ -66,9 +75,10 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   setError: (error) => set({ lastError: error }),
 
   connect: async () => {
-    const { status } = get()
+    const { status, reconnectAttempts: prevAttempts } = get()
     if (status === 'connecting') return false
 
+    const wasError = status === 'error'
     set({ status: 'connecting', lastError: null })
 
     try {
@@ -85,6 +95,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           consecutiveFailures: 0,
           lastError: null,
         })
+
+        // Notify on reconnection (only if we were in error state, not initial connect)
+        if (wasError || prevAttempts > 0) {
+          pushConnectionNotification('success', 'Connection Restored', 'Successfully reconnected to the API server.')
+        }
+
         // Start heartbeat to detect disconnections
         startHeartbeat(() => get().connect())
         return true
@@ -139,6 +155,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     // If we were in error state but a poll succeeded, we're actually connected
     if (status === 'error') {
       set({ status: 'connected', lastError: null, reconnectAttempts: 0 })
+      pushConnectionNotification('success', 'Connection Restored', 'API connection recovered successfully.')
     }
   },
 
@@ -149,6 +166,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     // After 3 consecutive poll failures, trigger reconnection
     if (failures >= 3 && get().status === 'connected') {
       set({ status: 'error', lastError: 'Multiple API requests failed' })
+      pushConnectionNotification('error', 'Connection Unstable', 'Multiple API requests have failed. Attempting to reconnect...')
       get().connect()
     }
   },

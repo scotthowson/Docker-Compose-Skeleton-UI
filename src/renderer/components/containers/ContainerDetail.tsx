@@ -3,10 +3,21 @@
 // =============================================================================
 
 import React, { useEffect, useCallback, useRef, useState } from 'react'
-import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats } from '../../../shared/types'
+import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
-import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer } from '../../api/endpoints'
+import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
+import ContainerFileBrowser from './ContainerFileBrowser'
+import LiveLogViewer from '../logs/LiveLogViewer'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts'
 import {
   ArrowLeft,
   ArrowRight,
@@ -33,6 +44,13 @@ import {
   ChevronDown,
   Search,
   Lock,
+  Download,
+  Terminal,
+  Loader2,
+  AlertCircle,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -231,6 +249,45 @@ function parseMountEntries(mountStr: string): MountEntry[] {
     })
 }
 
+/**
+ * Parse cpu_percent string like "2.34%" to a number (2.34).
+ */
+function parseCpuPercent(cpuStr: string): number {
+  if (!cpuStr || cpuStr === '--') return 0
+  const match = cpuStr.match(/([\d.]+)/)
+  return match ? parseFloat(match[1]) : 0
+}
+
+/**
+ * Parse memory_usage string like "150MiB / 8GiB" to MB number (150).
+ * Handles: "150MiB / 8GiB", "1.5GiB / 8GiB", "512KiB / 8GiB"
+ */
+function parseMemoryToMB(memStr: string): number {
+  if (!memStr || memStr === '--') return 0
+  // Take the used portion (before the slash)
+  const usedPart = memStr.split('/')[0].trim()
+  const match = usedPart.match(/([\d.]+)\s*(KiB|MiB|GiB|TiB|KB|MB|GB|TB|B)?/i)
+  if (!match) return 0
+  const value = parseFloat(match[1])
+  const unit = (match[2] || 'B').toLowerCase()
+  switch (unit) {
+    case 'tib':
+    case 'tb':
+      return value * 1024 * 1024
+    case 'gib':
+    case 'gb':
+      return value * 1024
+    case 'mib':
+    case 'mb':
+      return value
+    case 'kib':
+    case 'kb':
+      return value / 1024
+    default:
+      return value / (1024 * 1024)
+  }
+}
+
 // Network color palette for badge variety
 const NETWORK_COLORS = [
   { bg: 'bg-purple-500/10', text: 'text-purple-300', ring: 'ring-purple-500/20' },
@@ -337,16 +394,44 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   onRefreshList,
 }) => {
   const setStats = useContainerStore((s) => s.setStats)
+  const pushStatsHistory = useContainerStore((s) => s.pushStatsHistory)
   const storedStats = useContainerStore((s) => s.stats[containerName])
+  const statsHistory = useContainerStore((s) => s.statsHistory[containerName] ?? [])
   const { addToast } = useToast()
 
   const [detail, setDetail] = useState<ContainerDetailType | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [detailLoading, setDetailLoading] = useState(true)
   const [stats, setLocalStats] = useState<ContainerStats | null>(storedStats ?? null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [containerLogs, setContainerLogs] = useState<string>('')
   const [showLogs, setShowLogs] = useState(false)
   const [logsLoading, setLogsLoading] = useState(false)
+  const [liveLogsMode, setLiveLogsMode] = useState(false)
+
+  // Process viewer state
+  const [showProcesses, setShowProcesses] = useState(false)
+  const [processes, setProcesses] = useState<ContainerProcess[]>([])
+  const [processesLoading, setProcessesLoading] = useState(false)
+  const processIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Command runner state
+  const [showExec, setShowExec] = useState(false)
+  const [execCommand, setExecCommand] = useState('')
+  const [execLoading, setExecLoading] = useState(false)
+  const [execOutput, setExecOutput] = useState<{ command: string; output: string; exitCode: number; success: boolean } | null>(null)
+  const [execHistory, setExecHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('container-exec-history')
+      return raw ? JSON.parse(raw) : []
+    } catch { return [] }
+  })
+
+  // Rename state
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(containerName)
+  const [renameLoading, setRenameLoading] = useState(false)
 
   // Enhanced section states
   const [envSearch, setEnvSearch] = useState('')
@@ -357,19 +442,34 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Fetch full container detail (environment, mounts, networks)
-  useEffect(() => {
-    let cancelled = false
-    fetchContainer(containerName)
-      .then((d) => {
-        if (!cancelled) setDetail(d)
-      })
-      .catch(() => {
-        // detail stays null; we fall back to containerInfo
-      })
-    return () => {
-      cancelled = true
+  const fetchDetail = useCallback(async () => {
+    setDetailLoading(true)
+    setDetailError(null)
+    try {
+      const d = await fetchContainer(containerName)
+      if (mountedRef.current) {
+        setDetail(d)
+        setDetailError(null)
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setDetailError(msg || 'Failed to fetch container details')
+      }
+    } finally {
+      if (mountedRef.current) {
+        setDetailLoading(false)
+      }
     }
   }, [containerName])
+
+  useEffect(() => {
+    fetchDetail()
+  }, [fetchDetail])
+
+  const retryDetail = useCallback(() => {
+    fetchDetail()
+  }, [fetchDetail])
 
   // Fetch stats on mount and every 10s
   const fetchStats = useCallback(async () => {
@@ -379,11 +479,16 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         setLocalStats(s)
         setStats(containerName, s)
         setStatsLoading(false)
+
+        // Push to stats history for charts
+        const cpuNum = parseCpuPercent(s.cpu_percent)
+        const memNum = parseMemoryToMB(s.memory_usage)
+        pushStatsHistory(containerName, cpuNum, memNum)
       }
     } catch {
       if (mountedRef.current) setStatsLoading(false)
     }
-  }, [containerName, setStats])
+  }, [containerName, setStats, pushStatsHistory])
 
   useEffect(() => {
     mountedRef.current = true
@@ -441,6 +546,128 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     }
   }, [containerName])
 
+  // Download logs as text file
+  const handleDownloadLogs = useCallback(() => {
+    if (!containerLogs) return
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const filename = `${containerName}-logs-${yyyy}-${mm}-${dd}.txt`
+    const blob = new Blob([containerLogs], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [containerLogs, containerName])
+
+  // Handle container rename
+  const handleRename = useCallback(async () => {
+    const newName = renameValue.trim()
+    if (!newName || newName === containerName) {
+      setRenaming(false)
+      setRenameValue(containerName)
+      return
+    }
+    setRenameLoading(true)
+    try {
+      const result = await renameContainer(containerName, newName)
+      if (result.success) {
+        addToast({ type: 'success', message: `Renamed to "${newName}"` })
+        onRefreshList?.()
+        onBack()
+      } else {
+        addToast({ type: 'error', message: result.message || 'Rename failed', duration: 5000 })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Rename failed', duration: 5000 })
+    } finally {
+      setRenameLoading(false)
+      setRenaming(false)
+    }
+  }, [containerName, renameValue, addToast, onRefreshList, onBack])
+
+  // Fetch container processes
+  const handleFetchProcesses = useCallback(async () => {
+    setProcessesLoading(true)
+    try {
+      const result = await fetchContainerProcesses(containerName)
+      if (mountedRef.current) {
+        setProcesses(result.processes)
+      }
+    } catch {
+      if (mountedRef.current) {
+        setProcesses([])
+      }
+    } finally {
+      if (mountedRef.current) {
+        setProcessesLoading(false)
+      }
+    }
+  }, [containerName])
+
+  // Toggle process viewer — auto-refresh every 10s while visible
+  const handleToggleProcesses = useCallback(() => {
+    setShowProcesses((prev) => {
+      const next = !prev
+      if (next) {
+        // Fetch immediately and start interval
+        handleFetchProcesses()
+        processIntervalRef.current = setInterval(handleFetchProcesses, 10000)
+      } else {
+        // Clear interval when hiding
+        if (processIntervalRef.current) {
+          clearInterval(processIntervalRef.current)
+          processIntervalRef.current = null
+        }
+      }
+      return next
+    })
+  }, [handleFetchProcesses])
+
+  // Clean up process interval on unmount
+  useEffect(() => {
+    return () => {
+      if (processIntervalRef.current) {
+        clearInterval(processIntervalRef.current)
+        processIntervalRef.current = null
+      }
+    }
+  }, [])
+
+  // Command runner
+  const handleExecCommand = useCallback(async () => {
+    const cmd = execCommand.trim()
+    if (!cmd || execLoading) return
+    setExecLoading(true)
+    setExecOutput(null)
+    try {
+      const result = await execContainerCommand(containerName, cmd)
+      setExecOutput({
+        command: cmd,
+        output: result.output,
+        exitCode: result.exit_code,
+        success: result.success,
+      })
+      // Add to history (dedup, max 10)
+      setExecHistory((prev) => {
+        const filtered = prev.filter((h) => h !== cmd)
+        const next = [cmd, ...filtered].slice(0, 10)
+        try { localStorage.setItem('container-exec-history', JSON.stringify(next)) } catch {}
+        return next
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Command execution failed'
+      setExecOutput({ command: cmd, output: message, exitCode: -1, success: false })
+    } finally {
+      setExecLoading(false)
+    }
+  }, [execCommand, execLoading, containerName])
+
   // Derived data
   const envEntries = detail ? parseEnvString(detail.environment) : []
   const mounts = detail ? parseMounts(detail.mounts) : []
@@ -467,6 +694,16 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     })
   }
 
+  // Prepare chart data from stats history
+  const chartData = statsHistory.map((entry, idx) => ({
+    idx,
+    time: new Date(entry.time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    cpu: Math.round(entry.cpu * 100) / 100,
+    mem: Math.round(entry.mem * 100) / 100,
+  }))
+
+  const isRunning = containerInfo.state === 'running'
+
   return (
     <div className="flex flex-col gap-5 animate-in">
       {/* ---- Back button + title ---- */}
@@ -486,7 +723,37 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
-          <h1 className="text-xl font-bold text-white truncate">{containerName}</h1>
+          {renaming ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRename()
+                  if (e.key === 'Escape') { setRenaming(false); setRenameValue(containerName) }
+                }}
+                className="px-2 py-1 text-lg font-bold text-white bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              />
+              <button onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all">
+                {renameLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              </button>
+              <button onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all">
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-xl font-bold text-white truncate">{containerName}</h1>
+              <button
+                onClick={() => setRenaming(true)}
+                title="Rename container"
+                className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/10 rounded transition-all"
+              >
+                <Pencil size={14} />
+              </button>
+            </>
+          )}
           <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
           <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
         </div>
@@ -531,8 +798,49 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
             Logs
           </button>
+          {/* 4C: Processes toggle button — only for running containers */}
+          {isRunning && (
+            <button
+              onClick={handleToggleProcesses}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                showProcesses
+                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+                  : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
+              }`}
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              Processes
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ---- Detail loading skeleton ---- */}
+      {detailLoading && detail === null && (
+        <div className="space-y-3 animate-pulse">
+          <div className="h-4 w-3/4 bg-white/[0.06] rounded" />
+          <div className="h-4 w-1/2 bg-white/[0.06] rounded" />
+          <div className="h-4 w-2/3 bg-white/[0.06] rounded" />
+        </div>
+      )}
+
+      {/* ---- Detail error banner ---- */}
+      {detailError && (
+        <div className="flex items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+          <AlertCircle className="h-5 w-5 text-rose-400 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-rose-300">Failed to load container details</p>
+            <p className="text-xs text-rose-400/70 mt-0.5">{detailError}</p>
+          </div>
+          <button
+            onClick={retryDetail}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20 hover:bg-rose-500/20 transition-all"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* ---- Stats section ---- */}
       <section>
@@ -578,6 +886,126 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         </div>
       </section>
 
+      {/* ---- 4A: Metrics History Graphs ---- */}
+      {chartData.length >= 2 && (
+        <section className="animate-fade-in">
+          <SectionHeader icon={<Activity className="h-4 w-4 text-amber-400" />} title="Metrics History" />
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 mt-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* CPU % over time */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Cpu className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">CPU Usage (%)</span>
+                </div>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        domain={[0, 'auto']}
+                        tickFormatter={(v: number) => `${v}%`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          color: '#e2e8f0',
+                        }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        formatter={(value: number) => [`${value}%`, 'CPU']}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="cpu"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        fill="url(#cpuGradient)"
+                        dot={false}
+                        activeDot={{ r: 3, fill: '#f59e0b', stroke: '#1e293b', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Memory MB over time */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <MemoryStick className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Memory Usage (MB)</span>
+                </div>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="memGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        domain={[0, 'auto']}
+                        tickFormatter={(v: number) => `${v}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          color: '#e2e8f0',
+                        }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        formatter={(value: number) => [`${value} MB`, 'Memory']}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="mem"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        fill="url(#memGradient)"
+                        dot={false}
+                        activeDot={{ r: 3, fill: '#10b981', stroke: '#1e293b', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ---- Info section ---- */}
       <section>
         <SectionHeader icon={<Info className="h-4 w-4 text-emerald-400" />} title="Container Info" />
@@ -594,6 +1022,204 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           />
         </div>
       </section>
+
+      {/* ---- 4C: Process Viewer ---- */}
+      {showProcesses && isRunning && (
+        <section className="animate-fade-in">
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-violet-400" />
+                <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                  Running Processes
+                </h2>
+                {processes.length > 0 && (
+                  <span className="text-xs text-slate-600 ml-1">({processes.length})</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFetchProcesses}
+                  disabled={processesLoading}
+                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw className={`h-3 w-3 ${processesLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+                <button
+                  onClick={handleToggleProcesses}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {processesLoading && processes.length === 0 ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-8 bg-white/[0.03] rounded animate-pulse" />
+                ))}
+              </div>
+            ) : processes.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-600">
+                No process information available.
+              </div>
+            ) : (
+              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">PID</th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">User</th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">CPU%</th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">Time</th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">Command</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processes.map((proc, idx) => (
+                      <tr
+                        key={`${proc.pid}-${idx}`}
+                        className={`border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${
+                          idx % 2 === 0 ? 'bg-white/[0.01]' : 'bg-transparent'
+                        }`}
+                      >
+                        <td className="px-4 py-2 font-mono text-cyan-400">{proc.pid}</td>
+                        <td className="px-4 py-2 text-slate-300">{proc.uid}</td>
+                        <td className="px-4 py-2 text-amber-400 font-mono">{proc.cpu}</td>
+                        <td className="px-4 py-2 text-slate-400 font-mono">{proc.time}</td>
+                        <td className="px-4 py-2 text-slate-300 font-mono truncate max-w-xs" title={proc.cmd}>
+                          {proc.cmd}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ---- Command Runner (Phase 7C) ---- */}
+      {isRunning && (
+        <section className="animate-fade-in">
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowExec(!showExec)}
+              className="flex items-center gap-2 w-full p-5 hover:bg-white/[0.02] transition-colors"
+            >
+              <Terminal className="h-4 w-4 text-emerald-400" />
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                Run Command
+              </h2>
+              <ChevronDown
+                className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${showExec ? 'rotate-0' : '-rotate-90'}`}
+              />
+            </button>
+
+            {showExec && (
+              <div className="px-5 pb-5 space-y-4">
+                {/* Safety warning */}
+                <div className="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
+                  <Lock className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-amber-400/80 leading-relaxed">
+                    Commands run as the container's default user. Use caution — some commands may affect container state.
+                  </p>
+                </div>
+
+                {/* Command input */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-mono select-none">$</span>
+                    <input
+                      type="text"
+                      value={execCommand}
+                      onChange={(e) => setExecCommand(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleExecCommand()}
+                      placeholder="ls -la /app"
+                      className="
+                        w-full pl-7 pr-4 py-2.5
+                        bg-slate-950 border border-white/[0.08] rounded-lg
+                        text-xs text-slate-200 placeholder-slate-600 font-mono
+                        focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15
+                        transition-all duration-200
+                      "
+                    />
+                  </div>
+                  <button
+                    onClick={handleExecCommand}
+                    disabled={!execCommand.trim() || execLoading}
+                    className="
+                      flex items-center gap-1.5 px-4 py-2.5 rounded-lg
+                      text-xs font-medium text-white
+                      bg-emerald-500 hover:bg-emerald-400
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                      transition-all duration-200 shadow-lg shadow-emerald-500/20
+                    "
+                  >
+                    {execLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    Execute
+                  </button>
+                </div>
+
+                {/* Command history chips */}
+                {execHistory.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[10px] text-slate-600 self-center mr-1">History:</span>
+                    {execHistory.map((cmd) => (
+                      <button
+                        key={cmd}
+                        onClick={() => setExecCommand(cmd)}
+                        className="
+                          px-2 py-0.5 rounded text-[10px] font-mono
+                          bg-white/[0.03] border border-white/[0.06] text-slate-400
+                          hover:bg-white/[0.06] hover:text-slate-200
+                          transition-all duration-150 truncate max-w-[200px]
+                        "
+                        title={cmd}
+                      >
+                        {cmd}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Output */}
+                {execOutput && (
+                  <div className="space-y-2 animate-fade-in">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500 font-mono">$ {execOutput.command}</span>
+                      <span className={`
+                        text-[10px] font-mono px-1.5 py-0.5 rounded
+                        ${execOutput.exitCode === 0
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-rose-500/10 text-rose-400'
+                        }
+                      `}>
+                        exit {execOutput.exitCode}
+                      </span>
+                    </div>
+                    <pre className="
+                      bg-slate-950 border border-white/[0.06] rounded-lg p-4
+                      text-[11px] text-slate-300 font-mono
+                      max-h-[300px] overflow-auto scrollbar-thin
+                      whitespace-pre-wrap break-all leading-relaxed
+                    ">
+                      {execOutput.output || '(no output)'}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ---- Environment Variables (Enhanced) ---- */}
       {envEntries.length > 0 && (
@@ -871,14 +1497,42 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <div className="flex items-center justify-between">
             <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container Logs" />
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleFetchLogs}
-                disabled={logsLoading}
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
-              >
-                <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
+              {/* Live / Snapshot toggle */}
+              <div className="flex rounded-md bg-white/[0.03] border border-white/[0.06] p-0.5">
+                <button
+                  onClick={() => setLiveLogsMode(false)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${!liveLogsMode ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
+                >
+                  Snapshot
+                </button>
+                <button
+                  onClick={() => setLiveLogsMode(true)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${liveLogsMode ? 'bg-emerald-500/15 text-emerald-400' : 'text-slate-500 hover:text-slate-400'}`}
+                >
+                  Live
+                </button>
+              </div>
+              {!liveLogsMode && (
+                <>
+                  <button
+                    onClick={handleDownloadLogs}
+                    disabled={!containerLogs}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Download logs as text file"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </button>
+                  <button
+                    onClick={handleFetchLogs}
+                    disabled={logsLoading}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setShowLogs(false)}
                 className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
@@ -887,16 +1541,27 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               </button>
             </div>
           </div>
-          <pre
-            className="
-              glass-subtle mt-3 p-4 max-h-80 overflow-auto
-              text-xs leading-relaxed font-mono text-slate-300
-              whitespace-pre-wrap break-words scrollbar-thin
-            "
-          >
-            {containerLogs || 'No logs available.'}
-          </pre>
+          {liveLogsMode ? (
+            <div className="mt-3 h-80">
+              <LiveLogViewer containerName={containerName} initialLines={100} pollInterval={2000} />
+            </div>
+          ) : (
+            <pre
+              className="
+                glass-subtle mt-3 p-4 max-h-80 overflow-auto
+                text-xs leading-relaxed font-mono text-slate-300
+                whitespace-pre-wrap break-words scrollbar-thin
+              "
+            >
+              {containerLogs || 'No logs available.'}
+            </pre>
+          )}
         </section>
+      )}
+
+      {/* ---- File Browser ---- */}
+      {detail?.state === 'running' && (
+        <ContainerFileBrowser containerName={containerName} />
       )}
     </div>
   )

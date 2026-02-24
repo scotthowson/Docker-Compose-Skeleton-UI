@@ -57,6 +57,7 @@ export interface ServerStatus {
       available: string
       percent: string
     }
+    cpu_count: number
   }
 }
 
@@ -502,6 +503,15 @@ export interface StackAnnotation {
   color?: string
 }
 
+// Connection profiles
+export interface ConnectionProfile {
+  id: string
+  name: string
+  url: string
+  isDefault: boolean
+  lastConnected?: number
+}
+
 // App settings (local, persisted via electron-store)
 export interface AppSettings {
   serverUrl: string
@@ -529,6 +539,10 @@ export interface AppSettings {
   projectName: string
   /** Subtitle shown below the project name */
   projectSubtitle: string
+  /** Connection profiles for multi-server management */
+  connectionProfiles: ConnectionProfile[]
+  /** User-defined custom CSS injected into the app */
+  customCSS: string
 }
 
 // ---------------------------------------------------------------------------
@@ -759,6 +773,15 @@ export interface BackupRestoreResponse {
   filename: string
 }
 
+// POST /containers/:name/exec
+export interface ContainerExecResponse {
+  container: string
+  command: string
+  exit_code: number
+  output: string
+  success: boolean
+}
+
 // Navigation
 export type PageId =
   | 'dashboard'
@@ -780,3 +803,170 @@ export type PageId =
   | 'maintenance'
   | 'environment'
   | 'backup'
+  | 'terminal'
+  | 'cronjobs'
+
+// ---------------------------------------------------------------------------
+// v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
+// ---------------------------------------------------------------------------
+
+// POST /terminal/exec
+export interface TerminalExecResponse {
+  command: string
+  cwd: string
+  exit_code: number
+  output: string
+  success: boolean
+  timestamp: string
+}
+
+// GET /terminal/history
+export interface TerminalHistoryResponse {
+  commands: string[]
+  total: number
+}
+
+// POST /images/*/delete
+export interface ImageDeleteResponse {
+  success: boolean
+  image: string
+  message: string
+}
+
+// POST /containers/:name/rename
+export interface ContainerRenameResponse {
+  success: boolean
+  old_name: string
+  new_name: string
+  message: string
+}
+
+// GET /stacks/:name/services
+export interface StackServiceInfo {
+  name: string
+  state: string
+  health: string
+  image: string
+  container: string
+}
+
+export interface StackServicesResponse {
+  stack: string
+  services: StackServiceInfo[]
+}
+
+// GET /system/metrics
+export interface SystemMetricsResponse {
+  cpu: {
+    count: number
+    load_average: [number, number, number]
+  }
+  memory: {
+    total_mb: number
+    used_mb: number
+    available_mb: number
+    cached_mb: number
+    swap_total_mb: number
+    swap_used_mb: number
+  }
+  disks: Array<{
+    device: string
+    mount: string
+    total: string
+    used: string
+    available: string
+    percent: string
+  }>
+}
+
+// ---------------------------------------------------------------------------
+// v3.2: Terminal Auth, Container Files, Alerts, Cron, Live Logs
+// ---------------------------------------------------------------------------
+
+// POST /terminal/auth
+export interface TerminalAuthResponse {
+  success: boolean
+  token: string
+  username: string
+  expires_in: number
+  auth_method: string
+  message?: string
+}
+
+// POST /terminal/auth/verify
+export interface TerminalAuthVerifyResponse {
+  valid: boolean
+  username: string
+  expires_at: number
+}
+
+// POST /terminal/auth/logout
+export interface TerminalLogoutResponse {
+  success: boolean
+  message: string
+}
+
+// GET /containers/:name/files
+export interface ContainerFileEntry {
+  name: string
+  type: 'file' | 'directory' | 'symlink'
+  size: number
+  permissions: string
+  modified: string
+}
+
+export interface ContainerFilesResponse {
+  container: string
+  path: string
+  entries: ContainerFileEntry[]
+}
+
+// GET /containers/:name/files/content
+export interface ContainerFileContentResponse {
+  container: string
+  path: string
+  content: string
+  size: number
+}
+
+// GET/POST /alerts/config
+export interface AlertThresholds {
+  cpu_warning: number
+  cpu_critical: number
+  memory_warning: number
+  memory_critical: number
+  disk_warning: number
+  disk_critical: number
+  restart_threshold: number
+}
+
+export interface AlertConfigResponse {
+  thresholds: AlertThresholds
+}
+
+// GET /system/crontab
+export interface CronEntry {
+  schedule: string
+  command: string
+  user?: string
+  source: 'user' | 'system' | 'cron.d'
+  human_readable: string
+}
+
+export interface CrontabResponse {
+  entries: CronEntry[]
+  raw: string
+}
+
+// GET /containers/:name/logs/live, GET /logs/live
+export interface LogStreamEntry {
+  timestamp: string
+  line: string
+  level?: string
+}
+
+export interface LiveLogsResponse {
+  entries: LogStreamEntry[]
+  count: number
+  container?: string
+}

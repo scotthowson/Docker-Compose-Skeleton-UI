@@ -2,15 +2,21 @@
 // NotificationDrawer — Slide-out notification center from the right side
 // =============================================================================
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Bell, BellOff, X, Info, CheckCircle, AlertTriangle, XCircle,
-  Clock, Trash2, Check,
+  Clock, Trash2, Check, Settings2, Monitor,
 } from 'lucide-react'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Notification } from '../stores/notificationStore'
 import type { PageId } from '../../shared/types'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type FilterTab = 'all' | 'error' | 'warning' | 'info'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,6 +48,13 @@ const typeStyles: Record<Notification['type'], { icon: typeof Info; color: strin
     border: 'border-rose-500/20',
   },
 }
+
+const filterTabs: { id: FilterTab; label: string; types: Notification['type'][] }[] = [
+  { id: 'all', label: 'All', types: ['info', 'success', 'warning', 'error'] },
+  { id: 'error', label: 'Errors', types: ['error'] },
+  { id: 'warning', label: 'Warnings', types: ['warning'] },
+  { id: 'info', label: 'Info', types: ['info', 'success'] },
+]
 
 function relativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000)
@@ -147,6 +160,36 @@ function NotificationCard({
 }
 
 // ---------------------------------------------------------------------------
+// Toggle Switch
+// ---------------------------------------------------------------------------
+
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center justify-between py-1.5 cursor-pointer group">
+      <span className="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">{label}</span>
+      <button
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`
+          relative inline-flex h-5 w-9 items-center rounded-full
+          transition-colors duration-200
+          ${checked ? 'bg-emerald-500' : 'bg-slate-700'}
+        `}
+      >
+        <span
+          className={`
+            inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm
+            transition-transform duration-200
+            ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}
+          `}
+        />
+      </button>
+    </label>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // NotificationDrawer
 // ---------------------------------------------------------------------------
 
@@ -155,13 +198,18 @@ export function NotificationDrawer() {
     notifications,
     unreadCount,
     drawerOpen,
+    preferences,
     markAllRead,
     clearAll,
     setDrawerOpen,
+    setPreference,
+    requestDesktopPermission,
   } = useNotificationStore()
 
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
+  const [showPrefs, setShowPrefs] = useState(false)
 
   // Close on Escape key
   useEffect(() => {
@@ -199,6 +247,25 @@ export function NotificationDrawer() {
     },
     [setCurrentPage, setDrawerOpen],
   )
+
+  // Filtered notifications
+  const currentFilter = filterTabs.find((t) => t.id === activeFilter) ?? filterTabs[0]
+  const filteredNotifications = useMemo(
+    () => notifications.filter((n) => currentFilter.types.includes(n.type)),
+    [notifications, currentFilter],
+  )
+
+  // Per-tab counts
+  const tabCounts = useMemo(() => {
+    const counts: Record<FilterTab, number> = { all: 0, error: 0, warning: 0, info: 0 }
+    for (const n of notifications) {
+      counts.all++
+      if (n.type === 'error') counts.error++
+      else if (n.type === 'warning') counts.warning++
+      else counts.info++
+    }
+    return counts
+  }, [notifications])
 
   return (
     <>
@@ -239,6 +306,22 @@ export function NotificationDrawer() {
             </div>
 
             <div className="flex items-center gap-1">
+              {/* Preferences toggle */}
+              <button
+                onClick={() => setShowPrefs(!showPrefs)}
+                className={`
+                  flex items-center justify-center w-7 h-7 rounded-lg
+                  transition-all duration-150
+                  ${showPrefs
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : 'text-slate-500 hover:bg-white/[0.06] hover:text-slate-300'
+                  }
+                `}
+                title="Notification preferences"
+              >
+                <Settings2 size={13} />
+              </button>
+
               {/* Mark all read */}
               {unreadCount > 0 && (
                 <button
@@ -287,22 +370,95 @@ export function NotificationDrawer() {
             </div>
           </div>
 
+          {/* Preferences Panel */}
+          {showPrefs && (
+            <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.01] shrink-0 animate-fade-in">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
+                Alert Preferences
+              </p>
+              <div className="space-y-0.5">
+                <Toggle
+                  checked={preferences.healthAlerts}
+                  onChange={(v) => setPreference('healthAlerts', v)}
+                  label="Health state changes"
+                />
+                <Toggle
+                  checked={preferences.connectionAlerts}
+                  onChange={(v) => setPreference('connectionAlerts', v)}
+                  label="Connection changes"
+                />
+                <Toggle
+                  checked={preferences.containerCrashAlerts}
+                  onChange={(v) => setPreference('containerCrashAlerts', v)}
+                  label="Container crash alerts"
+                />
+                <Toggle
+                  checked={preferences.desktopNotifications}
+                  onChange={(v) => {
+                    if (v && 'Notification' in window && Notification.permission === 'default') {
+                      requestDesktopPermission()
+                    } else {
+                      setPreference('desktopNotifications', v)
+                    }
+                  }}
+                  label="Desktop notifications"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-white/[0.06] shrink-0">
+            {filterTabs.map((tab) => {
+              const count = tabCounts[tab.id]
+              const isActive = activeFilter === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveFilter(tab.id)}
+                  className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded-md
+                    text-[11px] font-medium transition-all duration-150
+                    ${isActive
+                      ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08]'
+                      : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                    }
+                  `}
+                >
+                  {tab.label}
+                  {count > 0 && (
+                    <span className={`
+                      text-[9px] rounded-full px-1.5 py-0.5 font-bold
+                      ${isActive ? 'bg-white/[0.08] text-slate-300' : 'bg-white/[0.04] text-slate-600'}
+                    `}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
           {/* Notification list */}
           <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
-            {notifications.length === 0 ? (
+            {filteredNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
                 <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
                   <BellOff size={24} className="text-slate-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-400">No notifications yet</p>
+                  <p className="text-sm font-medium text-slate-400">
+                    {activeFilter === 'all' ? 'No notifications yet' : `No ${currentFilter.label.toLowerCase()}`}
+                  </p>
                   <p className="text-[11px] text-slate-600 mt-1">
-                    Notifications from your Docker services will appear here
+                    {activeFilter === 'all'
+                      ? 'Notifications from your Docker services will appear here'
+                      : 'Try checking another filter tab'}
                   </p>
                 </div>
               </div>
             ) : (
-              notifications.map((notification) => (
+              filteredNotifications.map((notification) => (
                 <NotificationCard
                   key={notification.id}
                   notification={notification}
@@ -316,7 +472,9 @@ export function NotificationDrawer() {
           {notifications.length > 0 && (
             <div className="px-4 py-2.5 border-t border-white/[0.06] shrink-0">
               <p className="text-[10px] text-slate-600 text-center">
-                {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+                {activeFilter === 'all'
+                  ? `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}`
+                  : `${filteredNotifications.length} of ${notifications.length}`}
                 {unreadCount > 0 && ` \u00b7 ${unreadCount} unread`}
               </p>
             </div>

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import React, { useState, useMemo } from 'react'
-import { HeartPulse, Activity, AlertTriangle, XCircle, RefreshCw, WifiOff, Search, ArrowUpDown } from 'lucide-react'
+import { HeartPulse, Activity, AlertTriangle, XCircle, RefreshCw, WifiOff, Search, ArrowUpDown, Download } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { fetchHealthReport } from '../api/endpoints'
 import { useHealthStore } from '../stores/healthStore'
@@ -181,6 +181,19 @@ export default function Health() {
   const unhealthyPct = (summary.unhealthy / total) * 100
   const stoppedPct = (summary.stopped / total) * 100
 
+  // Export health report as JSON file
+  const exportHealthReport = () => {
+    if (!report) return
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const date = new Date().toISOString().slice(0, 10)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `health-report-${date}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -191,20 +204,36 @@ export default function Health() {
             Real-time container health status across all stacks
           </p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="
-            flex items-center gap-2 rounded-lg px-3.5 py-2
-            text-sm font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
-          "
-        >
-          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportHealthReport}
+            disabled={!report}
+            className="
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium text-cyan-400
+              bg-cyan-500/10 border border-cyan-500/20
+              hover:bg-cyan-500/20 hover:border-cyan-500/30
+              disabled:opacity-50 transition-all duration-200
+            "
+          >
+            <Download size={15} />
+            Export
+          </button>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium text-slate-300
+              bg-white/5 border border-white/10
+              hover:bg-white/10 hover:border-white/15
+              disabled:opacity-50 transition-all duration-200
+            "
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Error state */}

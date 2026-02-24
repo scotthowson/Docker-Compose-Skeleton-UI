@@ -209,7 +209,7 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
         {segments.map((seg, i) => (
           <div
             key={i}
-            className="flex-1 h-full rounded-[3px] transition-all duration-200 hover:scale-y-125 hover:brightness-125 cursor-default"
+            className="flex-1 h-full rounded-[3px] transition-all duration-300 ease-out hover:scale-y-125 hover:brightness-125 cursor-default"
             style={{ backgroundColor: COLORS[seg.status] }}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect()
@@ -293,7 +293,7 @@ function StatCard({
 }) {
   return (
     <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 animate-fade-in-up"
+      className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 transition-all duration-300"
       style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
     >
       <div className="flex items-center justify-between mb-3">
@@ -421,8 +421,8 @@ export default function Uptime() {
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-slate-100">Uptime Monitor</h2>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
             </span>
           </div>
@@ -533,7 +533,7 @@ export default function Uptime() {
         )}
 
         {/* Container rows */}
-        <div className="divide-y divide-white/[0.03]">
+        <div className="divide-y divide-white/[0.04]">
           {sortedContainers.map((container, idx) => {
             const segments = segmentsMap.get(container.name) ?? []
             const availability = calculateAvailability(container)
@@ -612,7 +612,7 @@ export default function Uptime() {
                   key={container.name}
                   className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up"
                   style={{
-                    animationDelay: `${idx * 50}ms`,
+                    animationDelay: `${idx * 60}ms`,
                     animationFillMode: 'both',
                   }}
                 >

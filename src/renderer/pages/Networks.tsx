@@ -1,41 +1,32 @@
 // =============================================================================
-// Networks — Full network & volume management with creation, deletion, topology
+// Networks — Full network management with creation, deletion, topology
 // =============================================================================
 
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  Network, HardDrive, RefreshCw, Plus, Trash2, X, Check,
+  Network, RefreshCw, Plus, Trash2, X, Check,
   Globe, Lock, AlertCircle, Loader2, Unplug, Plug, Eye,
-  Search, ChevronDown, ChevronUp, Info,
+  Search, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
-  fetchNetworks, fetchVolumes, fetchNetworkDetail,
-  createNetwork, deleteNetwork, connectToNetwork,
-  disconnectFromNetwork, deleteVolume,
+  fetchNetworks, fetchNetworkDetail,
+  createNetwork, deleteNetwork,
+  disconnectFromNetwork,
 } from '../api/endpoints'
 import { useNetworkStore } from '../stores/networkStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type {
-  NetworkListResponse, VolumeListResponse,
-  NetworkInfo, VolumeInfo, NetworkDetail,
+  NetworkListResponse,
+  NetworkInfo, NetworkDetail,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const value = bytes / Math.pow(1024, i)
-  return `${value.toFixed(i > 0 ? 1 : 0)} ${units[i]}`
-}
-
 const BUILTIN_NETWORKS = ['bridge', 'host', 'none']
-
-type TabId = 'networks' | 'volumes'
 
 // ---------------------------------------------------------------------------
 // Create Network Modal
@@ -244,7 +235,6 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
     try {
       await disconnectFromNetwork(network.name, containerName)
       onRefresh()
-      // Refetch detail
       const d = await fetchNetworkDetail(network.name)
       setDetail(d)
     } catch (err: unknown) {
@@ -254,89 +244,107 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-full max-w-xl mx-4 glass p-6 animate-scale-in max-h-[80vh] overflow-y-auto scrollbar-thin"
+        className="relative w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <div className={`flex items-center justify-center w-9 h-9 rounded-xl ring-1 ${
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-6 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center justify-center w-11 h-11 rounded-xl ring-1 ${
               isBuiltIn ? 'bg-slate-500/10 ring-slate-500/20' : 'bg-cyan-500/10 ring-cyan-500/20'
             }`}>
-              {detail?.internal ? <Lock size={18} className="text-amber-400" /> : <Network size={18} className={isBuiltIn ? 'text-slate-400' : 'text-cyan-400'} />}
+              {detail?.internal ? <Lock size={20} className="text-amber-400" /> : <Network size={20} className={isBuiltIn ? 'text-slate-400' : 'text-cyan-400'} />}
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-100 font-mono">{network.name}</h3>
-              <p className="text-[10px] text-slate-500">{network.id.slice(0, 12)}</p>
+              <h2 className="text-lg font-bold text-slate-100 font-mono">{network.name}</h2>
+              <p className="text-xs text-slate-500 font-mono">{network.id}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+          <button onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all">
             <X size={18} />
           </button>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin text-slate-500" />
+          <div className="flex items-center justify-center py-20">
+            <Loader2 size={24} className="animate-spin text-slate-500" />
           </div>
         ) : error ? (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
-            <AlertCircle size={14} className="text-rose-400" />
-            <p className="text-xs text-rose-300">{error}</p>
+          <div className="p-8">
+            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+              <AlertCircle size={16} className="text-rose-400" />
+              <p className="text-sm text-rose-300">{error}</p>
+            </div>
           </div>
         ) : detail ? (
-          <div className="space-y-4">
-            {/* Network info grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Driver</p>
-                <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
-                  {detail.driver}
-                </span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:divide-x divide-white/[0.06]">
+            {/* Left column — Network Properties */}
+            <div className="p-8 space-y-5">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Network Properties</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Driver</p>
+                  <span className="inline-flex rounded-full bg-cyan-500/15 px-3 py-1 text-xs font-semibold text-cyan-400">
+                    {detail.driver}
+                  </span>
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Scope</p>
+                  <p className="text-sm font-medium text-slate-200">{detail.scope}</p>
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Subnet</p>
+                  <p className="text-sm text-slate-200 font-mono">{detail.subnet || 'Auto-assigned'}</p>
+                </div>
+                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Gateway</p>
+                  <p className="text-sm text-slate-200 font-mono">{detail.gateway || 'Auto-assigned'}</p>
+                </div>
               </div>
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Scope</p>
-                <p className="text-sm text-slate-200">{detail.scope}</p>
-              </div>
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Subnet</p>
-                <p className="text-sm text-slate-200 font-mono">{detail.subnet || 'Auto'}</p>
-              </div>
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Gateway</p>
-                <p className="text-sm text-slate-200 font-mono">{detail.gateway || 'Auto'}</p>
+
+              {/* Internal badge */}
+              {detail.internal && (
+                <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+                  <Lock size={14} className="text-amber-400" />
+                  <span className="text-xs text-amber-300 font-medium">Internal network — no external connectivity</span>
+                </div>
+              )}
+
+              {/* Full ID */}
+              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Full Network ID</p>
+                <p className="text-xs text-slate-300 font-mono break-all">{detail.id}</p>
               </div>
             </div>
 
-            {/* Internal badge */}
-            {detail.internal && (
-              <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-                <Lock size={12} className="text-amber-400" />
-                <span className="text-xs text-amber-300">Internal network — no external connectivity</span>
-              </div>
-            )}
-
-            {/* Connected containers */}
-            <div>
-              <h4 className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+            {/* Right column — Connected Containers */}
+            <div className="p-8">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Plug size={12} className="text-slate-500" />
                 Connected Containers ({detail.containers.length})
-              </h4>
+              </h3>
+
               {detail.containers.length === 0 ? (
-                <p className="text-xs text-slate-600 italic py-3">No containers connected</p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Unplug size={28} className="text-slate-700 mb-3" />
+                  <p className="text-sm text-slate-500">No containers connected</p>
+                  <p className="text-xs text-slate-600 mt-1">Connect containers to this network using Docker CLI</p>
+                </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {detail.containers.map((c) => (
                     <div
                       key={c.id}
-                      className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5"
+                      className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5 hover:bg-white/[0.05] transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <div>
-                          <p className="text-xs text-slate-200 font-mono">{c.name}</p>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm text-slate-200 font-mono truncate">{c.name}</p>
                           <p className="text-[10px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</p>
                         </div>
                       </div>
@@ -344,13 +352,13 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
                         <button
                           onClick={() => handleDisconnect(c.name)}
                           disabled={disconnecting === c.name}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-50"
-                          title="Disconnect"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-all disabled:opacity-50 shrink-0 ml-3"
+                          title="Disconnect from network"
                         >
                           {disconnecting === c.name ? (
-                            <Loader2 size={10} className="animate-spin" />
+                            <Loader2 size={11} className="animate-spin" />
                           ) : (
-                            <Unplug size={10} />
+                            <Unplug size={11} />
                           )}
                           Disconnect
                         </button>
@@ -363,7 +371,8 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -371,8 +380,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
 // Delete Confirmation Modal
 // ---------------------------------------------------------------------------
 
-function DeleteConfirmModal({ type, name, onClose, onConfirm }: {
-  type: 'network' | 'volume'
+function DeleteConfirmModal({ name, onClose, onConfirm }: {
   name: string
   onClose: () => void
   onConfirm: () => void
@@ -384,15 +392,11 @@ function DeleteConfirmModal({ type, name, onClose, onConfirm }: {
     setDeleting(true)
     setError('')
     try {
-      if (type === 'network') {
-        await deleteNetwork(name)
-      } else {
-        await deleteVolume(name)
-      }
+      await deleteNetwork(name)
       onConfirm()
       onClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : `Failed to delete ${type}`)
+      setError(err instanceof Error ? err.message : 'Failed to delete network')
     } finally {
       setDeleting(false)
     }
@@ -406,16 +410,13 @@ function DeleteConfirmModal({ type, name, onClose, onConfirm }: {
             <Trash2 size={18} className="text-rose-400" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">Delete {type === 'network' ? 'Network' : 'Volume'}</h3>
+            <h3 className="text-sm font-semibold text-slate-100">Delete Network</h3>
             <p className="text-[10px] text-slate-500">This action cannot be undone</p>
           </div>
         </div>
 
         <p className="text-xs text-slate-400 mb-4">
           Are you sure you want to delete <span className="font-mono text-slate-200">{name}</span>?
-          {type === 'volume' && (
-            <span className="text-rose-400 block mt-1">All data stored in this volume will be permanently lost.</span>
-          )}
         </p>
 
         {error && (
@@ -556,16 +557,14 @@ function NetworkCard({ net, onInspect, onDelete }: {
 // ---------------------------------------------------------------------------
 
 export default function Networks() {
-  const [activeTab, setActiveTab] = useState<TabId>('networks')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [inspectNetwork, setInspectNetwork] = useState<NetworkInfo | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<{ type: 'network' | 'volume'; name: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'driver' | 'containers'>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
   const setNetworksStore = useNetworkStore((s) => s.setNetworks)
-  const setVolumesStore = useNetworkStore((s) => s.setVolumes)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
   const {
@@ -574,23 +573,11 @@ export default function Networks() {
     refresh: refreshNetworks,
   } = usePolling<NetworkListResponse>(fetchNetworks, 30000, { enabled: isConnected })
 
-  const {
-    data: volumesData,
-    loading: volumesLoading,
-    refresh: refreshVolumes,
-  } = usePolling<VolumeListResponse>(fetchVolumes, 30000, { enabled: isConnected })
-
   useEffect(() => {
     if (networksData) setNetworksStore(networksData.networks)
   }, [networksData, setNetworksStore])
 
-  useEffect(() => {
-    if (volumesData) setVolumesStore(volumesData.volumes)
-  }, [volumesData, setVolumesStore])
-
   const networks: NetworkInfo[] = networksData?.networks ?? []
-  const volumes: VolumeInfo[] = volumesData?.volumes ?? []
-  const isLoading = activeTab === 'networks' ? networksLoading : volumesLoading
 
   // Filter & sort networks
   const filteredNetworks = useMemo(() => {
@@ -613,30 +600,8 @@ export default function Networks() {
     return list
   }, [networks, searchQuery, sortBy, sortAsc])
 
-  // Filter & sort volumes
-  const filteredVolumes = useMemo(() => {
-    let list = [...volumes]
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      list = list.filter((v) => v.name.toLowerCase().includes(q))
-    }
-    list.sort((a, b) => a.name.localeCompare(b.name))
-    return list
-  }, [volumes, searchQuery])
-
   const userNetworks = networks.filter((n) => !BUILTIN_NETWORKS.includes(n.name))
   const totalContainers = networks.reduce((sum, n) => sum + n.containers.length, 0)
-  const totalVolumeSize = volumes.reduce((sum, v) => sum + v.size_bytes, 0)
-
-  function handleRefresh() {
-    refreshNetworks()
-    refreshVolumes()
-  }
-
-  const tabs: { id: TabId; label: string; icon: React.ElementType; count: number }[] = [
-    { id: 'networks', label: 'Networks', icon: Network, count: networksData?.total ?? networks.length },
-    { id: 'volumes', label: 'Volumes', icon: HardDrive, count: volumesData?.total ?? volumes.length },
-  ]
 
   return (
     <div className="space-y-6">
@@ -656,40 +621,37 @@ export default function Networks() {
       )}
       {deleteTarget && (
         <DeleteConfirmModal
-          type={deleteTarget.type}
-          name={deleteTarget.name}
+          name={deleteTarget}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={handleRefresh}
+          onConfirm={refreshNetworks}
         />
       )}
 
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-100">Networks & Volumes</h2>
+          <h2 className="text-xl font-bold text-slate-100">Networks</h2>
           <p className="mt-0.5 text-sm text-slate-500">
-            Docker network topology and volume storage management
+            Docker network topology and container connections
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {activeTab === 'networks' && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="
-                flex items-center gap-2 rounded-lg px-3.5 py-2
-                text-sm font-medium text-emerald-400
-                bg-emerald-500/10 border border-emerald-500/20
-                hover:bg-emerald-500/20 hover:border-emerald-500/30
-                transition-all duration-200
-              "
-            >
-              <Plus size={15} />
-              New Network
-            </button>
-          )}
           <button
-            onClick={handleRefresh}
-            disabled={isLoading}
+            onClick={() => setShowCreateModal(true)}
+            className="
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium text-emerald-400
+              bg-emerald-500/10 border border-emerald-500/20
+              hover:bg-emerald-500/20 hover:border-emerald-500/30
+              transition-all duration-200
+            "
+          >
+            <Plus size={15} />
+            New Network
+          </button>
+          <button
+            onClick={refreshNetworks}
+            disabled={networksLoading}
             className="
               flex items-center gap-2 rounded-lg px-3.5 py-2
               text-sm font-medium text-slate-300
@@ -698,14 +660,14 @@ export default function Networks() {
               disabled:opacity-50 transition-all duration-200
             "
           >
-            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={15} className={networksLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Stats row — 3 columns */}
+      <div className="grid grid-cols-3 gap-3">
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Network size={14} className="text-cyan-400" />
@@ -727,48 +689,6 @@ export default function Networks() {
           </div>
           <p className="text-2xl font-bold text-slate-100">{totalContainers}</p>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <HardDrive size={14} className="text-violet-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Volume Storage</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-100">{formatBytes(totalVolumeSize)}</p>
-        </div>
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-white/[0.03] backdrop-blur-lg rounded-xl p-1 border border-white/[0.06]">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setSearchQuery('') }}
-              className={`
-                flex items-center gap-2 flex-1 justify-center
-                rounded-lg px-4 py-2.5 text-sm font-medium
-                transition-all duration-200
-                ${
-                  isActive
-                    ? 'bg-white/[0.08] text-slate-100 shadow-sm border border-white/[0.08]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
-                }
-              `}
-            >
-              <Icon size={16} className={isActive ? 'text-emerald-400' : 'text-slate-500'} />
-              {tab.label}
-              <span
-                className={`
-                  ml-1 rounded-full px-2 py-0.5 text-xs font-medium
-                  ${isActive ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-slate-500'}
-                `}
-              >
-                {tab.count}
-              </span>
-            </button>
-          )
-        })}
       </div>
 
       {/* Search + Sort bar */}
@@ -779,144 +699,55 @@ export default function Networks() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${activeTab}...`}
+            placeholder="Search networks..."
             className="w-full pl-9 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15 transition-all"
           />
         </div>
-        {activeTab === 'networks' && (
-          <div className="flex items-center gap-1">
-            {(['name', 'driver', 'containers'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  if (sortBy === s) setSortAsc(!sortAsc)
-                  else { setSortBy(s); setSortAsc(true) }
-                }}
-                className={`
-                  flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
-                  ${sortBy === s
-                    ? 'bg-white/[0.06] border-white/[0.1] text-slate-200'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }
-                `}
-              >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-                {sortBy === s && (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          {(['name', 'driver', 'containers'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                if (sortBy === s) setSortAsc(!sortAsc)
+                else { setSortBy(s); setSortAsc(true) }
+              }}
+              className={`
+                flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
+                ${sortBy === s
+                  ? 'bg-white/[0.06] border-white/[0.1] text-slate-200'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                }
+              `}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+              {sortBy === s && (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Networks tab */}
-      {activeTab === 'networks' && (
-        <>
-          {networksLoading && networks.length === 0 ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 size={24} className="animate-spin text-slate-500" />
-            </div>
-          ) : filteredNetworks.length === 0 ? (
-            <div className="glass-subtle rounded-xl p-12 text-center">
-              <Network size={32} className="text-slate-600 mx-auto mb-3" />
-              <p className="text-sm text-slate-400">
-                {searchQuery ? 'No networks match your search' : 'No networks found'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredNetworks.map((net) => (
-                <NetworkCard
-                  key={net.id}
-                  net={net}
-                  onInspect={() => setInspectNetwork(net)}
-                  onDelete={() => setDeleteTarget({ type: 'network', name: net.name })}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Volumes tab */}
-      {activeTab === 'volumes' && (
-        <div className="glass-subtle rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <HardDrive size={16} className="text-cyan-400" />
-              Docker Volumes
-            </h3>
-            <div className="flex items-center gap-1.5">
-              <Info size={11} className="text-slate-600" />
-              <span className="text-[10px] text-slate-600">
-                {filteredVolumes.length} volume{filteredVolumes.length !== 1 ? 's' : ''} &middot; {formatBytes(totalVolumeSize)} total
-              </span>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06]">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Driver
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Mountpoint
-                  </th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Size
-                  </th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider w-16">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filteredVolumes.length === 0 && !volumesLoading && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
-                      {searchQuery ? 'No volumes match your search' : 'No volumes found'}
-                    </td>
-                  </tr>
-                )}
-                {volumesLoading && volumes.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
-                      <Loader2 size={16} className="inline animate-spin mr-2" />
-                      Loading volumes...
-                    </td>
-                  </tr>
-                )}
-                {filteredVolumes.map((vol) => (
-                  <tr key={vol.name} className="group hover:bg-white/[0.03] transition-colors duration-150">
-                    <td className="px-5 py-3 font-mono text-slate-200 text-xs">{vol.name}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
-                        {vol.driver}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs font-mono truncate max-w-[300px]" title={vol.mountpoint}>
-                      {vol.mountpoint}
-                    </td>
-                    <td className="px-5 py-3 text-right text-slate-300 text-xs font-mono">
-                      {formatBytes(vol.size_bytes)}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => setDeleteTarget({ type: 'volume', name: vol.name })}
-                        className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Delete volume"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Network cards */}
+      {networksLoading && networks.length === 0 ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={24} className="animate-spin text-slate-500" />
+        </div>
+      ) : filteredNetworks.length === 0 ? (
+        <div className="glass-subtle rounded-xl p-12 text-center">
+          <Network size={32} className="text-slate-600 mx-auto mb-3" />
+          <p className="text-sm text-slate-400">
+            {searchQuery ? 'No networks match your search' : 'No networks found'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredNetworks.map((net) => (
+            <NetworkCard
+              key={net.id}
+              net={net}
+              onInspect={() => setInspectNetwork(net)}
+              onDelete={() => setDeleteTarget(net.name)}
+            />
+          ))}
         </div>
       )}
     </div>

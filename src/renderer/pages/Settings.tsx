@@ -9,15 +9,17 @@ import {
   Monitor, Shield, Lock, User, UserCircle, Mail,
   Camera, Save, Key, AlertTriangle, XCircle, Plus, FolderPlus,
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
+  Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff,
 } from 'lucide-react'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
+import { useNotificationStore } from '../stores/notificationStore'
 import { usePolling } from '../hooks/usePolling'
-import { fetchVersion, fetchDisks } from '../api/endpoints'
-import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings } from '../../shared/types'
+import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
+import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, ConnectionProfile, AlertThresholds } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // User Profile Editor
@@ -221,24 +223,31 @@ function ProfileSettings() {
           <Eye size={12} />
           Status
         </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
+        <div className="flex flex-col gap-2">
+          <select
             value={profile.statusEmoji}
-            onChange={(e) => handleChange('statusEmoji', e.target.value.slice(0, 2))}
-            placeholder="🟢"
+            onChange={(e) => handleChange('statusEmoji', e.target.value)}
             className="
-              w-12 px-2 py-2.5 bg-white/5 border border-white/10 rounded-lg text-center
-              text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all
+              w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
+              text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
+              focus:ring-1 focus:ring-emerald-500/25 transition-all
             "
-          />
+          >
+            <option value="">Select status...</option>
+            <option value="\uD83D\uDFE2">{'\uD83D\uDFE2'} Online</option>
+            <option value="\uD83D\uDFE1">{'\uD83D\uDFE1'} Away</option>
+            <option value="\uD83D\uDD34">{'\uD83D\uDD34'} Busy</option>
+            <option value="\u26AB">{'\u26AB'} Do Not Disturb</option>
+            <option value="\uD83D\uDFE3">{'\uD83D\uDFE3'} In a Meeting</option>
+            <option value="\uD83D\uDCA4">{'\uD83D\uDCA4'} Offline</option>
+          </select>
           <input
             type="text"
             value={profile.statusText}
             onChange={(e) => handleChange('statusText', e.target.value)}
             placeholder="What are you working on?"
             className="
-              flex-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
+              w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
               text-sm text-slate-200 placeholder-slate-600
               focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all
             "
@@ -1418,6 +1427,337 @@ function ExportImportSettings() {
 }
 
 // ---------------------------------------------------------------------------
+// Connection Profiles (Phase 6A)
+// ---------------------------------------------------------------------------
+
+function ConnectionProfiles() {
+  const profiles = useSettingsStore((s) => s.connectionProfiles) ?? []
+  const serverUrl = useConnectionStore((s) => s.serverUrl)
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const setServerUrl = useConnectionStore((s) => s.setServerUrl)
+  const connect = useConnectionStore((s) => s.connect)
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+  const [addError, setAddError] = useState('')
+
+  const handleAdd = useCallback(() => {
+    const name = newName.trim()
+    const url = newUrl.trim()
+    setAddError('')
+
+    if (!name) { setAddError('Name is required'); return }
+    if (!url) { setAddError('URL is required'); return }
+    if (profiles.some((p) => p.url === url)) { setAddError('A profile with this URL already exists'); return }
+
+    const profile: ConnectionProfile = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      name,
+      url,
+      isDefault: profiles.length === 0,
+    }
+    updateSetting('connectionProfiles', [...profiles, profile])
+    setNewName('')
+    setNewUrl('')
+    setShowAdd(false)
+  }, [newName, newUrl, profiles, updateSetting])
+
+  const handleRemove = useCallback((id: string) => {
+    const updated = profiles.filter((p) => p.id !== id)
+    // If we removed the default, make the first one default
+    if (updated.length > 0 && !updated.some((p) => p.isDefault)) {
+      updated[0].isDefault = true
+    }
+    updateSetting('connectionProfiles', updated)
+  }, [profiles, updateSetting])
+
+  const handleSwitch = useCallback((profile: ConnectionProfile) => {
+    // Update last connected timestamp
+    const updated = profiles.map((p) => ({
+      ...p,
+      isDefault: p.id === profile.id,
+      lastConnected: p.id === profile.id ? Date.now() : p.lastConnected,
+    }))
+    updateSetting('connectionProfiles', updated)
+    updateSetting('serverUrl', profile.url)
+    setServerUrl(profile.url)
+    connect()
+  }, [profiles, updateSetting, setServerUrl, connect])
+
+  const isActive = (url: string) => url === serverUrl
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11px] text-slate-500">
+        Save and switch between multiple Docker Compose Skeleton servers.
+      </p>
+
+      {/* Current connection */}
+      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {connectionStatus === 'connected' ? (
+              <Wifi size={12} className="text-emerald-400" />
+            ) : (
+              <WifiOff size={12} className="text-slate-500" />
+            )}
+            <span className="text-[11px] text-slate-500">Active Server</span>
+          </div>
+          <span className="text-[11px] text-slate-300 font-mono">{serverUrl}</span>
+        </div>
+      </div>
+
+      {/* Profile list */}
+      {profiles.length > 0 && (
+        <div className="space-y-1.5">
+          {profiles.map((profile) => {
+            const active = isActive(profile.url)
+            return (
+              <div
+                key={profile.id}
+                className={`
+                  flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-colors
+                  ${active
+                    ? 'bg-emerald-500/[0.04] border-emerald-500/15'
+                    : 'bg-slate-800/30 border-white/[0.03] hover:border-white/[0.06]'
+                  }
+                `}
+              >
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-800/60 shrink-0">
+                  <Server size={12} className={active ? 'text-emerald-400' : 'text-slate-500'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-200 truncate">{profile.name}</p>
+                  <p className="text-[10px] font-mono text-slate-500 truncate">{profile.url}</p>
+                </div>
+
+                {active ? (
+                  <span className="text-[10px] text-emerald-400 font-medium px-2 py-0.5 rounded bg-emerald-500/10 shrink-0">
+                    Active
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleSwitch(profile)}
+                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/[0.06] hover:text-slate-200 transition-all shrink-0"
+                  >
+                    Connect
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleRemove(profile.id)}
+                  className="p-1 text-slate-600 hover:text-rose-400 transition-colors shrink-0"
+                  title="Remove profile"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Add form */}
+      {showAdd ? (
+        <div className="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Plus size={14} className="text-emerald-400" />
+            <span className="text-xs font-semibold text-slate-200">New Profile</span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Name</label>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => { setNewName(e.target.value); setAddError('') }}
+              placeholder="Production Server"
+              autoFocus
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Server URL</label>
+            <input
+              type="text"
+              value={newUrl}
+              onChange={(e) => { setNewUrl(e.target.value); setAddError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              placeholder="http://192.168.1.100:9876"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+            />
+          </div>
+
+          {addError && (
+            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-[11px] text-rose-400">
+              <XCircle size={12} />
+              {addError}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={handleAdd}
+              disabled={!newName.trim() || !newUrl.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20"
+            >
+              <Plus size={12} />
+              Save Profile
+            </button>
+            <button
+              onClick={() => { setShowAdd(false); setNewName(''); setNewUrl(''); setAddError('') }}
+              className="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all"
+        >
+          <Plus size={12} />
+          Add Server Profile
+        </button>
+      )}
+
+      {profiles.length === 0 && !showAdd && (
+        <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/[0.06] p-4 text-center">
+          <Server size={20} className="text-slate-600 mx-auto mb-2" />
+          <p className="text-[11px] text-slate-500">No saved profiles</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">Save server connections for quick switching</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Notification Preferences (Phase 6B)
+// ---------------------------------------------------------------------------
+
+function NotificationPreferencesSection() {
+  const { preferences, setPreference, requestDesktopPermission } = useNotificationStore()
+
+  const toggleItems: { key: keyof typeof preferences; label: string; description: string; icon: React.ReactNode; color: string }[] = [
+    {
+      key: 'healthAlerts',
+      label: 'Health Alerts',
+      description: 'Notify when system health changes (healthy/degraded/critical)',
+      icon: <HeartPulse size={12} />,
+      color: 'text-rose-400',
+    },
+    {
+      key: 'connectionAlerts',
+      label: 'Connection Alerts',
+      description: 'Notify on server connection/disconnection events',
+      icon: <Wifi size={12} />,
+      color: 'text-emerald-400',
+    },
+    {
+      key: 'containerCrashAlerts',
+      label: 'Container Crash Alerts',
+      description: 'Notify when containers stop unexpectedly',
+      icon: <AlertTriangle size={12} />,
+      color: 'text-amber-400',
+    },
+    {
+      key: 'desktopNotifications',
+      label: 'Desktop Notifications',
+      description: 'Show OS-level notifications when the window is not focused',
+      icon: <Monitor size={12} />,
+      color: 'text-cyan-400',
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11px] text-slate-500">
+        Control which events generate notifications. These preferences are also accessible from the notification drawer.
+      </p>
+
+      <div className="space-y-1">
+        {toggleItems.map((item) => {
+          const checked = item.key === 'diskWarningThreshold'
+            ? false
+            : (preferences[item.key] as boolean)
+          return (
+            <div
+              key={item.key}
+              className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] ${item.color}`}>
+                  {item.icon}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-200">{item.label}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{item.description}</p>
+                </div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={checked}
+                onClick={() => {
+                  if (item.key === 'desktopNotifications' && !checked) {
+                    if ('Notification' in window && Notification.permission === 'default') {
+                      requestDesktopPermission()
+                      return
+                    }
+                  }
+                  setPreference(item.key as keyof typeof preferences, !checked as never)
+                }}
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full
+                  transition-colors duration-200 shrink-0
+                  ${checked ? 'bg-emerald-500' : 'bg-slate-700'}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm
+                    transition-transform duration-200
+                    ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}
+                  `}
+                />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Disk warning threshold */}
+      <div className="border-t border-white/[0.04] pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-xs font-medium text-slate-200">Disk Warning Threshold</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Alert when disk usage exceeds this percentage</p>
+          </div>
+          <span className="text-sm font-bold text-amber-400 font-mono">{preferences.diskWarningThreshold}%</span>
+        </div>
+        <input
+          type="range"
+          min={75}
+          max={95}
+          step={5}
+          value={preferences.diskWarningThreshold}
+          onChange={(e) => setPreference('diskWarningThreshold', Number(e.target.value))}
+          className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-amber-500"
+        />
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[9px] text-slate-600">75%</span>
+          <span className="text-[9px] text-slate-600">95%</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Session Information
 // ---------------------------------------------------------------------------
 
@@ -1426,6 +1766,8 @@ function SessionInfo() {
   const [sessionData, setSessionData] = useState<{ expiresAt?: number; token?: string } | null>(null)
   const [timeLeft, setTimeLeft] = useState('')
   const [lastLogin, setLastLogin] = useState<string | null>(null)
+  const [showToken, setShowToken] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     try {
@@ -1475,9 +1817,16 @@ function SessionInfo() {
     load()
   }, [currentUser])
 
-  const tokenDisplay = sessionData?.token
-    ? `${sessionData.token.slice(0, 8)}...${sessionData.token.slice(-4)}`
-    : null
+  const token = sessionData?.token ?? null
+  const tokenMasked = token ? `${token.slice(0, 8)}${'*'.repeat(Math.min(token.length - 12, 24))}${token.slice(-4)}` : null
+
+  const handleCopyToken = useCallback(() => {
+    if (!token) return
+    navigator.clipboard.writeText(token).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [token])
 
   return (
     <div className="space-y-2 mb-4">
@@ -1496,7 +1845,11 @@ function SessionInfo() {
         {sessionData?.expiresAt && (
           <div className="flex items-center justify-between py-1.5">
             <span className="text-[11px] text-slate-500">Session Expiry</span>
-            <span className="text-[11px] text-slate-300 font-mono">{timeLeft}</span>
+            <span className={`text-[11px] font-mono ${
+              timeLeft === 'Expired' ? 'text-rose-400' : 'text-slate-300'
+            }`}>
+              {timeLeft}
+            </span>
           </div>
         )}
         {lastLogin && (
@@ -1507,14 +1860,167 @@ function SessionInfo() {
             </span>
           </div>
         )}
-        {tokenDisplay && (
-          <div className="flex items-center justify-between py-1.5">
-            <span className="text-[11px] text-slate-500">Session Token</span>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {tokenDisplay}
-            </span>
+        {token && (
+          <div className="py-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] text-slate-500">Session Token</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowToken(!showToken)}
+                  className="p-1 text-slate-600 hover:text-slate-300 transition-colors"
+                  title={showToken ? 'Hide token' : 'Show token'}
+                >
+                  {showToken ? <EyeOff size={11} /> : <Eye size={11} />}
+                </button>
+                <button
+                  onClick={handleCopyToken}
+                  className={`p-1 transition-colors ${copied ? 'text-emerald-400' : 'text-slate-600 hover:text-slate-300'}`}
+                  title="Copy token"
+                >
+                  {copied ? <Check size={11} /> : <Copy size={11} />}
+                </button>
+              </div>
+            </div>
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded px-2.5 py-1.5 overflow-x-auto">
+              <code className="text-[10px] text-slate-400 font-mono break-all select-all">
+                {showToken ? token : tokenMasked}
+              </code>
+            </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Alert Thresholds Editor
+// ---------------------------------------------------------------------------
+
+function AlertThresholdsEditor() {
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const [thresholds, setThresholds] = useState<AlertThresholds>({
+    cpu_warning: 80, cpu_critical: 95,
+    memory_warning: 80, memory_critical: 95,
+    disk_warning: 85, disk_critical: 95,
+    restart_threshold: 5,
+  })
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (!isConnected) return
+    setLoading(true)
+    fetchAlertConfig()
+      .then((res) => { if (res.thresholds) setThresholds(res.thresholds) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [isConnected])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      await updateAlertConfig(thresholds)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch { /* */ }
+    finally { setSaving(false) }
+  }
+
+  const updateField = (key: keyof AlertThresholds, value: number) => {
+    setThresholds(prev => ({ ...prev, [key]: value }))
+  }
+
+  const sliderRow = (label: string, warningKey: keyof AlertThresholds, criticalKey: keyof AlertThresholds, unit = '%') => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-slate-400">{label}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-amber-400/70">Warning: {thresholds[warningKey]}{unit}</span>
+          <span className="text-[10px] text-rose-400/70">Critical: {thresholds[criticalKey]}{unit}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-amber-400/50 w-10 shrink-0">Warn</span>
+            <input
+              type="range" min={10} max={100} step={5}
+              value={thresholds[warningKey]}
+              onChange={(e) => updateField(warningKey, Number(e.target.value))}
+              className="flex-1 h-1 rounded-full appearance-none bg-slate-700 accent-amber-500 cursor-pointer"
+            />
+            <input
+              type="number" min={10} max={100} step={5}
+              value={thresholds[warningKey]}
+              onChange={(e) => updateField(warningKey, Number(e.target.value))}
+              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-amber-400 focus:outline-none focus:border-amber-500/30"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-rose-400/50 w-10 shrink-0">Crit</span>
+            <input
+              type="range" min={10} max={100} step={5}
+              value={thresholds[criticalKey]}
+              onChange={(e) => updateField(criticalKey, Number(e.target.value))}
+              className="flex-1 h-1 rounded-full appearance-none bg-slate-700 accent-rose-500 cursor-pointer"
+            />
+            <input
+              type="number" min={10} max={100} step={5}
+              value={thresholds[criticalKey]}
+              onChange={(e) => updateField(criticalKey, Number(e.target.value))}
+              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-rose-400 focus:outline-none focus:border-rose-500/30"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (loading) {
+    return <div className="flex items-center gap-2 py-4"><Timer size={14} className="text-slate-600 animate-spin" /><span className="text-xs text-slate-600">Loading thresholds...</span></div>
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-[11px] text-slate-500 -mt-1">
+        Configure when resource usage triggers warning and critical alerts on the dashboard.
+      </p>
+
+      {sliderRow('CPU Usage', 'cpu_warning', 'cpu_critical')}
+      <div className="border-b border-white/[0.04]" />
+      {sliderRow('Memory Usage', 'memory_warning', 'memory_critical')}
+      <div className="border-b border-white/[0.04]" />
+      {sliderRow('Disk Usage', 'disk_warning', 'disk_critical')}
+      <div className="border-b border-white/[0.04]" />
+
+      {/* Restart threshold */}
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-xs font-medium text-slate-400">Container Restart Threshold</span>
+          <p className="text-[10px] text-slate-600">Alert when a container restarts more than this many times</p>
+        </div>
+        <input
+          type="number" min={1} max={50} step={1}
+          value={thresholds.restart_threshold}
+          onChange={(e) => updateField('restart_threshold', Number(e.target.value))}
+          className="w-16 px-2 py-1.5 text-sm text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500/30"
+        />
+      </div>
+
+      {/* Save button */}
+      <div className="flex items-center justify-end gap-2 pt-2">
+        {saved && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={12} /> Saved</span>}
+        <button
+          onClick={handleSave}
+          disabled={saving || !isConnected}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40 transition-all"
+        >
+          {saving ? <Timer size={12} className="animate-spin" /> : <Save size={12} />}
+          Save Thresholds
+        </button>
       </div>
     </div>
   )
@@ -1584,6 +2090,10 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
 export default function Settings() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const serverUrl = useConnectionStore((s) => s.serverUrl)
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+  const customCSS = useSettingsStore((s) => s.customCSS) || ''
+  const [customCSSLocal, setCustomCSSLocal] = useState(customCSS)
+  useEffect(() => { setCustomCSSLocal(customCSS) }, [customCSS])
 
   const [appVersion, setAppVersion] = useState<string>('--')
 
@@ -1704,7 +2214,24 @@ export default function Settings() {
           <DiskLabelManager />
         </SectionCard>
 
-        {/* Row 5: Auto-Lock & Notifications + Export/Import (side by side) */}
+        {/* Row 5: Connection Profiles + Notification Preferences */}
+        <SectionCard
+          icon={<Server size={16} className="text-emerald-400" />}
+          title="Server Profiles"
+          accentColor="border-t-emerald-500"
+        >
+          <ConnectionProfiles />
+        </SectionCard>
+
+        <SectionCard
+          icon={<Bell size={16} className="text-cyan-400" />}
+          title="Notification Preferences"
+          accentColor="border-t-cyan-500"
+        >
+          <NotificationPreferencesSection />
+        </SectionCard>
+
+        {/* Row 6: Auto-Lock & Notifications + Export/Import (side by side) */}
         <SectionCard
           icon={<LockKeyhole size={16} className="text-amber-400" />}
           title="Lock & Notifications"
@@ -1721,7 +2248,64 @@ export default function Settings() {
           <ExportImportSettings />
         </SectionCard>
 
-        {/* Row 6: About + Security (side by side) */}
+        {/* Custom CSS */}
+        <SectionCard
+          icon={<Palette size={16} className="text-violet-400" />}
+          title="Custom CSS"
+          accentColor="border-t-violet-500"
+          fullWidth
+        >
+          <div className="space-y-4">
+            <p className="text-[10px] text-slate-500">Add custom styles to personalize your dashboard</p>
+            <textarea
+              value={customCSSLocal}
+              onChange={(e) => setCustomCSSLocal(e.target.value)}
+              placeholder={"/* Add your custom CSS here */\n.glass { border-radius: 1rem; }"}
+              rows={10}
+              className="
+                w-full px-4 py-3 bg-slate-950 border border-white/[0.08] rounded-xl
+                text-xs text-emerald-400 placeholder-slate-700 font-mono
+                focus:outline-none focus:border-violet-500/30 focus:ring-1 focus:ring-violet-500/15
+                resize-y transition-all leading-relaxed
+              "
+              spellCheck={false}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-600">
+                {customCSSLocal.length} characters
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setCustomCSSLocal(''); updateSetting('customCSS', '') }}
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => updateSetting('customCSS', customCSSLocal)}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-400 shadow-lg shadow-violet-500/20 transition-all"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600">
+              Changes apply instantly when you click Apply. Use browser dev tools to inspect element classes.
+            </p>
+          </div>
+        </SectionCard>
+
+        {/* Row 7: Alert Thresholds */}
+        <SectionCard
+          icon={<Bell size={16} className="text-amber-400" />}
+          title="Alert Thresholds"
+          accentColor="border-t-amber-500"
+          defaultCollapsed
+        >
+          <AlertThresholdsEditor />
+        </SectionCard>
+
+        {/* Row 8: About + Security (side by side) */}
         <SectionCard
           icon={<Info size={16} className="text-cyan-400" />}
           title="About"

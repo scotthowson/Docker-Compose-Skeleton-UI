@@ -9,6 +9,7 @@ import { useApi } from '../hooks/useApi'
 import { fetchContainers } from '../api/endpoints'
 import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
+import { ErrorBoundary } from '../components/common/ErrorBoundary'
 
 const CONTAINER_POLL_INTERVAL = 10_000
 
@@ -56,12 +57,14 @@ const Containers: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-6">
       {selectedName && selectedContainer ? (
-        <ContainerDetail
-          containerName={selectedName}
-          containerInfo={selectedContainer}
-          onBack={handleBack}
-          onRefreshList={refresh}
-        />
+        <ErrorBoundary key={selectedName} fallbackMessage="Failed to render container details">
+          <ContainerDetail
+            containerName={selectedName}
+            containerInfo={selectedContainer}
+            onBack={handleBack}
+            onRefreshList={refresh}
+          />
+        </ErrorBoundary>
       ) : (
         <ContainerList
           selectedName={selectedName}

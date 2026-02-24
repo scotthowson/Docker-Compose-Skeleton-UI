@@ -7,11 +7,13 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   ScrollText, Search, ArrowDownToLine, RefreshCw, FileText,
   Download, Copy, Check, Filter, X, BarChart3, Archive, ChevronDown,
+  Radio,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { fetchLogsFiltered, fetchLogStats, fetchLogArchives } from '../api/endpoints'
 import { useLogStore } from '../stores/logStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import LiveLogViewer from '../components/logs/LiveLogViewer'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -64,7 +66,7 @@ function getLineColorClass(line: string): string {
 // Tab type
 // ---------------------------------------------------------------------------
 
-type TabId = 'logs' | 'archives'
+type TabId = 'logs' | 'live' | 'archives'
 
 // ---------------------------------------------------------------------------
 // Component
@@ -464,6 +466,20 @@ export default function Logs() {
           Logs
         </button>
         <button
+          onClick={() => setActiveTab('live')}
+          className={`
+            flex items-center gap-1.5 rounded-lg px-3 py-2
+            text-xs font-medium border transition-all duration-200
+            ${activeTab === 'live'
+              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+              : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+            }
+          `}
+        >
+          <Radio size={14} />
+          Live
+        </button>
+        <button
           onClick={() => setActiveTab('archives')}
           className={`
             flex items-center gap-1.5 rounded-lg px-3 py-2
@@ -654,6 +670,15 @@ export default function Logs() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ================================================================= */}
+      {/* LIVE TAB */}
+      {/* ================================================================= */}
+      {activeTab === 'live' && (
+        <div className="flex-1 min-h-0">
+          <LiveLogViewer initialLines={200} pollInterval={2000} maxLines={5000} />
+        </div>
       )}
 
       {/* ================================================================= */}

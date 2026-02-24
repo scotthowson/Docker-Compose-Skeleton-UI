@@ -2,14 +2,17 @@
 // QuickActions — Dashboard panel with common server management actions
 // =============================================================================
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
   Play, Square, RotateCw, Trash2, RefreshCw, Layers,
   HeartPulse, ScrollText, Monitor, Settings2, Loader2, Zap,
-  HardDrive, Network, Cog, ChevronDown,
+  HardDrive, Network, Cog, ChevronDown, Archive,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useToast } from '../common/Toast'
+import { runImagePrune, triggerLogRotate, fetchHealthReport } from '../../api/endpoints'
+import { useHealthStore } from '../../stores/healthStore'
 import type { PageId } from '../../../shared/types'
 
 interface QuickAction {
@@ -19,9 +22,10 @@ interface QuickAction {
   color: string
   bgColor: string
   navigateTo?: PageId
+  apiAction?: boolean
 }
 
-const actions: QuickAction[] = [
+const navActions: QuickAction[] = [
   {
     id: 'stacks',
     label: 'Manage Stacks',
@@ -70,35 +74,43 @@ const actions: QuickAction[] = [
     bgColor: 'bg-blue-500/10 group-hover:bg-blue-500/15',
     navigateTo: 'containers',
   },
+]
+
+const apiActions: QuickAction[] = [
   {
-    id: 'images',
-    label: 'Images',
-    icon: <HardDrive size={18} />,
+    id: 'prune-images',
+    label: 'Prune Images',
+    icon: <Trash2 size={18} />,
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10 group-hover:bg-orange-500/15',
-    navigateTo: 'images',
+    apiAction: true,
   },
   {
-    id: 'networks',
-    label: 'Networks',
-    icon: <Network size={18} />,
+    id: 'rotate-logs',
+    label: 'Rotate Logs',
+    icon: <Archive size={18} />,
     color: 'text-pink-400',
     bgColor: 'bg-pink-500/10 group-hover:bg-pink-500/15',
-    navigateTo: 'networks',
+    apiAction: true,
   },
   {
-    id: 'settings',
-    label: 'Settings',
-    icon: <Cog size={18} />,
-    color: 'text-slate-300',
-    bgColor: 'bg-slate-500/10 group-hover:bg-slate-500/15',
-    navigateTo: 'settings',
+    id: 'check-health',
+    label: 'Check Health',
+    icon: <HeartPulse size={18} />,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10 group-hover:bg-emerald-500/15',
+    apiAction: true,
   },
 ]
+
+const allActions = [...navActions, ...apiActions]
 
 export default function QuickActions({ collapsible = false }: { collapsible?: boolean }) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const setHealthReport = useHealthStore((s) => s.setReport)
+  const { addToast } = useToast()
+  const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(() => {
     if (!collapsible) return false
     try { return localStorage.getItem('dash-quickactions-collapsed') === 'true' } catch { return false }
@@ -109,6 +121,55 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
     setCollapsed(next)
     try { localStorage.setItem('dash-quickactions-collapsed', String(next)) } catch {}
   }
+
+  const handleApiAction = useCallback(async (actionId: string) => {
+    if (loadingAction) return
+    setLoadingAction(actionId)
+    try {
+      switch (actionId) {
+        case 'prune-images': {
+          const result = await runImagePrune()
+          addToast({
+            type: result.success ? 'success' : 'error',
+            message: result.success ? 'Stale images pruned successfully' : 'Image prune failed',
+          })
+          break
+        }
+        case 'rotate-logs': {
+          const result = await triggerLogRotate()
+          addToast({
+            type: result.success ? 'success' : 'error',
+            message: result.success
+              ? `Logs rotated${result.archived_as ? ` — archived as ${result.archived_as}` : ''}`
+              : 'Log rotation failed',
+          })
+          break
+        }
+        case 'check-health': {
+          const report = await fetchHealthReport()
+          setHealthReport(report)
+          addToast({
+            type: report.status === 'healthy' ? 'success' : report.status === 'degraded' ? 'warning' : 'error',
+            message: `Health: ${report.status} — ${report.summary.healthy}/${report.summary.total} healthy`,
+          })
+          break
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Action failed'
+      addToast({ type: 'error', message: msg })
+    } finally {
+      setLoadingAction(null)
+    }
+  }, [loadingAction, addToast, setHealthReport])
+
+  const handleClick = useCallback((action: QuickAction) => {
+    if (action.navigateTo) {
+      setCurrentPage(action.navigateTo)
+    } else if (action.apiAction) {
+      handleApiAction(action.id)
+    }
+  }, [setCurrentPage, handleApiAction])
 
   return (
     <div className="glass-card p-6 animate-fade-in">
@@ -132,29 +193,32 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
         className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'}`}
       >
         <div className={`grid grid-cols-3 gap-2.5 stagger-children ${collapsed ? '' : 'pt-0'}`}>
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              onClick={() => action.navigateTo && setCurrentPage(action.navigateTo)}
-              disabled={!isConnected && action.id !== 'stacks'}
-              className="
-                group flex flex-col items-center gap-2.5 p-4
-                rounded-xl bg-slate-800/30 border border-white/[0.03]
-                hover:border-white/[0.08] hover:bg-slate-800/50
-                hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
-                disabled:opacity-40
-                transition-all duration-200
-                text-center press
-              "
-            >
-              <div className={`rounded-lg p-2.5 ${action.bgColor} ${action.color} transition-all duration-300 group-hover:scale-110`}>
-                {action.icon}
-              </div>
-              <span className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">
-                {action.label}
-              </span>
-            </button>
-          ))}
+          {allActions.map((action) => {
+            const isLoading = loadingAction === action.id
+            return (
+              <button
+                key={action.id}
+                onClick={() => handleClick(action)}
+                disabled={(!isConnected && action.id !== 'stacks') || isLoading}
+                className="
+                  group flex flex-col items-center gap-2.5 p-4
+                  rounded-xl bg-slate-800/30 border border-white/[0.03]
+                  hover:border-white/[0.08] hover:bg-slate-800/50
+                  hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
+                  disabled:opacity-40
+                  transition-all duration-200
+                  text-center press
+                "
+              >
+                <div className={`rounded-lg p-2.5 ${action.bgColor} ${action.color} transition-all duration-300 group-hover:scale-110`}>
+                  {isLoading ? <Loader2 size={18} className="animate-spin" /> : action.icon}
+                </div>
+                <span className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">
+                  {action.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

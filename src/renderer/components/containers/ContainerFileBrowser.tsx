@@ -1,0 +1,713 @@
+// =============================================================================
+// ContainerFileBrowser — Tree-style file browser for running Docker containers
+// =============================================================================
+
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { fetchContainerFiles, fetchContainerFileContent } from '../../api/endpoints'
+import type { ContainerFileEntry } from '../../../shared/types'
+import {
+  Folder,
+  File,
+  FileText,
+  ChevronRight,
+  ArrowLeft,
+  Download,
+  X,
+  RefreshCw,
+  AlertCircle,
+  FolderOpen,
+  FileCode,
+  FileJson,
+} from 'lucide-react'
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+interface Props {
+  containerName: string
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Format raw byte count to human-readable KB/MB/GB. */
+function formatSize(bytes: number): string {
+  if (bytes < 0) return '--'
+  if (bytes === 0) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+/** Get the file extension from a filename. */
+function getExtension(name: string): string {
+  const dot = name.lastIndexOf('.')
+  if (dot === -1 || dot === 0) return ''
+  return name.slice(dot + 1).toLowerCase()
+}
+
+/** Choose the appropriate icon component for a file entry. */
+function FileIcon({ entry }: { entry: ContainerFileEntry }) {
+  if (entry.type === 'directory') {
+    return <Folder className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+  }
+  if (entry.type === 'symlink') {
+    return <File className="h-4 w-4 text-cyan-400 flex-shrink-0" />
+  }
+  const ext = getExtension(entry.name)
+  if (ext === 'json') {
+    return <FileJson className="h-4 w-4 text-amber-400 flex-shrink-0" />
+  }
+  if (['sh', 'bash', 'zsh', 'py', 'js', 'ts', 'rb', 'go', 'rs', 'lua', 'pl'].includes(ext)) {
+    return <FileCode className="h-4 w-4 text-violet-400 flex-shrink-0" />
+  }
+  return <FileText className="h-4 w-4 text-slate-400 flex-shrink-0" />
+}
+
+/** Map file extension to a syntax-hint label for the content viewer. */
+function getSyntaxLabel(name: string): string {
+  const ext = getExtension(name)
+  const map: Record<string, string> = {
+    json: 'JSON',
+    yml: 'YAML',
+    yaml: 'YAML',
+    toml: 'TOML',
+    ini: 'INI',
+    conf: 'Config',
+    cfg: 'Config',
+    properties: 'Properties',
+    sh: 'Shell',
+    bash: 'Shell',
+    zsh: 'Shell',
+    py: 'Python',
+    js: 'JavaScript',
+    ts: 'TypeScript',
+    rb: 'Ruby',
+    go: 'Go',
+    rs: 'Rust',
+    lua: 'Lua',
+    pl: 'Perl',
+    xml: 'XML',
+    html: 'HTML',
+    css: 'CSS',
+    sql: 'SQL',
+    md: 'Markdown',
+    env: 'Env',
+    log: 'Log',
+    txt: 'Text',
+    csv: 'CSV',
+  }
+  return map[ext] || 'Plain'
+}
+
+/** Build path segments for breadcrumb navigation. */
+function buildBreadcrumbs(path: string): Array<{ label: string; path: string }> {
+  const crumbs: Array<{ label: string; path: string }> = [{ label: '/', path: '/' }]
+  if (path === '/') return crumbs
+
+  const parts = path.split('/').filter(Boolean)
+  let accumulated = ''
+  for (const part of parts) {
+    accumulated += '/' + part
+    crumbs.push({ label: part, path: accumulated })
+  }
+  return crumbs
+}
+
+/** Determine the color class for an entry name based on its type. */
+function entryNameColor(entry: ContainerFileEntry): string {
+  if (entry.type === 'directory') return 'text-emerald-400'
+  if (entry.type === 'symlink') return 'text-cyan-400'
+  return 'text-slate-300'
+}
+
+/** Resolve the parent directory of a given path. */
+function parentPath(path: string): string {
+  if (path === '/') return '/'
+  const trimmed = path.endsWith('/') ? path.slice(0, -1) : path
+  const lastSlash = trimmed.lastIndexOf('/')
+  if (lastSlash <= 0) return '/'
+  return trimmed.slice(0, lastSlash)
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton Rows (loading state)
+// ---------------------------------------------------------------------------
+
+function SkeletonRows({ count = 8 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <tr key={i} className="border-b border-white/[0.04]">
+          <td className="px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="h-4 w-4 rounded bg-white/[0.06] animate-pulse" />
+              <div
+                className="h-3.5 rounded bg-white/[0.06] animate-pulse"
+                style={{ width: `${60 + Math.random() * 120}px` }}
+              />
+            </div>
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-12 rounded bg-white/[0.04] animate-pulse" />
+          </td>
+          <td className="px-4 py-3">
+            <div className="h-3 w-14 rounded bg-white/[0.04] animate-pulse" />
+          </td>
+          <td className="px-4 py-3 hidden md:table-cell">
+            <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+          </td>
+          <td className="px-4 py-3 hidden lg:table-cell">
+            <div className="h-3 w-28 rounded bg-white/[0.04] animate-pulse" />
+          </td>
+        </tr>
+      ))}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// File Content Viewer Overlay
+// ---------------------------------------------------------------------------
+
+interface FileViewerProps {
+  containerName: string
+  filePath: string
+  fileName: string
+  onClose: () => void
+}
+
+function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerProps) {
+  const [content, setContent] = useState<string | null>(null)
+  const [fileSize, setFileSize] = useState<number>(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+
+  const syntaxLabel = getSyntaxLabel(fileName)
+
+  // Load file content
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setContent(null)
+
+    fetchContainerFileContent(containerName, filePath)
+      .then((res) => {
+        if (!cancelled) {
+          setContent(res.content)
+          setFileSize(res.size)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (msg.toLowerCase().includes('permission')) {
+            setError('Permission denied: unable to read this file.')
+          } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('404')) {
+            setError('File not found: the file may have been removed or renamed.')
+          } else {
+            setError(msg || 'Failed to read file content.')
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [containerName, filePath])
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  // Close on backdrop click
+  const handleOverlayClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target === overlayRef.current) onClose()
+    },
+    [onClose],
+  )
+
+  // Download file as blob
+  const handleDownload = useCallback(() => {
+    if (content === null) return
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [content, fileName])
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      onClick={handleOverlayClick}
+      className="
+        fixed inset-0 z-[9999]
+        flex items-center justify-center
+        bg-black/70 backdrop-blur-sm
+        animate-fade-in
+      "
+    >
+      <div
+        className="
+          relative
+          w-full max-w-4xl mx-4 max-h-[85vh]
+          bg-slate-900/95 backdrop-blur-2xl
+          border border-white/10 rounded-2xl
+          shadow-2xl shadow-black/50
+          flex flex-col
+          animate-fade-in
+        "
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-viewer-title"
+      >
+        {/* Title bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <FileIcon entry={{ name: fileName, type: 'file', size: 0, permissions: '', modified: '' }} />
+            <div className="min-w-0">
+              <h2
+                id="file-viewer-title"
+                className="text-sm font-semibold text-slate-100 truncate"
+                title={filePath}
+              >
+                {fileName}
+              </h2>
+              <p className="text-[11px] text-slate-500 font-mono truncate" title={filePath}>
+                {filePath}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Syntax label badge */}
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20">
+              {syntaxLabel}
+            </span>
+            {/* Size badge */}
+            {!loading && !error && (
+              <span className="text-[10px] text-slate-500 font-mono">
+                {formatSize(fileSize)}
+              </span>
+            )}
+            {/* Download button */}
+            <button
+              onClick={handleDownload}
+              disabled={content === null}
+              className="
+                flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                text-xs font-medium
+                bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                hover:bg-emerald-500/20 transition-all
+                disabled:opacity-40 disabled:cursor-not-allowed
+              "
+              title="Download file"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </button>
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="
+                flex items-center justify-center
+                w-8 h-8 rounded-lg
+                text-slate-500 hover:text-slate-300
+                hover:bg-white/[0.06]
+                transition-colors duration-150
+              "
+              aria-label="Close file viewer"
+            >
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 overflow-hidden">
+          {loading && (
+            <div className="flex items-center justify-center h-64 gap-3">
+              <RefreshCw className="h-5 w-5 text-emerald-400 animate-spin" />
+              <span className="text-sm text-slate-400">Reading file...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 px-6">
+              <AlertCircle className="h-8 w-8 text-rose-400" />
+              <p className="text-sm text-rose-300 text-center">{error}</p>
+            </div>
+          )}
+
+          {!loading && !error && content !== null && (
+            <pre
+              className="
+                px-6 py-5
+                text-[12px] leading-relaxed font-mono text-slate-300
+                whitespace-pre-wrap break-words
+                overflow-auto max-h-[calc(85vh-130px)]
+                scrollbar-thin
+                selection:bg-emerald-500/30
+              "
+            >
+              {content || '(empty file)'}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ContainerFileBrowser Component
+// ---------------------------------------------------------------------------
+
+const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
+  const [currentPath, setCurrentPath] = useState('/')
+  const [entries, setEntries] = useState<ContainerFileEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  // File viewer overlay state
+  const [viewingFile, setViewingFile] = useState<{ path: string; name: string } | null>(null)
+
+  // Sort entries: directories first, then alphabetical
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (a.type === 'directory' && b.type !== 'directory') return -1
+    if (a.type !== 'directory' && b.type === 'directory') return 1
+    return a.name.localeCompare(b.name)
+  })
+
+  const breadcrumbs = buildBreadcrumbs(currentPath)
+  const isRoot = currentPath === '/'
+
+  // Fetch directory listing
+  const fetchDirectory = useCallback(
+    async (path: string) => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetchContainerFiles(containerName, path)
+        setEntries(res.entries)
+        setCurrentPath(res.path || path)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.toLowerCase().includes('permission')) {
+          setError('Permission denied: cannot list this directory.')
+        } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('404')) {
+          setError('Directory not found.')
+        } else {
+          setError(msg || 'Failed to list directory contents.')
+        }
+        setEntries([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [containerName],
+  )
+
+  // Initial load
+  useEffect(() => {
+    fetchDirectory('/')
+  }, [fetchDirectory])
+
+  // Navigate into a directory
+  const navigateTo = useCallback(
+    (path: string) => {
+      fetchDirectory(path)
+    },
+    [fetchDirectory],
+  )
+
+  // Navigate to parent
+  const navigateUp = useCallback(() => {
+    if (!isRoot) {
+      navigateTo(parentPath(currentPath))
+    }
+  }, [currentPath, isRoot, navigateTo])
+
+  // Handle clicking an entry row
+  const handleEntryClick = useCallback(
+    (entry: ContainerFileEntry) => {
+      if (entry.type === 'directory') {
+        const target = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`
+        navigateTo(target)
+      } else {
+        // File or symlink — open viewer
+        const target = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`
+        setViewingFile({ path: target, name: entry.name })
+      }
+    },
+    [currentPath, navigateTo],
+  )
+
+  // Refresh current directory
+  const handleRefresh = useCallback(() => {
+    fetchDirectory(currentPath)
+  }, [fetchDirectory, currentPath])
+
+  return (
+    <>
+      <section className="animate-fade-in">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-xl overflow-hidden">
+          {/* Header with collapse toggle */}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="flex items-center gap-2 w-full px-5 py-4 hover:bg-white/[0.02] transition-colors"
+          >
+            <FolderOpen className="h-4 w-4 text-emerald-400" />
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+              File Browser
+            </h2>
+            <ChevronRight
+              className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${
+                collapsed ? 'rotate-0' : 'rotate-90'
+              }`}
+            />
+          </button>
+
+          {!collapsed && (
+            <div className="px-5 pb-5 space-y-4">
+              {/* Toolbar: breadcrumbs + actions */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Back / parent directory button */}
+                <button
+                  onClick={navigateUp}
+                  disabled={isRoot || loading}
+                  className="
+                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
+                    text-xs font-medium
+                    bg-white/[0.04] border border-white/[0.06]
+                    text-slate-400 hover:text-white hover:bg-white/[0.08]
+                    transition-all duration-200
+                    disabled:opacity-30 disabled:cursor-not-allowed
+                  "
+                  title="Go to parent directory"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Up
+                </button>
+
+                {/* Breadcrumb navigation */}
+                <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+                  {breadcrumbs.map((crumb, idx) => {
+                    const isLast = idx === breadcrumbs.length - 1
+                    return (
+                      <React.Fragment key={crumb.path}>
+                        {idx > 0 && (
+                          <ChevronRight className="h-3 w-3 text-slate-600 flex-shrink-0" />
+                        )}
+                        <button
+                          onClick={() => !isLast && navigateTo(crumb.path)}
+                          disabled={isLast || loading}
+                          className={`
+                            px-1.5 py-0.5 rounded text-xs font-mono flex-shrink-0
+                            transition-colors duration-150
+                            ${isLast
+                              ? 'text-slate-200 font-semibold cursor-default'
+                              : 'text-slate-500 hover:text-emerald-400 hover:bg-white/[0.04]'
+                            }
+                          `}
+                          title={crumb.path}
+                        >
+                          {crumb.label}
+                        </button>
+                      </React.Fragment>
+                    )
+                  })}
+                </nav>
+
+                {/* Refresh button */}
+                <button
+                  onClick={handleRefresh}
+                  disabled={loading}
+                  className="
+                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
+                    text-xs font-medium
+                    bg-white/[0.04] border border-white/[0.06]
+                    text-slate-400 hover:text-white hover:bg-white/[0.08]
+                    transition-all duration-200
+                    disabled:opacity-30
+                  "
+                  title="Refresh directory"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {/* Error banner */}
+              {error && (
+                <div className="flex items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+                  <AlertCircle className="h-5 w-5 text-rose-400 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-rose-300">{error}</p>
+                  </div>
+                  <button
+                    onClick={handleRefresh}
+                    className="
+                      flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                      text-xs font-medium
+                      bg-rose-500/10 text-rose-300 border border-rose-500/20
+                      hover:bg-rose-500/20 transition-all
+                    "
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {/* File listing table */}
+              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">
+                        Name
+                      </th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-20">
+                        Type
+                      </th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-24">
+                        Size
+                      </th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-28 hidden md:table-cell">
+                        Permissions
+                      </th>
+                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-40 hidden lg:table-cell">
+                        Modified
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading && entries.length === 0 && <SkeletonRows />}
+
+                    {!loading && !error && sortedEntries.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-12 text-slate-600">
+                          <div className="flex flex-col items-center gap-2">
+                            <FolderOpen className="h-8 w-8 text-slate-700" />
+                            <span>This directory is empty.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loading &&
+                      sortedEntries.map((entry, idx) => (
+                        <tr
+                          key={entry.name}
+                          onClick={() => handleEntryClick(entry)}
+                          className={`
+                            border-b border-white/[0.04]
+                            hover:bg-white/[0.03]
+                            cursor-pointer
+                            transition-colors duration-150
+                            animate-fade-in
+                            ${idx % 2 === 0 ? 'bg-white/[0.01]' : 'bg-transparent'}
+                          `}
+                          style={{ animationDelay: `${Math.min(idx * 15, 300)}ms` }}
+                        >
+                          {/* Name */}
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <FileIcon entry={entry} />
+                              <span
+                                className={`font-mono truncate ${entryNameColor(entry)}`}
+                                title={entry.name}
+                              >
+                                {entry.name}
+                                {entry.type === 'directory' && '/'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Type */}
+                          <td className="px-4 py-2.5">
+                            <span
+                              className={`
+                                inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide
+                                ${entry.type === 'directory'
+                                  ? 'bg-emerald-500/10 text-emerald-400'
+                                  : entry.type === 'symlink'
+                                    ? 'bg-cyan-500/10 text-cyan-400'
+                                    : 'bg-slate-500/10 text-slate-400'
+                                }
+                              `}
+                            >
+                              {entry.type === 'directory' ? 'dir' : entry.type === 'symlink' ? 'link' : 'file'}
+                            </span>
+                          </td>
+
+                          {/* Size */}
+                          <td className="px-4 py-2.5 font-mono text-slate-400">
+                            {entry.type === 'directory' ? '--' : formatSize(entry.size)}
+                          </td>
+
+                          {/* Permissions */}
+                          <td className="px-4 py-2.5 font-mono text-slate-500 hidden md:table-cell">
+                            {entry.permissions || '--'}
+                          </td>
+
+                          {/* Modified */}
+                          <td className="px-4 py-2.5 text-slate-500 hidden lg:table-cell">
+                            {entry.modified || '--'}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer info: entry count */}
+              {!loading && !error && entries.length > 0 && (
+                <div className="flex items-center justify-between text-[10px] text-slate-600 px-1">
+                  <span>
+                    {sortedEntries.filter((e) => e.type === 'directory').length} directories,{' '}
+                    {sortedEntries.filter((e) => e.type !== 'directory').length} files
+                  </span>
+                  <span className="font-mono">{currentPath}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* File content viewer overlay */}
+      {viewingFile && (
+        <FileViewer
+          containerName={containerName}
+          filePath={viewingFile.path}
+          fileName={viewingFile.name}
+          onClose={() => setViewingFile(null)}
+        />
+      )}
+    </>
+  )
+}
+
+export default ContainerFileBrowser

@@ -1,11 +1,17 @@
 // =============================================================================
 // ContainerOverview — Live container status list for Dashboard
+//                     with compact PieChart donut showing status breakdown
 // =============================================================================
 
 import React from 'react'
 import { Box, CircleDot, Wifi, WifiOff } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { useConnectionStore } from '../../stores/connectionStore'
 import type { ContainerInfo } from '../../../shared/types'
+
+// ---------------------------------------------------------------------------
+// Status helpers
+// ---------------------------------------------------------------------------
 
 function statusDot(state: string): string {
   switch (state) {
@@ -32,6 +38,76 @@ function formatUptime(seconds: number): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
+
+// ---------------------------------------------------------------------------
+// Donut colors for status breakdown
+// ---------------------------------------------------------------------------
+
+const STATUS_COLORS = {
+  running: '#10b981',  // emerald-500
+  stopped: '#f43f5e',  // rose-500
+  paused: '#f59e0b',   // amber-500
+  other: '#64748b',    // slate-500
+}
+
+// ---------------------------------------------------------------------------
+// Status Donut — compact 80x80 breakdown chart
+// ---------------------------------------------------------------------------
+
+function StatusDonut({ containers }: { containers: ContainerInfo[] }) {
+  const running = containers.filter((c) => c.state === 'running').length
+  const stopped = containers.filter((c) => c.state === 'exited').length
+  const paused = containers.filter((c) => c.state === 'paused').length
+  const other = containers.length - running - stopped - paused
+
+  const data = [
+    { name: 'Running', value: running, color: STATUS_COLORS.running },
+    { name: 'Stopped', value: stopped, color: STATUS_COLORS.stopped },
+    { name: 'Paused', value: paused, color: STATUS_COLORS.paused },
+    { name: 'Other', value: other, color: STATUS_COLORS.other },
+  ].filter((d) => d.value > 0)
+
+  // If no containers, show a single grey ring
+  if (data.length === 0) {
+    data.push({ name: 'None', value: 1, color: '#1e293b' })
+  }
+
+  const total = containers.length
+
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={26}
+            outerRadius={36}
+            paddingAngle={data.length > 1 ? 3 : 0}
+            dataKey="value"
+            stroke="none"
+            animationBegin={0}
+            animationDuration={600}
+          >
+            {data.map((entry, index) => (
+              <Cell key={`status-cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      {/* Center: total count */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-sm font-bold text-white leading-none">{total}</span>
+        <span className="text-[8px] text-slate-500 uppercase tracking-wider mt-0.5">total</span>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
 
 export default function ContainerOverview({ containers }: { containers: ContainerInfo[] }) {
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -69,6 +145,37 @@ export default function ContainerOverview({ containers }: { containers: Containe
           {containers.length}
         </span>
       </div>
+
+      {/* Status donut breakdown */}
+      {containers.length > 0 && (
+        <div className="flex items-center gap-4 mb-4 pb-4 border-b border-white/5">
+          <StatusDonut containers={containers} />
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[10px]">
+            {running.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="text-slate-400">{running.length} running</span>
+              </div>
+            )}
+            {stopped.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-rose-500" />
+                <span className="text-slate-400">
+                  {containers.filter((c) => c.state === 'exited').length} stopped
+                </span>
+              </div>
+            )}
+            {containers.filter((c) => c.state === 'paused').length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="text-slate-400">
+                  {containers.filter((c) => c.state === 'paused').length} paused
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1 max-h-[320px] overflow-y-auto scrollbar-thin">
         {sorted.map((container) => {

@@ -5,7 +5,8 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
-import { fetchImages } from '../api/endpoints'
+import { fetchImages, runImagePrune, deleteImage } from '../api/endpoints'
+import { useToast } from '../components/common/Toast'
 import ImageList from '../components/images/ImageList'
 import ImageCard from '../components/images/ImageCard'
 import {
@@ -16,6 +17,9 @@ import {
   LayoutList,
   LayoutGrid,
   Search,
+  Trash2,
+  Loader2,
+  ListChecks,
 } from 'lucide-react'
 
 const IMAGE_POLL_INTERVAL = 60_000
@@ -28,6 +32,12 @@ const Images: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [searchQuery, setSearchQuery] = useState('')
+  const [pruneLoading, setPruneLoading] = useState(false)
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchResults, setBatchResults] = useState<Array<{ id: string; success: boolean; message: string }> | null>(null)
+  const { addToast } = useToast()
 
   // Fetch images via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
@@ -39,6 +49,27 @@ const Images: React.FC = () => {
   }, [setImages, setLoading])
 
   useApi(handleFetch, IMAGE_POLL_INTERVAL)
+
+  // Prune dangling images
+  const handlePrune = useCallback(async () => {
+    if (pruneLoading) return
+    setPruneLoading(true)
+    try {
+      const result = await runImagePrune()
+      addToast({
+        type: 'success',
+        message: result.message || 'Dangling images pruned successfully',
+      })
+      // Refresh image list after prune
+      await handleFetch()
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to prune dangling images'
+      addToast({ type: 'error', message })
+    } finally {
+      setPruneLoading(false)
+    }
+  }, [pruneLoading, addToast, handleFetch])
 
   // Filter by search
   const filteredImages = useMemo(() => {
@@ -52,6 +83,64 @@ const Images: React.FC = () => {
         i.staleness.toLowerCase().includes(q),
     )
   }, [images, searchQuery])
+
+  // Batch mode handlers
+  const handleToggleBatch = useCallback(() => {
+    setBatchMode(prev => {
+      if (prev) {
+        setSelectedImages(new Set())
+        setBatchResults(null)
+      }
+      return !prev
+    })
+  }, [])
+
+  const handleToggleImage = useCallback((id: string) => {
+    setSelectedImages(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedImages(new Set(filteredImages.map(i => i.id)))
+  }, [filteredImages])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedImages(new Set())
+  }, [])
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedImages.size === 0 || batchLoading) return
+    setBatchLoading(true)
+    setBatchResults(null)
+
+    const results: Array<{ id: string; success: boolean; message: string }> = []
+
+    for (const id of selectedImages) {
+      try {
+        const res = await deleteImage(id)
+        results.push({ id, success: res.success, message: res.message })
+      } catch (err) {
+        results.push({ id, success: false, message: err instanceof Error ? err.message : 'Failed' })
+      }
+    }
+
+    setBatchResults(results)
+    setBatchLoading(false)
+
+    const successCount = results.filter(r => r.success).length
+    if (successCount > 0) {
+      addToast({ type: 'success', message: `Deleted ${successCount} image${successCount !== 1 ? 's' : ''}` })
+      await handleFetch()
+    }
+    if (successCount < results.length) {
+      addToast({ type: 'error', message: `${results.length - successCount} deletion${results.length - successCount !== 1 ? 's' : ''} failed`, duration: 5000 })
+    }
+    setSelectedImages(new Set())
+  }, [selectedImages, batchLoading, addToast, handleFetch])
 
   // Summary counts
   const counts = useMemo(() => {
@@ -73,6 +162,42 @@ const Images: React.FC = () => {
               Track Docker image freshness and staleness
             </p>
           </div>
+
+          <div className="flex items-center gap-3">
+          {/* Batch mode toggle */}
+          <button
+            onClick={handleToggleBatch}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
+              batchMode
+                ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
+                : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.08]'
+            }`}
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            {batchMode ? 'Exit Batch' : 'Batch Mode'}
+          </button>
+
+          {/* Prune dangling images */}
+          <button
+            onClick={handlePrune}
+            disabled={pruneLoading}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
+              border backdrop-blur-sm transition-all duration-200
+              ${
+                pruneLoading
+                  ? 'bg-rose-500/5 border-rose-500/10 text-rose-400/50 cursor-not-allowed'
+                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 press'
+              }
+            `}
+          >
+            {pruneLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            Prune All Dangling
+          </button>
 
           {/* View toggle */}
           <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-1">
@@ -107,6 +232,7 @@ const Images: React.FC = () => {
               Cards
             </button>
           </div>
+          </div>
         </div>
 
         {/* ---- Search bar ---- */}
@@ -131,6 +257,31 @@ const Images: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* ---- Batch action bar ---- */}
+        {batchMode && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
+            <span className="text-sm font-medium text-emerald-400">
+              {selectedImages.size} selected
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <button onClick={handleSelectAll} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all">
+                Select All
+              </button>
+              <button onClick={handleClearSelection} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all">
+                Clear
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedImages.size === 0 || batchLoading}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-rose-500 hover:bg-rose-400 shadow-lg shadow-rose-500/20 disabled:opacity-50 transition-all"
+              >
+                {batchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete Selected
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ---- Summary stat cards ---- */}
         <div className="grid grid-cols-4 gap-3">
@@ -162,7 +313,11 @@ const Images: React.FC = () => {
 
         {/* ---- Content ---- */}
         {viewMode === 'table' ? (
-          <ImageList />
+          <ImageList
+            batchMode={batchMode}
+            selectedImages={selectedImages}
+            onToggleImage={handleToggleImage}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {filteredImages.length === 0 ? (

@@ -51,14 +51,14 @@
   /* ── Glass components ──────────────────────────────────────── */
   .light .glass {
     background-color: rgba(255,255,255,0.85) !important;
-    border-color: #e2e8f0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.03) !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 24px rgba(0,0,0,0.06) !important;
   }
 
   .light .glass-subtle {
     background-color: rgba(255,255,255,0.70) !important;
-    border-color: #e2e8f0 !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8) !important;
   }
 
   .light .glass-hover:hover {
@@ -69,7 +69,7 @@
 
   .light .glass-card {
     background-color: rgba(255,255,255,0.90) !important;
-    border-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
   }
 
@@ -94,7 +94,7 @@
   }
 
   .light .text-slate-400 {
-    color: #64748b !important;
+    color: #94a3b8 !important;
   }
 
   .light .text-slate-500 {
@@ -141,7 +141,7 @@
   .light .border-white\/\[0\.10\],
   .light .border-white\/\[0\.12\],
   .light .border-white\/\[0\.15\] {
-    border-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
   }
 
   /* Dividers */
@@ -222,14 +222,14 @@
 
   .light input::placeholder,
   .light textarea::placeholder {
-    color: #94a3b8 !important;
+    color: #64748b !important;
   }
 
   .light input:focus,
   .light textarea:focus,
   .light select:focus {
     border-color: #059669 !important;
-    box-shadow: 0 0 0 2px rgba(5,150,105,0.15) !important;
+    box-shadow: 0 0 0 3px rgba(5,150,105,0.2) !important;
   }
 
   /* ── Buttons ───────────────────────────────────────────────── */
@@ -288,7 +288,11 @@
 
   /* ── Sidebar nav items ─────────────────────────────────────── */
   .light .bg-emerald-500\/12 {
-    background-color: rgba(5,150,105,0.08) !important;
+    background-color: rgba(5,150,105,0.12) !important;
+  }
+
+  .light aside button .bg-emerald-400 {
+    background-color: #059669 !important;
   }
 
   .light aside button:hover {
@@ -304,20 +308,20 @@
 
   /* ── Scrollbar ─────────────────────────────────────────────── */
   .light ::-webkit-scrollbar-thumb {
-    background-color: rgba(148,163,184,0.4) !important;
+    background-color: rgba(148,163,184,0.5) !important;
   }
 
   .light ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100,116,139,0.5) !important;
+    background-color: rgba(100,116,139,0.6) !important;
   }
 
   .light .scrollbar-thin {
-    scrollbar-color: rgba(148,163,184,0.4) transparent;
+    scrollbar-color: rgba(148,163,184,0.5) transparent;
   }
 
   /* ── Modal overlays ────────────────────────────────────────── */
   .light .bg-black\/60 {
-    background-color: rgba(15,23,42,0.3) !important;
+    background-color: rgba(15,23,42,0.25) !important;
   }
 
   /* ── Status bar separators ─────────────────────────────────── */
@@ -360,7 +364,7 @@
 
   /* ── Log viewer terminal bg ──────────────────────────────── */
   .light .bg-slate-950 {
-    background-color: #f8fafc !important;
+    background-color: #f1f5f9 !important;
   }
 
   /* ── User profile dropdown ───────────────────────────────── */
@@ -410,6 +414,58 @@
   .light .border-t-violet-500 { border-top-color: #7c3aed !important; }
   .light .border-t-amber-500 { border-top-color: #d97706 !important; }
   .light .border-t-rose-500 { border-top-color: #e11d48 !important; }
+
+  /* ── Cards depth ──────────────────────────────────────────── */
+  .light .glass-card,
+  .light .glass-subtle {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+  }
+
+  /* ── Tables (enhanced) ──────────────────────────────────────── */
+  .light table thead {
+    background-color: #f8fafc !important;
+  }
+
+  .light table tr:hover {
+    background-color: #f1f5f9 !important;
+  }
+
+  /* ── Modals (lighter backdrop) ──────────────────────────────── */
+  .light .bg-black\/60 {
+    background-color: rgba(15,23,42,0.25) !important;
+  }
+
+  /* ── Status badges (darker accents for contrast) ────────────── */
+  .light .bg-emerald-500\/10 { background-color: rgba(5,150,105,0.1) !important; }
+  .light .bg-rose-500\/10 { background-color: rgba(225,29,72,0.08) !important; }
+  .light .bg-amber-500\/10 { background-color: rgba(217,119,6,0.08) !important; }
+  .light .bg-cyan-500\/10 { background-color: rgba(8,145,178,0.08) !important; }
+
+  /* ── Input focus (stronger emerald ring) ────────────────────── */
+  .light input:focus,
+  .light textarea:focus,
+  .light select:focus {
+    border-color: #059669 !important;
+    box-shadow: 0 0 0 3px rgba(5,150,105,0.2) !important;
+  }
+
+  /* ── Hover states for interactive elements ──────────────────── */
+  .light .hover\:bg-white\/\[0\.05\]:hover,
+  .light .hover\:bg-white\/\[0\.06\]:hover,
+  .light .hover\:bg-white\/\[0\.08\]:hover,
+  .light .hover\:bg-white\/10:hover {
+    background-color: rgba(226,232,240,0.8) !important;
+  }
+
+  /* ── Code/pre blocks ────────────────────────────────────────── */
+  .light pre, .light code {
+    background-color: #f1f5f9 !important;
+    color: #334155 !important;
+  }
+
+  .light .bg-slate-950 {
+    background-color: #f1f5f9 !important;
+  }
 
   /* ══════════════════════════════════════════════════════════════
      END LIGHT MODE

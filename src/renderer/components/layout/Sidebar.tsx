@@ -31,11 +31,14 @@ import {
   FileCode,
   Archive,
   Database,
+  TerminalSquare,
+  CalendarClock,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { PageId } from '../../../shared/types'
 
 interface NavItem {
@@ -51,11 +54,13 @@ const navItems: NavItem[] = [
   { id: 'containers', label: 'Containers', icon: Box, section: 'main' },
   { id: 'images', label: 'Images', icon: HardDrive, section: 'main' },
   { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
-  { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
   { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
+  { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
   { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },
   { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
+  { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
+  { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock, section: 'system' },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
   { id: 'environment', label: 'Environment', icon: FileCode, section: 'system' },
   { id: 'backup', label: 'Backup', icon: Archive, section: 'system' },
@@ -77,6 +82,7 @@ export function Sidebar() {
   const systemStatus = useSystemStore((s) => s.status)
   const healthReport = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount)
 
   const mainItems = navItems.filter((i) => i.section === 'main')
   const systemItems = navItems.filter((i) => i.section === 'system')
@@ -110,6 +116,13 @@ export function Sidebar() {
         value: `${unhealthy}`,
         color: 'bg-rose-500/20 text-rose-400',
       }
+    }
+  }
+
+  if (unreadNotifications > 0) {
+    badges.activity = {
+      value: `${unreadNotifications}`,
+      color: 'bg-amber-500/20 text-amber-400',
     }
   }
 

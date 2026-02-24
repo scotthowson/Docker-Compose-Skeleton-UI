@@ -7,6 +7,7 @@ import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 // ---------------------------------------------------------------------------
 // AnimatedCounter — Smoothly animates between numeric values using rAF
@@ -97,6 +98,8 @@ interface CardProps {
   trend?: 'up' | 'down' | 'stable'
   loading?: boolean
   index?: number
+  onClick?: () => void
+  pulse?: boolean
 }
 
 const accentBorderMap: Record<CardProps['accentColor'], string> = {
@@ -119,15 +122,18 @@ const trendIcons: Record<NonNullable<CardProps['trend']>, { symbol: string; colo
   stable: { symbol: '\u2192', color: 'text-slate-400' },
 }
 
-function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0 }: CardProps) {
+function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse }: CardProps) {
   return (
     <div
+      onClick={onClick}
       className={`
         relative overflow-hidden rounded-xl border-t-2 ${accentBorderMap[accentColor]}
-        border border-white/5 bg-slate-900/60 backdrop-blur-md
+        border bg-slate-900/60 backdrop-blur-md
         p-5 transition-all duration-300 hover:bg-slate-900/80 hover:border-white/10
         hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5
         animate-fade-in
+        ${onClick ? 'cursor-pointer' : ''}
+        ${pulse ? 'border-amber-500/30 animate-pulse' : 'border-white/5'}
       `}
       style={{ animationDelay: `${index * 60}ms` }}
     >
@@ -188,6 +194,13 @@ export default function OverviewCards() {
   const status = useSystemStore((s) => s.status)
   const report = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+
+  // Check disk usage for pulse warning
+  const diskPercent = status?.system.disk.percent
+    ? parseInt(status.system.disk.percent.replace('%', ''), 10)
+    : 0
+  const diskWarning = diskPercent >= 85
 
   // Status data hasn't arrived yet — show loading skeletons for first 3 cards
   const statusLoading = !status
@@ -258,6 +271,7 @@ export default function OverviewCards() {
         trend={stackTrend}
         loading={statusLoading}
         index={0}
+        onClick={() => setCurrentPage('stacks')}
       />
       <StatCard
         icon={<Box className="h-5 w-5" />}
@@ -268,15 +282,19 @@ export default function OverviewCards() {
         trend={containerTrend}
         loading={statusLoading}
         index={1}
+        onClick={() => setCurrentPage('containers')}
       />
       <StatCard
         icon={<HardDrive className="h-5 w-5" />}
         label="Docker Images"
         value={imageCount}
-        accentColor="cyan"
+        subtitle={diskWarning ? `Disk ${diskPercent}% used` : undefined}
+        accentColor={diskWarning ? 'amber' : 'cyan'}
         trend="stable"
         loading={statusLoading}
         index={2}
+        onClick={() => setCurrentPage('images')}
+        pulse={diskWarning}
       />
       <StatCard
         icon={<HeartPulse className="h-5 w-5" />}
@@ -293,6 +311,7 @@ export default function OverviewCards() {
         trend={healthTrend}
         loading={healthLoading}
         index={3}
+        onClick={() => setCurrentPage('health')}
       />
     </div>
   )

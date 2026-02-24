@@ -36,6 +36,8 @@ const pageTitles: Record<PageId, string> = {
   users: 'User Management',
   config: 'Server Config',
   settings: 'Settings',
+  terminal: 'Terminal',
+  cronjobs: 'Cron Jobs',
 }
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {

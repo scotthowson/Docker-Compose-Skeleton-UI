@@ -28,6 +28,8 @@ import Maintenance from './pages/Maintenance'
 import Environment from './pages/Environment'
 import Volumes from './pages/Volumes'
 import Backup from './pages/Backup'
+import Terminal from './pages/Terminal'
+import CronJobs from './pages/CronJobs'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -50,13 +52,15 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   maintenance: Maintenance,
   environment: Environment,
   backup: Backup,
+  terminal: Terminal,
+  cronjobs: CronJobs,
 }
 
 // Page order for Ctrl+1-9 navigation
-const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
+const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics', 'terminal']
 
 export default function App() {
-  const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes } = useSettingsStore()
+  const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes, customCSS } = useSettingsStore()
   const { connect } = useConnectionStore()
   const { isAuthenticated, loading: authLoading, checkAccountExists, logout } = useAuthStore()
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -79,6 +83,20 @@ export default function App() {
     document.documentElement.classList.toggle('light', theme === 'light')
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  // Custom CSS injection
+  useEffect(() => {
+    let styleEl = document.getElementById('custom-user-css') as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement('style')
+      styleEl.id = 'custom-user-css'
+      document.head.appendChild(styleEl)
+    }
+    styleEl.textContent = customCSS || ''
+    return () => {
+      // Don't remove on cleanup — persist across re-renders
+    }
+  }, [customCSS])
 
   // Auto-lock after inactivity
   const resetAutoLock = useCallback(() => {
@@ -150,6 +168,16 @@ export default function App() {
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('app-refresh'))
+      }
+      // Ctrl+T → Terminal
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault()
+        setCurrentPage('terminal')
+      }
+      // Ctrl+Shift+P → Command Palette (alternative to Ctrl+K)
+      if (e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('open-command-palette'))
       }
     }
     window.addEventListener('keydown', handleKeyDown)

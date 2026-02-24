@@ -31,6 +31,8 @@ const sections: ShortcutSection[] = [
       { keys: ['Ctrl', '1-9'], label: 'Navigate to page by position' },
       { keys: ['Ctrl', '0'], label: 'Settings' },
       { keys: ['Ctrl', 'K'], label: 'Command palette' },
+      { keys: ['Ctrl', 'Shift', 'P'], label: 'Command palette (alt)' },
+      { keys: ['Ctrl', 'T'], label: 'Terminal' },
     ],
   },
   {

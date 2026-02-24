@@ -1,5 +1,5 @@
 // =============================================================================
-// Volumes — Docker volume management with search, sort, and delete
+// Volumes — Docker volume management with search, sort, delete & batch ops
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react'
@@ -16,6 +16,11 @@ import {
   X,
   AlertCircle,
   FolderOpen,
+  CheckSquare,
+  Square,
+  CheckCircle2,
+  XCircle,
+  ListChecks,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -42,6 +47,16 @@ function formatBytes(bytes: number): string {
 }
 
 type SortField = 'name' | 'size'
+
+// ---------------------------------------------------------------------------
+// Batch result type
+// ---------------------------------------------------------------------------
+
+interface BatchResult {
+  name: string
+  success: boolean
+  message: string
+}
 
 // ---------------------------------------------------------------------------
 // Skeleton Rows
@@ -193,16 +208,120 @@ function DeleteConfirmModal({
 }
 
 // ---------------------------------------------------------------------------
+// Batch Delete Confirmation Modal
+// ---------------------------------------------------------------------------
+
+function BatchDeleteConfirmModal({
+  count,
+  onClose,
+  onConfirm,
+}: {
+  count: number
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [confirmText, setConfirmText] = useState('')
+  const expected = String(count)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md mx-4 glass p-6 animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+            <AlertTriangle size={18} className="text-rose-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-100">Batch Delete Volumes</h3>
+            <p className="text-[10px] text-slate-500">This action cannot be undone</p>
+          </div>
+        </div>
+
+        {/* Warning message */}
+        <div className="rounded-lg bg-rose-500/5 border border-rose-500/10 p-4 mb-4">
+          <p className="text-xs text-slate-400 leading-relaxed">
+            You are about to permanently delete{' '}
+            <span className="font-semibold text-rose-400">{count}</span>{' '}
+            volume{count !== 1 ? 's' : ''}. All data stored in these volumes will be lost.
+          </p>
+          <p className="text-xs text-slate-500 mt-3">
+            Type <span className="font-mono text-slate-300 bg-white/[0.06] px-1.5 py-0.5 rounded">{expected}</span> to confirm:
+          </p>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={expected}
+            className="
+              mt-2 w-full px-3 py-2
+              bg-white/[0.03] border border-white/[0.08] rounded-lg
+              text-sm text-slate-200 placeholder-slate-600
+              focus:outline-none focus:border-rose-500/30 focus:ring-1 focus:ring-rose-500/15
+              transition-all duration-200
+            "
+            autoFocus
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onClose}
+            className="
+              flex-1 py-2.5 rounded-lg text-sm text-slate-400
+              bg-white/5 border border-white/10
+              hover:bg-white/10 hover:text-slate-200
+              transition-all duration-200
+            "
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={confirmText !== expected}
+            className="
+              flex-1 flex items-center justify-center gap-2
+              py-2.5 rounded-lg text-sm font-semibold text-white
+              bg-rose-500 hover:bg-rose-400
+              shadow-lg shadow-rose-500/25
+              disabled:opacity-50 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            <Trash2 size={14} />
+            Delete {count} Volume{count !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
 export default function Volumes() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const { addToast } = useToast()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Batch state
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedVolumes, setSelectedVolumes] = useState<Set<string>>(new Set())
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
+  const [batchResults, setBatchResults] = useState<BatchResult[] | null>(null)
 
   // Poll volumes data
   const {
@@ -285,6 +404,74 @@ export default function Volumes() {
     refresh()
   }, [refresh])
 
+  // -------------------------------------------------------------------------
+  // Batch operations
+  // -------------------------------------------------------------------------
+
+  const toggleBatchMode = useCallback(() => {
+    setBatchMode((prev) => {
+      if (prev) {
+        // Exiting batch mode — clear selection & results
+        setSelectedVolumes(new Set())
+        setBatchResults(null)
+      }
+      return !prev
+    })
+  }, [])
+
+  const toggleVolumeSelection = useCallback((name: string) => {
+    setSelectedVolumes((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }, [])
+
+  const selectAll = useCallback(() => {
+    setSelectedVolumes(new Set(filteredVolumes.map((v) => v.name)))
+  }, [filteredVolumes])
+
+  const clearSelection = useCallback(() => {
+    setSelectedVolumes(new Set())
+  }, [])
+
+  const handleBatchDelete = useCallback(async () => {
+    setBatchConfirmOpen(false)
+    if (selectedVolumes.size === 0) return
+    setBatchLoading(true)
+    setBatchResults(null)
+
+    const results: BatchResult[] = []
+    for (const name of selectedVolumes) {
+      try {
+        await deleteVolume(name)
+        results.push({ name, success: true, message: 'Deleted successfully' })
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to delete'
+        results.push({ name, success: false, message })
+      }
+    }
+
+    setBatchResults(results)
+    setBatchLoading(false)
+    setSelectedVolumes(new Set())
+
+    const successCount = results.filter((r) => r.success).length
+    const failCount = results.length - successCount
+    if (failCount === 0) {
+      addToast({ type: 'success', message: `Successfully deleted ${successCount} volume${successCount !== 1 ? 's' : ''}` })
+    } else {
+      addToast({
+        type: 'warning',
+        message: `Deleted ${successCount} volume${successCount !== 1 ? 's' : ''}, ${failCount} failed`,
+        duration: 6000,
+      })
+    }
+
+    refresh()
+  }, [selectedVolumes, addToast, refresh])
+
   // Sort indicator component
   const SortIndicator = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null
@@ -319,6 +506,15 @@ export default function Volumes() {
         />
       )}
 
+      {/* Batch delete confirmation modal */}
+      {batchConfirmOpen && (
+        <BatchDeleteConfirmModal
+          count={selectedVolumes.size}
+          onClose={() => setBatchConfirmOpen(false)}
+          onConfirm={handleBatchDelete}
+        />
+      )}
+
       {/* ----------------------------------------------------------------- */}
       {/* Page Header                                                       */}
       {/* ----------------------------------------------------------------- */}
@@ -331,21 +527,130 @@ export default function Volumes() {
             Manage Docker volume storage and persistent data
           </p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="
-            flex items-center gap-2 rounded-lg px-3.5 py-2
-            text-sm font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
-          "
-        >
-          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleBatchMode}
+            className={`
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium transition-all duration-200 border
+              ${batchMode
+                ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
+                : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
+              }
+            `}
+          >
+            <ListChecks size={15} />
+            {batchMode ? 'Exit Batch' : 'Batch Select'}
+          </button>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium text-slate-300
+              bg-white/5 border border-white/10
+              hover:bg-white/10 hover:border-white/15
+              disabled:opacity-50 transition-all duration-200
+            "
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Batch Action Bar                                                  */}
+      {/* ----------------------------------------------------------------- */}
+      {batchMode && (
+        <div className="flex items-center justify-between bg-amber-500/5 border border-amber-500/15 rounded-xl px-5 py-3 animate-fade-in">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-amber-400">
+              {selectedVolumes.size} selected
+            </span>
+            <div className="h-4 w-px bg-white/10" />
+            <button
+              onClick={selectAll}
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Select All ({filteredVolumes.length})
+            </button>
+            <button
+              onClick={clearSelection}
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <button
+            onClick={() => setBatchConfirmOpen(true)}
+            disabled={selectedVolumes.size === 0 || batchLoading}
+            className="
+              flex items-center gap-2 rounded-lg px-4 py-2
+              text-sm font-semibold text-white
+              bg-rose-500 hover:bg-rose-400
+              shadow-lg shadow-rose-500/25
+              disabled:opacity-40 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            {batchLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Trash2 size={14} />
+            )}
+            {batchLoading ? 'Deleting...' : 'Delete Selected'}
+          </button>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Batch Results Panel                                               */}
+      {/* ----------------------------------------------------------------- */}
+      {batchResults && batchResults.length > 0 && (
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 animate-fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <ListChecks size={16} className="text-amber-400" />
+              Batch Delete Results
+            </h3>
+            <button
+              onClick={() => setBatchResults(null)}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {batchResults.map((result) => (
+              <div
+                key={result.name}
+                className={`
+                  flex items-center gap-3 rounded-lg p-3 border
+                  ${result.success
+                    ? 'bg-emerald-500/5 border-emerald-500/15'
+                    : 'bg-rose-500/5 border-rose-500/15'
+                  }
+                `}
+              >
+                {result.success ? (
+                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <XCircle size={14} className="text-rose-400 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-mono text-slate-200 truncate" title={result.name}>
+                    {result.name}
+                  </p>
+                  <p className={`text-[10px] ${result.success ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>
+                    {result.message}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Summary Stat Cards                                                */}
@@ -511,6 +816,21 @@ export default function Volumes() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/[0.06]">
+                {/* Batch checkbox column */}
+                {batchMode && (
+                  <th className="text-center px-3 py-3 w-10">
+                    <button
+                      onClick={selectedVolumes.size === filteredVolumes.length ? clearSelection : selectAll}
+                      className="text-slate-500 hover:text-emerald-400 transition-colors"
+                    >
+                      {selectedVolumes.size === filteredVolumes.length && filteredVolumes.length > 0 ? (
+                        <CheckSquare size={15} className="text-emerald-400" />
+                      ) : (
+                        <Square size={15} />
+                      )}
+                    </button>
+                  </th>
+                )}
                 <th
                   className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors select-none"
                   onClick={() => handleSort('name')}
@@ -555,7 +875,7 @@ export default function Volumes() {
               {/* Empty state */}
               {hasLoaded && filteredVolumes.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-16">
+                  <td colSpan={batchMode ? 6 : 5} className="px-5 py-16">
                     <div className="flex flex-col items-center gap-4">
                       <div className="relative">
                         <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl" />
@@ -601,70 +921,94 @@ export default function Volumes() {
 
               {/* Volume rows */}
               {hasLoaded &&
-                filteredVolumes.map((vol) => (
-                  <tr
-                    key={vol.name}
-                    className="border-b border-white/[0.04] hover:bg-white/[0.02] group transition-colors duration-150"
-                  >
-                    {/* Name */}
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
-                          <Database size={13} className="text-cyan-400" />
-                        </div>
-                        <span className="font-mono text-xs text-slate-200 truncate max-w-[240px]" title={vol.name}>
-                          {vol.name}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Driver */}
-                    <td className="px-5 py-3.5">
-                      <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
-                        {vol.driver}
-                      </span>
-                    </td>
-
-                    {/* Mountpoint */}
-                    <td
-                      className="px-5 py-3.5 text-slate-400 text-xs font-mono truncate max-w-[300px]"
-                      title={vol.mountpoint}
+                filteredVolumes.map((vol) => {
+                  const isSelected = selectedVolumes.has(vol.name)
+                  return (
+                    <tr
+                      key={vol.name}
+                      onClick={batchMode ? () => toggleVolumeSelection(vol.name) : undefined}
+                      className={`
+                        border-b border-white/[0.04] group transition-colors duration-150
+                        ${batchMode ? 'cursor-pointer' : ''}
+                        ${isSelected
+                          ? 'bg-emerald-500/[0.06] hover:bg-emerald-500/[0.08]'
+                          : 'hover:bg-white/[0.02]'
+                        }
+                      `}
                     >
-                      {vol.mountpoint}
-                    </td>
+                      {/* Batch checkbox */}
+                      {batchMode && (
+                        <td className="text-center px-3 py-3.5">
+                          {isSelected ? (
+                            <CheckSquare size={15} className="text-emerald-400 mx-auto" />
+                          ) : (
+                            <Square size={15} className="text-slate-600 mx-auto" />
+                          )}
+                        </td>
+                      )}
 
-                    {/* Size */}
-                    <td className="px-5 py-3.5 text-right">
-                      <span
-                        className={`text-xs font-mono font-medium ${
-                          vol.size_bytes > 1073741824
-                            ? 'text-amber-400'
-                            : vol.size_bytes > 104857600
-                              ? 'text-slate-200'
-                              : 'text-slate-400'
-                        }`}
-                      >
-                        {formatBytes(vol.size_bytes)}
-                      </span>
-                    </td>
+                      {/* Name */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
+                            <Database size={13} className="text-cyan-400" />
+                          </div>
+                          <span className="font-mono text-xs text-slate-200 truncate max-w-[240px]" title={vol.name}>
+                            {vol.name}
+                          </span>
+                        </div>
+                      </td>
 
-                    {/* Actions */}
-                    <td className="px-5 py-3.5 text-right">
-                      <button
-                        onClick={() => setDeleteTarget(vol.name)}
-                        className="
-                          p-1.5 rounded-md
-                          text-slate-600 hover:text-rose-400 hover:bg-rose-500/10
-                          opacity-0 group-hover:opacity-100
-                          transition-all duration-200
-                        "
-                        title="Delete volume"
+                      {/* Driver */}
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
+                          {vol.driver}
+                        </span>
+                      </td>
+
+                      {/* Mountpoint */}
+                      <td
+                        className="px-5 py-3.5 text-slate-400 text-xs font-mono truncate max-w-[300px]"
+                        title={vol.mountpoint}
                       >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        {vol.mountpoint}
+                      </td>
+
+                      {/* Size */}
+                      <td className="px-5 py-3.5 text-right">
+                        <span
+                          className={`text-xs font-mono font-medium ${
+                            vol.size_bytes > 1073741824
+                              ? 'text-amber-400'
+                              : vol.size_bytes > 104857600
+                                ? 'text-slate-200'
+                                : 'text-slate-400'
+                          }`}
+                        >
+                          {formatBytes(vol.size_bytes)}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-5 py-3.5 text-right">
+                        {!batchMode && (
+                          <button
+                            onClick={() => setDeleteTarget(vol.name)}
+                            className="
+                              p-1.5 rounded-md
+                              text-slate-600 hover:text-rose-400 hover:bg-rose-500/10
+                              opacity-0 group-hover:opacity-100
+                              transition-all duration-200
+                            "
+                            title="Delete volume"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
             </tbody>
           </table>
         </div>

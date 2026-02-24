@@ -121,7 +121,13 @@ const COLUMNS: ColumnDef[] = [
 // Component
 // ---------------------------------------------------------------------------
 
-const ImageList: React.FC = () => {
+interface ImageListProps {
+  batchMode?: boolean
+  selectedImages?: Set<string>
+  onToggleImage?: (id: string) => void
+}
+
+const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages, onToggleImage }) => {
   const images = useImageStore((s) => s.images)
   const loading = useImageStore((s) => s.loading)
 
@@ -215,6 +221,9 @@ const ImageList: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/[0.06]">
+                {batchMode && (
+                  <th className="px-4 py-3 w-10"></th>
+                )}
                 {COLUMNS.map((col) => (
                   <th
                     key={col.key}
@@ -236,7 +245,7 @@ const ImageList: React.FC = () => {
             <tbody>
               {loading && images.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="py-16 text-center">
+                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
                       <span className="text-sm text-slate-500">Loading images...</span>
@@ -245,7 +254,7 @@ const ImageList: React.FC = () => {
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="py-16 text-center">
+                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <HardDrive className="h-8 w-8 text-slate-600" />
                       <span className="text-sm text-slate-500">
@@ -264,8 +273,31 @@ const ImageList: React.FC = () => {
                   return (
                     <tr
                       key={`${image.id}-${idx}`}
-                      className="group border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors"
+                      onClick={() => batchMode && onToggleImage?.(image.id)}
+                      className={`group border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors ${
+                        batchMode ? 'cursor-pointer' : ''
+                      } ${batchMode && selectedImages?.has(image.id) ? 'bg-emerald-500/[0.06]' : ''}`}
                     >
+                      {/* Batch checkbox */}
+                      {batchMode && (
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onToggleImage?.(image.id) }}
+                            className={`flex items-center justify-center w-5 h-5 rounded border transition-all ${
+                              selectedImages?.has(image.id)
+                                ? 'bg-emerald-500 border-emerald-500'
+                                : 'bg-white/5 border-white/20 hover:border-white/40'
+                            }`}
+                          >
+                            {selectedImages?.has(image.id) && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        </td>
+                      )}
+
                       {/* Repository */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

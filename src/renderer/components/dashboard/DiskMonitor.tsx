@@ -1,9 +1,10 @@
 // =============================================================================
 // DiskMonitor — Shows mounted filesystems with custom labels and usage bars
+//               with disk warning banner and pulsing glow for near-capacity
 // =============================================================================
 
 import React, { useState, useCallback } from 'react'
-import { HardDrive, Pencil, Check, X, Plus, Pin, PinOff, FolderPlus } from 'lucide-react'
+import { HardDrive, Pencil, Check, X, Plus, Pin, PinOff, FolderPlus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { DiskInfo, CustomDiskEntry } from '../../../shared/types'
 
@@ -28,6 +29,22 @@ function percentTextColor(pct: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Disk Warning Banner
+// ---------------------------------------------------------------------------
+
+function DiskWarningBanner({ count }: { count: number }) {
+  if (count === 0) return null
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg bg-rose-500/15 border border-rose-500/25 px-3.5 py-2.5 mb-4 animate-fade-in">
+      <AlertTriangle size={16} className="text-rose-400 shrink-0" />
+      <span className="text-xs font-medium text-rose-300">
+        {count} disk{count !== 1 ? 's' : ''} above 85% capacity
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Disk Row
 // ---------------------------------------------------------------------------
 
@@ -39,6 +56,7 @@ function DiskRow({ disk, label, onLabelChange }: {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(label)
   const pct = parsePercent(disk.percent)
+  const isNearCapacity = pct >= 90
 
   const handleSave = () => {
     onLabelChange(disk.mount, editValue.trim())
@@ -80,6 +98,9 @@ function DiskRow({ disk, label, onLabelChange }: {
               <span className="text-xs font-semibold text-slate-200 truncate" title={disk.mount}>
                 {displayName}
               </span>
+              {isNearCapacity && (
+                <ShieldAlert size={12} className="text-rose-400 shrink-0" title="Near capacity" />
+              )}
               <button
                 onClick={() => { setEditValue(label); setEditing(true) }}
                 className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-opacity"
@@ -98,7 +119,7 @@ function DiskRow({ disk, label, onLabelChange }: {
       {/* Progress bar */}
       <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden mb-2">
         <div
-          className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out`}
+          className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -147,6 +168,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
   // If the server has data for this mount, render like a normal disk with usage
   if (serverDisk) {
     const pct = parsePercent(serverDisk.percent)
+    const isNearCapacity = pct >= 90
     return (
       <div className="group rounded-lg bg-violet-500/[0.03] border border-violet-500/10 hover:border-violet-500/20 p-3.5 transition-all duration-200">
         <div className="flex items-center justify-between mb-2.5">
@@ -174,6 +196,9 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400/70 border border-violet-500/10 shrink-0">
                   custom
                 </span>
+                {isNearCapacity && (
+                  <ShieldAlert size={12} className="text-rose-400 shrink-0" title="Near capacity" />
+                )}
                 <button
                   onClick={() => { setEditValue(label); setEditing(true) }}
                   className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-opacity"
@@ -187,7 +212,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
           <span className={`text-xs font-bold tabular-nums ${percentTextColor(pct)}`}>{serverDisk.percent}</span>
         </div>
         <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden mb-2">
-          <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out`} style={{ width: `${pct}%` }} />
+          <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''}`} style={{ width: `${pct}%` }} />
         </div>
         <div className="flex items-center justify-between text-[10px] text-slate-500">
           <span>{serverDisk.used} / {serverDisk.total} used</span>
@@ -276,6 +301,10 @@ export default function DiskMonitor({ disks }: { disks: DiskInfo[] }) {
 
   const totalMounts = disks.length + customMountsNotInServer.length
 
+  // Count disks above 85% for the warning banner
+  const allDiskPercents = disks.map((d) => parsePercent(d.percent))
+  const disksAbove85 = allDiskPercents.filter((p) => p > 85).length
+
   if (totalMounts === 0) {
     return (
       <div className="glass-card p-6 animate-fade-in">
@@ -302,6 +331,9 @@ export default function DiskMonitor({ disks }: { disks: DiskInfo[] }) {
           )}
         </span>
       </div>
+
+      {/* Warning banner for disks above 85% */}
+      <DiskWarningBanner count={disksAbove85} />
 
       <div className="grid grid-cols-1 gap-2.5">
         {/* Server-detected disks (non-custom ones render normally) */}
