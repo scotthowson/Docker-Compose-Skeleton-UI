@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Header } from './components/layout/Header'
 import { StatusBar } from './components/layout/StatusBar'
@@ -13,12 +13,15 @@ import Stacks from './pages/Stacks'
 import Containers from './pages/Containers'
 import Images from './pages/Images'
 import Health from './pages/Health'
+import Uptime from './pages/Uptime'
 import Networks from './pages/Networks'
 import Logs from './pages/Logs'
 import System from './pages/System'
 import Config from './pages/Config'
 import Settings from './pages/Settings'
 import Bookmarks from './pages/Bookmarks'
+import Activity from './pages/Activity'
+import Diagnostics from './pages/Diagnostics'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -27,22 +30,27 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   containers: Containers,
   images: Images,
   health: Health,
+  uptime: Uptime,
   networks: Networks,
   bookmarks: Bookmarks,
+  activity: Activity,
   logs: Logs,
   system: System,
+  diagnostics: Diagnostics,
   config: Config,
   settings: Settings,
 }
 
 // Page order for Ctrl+1-9 navigation
-const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'bookmarks', 'logs', 'system', 'config']
+const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'uptime', 'networks', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
 
 export default function App() {
   const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes } = useSettingsStore()
   const { connect } = useConnectionStore()
   const { isAuthenticated, loading: authLoading, checkAccountExists, logout } = useAuthStore()
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [transitionPage, setTransitionPage] = useState(currentPage)
+  const [transitioning, setTransitioning] = useState(false)
 
   useEffect(() => {
     checkAccountExists()
@@ -85,6 +93,18 @@ export default function App() {
       if (autoLockTimerRef.current) clearTimeout(autoLockTimerRef.current)
     }
   }, [isAuthenticated, autoLockMinutes, resetAutoLock])
+
+  // Smooth page transition: fade out, swap component, fade in
+  useEffect(() => {
+    if (currentPage !== transitionPage) {
+      setTransitioning(true)
+      const timer = setTimeout(() => {
+        setTransitionPage(currentPage)
+        setTransitioning(false)
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [currentPage, transitionPage])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -134,7 +154,7 @@ export default function App() {
     return <Login />
   }
 
-  const PageComponent = pageComponents[currentPage] || Dashboard
+  const ActivePage = pageComponents[transitionPage] || Dashboard
 
   return (
     <ToastProvider>
@@ -166,8 +186,8 @@ export default function App() {
 
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto p-6 transition-all duration-300 scrollbar-thin">
-            <div className="max-w-[1600px] mx-auto">
-              <PageComponent />
+            <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
+              <ActivePage />
             </div>
           </main>
         </div>

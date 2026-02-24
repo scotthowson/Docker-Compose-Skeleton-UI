@@ -8,6 +8,7 @@ import { useContainerStore } from '../../stores/containerStore'
 import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer } from '../../api/endpoints'
 import {
   ArrowLeft,
+  ArrowRight,
   Cpu,
   MemoryStick,
   Network,
@@ -26,6 +27,11 @@ import {
   RotateCw,
   ScrollText,
   RefreshCw,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  Search,
+  Lock,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -96,6 +102,145 @@ function parseNetworks(networkStr: string): string[] {
     .map((n) => n.trim())
     .filter(Boolean)
 }
+
+/** Check if an env key name is sensitive (password, secret, token, key). */
+function isSensitiveKey(key: string): boolean {
+  const upper = key.toUpperCase()
+  return ['PASSWORD', 'SECRET', 'TOKEN', 'KEY'].some((s) => upper.includes(s))
+}
+
+/** Mask a sensitive value with dots. */
+function maskValue(value: string): string {
+  if (value.length <= 2) return '\u2022'.repeat(8)
+  return value[0] + '\u2022'.repeat(Math.min(value.length - 2, 16)) + value[value.length - 1]
+}
+
+/**
+ * Parse a ports string like "0.0.0.0:8096->8096/tcp, 443->443/tcp"
+ * into structured entries.
+ */
+interface PortMapping {
+  bindAddress?: string
+  hostPort: string
+  containerPort: string
+  protocol: string
+  raw: string
+}
+
+function parsePortMappings(portsStr: string): PortMapping[] {
+  if (!portsStr || portsStr === '--') return []
+  return portsStr
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      // Formats: "0.0.0.0:8096->8096/tcp", "8096->8096/tcp", "8096/tcp"
+      let bindAddress: string | undefined
+      let hostPort = ''
+      let containerPort = ''
+      let protocol = 'tcp'
+
+      const arrowIdx = raw.indexOf('->')
+      if (arrowIdx === -1) {
+        // No mapping, just exposed port like "8096/tcp"
+        const slashIdx = raw.indexOf('/')
+        if (slashIdx !== -1) {
+          containerPort = raw.slice(0, slashIdx)
+          protocol = raw.slice(slashIdx + 1)
+        } else {
+          containerPort = raw
+        }
+        hostPort = containerPort
+      } else {
+        const leftSide = raw.slice(0, arrowIdx)
+        const rightSide = raw.slice(arrowIdx + 2)
+
+        // Parse right side: "8096/tcp"
+        const slashIdx = rightSide.indexOf('/')
+        if (slashIdx !== -1) {
+          containerPort = rightSide.slice(0, slashIdx)
+          protocol = rightSide.slice(slashIdx + 1)
+        } else {
+          containerPort = rightSide
+        }
+
+        // Parse left side: "0.0.0.0:8096" or "8096"
+        const lastColon = leftSide.lastIndexOf(':')
+        if (lastColon !== -1) {
+          const potentialAddr = leftSide.slice(0, lastColon)
+          const potentialPort = leftSide.slice(lastColon + 1)
+          // Check if the part after last colon is a port number
+          if (/^\d+$/.test(potentialPort)) {
+            bindAddress = potentialAddr || undefined
+            hostPort = potentialPort
+          } else {
+            hostPort = leftSide
+          }
+        } else {
+          hostPort = leftSide
+        }
+      }
+
+      return { bindAddress, hostPort, containerPort, protocol, raw }
+    })
+}
+
+/**
+ * Parse a mount entry like "source:destination:mode" into parts.
+ */
+interface MountEntry {
+  source: string
+  destination: string
+  mode?: string
+  raw: string
+}
+
+function parseMountEntries(mountStr: string): MountEntry[] {
+  if (!mountStr || mountStr === '--') return []
+  return mountStr
+    .split(/[\n,]/)
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      // Docker mounts: /host/path:/container/path or /host/path:/container/path:ro
+      // Named volumes: volume_name:/container/path:rw
+      const parts = raw.split(':')
+      if (parts.length >= 3) {
+        // Could be /host:/container:mode or on Windows C:\path... but we handle unix
+        const lastPart = parts[parts.length - 1]
+        if (lastPart === 'ro' || lastPart === 'rw' || lastPart === 'z' || lastPart === 'Z') {
+          return {
+            source: parts.slice(0, -2).join(':') || parts[0],
+            destination: parts[parts.length - 2],
+            mode: lastPart,
+            raw,
+          }
+        }
+        // No mode, just source:destination with colons in path
+        return {
+          source: parts[0],
+          destination: parts.slice(1).join(':'),
+          raw,
+        }
+      }
+      if (parts.length === 2) {
+        return { source: parts[0], destination: parts[1], raw }
+      }
+      return { source: raw, destination: raw, raw }
+    })
+}
+
+// Network color palette for badge variety
+const NETWORK_COLORS = [
+  { bg: 'bg-purple-500/10', text: 'text-purple-300', ring: 'ring-purple-500/20' },
+  { bg: 'bg-cyan-500/10', text: 'text-cyan-300', ring: 'ring-cyan-500/20' },
+  { bg: 'bg-emerald-500/10', text: 'text-emerald-300', ring: 'ring-emerald-500/20' },
+  { bg: 'bg-amber-500/10', text: 'text-amber-300', ring: 'ring-amber-500/20' },
+  { bg: 'bg-rose-500/10', text: 'text-rose-300', ring: 'ring-rose-500/20' },
+  { bg: 'bg-blue-500/10', text: 'text-blue-300', ring: 'ring-blue-500/20' },
+  { bg: 'bg-pink-500/10', text: 'text-pink-300', ring: 'ring-pink-500/20' },
+  { bg: 'bg-indigo-500/10', text: 'text-indigo-300', ring: 'ring-indigo-500/20' },
+]
 
 // ---------------------------------------------------------------------------
 // Badge subcomponents
@@ -198,6 +343,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const [showLogs, setShowLogs] = useState(false)
   const [logsLoading, setLogsLoading] = useState(false)
 
+  // Enhanced section states
+  const [envSearch, setEnvSearch] = useState('')
+  const [envCollapsed, setEnvCollapsed] = useState(false)
+  const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set())
+
   const mountedRef = useRef(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -274,6 +424,27 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const envEntries = detail ? parseEnvString(detail.environment) : []
   const mounts = detail ? parseMounts(detail.mounts) : []
   const networks = detail ? parseNetworks(detail.networks) : []
+  const portMappings = parsePortMappings(containerInfo.ports)
+  const mountEntries = detail ? parseMountEntries(detail.mounts) : []
+
+  // Filtered env entries based on search
+  const filteredEnvEntries = envSearch
+    ? envEntries.filter(
+        (e) =>
+          e.key.toLowerCase().includes(envSearch.toLowerCase()) ||
+          e.value.toLowerCase().includes(envSearch.toLowerCase())
+      )
+    : envEntries
+
+  // Toggle secret reveal
+  const toggleSecret = (key: string) => {
+    setRevealedSecrets((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <div className="flex flex-col gap-5 animate-in">
@@ -403,56 +574,272 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         </div>
       </section>
 
-      {/* ---- Environment variables ---- */}
+      {/* ---- Environment Variables (Enhanced) ---- */}
       {envEntries.length > 0 && (
-        <section>
-          <SectionHeader icon={<Variable className="h-4 w-4 text-amber-400" />} title="Environment Variables" />
-          <div className="glass-subtle mt-3 max-h-64 overflow-y-auto scrollbar-thin divide-y divide-white/[0.04]">
-            {envEntries.map((entry, idx) => (
-              <div key={idx} className="flex gap-3 px-4 py-2">
-                <span className="text-xs font-mono text-emerald-400 w-56 flex-shrink-0 truncate" title={entry.key}>
-                  {entry.key}
-                </span>
-                <span className="text-xs font-mono text-slate-400 truncate" title={entry.value}>
-                  {entry.value}
-                </span>
+        <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
+            {/* Header with collapse toggle */}
+            <button
+              onClick={() => setEnvCollapsed(!envCollapsed)}
+              className="flex items-center gap-2 w-full group"
+            >
+              <Variable className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                Environment Variables
+              </h2>
+              <span className="text-xs text-slate-600 ml-1">({envEntries.length})</span>
+              <ChevronDown
+                className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${
+                  envCollapsed ? '-rotate-90' : 'rotate-0'
+                }`}
+              />
+            </button>
+
+            {!envCollapsed && (
+              <div className="mt-4 space-y-3">
+                {/* Search/filter input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Filter variables..."
+                    value={envSearch}
+                    onChange={(e) => setEnvSearch(e.target.value)}
+                    className="
+                      w-full pl-9 pr-4 py-2 rounded-lg text-xs font-mono
+                      bg-white/[0.03] border border-white/[0.06]
+                      text-slate-300 placeholder-slate-600
+                      focus:outline-none focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20
+                      transition-all duration-200
+                    "
+                  />
+                </div>
+
+                {/* Variable table */}
+                <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+                  {filteredEnvEntries.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-slate-600">
+                      No matching variables found.
+                    </div>
+                  ) : (
+                    filteredEnvEntries.map((entry, idx) => {
+                      const sensitive = isSensitiveKey(entry.key)
+                      const revealed = revealedSecrets.has(entry.key)
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-3 px-4 py-2.5 animate-fade-in ${
+                            idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'
+                          }`}
+                          style={{ animationDelay: `${idx * 0.02}s` }}
+                        >
+                          {sensitive && (
+                            <Lock className="h-3 w-3 text-amber-500/60 flex-shrink-0" />
+                          )}
+                          <span
+                            className="text-xs font-mono text-cyan-400 w-56 flex-shrink-0 truncate"
+                            title={entry.key}
+                          >
+                            {entry.key}
+                          </span>
+                          <span className="text-xs text-slate-600 flex-shrink-0">=</span>
+                          <span
+                            className="text-xs font-mono text-slate-300 truncate flex-1 min-w-0"
+                            title={sensitive && !revealed ? '(hidden)' : entry.value}
+                          >
+                            {sensitive && !revealed ? maskValue(entry.value) : entry.value}
+                          </span>
+                          {sensitive && (
+                            <button
+                              onClick={() => toggleSecret(entry.key)}
+                              className="flex-shrink-0 p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 transition-colors"
+                              title={revealed ? 'Hide value' : 'Reveal value'}
+                            >
+                              {revealed ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </section>
       )}
 
-      {/* ---- Mounts ---- */}
-      {mounts.length > 0 && (
-        <section>
-          <SectionHeader icon={<FolderOpen className="h-4 w-4 text-cyan-400" />} title="Mounts" />
-          <div className="glass-subtle mt-3 divide-y divide-white/[0.04]">
-            {mounts.map((mount, idx) => (
-              <div key={idx} className="px-4 py-2.5">
-                <span className="text-xs font-mono text-slate-300">{mount}</span>
-              </div>
-            ))}
+      {/* ---- Volume Mounts (Enhanced) ---- */}
+      {mountEntries.length > 0 && (
+        <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <HardDrive className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                Volume Mounts
+              </h2>
+              <span className="text-xs text-slate-600 ml-1">({mountEntries.length})</span>
+            </div>
+
+            <div className="grid gap-2.5">
+              {mountEntries.map((mount, idx) => (
+                <div
+                  key={idx}
+                  className="
+                    flex items-center gap-3 px-4 py-3 rounded-lg
+                    bg-white/[0.02] border border-white/[0.04]
+                    hover:bg-white/[0.04] transition-colors duration-200
+                    animate-fade-in
+                  "
+                  style={{ animationDelay: `${idx * 0.05}s` }}
+                >
+                  {/* Source path */}
+                  <div className="flex-1 min-w-0">
+                    <span
+                      className="text-xs font-mono text-amber-400 truncate block"
+                      title={mount.source}
+                    >
+                      {mount.source}
+                    </span>
+                  </div>
+
+                  {/* Arrow */}
+                  <ArrowRight className="h-4 w-4 text-slate-600 flex-shrink-0" />
+
+                  {/* Destination path */}
+                  <div className="flex-1 min-w-0">
+                    <span
+                      className="text-xs font-mono text-emerald-400 truncate block"
+                      title={mount.destination}
+                    >
+                      {mount.destination}
+                    </span>
+                  </div>
+
+                  {/* Mode badge */}
+                  {mount.mode && (
+                    <span
+                      className={`
+                        flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
+                        ${mount.mode === 'ro'
+                          ? 'bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
+                        }
+                      `}
+                    >
+                      {mount.mode}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
 
-      {/* ---- Networks ---- */}
+      {/* ---- Port Mappings (Enhanced) ---- */}
+      {portMappings.length > 0 && (
+        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Globe className="h-4 w-4 text-cyan-400" />
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                Port Mappings
+              </h2>
+              <span className="text-xs text-slate-600 ml-1">({portMappings.length})</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {portMappings.map((port, idx) => (
+                <div
+                  key={idx}
+                  className="
+                    flex items-center gap-3 px-4 py-3 rounded-lg
+                    bg-white/[0.02] border border-white/[0.04]
+                    hover:bg-white/[0.04] transition-colors duration-200
+                    animate-fade-in
+                  "
+                  style={{ animationDelay: `${idx * 0.05}s` }}
+                >
+                  {/* Host port */}
+                  <div className="flex flex-col items-center min-w-0">
+                    {port.bindAddress && (
+                      <span className="text-[10px] text-slate-600 font-mono truncate max-w-[80px]" title={port.bindAddress}>
+                        {port.bindAddress}
+                      </span>
+                    )}
+                    <span className="text-lg font-bold text-white leading-tight">
+                      {port.hostPort}
+                    </span>
+                    <span className="text-[10px] text-slate-600 uppercase">host</span>
+                  </div>
+
+                  {/* Arrow */}
+                  <ArrowRight className="h-4 w-4 text-cyan-500/50 flex-shrink-0" />
+
+                  {/* Container port */}
+                  <div className="flex flex-col items-center min-w-0">
+                    <span className="text-lg font-bold text-cyan-400 leading-tight">
+                      {port.containerPort}
+                    </span>
+                    <span className="text-[10px] text-slate-600 uppercase">container</span>
+                  </div>
+
+                  {/* Protocol badge */}
+                  <span
+                    className={`
+                      ml-auto flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
+                      ${port.protocol === 'udp'
+                        ? 'bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/20'
+                        : 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20'
+                      }
+                    `}
+                  >
+                    {port.protocol}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---- Network Connections (Enhanced) ---- */}
       {networks.length > 0 && (
-        <section>
-          <SectionHeader icon={<Globe className="h-4 w-4 text-purple-400" />} title="Networks" />
-          <div className="flex flex-wrap gap-2 mt-3">
-            {networks.map((net, idx) => (
-              <span
-                key={idx}
-                className="
-                  inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                  bg-purple-500/10 text-purple-300 ring-1 ring-purple-500/20
-                "
-              >
-                <Layers className="h-3 w-3" />
-                {net}
-              </span>
-            ))}
+        <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Network className="h-4 w-4 text-purple-400" />
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                Networks
+              </h2>
+              <span className="text-xs text-slate-600 ml-1">({networks.length})</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2.5">
+              {networks.map((net, idx) => {
+                const color = NETWORK_COLORS[idx % NETWORK_COLORS.length]
+                return (
+                  <span
+                    key={idx}
+                    className={`
+                      inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
+                      ring-1 transition-all duration-200 hover:scale-105 cursor-default
+                      animate-fade-in
+                      ${color.bg} ${color.text} ${color.ring}
+                    `}
+                    style={{ animationDelay: `${idx * 0.05}s` }}
+                  >
+                    <Network className="h-3.5 w-3.5" />
+                    {net}
+                  </span>
+                )
+              })}
+            </div>
           </div>
         </section>
       )}

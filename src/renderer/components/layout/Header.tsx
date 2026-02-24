@@ -5,12 +5,14 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Sun, Moon, LogOut, ChevronDown, Settings, Shield,
-  UserCircle, Mail, Clock,
+  UserCircle, Mail, Clock, Bell,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSystemStore } from '../../stores/systemStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useNotificationStore } from '../../stores/notificationStore'
+import { NotificationDrawer } from '../NotificationDrawer'
 import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
@@ -20,10 +22,13 @@ const pageTitles: Record<PageId, string> = {
   containers: 'Containers',
   images: 'Images',
   health: 'Health Monitor',
+  uptime: 'Uptime Monitor',
   networks: 'Networks',
   bookmarks: 'Bookmarks',
+  activity: 'Activity',
   logs: 'Logs',
   system: 'System Info',
+  diagnostics: 'Diagnostics',
   config: 'Server Config',
   settings: 'Settings',
 }
@@ -185,6 +190,8 @@ export function Header() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const serverStatus = useSystemStore((s) => s.status)
   const { currentUser } = useAuthStore()
+  const unreadCount = useNotificationStore((s) => s.unreadCount)
+  const toggleDrawer = useNotificationStore((s) => s.toggleDrawer)
 
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [profileVersion, setProfileVersion] = useState(0)
@@ -216,6 +223,7 @@ export function Header() {
   }
 
   return (
+    <>
     <header
       className="
         drag-region
@@ -241,8 +249,35 @@ export function Header() {
         )}
       </div>
 
-      {/* Right: Search + User + Theme + Connection */}
+      {/* Right: Notifications + Search + User + Theme + Connection */}
       <div className="no-drag flex items-center gap-2.5">
+        {/* Notification bell */}
+        <button
+          onClick={toggleDrawer}
+          className="
+            relative flex items-center justify-center w-8 h-8
+            rounded-lg text-slate-400
+            bg-white/[0.03] border border-white/[0.06]
+            hover:bg-white/[0.08] hover:text-slate-200
+            transition-all duration-200
+          "
+          title="Notifications"
+        >
+          <Bell size={14} />
+          {unreadCount > 0 && (
+            <span className="
+              absolute -top-1 -right-1
+              flex items-center justify-center
+              min-w-[16px] h-4 px-1 rounded-full
+              bg-rose-500 text-white
+              text-[9px] font-bold leading-none
+              ring-2 ring-slate-900
+            ">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+
         {/* Command palette trigger */}
         <button
           onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
@@ -331,5 +366,7 @@ export function Header() {
         </div>
       </div>
     </header>
+    <NotificationDrawer />
+    </>
   )
 }

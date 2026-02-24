@@ -4,10 +4,10 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
-  Search, LayoutDashboard, Layers, Box, HardDrive, HeartPulse, Network,
+  Search, LayoutDashboard, Layers, Box, HardDrive, HeartPulse, Clock, Network,
   ScrollText, Monitor, Settings2, Cog, ArrowRight, Trash2, Play, Square,
   RotateCw, Command, Wrench, Sun, Moon, PanelLeftClose, PanelLeft,
-  LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark,
+  LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -43,12 +43,15 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   containers: <Box size={16} />,
   images: <HardDrive size={16} />,
   health: <HeartPulse size={16} />,
+  uptime: <Clock size={16} />,
   networks: <Network size={16} />,
   logs: <ScrollText size={16} />,
   system: <Monitor size={16} />,
   config: <Settings2 size={16} />,
   settings: <Cog size={16} />,
   bookmarks: <Bookmark size={16} />,
+  activity: <Zap size={16} />,
+  diagnostics: <Shield size={16} />,
 }
 
 const pageLabels: Record<PageId, string> = {
@@ -57,10 +60,13 @@ const pageLabels: Record<PageId, string> = {
   containers: 'Containers',
   images: 'Images',
   health: 'Health Monitor',
+  uptime: 'Uptime Monitor',
   networks: 'Networks & Volumes',
   bookmarks: 'Bookmarks',
+  activity: 'Activity',
   logs: 'Log Viewer',
   system: 'System Info',
+  diagnostics: 'Diagnostics',
   config: 'Server Config',
   settings: 'Settings',
 }
@@ -117,7 +123,7 @@ export function CommandPalette() {
     const items: CommandItem[] = []
 
     // Navigation commands
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'logs', 'system', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'uptime', 'networks', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,

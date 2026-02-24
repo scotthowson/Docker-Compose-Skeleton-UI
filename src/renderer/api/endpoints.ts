@@ -36,6 +36,13 @@ import type {
   LogsResponse,
   EventsResponse,
   MaintenanceResponse,
+  ContainerProcessesResponse,
+  StackComposeResponse,
+  AuthResponse,
+  AuthVerifyResponse,
+  InviteResponse,
+  InviteListResponse,
+  UserListResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -149,6 +156,13 @@ export function deleteStack(name: string): Promise<StackDeleteResponse> {
   )
 }
 
+/** GET /stacks/:name/compose — Fetch raw docker-compose.yml content */
+export function fetchStackCompose(name: string): Promise<StackComposeResponse> {
+  return apiClient.get<StackComposeResponse>(
+    `/stacks/${encodeURIComponent(name)}/compose`,
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Images
 // ---------------------------------------------------------------------------
@@ -216,6 +230,13 @@ export function stopContainer(name: string): Promise<ContainerActionResponse> {
 export function restartContainer(name: string): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
     `/containers/${encodeURIComponent(name)}/restart`,
+  )
+}
+
+/** GET /containers/:name/processes — Running processes in a container */
+export function fetchContainerProcesses(name: string): Promise<ContainerProcessesResponse> {
+  return apiClient.get<ContainerProcessesResponse>(
+    `/containers/${encodeURIComponent(name)}/processes`,
   )
 }
 
@@ -316,4 +337,48 @@ export function runDockerPrune(): Promise<MaintenanceResponse> {
 /** POST /maintenance/image-prune — Docker image prune */
 export function runImagePrune(): Promise<MaintenanceResponse> {
   return apiClient.post<MaintenanceResponse>('/maintenance/image-prune')
+}
+
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+/** POST /auth/setup — Initial admin account setup */
+export function authSetup(username: string, password: string): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/setup', { username, password })
+}
+
+/** POST /auth/login — Authenticate and receive token */
+export function authLogin(username: string, password: string): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/login', { username, password })
+}
+
+/** POST /auth/register — Register with invite code */
+export function authRegister(username: string, password: string, invite_code: string): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/register', { username, password, invite_code })
+}
+
+/** GET /auth/verify — Verify current token validity */
+export function authVerify(): Promise<AuthVerifyResponse> {
+  return apiClient.get<AuthVerifyResponse>('/auth/verify')
+}
+
+/** POST /auth/invite — Create an invite code */
+export function authCreateInvite(role?: string): Promise<InviteResponse> {
+  return apiClient.post<InviteResponse>('/auth/invite', { role: role || 'user' })
+}
+
+/** GET /auth/users — List all registered users */
+export function authListUsers(): Promise<UserListResponse> {
+  return apiClient.get<UserListResponse>('/auth/users')
+}
+
+/** GET /auth/invites — List all invite codes */
+export function authListInvites(): Promise<InviteListResponse> {
+  return apiClient.get<InviteListResponse>('/auth/invites')
+}
+
+/** POST /auth/revoke — Revoke a user's access */
+export function authRevokeUser(username: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.post<{ success: boolean; message: string }>('/auth/revoke', { username })
 }

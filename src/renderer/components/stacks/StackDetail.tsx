@@ -21,9 +21,11 @@ import {
   XCircle,
   ChevronDown,
   RefreshCw,
+  FileCode2,
 } from 'lucide-react'
 import type { StackDetail as StackDetailType, ContainerInfo } from '../../../shared/types'
-import { fetchStack, fetchStackLogs } from '../../api/endpoints'
+import { fetchStack, fetchStackLogs, fetchStackCompose } from '../../api/endpoints'
+import { ComposeViewer } from './ComposeViewer'
 
 interface Props {
   stackName: string
@@ -81,8 +83,27 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [logsLoading, setLogsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'containers' | 'logs' | 'services'>('containers')
   const [confirmAction, setConfirmAction] = useState<'stop' | 'restart' | 'update' | null>(null)
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeContent, setComposeContent] = useState<string | undefined>(undefined)
+  const [composeLoading, setComposeLoading] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Fetch compose file content
+  const handleViewCompose = useCallback(async () => {
+    setComposeLoading(true)
+    try {
+      const data = await fetchStackCompose(stackName)
+      setComposeContent(data.content)
+      setShowCompose(true)
+    } catch {
+      // Still open the viewer — it will show the placeholder
+      setComposeContent(undefined)
+      setShowCompose(true)
+    } finally {
+      setComposeLoading(false)
+    }
+  }, [stackName])
 
   // Fetch stack detail
   const loadDetail = useCallback(async () => {
@@ -372,9 +393,40 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               )}
               Update
             </button>
+
+            {/* View Compose */}
+            <button
+              onClick={handleViewCompose}
+              disabled={composeLoading}
+              className={`
+                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
+                border transition-all duration-200
+                ${
+                  composeLoading
+                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                    : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30'
+                }
+              `}
+            >
+              {composeLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileCode2 className="w-3.5 h-3.5" />
+              )}
+              Compose
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Compose file viewer overlay */}
+      {showCompose && (
+        <ComposeViewer
+          stackName={stackName}
+          content={composeContent}
+          onClose={() => setShowCompose(false)}
+        />
+      )}
 
       {/* Tab navigation */}
       <div className="flex items-center gap-1 p-1 glass-subtle w-fit">

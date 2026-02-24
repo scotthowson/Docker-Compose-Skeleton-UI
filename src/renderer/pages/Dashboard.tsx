@@ -7,7 +7,7 @@ import { WifiOff, Wifi, Loader2, Server, RefreshCw } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchServerStatus, fetchHealthReport, fetchEvents, fetchVersion,
-  fetchContainers, fetchDisks,
+  fetchContainers, fetchDisks, fetchSystemInfo,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -146,6 +146,7 @@ export default function Dashboard() {
 
   const setSystemStatus = useSystemStore((s) => s.setStatus)
   const setSystemVersion = useSystemStore((s) => s.setVersion)
+  const setSystemInfo = useSystemStore((s) => s.setSystem)
   const systemStatus = useSystemStore((s) => s.status)
 
   const setHealthReport = useHealthStore((s) => s.setReport)
@@ -214,6 +215,19 @@ export default function Dashboard() {
       onPollSuccess()
     }
   }, [versionPoll.data, setSystemVersion, onPollSuccess])
+
+  // --- Poll /system every 60s (provides cpu_count for CPU gauge) ---
+  const systemInfoPoll = usePolling(fetchSystemInfo, 60000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  React.useEffect(() => {
+    if (systemInfoPoll.data) {
+      setSystemInfo(systemInfoPoll.data)
+      onPollSuccess()
+    }
+  }, [systemInfoPoll.data, setSystemInfo, onPollSuccess])
 
   // --- Poll /containers every 10s ---
   const containersPoll = usePolling<ContainerListResponse>(fetchContainers, 10000, {

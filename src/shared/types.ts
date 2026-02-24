@@ -411,6 +411,69 @@ export interface EventEntry {
   name: string
 }
 
+// GET /containers/:name/processes
+export interface ContainerProcessesResponse {
+  container: string
+  processes: ContainerProcess[]
+}
+
+export interface ContainerProcess {
+  uid: string
+  pid: string
+  ppid: string
+  cpu: string
+  time: string
+  cmd: string
+}
+
+// GET /stacks/:name/compose
+export interface StackComposeResponse {
+  stack: string
+  content: string
+}
+
+// Auth responses
+export interface AuthResponse {
+  success: boolean
+  token: string
+  username: string
+  role: 'admin' | 'user'
+}
+
+export interface AuthVerifyResponse {
+  valid: boolean
+  username: string
+  role: string
+}
+
+export interface InviteResponse {
+  success: boolean
+  code: string
+  expires_at: string
+}
+
+export interface InviteListResponse {
+  invites: InviteCode[]
+}
+
+export interface InviteCode {
+  code: string
+  role: string
+  created_at: string
+  expires_at: string
+  used: boolean
+}
+
+export interface UserListResponse {
+  users: ApiUser[]
+}
+
+export interface ApiUser {
+  username: string
+  role: string
+  created_at: string
+}
+
 // GET /
 export interface APIRoot {
   name: string
@@ -471,9 +534,12 @@ export type PageId =
   | 'containers'
   | 'images'
   | 'health'
+  | 'uptime'
   | 'networks'
   | 'logs'
   | 'system'
+  | 'diagnostics'
   | 'config'
   | 'settings'
   | 'bookmarks'
+  | 'activity'

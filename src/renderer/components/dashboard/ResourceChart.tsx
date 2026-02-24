@@ -14,6 +14,8 @@ const COLORS = {
   available: '#334155',  // slate-700
   diskUsed: '#06b6d4',   // cyan-500
   diskAvailable: '#1e293b', // slate-800
+  cpuUsed: '#f59e0b',    // amber-500
+  cpuAvailable: '#1e293b', // slate-800
 }
 
 interface DonutProps {
@@ -119,6 +121,7 @@ function parseDiskToMB(value: string): number {
 
 export default function ResourceChart() {
   const status = useSystemStore((s) => s.status)
+  const systemInfo = useSystemStore((s) => s.system)
   const connectionStatus = useConnectionStore((s) => s.status)
   const isDisconnected = !status && connectionStatus !== 'connected'
 
@@ -177,8 +180,16 @@ export default function ResourceChart() {
     { name: 'Available', value: diskAvailMB },
   ]
 
-  // Load average
+  // Load average & CPU
   const loadAvg = status?.system.load_average ?? [0, 0, 0] as [number, number, number]
+  const cpuCount = systemInfo?.cpu_count ?? 1
+  const cpuPercent = Math.min(100, Math.round((loadAvg[0] / cpuCount) * 100))
+  const cpuFree = Math.max(0, 100 - cpuPercent)
+
+  const cpuData = [
+    { name: 'Load', value: cpuPercent },
+    { name: 'Available', value: cpuFree },
+  ]
 
   return (
     <div className="glass-card p-6 animate-fade-in">
@@ -187,6 +198,13 @@ export default function ResourceChart() {
       </h3>
 
       <div className="flex flex-wrap items-start justify-around gap-6">
+        <DonutChart
+          title="CPU"
+          data={cpuData}
+          colors={[COLORS.cpuUsed, COLORS.cpuAvailable]}
+          centerValue={`${cpuPercent}%`}
+          centerLabel="load"
+        />
         <DonutChart
           title="Memory"
           data={memoryData}
@@ -208,7 +226,13 @@ export default function ResourceChart() {
       </div>
 
       {/* Quick stat callouts */}
-      <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+      <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
+          <p className="text-sm font-semibold text-slate-200 mt-0.5">
+            {cpuCount}
+          </p>
+        </div>
         <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total Memory</p>
           <p className="text-sm font-semibold text-slate-200 mt-0.5">
