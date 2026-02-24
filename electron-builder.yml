@@ -13,7 +13,6 @@ linux:
     - AppImage
     - deb
     - rpm
-    - apk
   category: Development
   synopsis: Docker Compose Skeleton management dashboard
   description: Premium desktop application for managing Docker Compose Skeleton servers with live monitoring, stack management, health checks, and more.

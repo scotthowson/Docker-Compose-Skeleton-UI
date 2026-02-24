@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { CommandPalette } from './components/CommandPalette'
+import { KeyboardShortcuts } from './components/KeyboardShortcuts'
 import { useSettingsStore } from './stores/settingsStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useAuthStore } from './stores/authStore'
@@ -25,6 +26,7 @@ import Diagnostics from './pages/Diagnostics'
 import Users from './pages/Users'
 import Maintenance from './pages/Maintenance'
 import Environment from './pages/Environment'
+import Volumes from './pages/Volumes'
 import Backup from './pages/Backup'
 import type { PageId } from '../shared/types'
 
@@ -36,6 +38,7 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   health: Health,
   uptime: Uptime,
   networks: Networks,
+  volumes: Volumes,
   bookmarks: Bookmarks,
   activity: Activity,
   logs: Logs,
@@ -50,7 +53,7 @@ const pageComponents: Record<PageId, React.ComponentType> = {
 }
 
 // Page order for Ctrl+1-9 navigation
-const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
+const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
 
 export default function App() {
   const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes } = useSettingsStore()
@@ -180,8 +183,9 @@ export default function App() {
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm z-0" />
         )}
 
-        {/* Command Palette */}
+        {/* Command Palette + Keyboard Shortcuts */}
         <CommandPalette />
+        <KeyboardShortcuts />
 
         {/* Header — z-30 so dropdown renders above content area */}
         <div className="relative z-30">

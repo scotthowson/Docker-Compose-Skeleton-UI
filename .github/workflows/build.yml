@@ -21,8 +21,6 @@ jobs:
             artifact: deb
           - target: rpm
             artifact: rpm
-          - target: apk
-            artifact: apk
 
     steps:
       - name: Checkout
@@ -60,7 +58,6 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
-            release/*.apk
           if-no-files-found: ignore
 
   build-windows:
@@ -120,7 +117,6 @@ jobs:
             artifacts/**/*.AppImage
             artifacts/**/*.deb
             artifacts/**/*.rpm
-            artifacts/**/*.apk
             artifacts/**/*.exe
           generate_release_notes: true
           draft: false

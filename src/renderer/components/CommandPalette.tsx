@@ -8,7 +8,7 @@ import {
   ScrollText, Monitor, Settings2, Cog, ArrowRight, Trash2, Play, Square,
   RotateCw, Command, Wrench, Sun, Moon, PanelLeftClose, PanelLeft,
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
-  FileCode, Archive,
+  FileCode, Archive, Database,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -46,6 +46,7 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   health: <HeartPulse size={16} />,
   uptime: <Clock size={16} />,
   networks: <Network size={16} />,
+  volumes: <Database size={16} />,
   logs: <ScrollText size={16} />,
   system: <Monitor size={16} />,
   config: <Settings2 size={16} />,
@@ -66,7 +67,8 @@ const pageLabels: Record<PageId, string> = {
   images: 'Images',
   health: 'Health Monitor',
   uptime: 'Uptime Monitor',
-  networks: 'Networks & Volumes',
+  networks: 'Networks',
+  volumes: 'Volumes',
   bookmarks: 'Bookmarks',
   activity: 'Activity',
   maintenance: 'Maintenance',
@@ -132,7 +134,7 @@ export function CommandPalette() {
     const items: CommandItem[] = []
 
     // Navigation commands
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'uptime', 'bookmarks', 'activity', 'maintenance', 'environment', 'backup', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'maintenance', 'environment', 'backup', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,

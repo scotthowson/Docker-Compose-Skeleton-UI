@@ -47,13 +47,19 @@ A premium Electron desktop application for managing [Docker Compose Skeleton](ht
 - Per-container health breakdown with state and status
 - Color-coded status badges
 
-### Networks & Volumes
+### Networks
 - Network list with driver, scope, connected containers
 - Network detail with subnet, gateway, container IPs
 - Create and delete networks
 - **Networks moved above Health** in sidebar navigation
-- Volume list with driver, mountpoint, size
-- Delete volumes with confirmation
+
+### Volumes
+- **Dedicated Volumes page** — full volume management with summary stats
+- Volume table with name, driver, mountpoint, size
+- **Search and sort** — filter by name, sort by name or size
+- **Size analysis** — total storage, largest volume, driver breakdown
+- Delete volumes with confirmation modal
+- Color-coded size indicators (amber for large volumes)
 
 ### Log Viewer
 - Live log viewer with auto-scroll
@@ -128,6 +134,7 @@ A premium Electron desktop application for managing [Docker Compose Skeleton](ht
 - **PBKDF2 key derivation** (100k iterations, random 128-bit salt, Web Crypto API)
 - Initial setup flow with account creation
 - Login with remember-me (4 hour sessions)
+- **Invite code registration** — new users can register with an invite code from the login screen
 - Auto-lock after configurable inactivity
 - **Invite code system** — used invites tracked instead of deleted, shows who used each code
 
@@ -145,12 +152,18 @@ A premium Electron desktop application for managing [Docker Compose Skeleton](ht
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+D` | Toggle dark/light theme |
 | `Ctrl+R` | Refresh all data |
+| `Ctrl+/` or `?` | Keyboard shortcuts overlay |
 
-### UI Improvements
+### UI & Design
+- **Glassmorphism design system** — multi-depth glass effects, gradient borders, neon glow utilities
 - **Full-screen glass overlays** for creating and editing stacks — built with React portals, escape key to close, backdrop blur
+- **Animated dashboard counters** — numbers smoothly count up with 60fps ease-out animation
+- **Premium CSS animations** — floating orbs, gradient rotation, morphing blobs, shimmer skeletons, stagger children, pulse glow effects
+- **Keyboard shortcuts overlay** — press `?` or `Ctrl+/` to see all shortcuts in a beautiful panel
 - **CPU usage bar** in the status bar footer alongside RAM
 - **Networks above Health** in sidebar navigation order
 - **Profile customization** — status emoji + text, timezone selector, accent colour picker (8 colours)
+- **Micro-interactions** — press effects on buttons, hover transforms on cards, staggered entrance animations
 
 ## Tech Stack
 
@@ -204,7 +217,7 @@ Build output goes to the `release/` directory. Supported targets:
 
 | Platform | Format |
 |----------|--------|
-| Linux | AppImage, .deb, .rpm, .apk |
+| Linux | AppImage, .deb, .rpm |
 | macOS | .dmg |
 | Windows | NSIS installer |
 
@@ -246,14 +259,16 @@ src/
       images/            # ImageList, ImageCard
       layout/            # Sidebar, Header, StatusBar (with CPU bar)
       settings/          # ConnectionForm, AppSettings, ProfileCustomization
-      CommandPalette.tsx # Global Ctrl+K search
+      CommandPalette.tsx  # Global Ctrl+K search
+      KeyboardShortcuts.tsx # Ctrl+/ or ? overlay
       NotificationDrawer.tsx
-    pages/               # 19 pages
+    pages/               # 20 pages
       Dashboard.tsx      # Live overview, charts, quick actions
       Stacks.tsx         # Stack list with batch operations
       Containers.tsx     # Container list with batch operations
       Images.tsx         # Image tracking with staleness
       Networks.tsx       # Network management
+      Volumes.tsx        # Volume management with search, sort, delete
       Health.tsx         # Health monitoring
       Logs.tsx           # Log viewer with server-side filtering and statistics
       System.tsx         # System information
@@ -264,7 +279,7 @@ src/
       Backup.tsx         # Backup/restore with status polling and archive browser
       Settings.tsx       # User profile, appearance, connection, security
       Bookmarks.tsx      # Pinned pages, stacks, containers
-      Login.tsx          # Authentication flow
+      Login.tsx          # Authentication with invite code registration
       Users.tsx          # User management and invite codes
       Activity.tsx       # Activity feed
       Uptime.tsx         # Uptime monitoring

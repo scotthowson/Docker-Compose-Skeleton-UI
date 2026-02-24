@@ -620,6 +620,148 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+
+  /* ── Glass depth levels ──────────────────────────────────────── */
+  .glass-1 {
+    @apply bg-white/[0.03] backdrop-blur-md border border-white/[0.05] rounded-xl;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .glass-2 {
+    @apply bg-white/[0.06] backdrop-blur-xl border border-white/[0.08] rounded-xl;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .glass-3 {
+    @apply bg-white/[0.10] backdrop-blur-2xl border border-white/[0.12] rounded-xl;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* ── Animated gradient border ─────────────────────────────────── */
+  .gradient-border-animated {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .gradient-border-animated::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--gradient-angle, 0deg),
+      rgba(52, 211, 153, 0.4),
+      rgba(34, 211, 238, 0.2),
+      rgba(139, 92, 246, 0.4),
+      rgba(251, 113, 133, 0.2),
+      rgba(52, 211, 153, 0.4)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: gradientRotate 4s linear infinite;
+  }
+
+  /* ── Float animation ─────────────────────────────────────────── */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-float-slow {
+    animation: float 10s ease-in-out infinite;
+  }
+
+  .animate-float-delayed {
+    animation: float 6s ease-in-out infinite;
+    animation-delay: 3s;
+  }
+
+  /* ── Slide up entrance ───────────────────────────────────────── */
+  .animate-slide-up {
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* ── Glow pulse effect ───────────────────────────────────────── */
+  .glow-pulse-emerald {
+    animation: glowPulseEmerald 3s ease-in-out infinite;
+  }
+
+  .glow-pulse-cyan {
+    animation: glowPulseCyan 3s ease-in-out infinite;
+  }
+
+  .glow-pulse-rose {
+    animation: glowPulseRose 3s ease-in-out infinite;
+  }
+
+  /* ── Neon text utilities ─────────────────────────────────────── */
+  .neon-emerald {
+    text-shadow: 0 0 7px rgba(52, 211, 153, 0.4), 0 0 20px rgba(52, 211, 153, 0.15);
+  }
+
+  .neon-cyan {
+    text-shadow: 0 0 7px rgba(34, 211, 238, 0.4), 0 0 20px rgba(34, 211, 238, 0.15);
+  }
+
+  .neon-rose {
+    text-shadow: 0 0 7px rgba(251, 113, 133, 0.4), 0 0 20px rgba(251, 113, 133, 0.15);
+  }
+
+  .neon-amber {
+    text-shadow: 0 0 7px rgba(251, 191, 36, 0.4), 0 0 20px rgba(251, 191, 36, 0.15);
+  }
+
+  /* ── Shimmer skeleton loading ────────────────────────────────── */
+  .skeleton {
+    @apply rounded-lg bg-gradient-to-r from-slate-800/60 via-slate-700/40 to-slate-800/60;
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.8s ease-in-out infinite;
+  }
+
+  /* ── Morphing blob background ────────────────────────────────── */
+  .blob {
+    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+    animation: morph 8s ease-in-out infinite;
+  }
+
+  /* ── Interactive press effect ─────────────────────────────────── */
+  .press {
+    transition: transform 0.15s ease;
+  }
+
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* ── Stagger children — extended to 12 ───────────────────────── */
+  .stagger-children > *:nth-child(9) { animation-delay: 480ms; }
+  .stagger-children > *:nth-child(10) { animation-delay: 540ms; }
+  .stagger-children > *:nth-child(11) { animation-delay: 600ms; }
+  .stagger-children > *:nth-child(12) { animation-delay: 660ms; }
+
+  /* ── Gradient text — more variants ───────────────────────────── */
+  .text-gradient-rose {
+    @apply bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-violet {
+    @apply bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-amber {
+    @apply bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-rainbow {
+    background: linear-gradient(90deg, #34d399, #22d3ee, #a78bfa, #fb7185, #fbbf24, #34d399);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradientScroll 4s linear infinite;
+  }
 }
 
 @keyframes fadeIn {
@@ -660,6 +802,79 @@
 @keyframes orbit {
   from { transform: rotate(0deg) translateX(70px) rotate(0deg); }
   to { transform: rotate(360deg) translateX(70px) rotate(-360deg); }
+}
+
+@keyframes gradientRotate {
+  0% { --gradient-angle: 0deg; }
+  100% { --gradient-angle: 360deg; }
+}
+
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glowPulseEmerald {
+  0%, 100% { box-shadow: 0 0 8px rgba(52, 211, 153, 0.15); }
+  50% { box-shadow: 0 0 24px rgba(52, 211, 153, 0.3), 0 0 48px rgba(52, 211, 153, 0.1); }
+}
+
+@keyframes glowPulseCyan {
+  0%, 100% { box-shadow: 0 0 8px rgba(34, 211, 238, 0.15); }
+  50% { box-shadow: 0 0 24px rgba(34, 211, 238, 0.3), 0 0 48px rgba(34, 211, 238, 0.1); }
+}
+
+@keyframes glowPulseRose {
+  0%, 100% { box-shadow: 0 0 8px rgba(251, 113, 133, 0.15); }
+  50% { box-shadow: 0 0 24px rgba(251, 113, 133, 0.3), 0 0 48px rgba(251, 113, 133, 0.1); }
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes morph {
+  0%, 100% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+  25% { border-radius: 58% 42% 75% 25% / 76% 46% 54% 24%; }
+  50% { border-radius: 50% 50% 33% 67% / 55% 27% 73% 45%; }
+  75% { border-radius: 33% 67% 58% 42% / 63% 68% 32% 37%; }
+}
+
+@keyframes gradientScroll {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blinkCaret {
+  0%, 100% { border-color: transparent; }
+  50% { border-color: rgba(52, 211, 153, 0.8); }
+}
+
+@keyframes slideInFromBottom {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.4; }
+  100% { transform: scale(4); opacity: 0; }
 }
 
 @layer utilities {

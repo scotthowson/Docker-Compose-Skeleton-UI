@@ -30,6 +30,7 @@ import {
   Wrench,
   FileCode,
   Archive,
+  Database,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -50,6 +51,7 @@ const navItems: NavItem[] = [
   { id: 'containers', label: 'Containers', icon: Box, section: 'main' },
   { id: 'images', label: 'Images', icon: HardDrive, section: 'main' },
   { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
+  { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
   { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
   { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },

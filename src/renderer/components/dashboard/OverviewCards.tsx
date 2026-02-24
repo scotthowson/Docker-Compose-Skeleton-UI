@@ -2,16 +2,96 @@
 // OverviewCards — Quick stats grid (4 columns) for the Dashboard
 // =============================================================================
 
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 
+// ---------------------------------------------------------------------------
+// AnimatedCounter — Smoothly animates between numeric values using rAF
+// ---------------------------------------------------------------------------
+
+interface AnimatedCounterProps {
+  value: number
+  duration?: number
+  className?: string
+}
+
+function AnimatedCounter({ value, duration = 800, className = '' }: AnimatedCounterProps) {
+  const [displayValue, setDisplayValue] = useState(value)
+  const previousValue = useRef(value)
+  const rafId = useRef<number | null>(null)
+  const startTime = useRef<number | null>(null)
+
+  useEffect(() => {
+    const from = previousValue.current
+    const to = value
+
+    // Nothing to animate
+    if (from === to) {
+      setDisplayValue(to)
+      return
+    }
+
+    // Cancel any in-flight animation
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current)
+    }
+
+    // Snapshot the current displayed value as the starting point when
+    // interrupting mid-animation, so the counter picks up smoothly
+    const animateFrom = displayValue !== to ? displayValue : from
+
+    startTime.current = null
+
+    // Cubic ease-out for natural deceleration
+    const easeOut = (t: number): number => 1 - Math.pow(1 - t, 3)
+
+    const step = (timestamp: number) => {
+      if (startTime.current === null) startTime.current = timestamp
+      const elapsed = timestamp - startTime.current
+      const progress = Math.min(elapsed / duration, 1)
+      const easedProgress = easeOut(progress)
+
+      const current = animateFrom + (to - animateFrom) * easedProgress
+      setDisplayValue(Math.round(current))
+
+      if (progress < 1) {
+        rafId.current = requestAnimationFrame(step)
+      } else {
+        // Ensure we land exactly on target
+        setDisplayValue(to)
+        previousValue.current = to
+        rafId.current = null
+      }
+    }
+
+    rafId.current = requestAnimationFrame(step)
+
+    return () => {
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current)
+        // When cleanup fires due to value change, snapshot where we are
+        previousValue.current = displayValue
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration])
+
+  return (
+    <span className={`tabular-nums ${className}`}>
+      {displayValue}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
 interface CardProps {
   icon: React.ReactNode
   label: string
-  value: string | number
+  value: string | number | React.ReactNode
   subtitle?: string
   accentColor: 'emerald' | 'cyan' | 'amber' | 'rose'
   trend?: 'up' | 'down' | 'stable'
@@ -77,7 +157,13 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
           </div>
           <div className="mt-4">
             <p className="text-sm font-medium text-slate-400">{label}</p>
-            <p className="mt-1 text-2xl font-bold text-white tracking-tight">{value}</p>
+            <p className="mt-1 text-2xl font-bold text-white tracking-tight tabular-nums">
+              {typeof value === 'number' ? (
+                <AnimatedCounter value={value} />
+              ) : (
+                value
+              )}
+            </p>
             {subtitle && (
               <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
             )}
@@ -160,7 +246,13 @@ export default function OverviewCards() {
       <StatCard
         icon={<Layers className="h-5 w-5" />}
         label="Total Stacks"
-        value={`${runningStacks} / ${totalStacks}`}
+        value={
+          <span className="tabular-nums">
+            <AnimatedCounter value={runningStacks} />
+            {' / '}
+            <AnimatedCounter value={totalStacks} />
+          </span>
+        }
         subtitle={`${runningStacks} running`}
         accentColor={runningStacks === totalStacks && totalStacks > 0 ? 'emerald' : 'amber'}
         trend={stackTrend}

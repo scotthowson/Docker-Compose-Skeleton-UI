@@ -776,6 +776,7 @@ export type PageId =
   | 'bookmarks'
   | 'activity'
   | 'users'
+  | 'volumes'
   | 'maintenance'
   | 'environment'
   | 'backup'

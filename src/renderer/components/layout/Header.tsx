@@ -24,6 +24,7 @@ const pageTitles: Record<PageId, string> = {
   health: 'Health Monitor',
   uptime: 'Uptime Monitor',
   networks: 'Networks',
+  volumes: 'Volumes',
   bookmarks: 'Bookmarks',
   activity: 'Activity',
   maintenance: 'Maintenance',

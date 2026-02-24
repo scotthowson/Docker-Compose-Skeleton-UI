@@ -131,7 +131,7 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'}`}
       >
-        <div className={`grid grid-cols-3 gap-2.5 ${collapsed ? '' : 'pt-0'}`}>
+        <div className={`grid grid-cols-3 gap-2.5 stagger-children ${collapsed ? '' : 'pt-0'}`}>
           {actions.map((action) => (
             <button
               key={action.id}
@@ -141,12 +141,13 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
                 group flex flex-col items-center gap-2.5 p-4
                 rounded-xl bg-slate-800/30 border border-white/[0.03]
                 hover:border-white/[0.08] hover:bg-slate-800/50
+                hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
                 disabled:opacity-40
                 transition-all duration-200
-                text-center
+                text-center press
               "
             >
-              <div className={`rounded-lg p-2.5 ${action.bgColor} ${action.color} transition-colors`}>
+              <div className={`rounded-lg p-2.5 ${action.bgColor} ${action.color} transition-all duration-300 group-hover:scale-110`}>
                 {action.icon}
               </div>
               <span className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">
