@@ -496,7 +496,7 @@ export default function Volumes() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       {/* Delete confirmation modal */}
       {deleteTarget && (
         <DeleteConfirmModal
@@ -520,7 +520,7 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-100">
+          <h2 className="text-base md:text-xl font-bold text-slate-100">
             <span className="text-gradient">Volumes</span>
           </h2>
           <p className="mt-0.5 text-sm text-slate-500">

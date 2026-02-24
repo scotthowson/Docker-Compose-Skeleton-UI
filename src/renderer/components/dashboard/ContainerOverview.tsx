@@ -115,7 +115,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
 
   if (isDisconnected && containers.length === 0) {
     return (
-      <div className="glass-card p-6 animate-fade-in">
+      <div className="glass-card p-4 md:p-6 animate-fade-in">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
           <Box size={14} className="text-cyan-400" />
           Containers
@@ -133,7 +133,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
   const sorted = [...running, ...stopped]
 
   return (
-    <div className="glass-card p-6 animate-fade-in">
+    <div className="glass-card p-4 md:p-6 animate-fade-in">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
           <Box size={14} className="text-cyan-400" />

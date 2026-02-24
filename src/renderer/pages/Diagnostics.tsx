@@ -1057,11 +1057,11 @@ export default function Diagnostics() {
   const showDisconnected = !isConnected && hasNoData
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* ── Page header ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
             <span className="text-gradient">Diagnostics</span>
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -1100,16 +1100,16 @@ export default function Diagnostics() {
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
-        <div className="space-y-6 stagger-children">
+        <div className="space-y-3 md:space-y-6 stagger-children">
 
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 1: Health Score + Resource Gauges                     */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-6">
 
             {/* Health Score Ring */}
             <div className="lg:col-span-4">
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6 flex flex-col items-center justify-center h-full relative overflow-hidden">
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center h-full relative overflow-hidden">
                 {/* Ambient glow behind ring */}
                 <div className="absolute inset-0 pointer-events-none">
                   <div
@@ -1132,8 +1132,8 @@ export default function Diagnostics() {
             </div>
 
             {/* Resource Gauges + Server Control */}
-            <div className="lg:col-span-8 flex flex-col gap-6">
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+            <div className="lg:col-span-8 flex flex-col gap-3 md:gap-6">
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
                 <SectionHeader icon={<Activity size={14} />} title="Resource Gauges" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <SemiGauge
@@ -1158,7 +1158,7 @@ export default function Diagnostics() {
                   />
                 </div>
               </div>
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
                 <SectionHeader icon={<Power size={14} />} title="Server Control" />
                 <ServerControlCard />
               </div>
@@ -1168,16 +1168,16 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 2: Container Matrix + Image Freshness                */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
 
             {/* Container Health Matrix */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<Box size={14} />} title="Container Health Matrix" />
               <ContainerHealthMatrix containers={containers} />
             </div>
 
             {/* Image Freshness Breakdown */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<HardDrive size={14} />} title="Image Freshness" />
               <ImageFreshnessBar images={images} />
             </div>
@@ -1186,16 +1186,16 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 3: Port Map + Event Chart                            */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
 
             {/* Port Allocation Map */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<TrendingUp size={14} />} title="Port Allocation Map" />
               <PortAllocationMap containers={containers} />
             </div>
 
             {/* Event Frequency */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<BarChart3 size={14} />} title="Event Frequency" />
               <EventFrequencyChart events={events} />
             </div>
@@ -1204,7 +1204,7 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 4: Network Topology                                  */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
             <SectionHeader icon={<Network size={14} />} title="Network Topology" />
             <NetworkTopology networks={networks} />
           </div>
@@ -1212,7 +1212,7 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 5: Alerts Panel                                      */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
             <SectionHeader icon={<AlertTriangle size={14} />} title="Active Alerts" />
             <AlertsPanel
               containers={containers}

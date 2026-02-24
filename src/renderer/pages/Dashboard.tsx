@@ -319,14 +319,14 @@ export default function Dashboard() {
   const showDisconnected = !isConnected && hasNoData
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
             <span className="text-gradient">Dashboard</span>
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-xs md:text-sm text-slate-500">
             {systemStatus
               ? <><span className="text-slate-400">{systemStatus.hostname}</span>{' \u2014 uptime '}{formatUptime(systemStatus.uptime_seconds)}</>
               : 'Overview of your Docker environment'}
@@ -345,25 +345,25 @@ export default function Dashboard() {
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-3 md:space-y-6">
           {/* Row 1: Overview Cards */}
           <OverviewCards />
 
           {/* Row 2: Health + Resources */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
             <HealthSummary />
             <ResourceChart history={resourceHistoryRef.current} />
           </div>
 
           {/* Row 3: Containers + Server Info + Disks */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
             <ContainerOverview containers={containers} />
             <ServerInfo />
             <DiskMonitor disks={disks} />
           </div>
 
           {/* Row 4: Events + Quick Actions */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <RecentEvents collapsible />
             </div>

@@ -2,7 +2,7 @@
 // Sidebar — Collapsible navigation with glassmorphism, badges, health status
 // =============================================================================
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import {
   LayoutDashboard,
   Layers,
@@ -39,6 +39,7 @@ import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { isMobile } from '../../hooks/useMobile'
 import type { PageId } from '../../../shared/types'
 
 interface NavItem {
@@ -83,6 +84,15 @@ export function Sidebar() {
   const healthReport = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
   const unreadNotifications = useNotificationStore((s) => s.unreadCount)
+
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+
+  // Auto-collapse sidebar on mobile
+  useEffect(() => {
+    if (isMobile && !sidebarCollapsed) {
+      updateSetting('sidebarCollapsed', true)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mainItems = navItems.filter((i) => i.section === 'main')
   const systemItems = navItems.filter((i) => i.section === 'system')
@@ -159,11 +169,11 @@ export function Sidebar() {
         bg-slate-900/60 backdrop-blur-2xl
         border-r border-white/[0.06]
         transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
-        ${sidebarCollapsed ? 'w-[68px]' : 'w-[220px]'}
+        ${sidebarCollapsed ? 'w-[52px] md:w-[68px]' : 'w-[220px]'}
       `}
     >
       {/* Brand area */}
-      <div className="flex items-center gap-3 px-4 h-14 border-b border-white/[0.06] shrink-0">
+      <div className="flex items-center gap-3 px-2 md:px-4 h-11 md:h-14 border-b border-white/[0.06] shrink-0">
         <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-400 shrink-0 border border-emerald-500/10">
           <Container size={18} strokeWidth={2.2} />
           <div className="absolute inset-0 rounded-xl bg-emerald-400/5 blur-sm" />

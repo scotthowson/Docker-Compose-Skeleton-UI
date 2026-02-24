@@ -32,7 +32,7 @@ export default function ServerInfo() {
 
   if (!status && connectionStatus === 'connected') {
     return (
-      <div className="glass-card p-6 animate-pulse">
+      <div className="glass-card p-4 md:p-6 animate-pulse">
         <div className="h-5 w-32 rounded bg-slate-700/50 mb-4" />
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -45,7 +45,7 @@ export default function ServerInfo() {
 
   if (!status) {
     return (
-      <div className="glass-card p-6 animate-fade-in">
+      <div className="glass-card p-4 md:p-6 animate-fade-in">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
           <Server size={14} className="text-emerald-400" />
           Server Details
@@ -65,7 +65,7 @@ export default function ServerInfo() {
   const apiVersion = version?.api_version ?? '--'
 
   return (
-    <div className="glass-card p-6 animate-fade-in">
+    <div className="glass-card p-4 md:p-6 animate-fade-in">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
         <Server size={14} className="text-emerald-400" />
         Server Details

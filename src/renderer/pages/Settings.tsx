@@ -2121,10 +2121,10 @@ export default function Settings() {
   }, [])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* Page header */}
       <div>
-        <h2 className="text-xl font-bold text-slate-100">Settings</h2>
+        <h2 className="text-base md:text-xl font-bold text-slate-100">Settings</h2>
         <p className="mt-0.5 text-sm text-slate-500">
           Configure connection, appearance, polling intervals, disk labels, and more
         </p>

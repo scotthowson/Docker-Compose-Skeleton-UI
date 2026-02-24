@@ -271,7 +271,7 @@ export default function Logs() {
       {/* Page header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h2 className="text-xl font-bold text-slate-100">Log Viewer</h2>
+          <h2 className="text-base md:text-xl font-bold text-slate-100">Log Viewer</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             {logFile ? (
               <span className="font-mono text-xs">{logFile}</span>

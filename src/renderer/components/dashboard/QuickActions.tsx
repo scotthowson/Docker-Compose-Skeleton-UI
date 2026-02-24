@@ -172,7 +172,7 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
   }, [setCurrentPage, handleApiAction])
 
   return (
-    <div className="glass-card p-6 animate-fade-in">
+    <div className="glass-card p-4 md:p-6 animate-fade-in">
       <div
         className={`flex items-center justify-between ${collapsible ? 'cursor-pointer select-none' : ''} ${collapsed ? '' : 'mb-4'}`}
         onClick={collapsible ? toggleCollapsed : undefined}

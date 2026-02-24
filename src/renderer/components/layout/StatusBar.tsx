@@ -85,10 +85,10 @@ export function StatusBar() {
     <footer
       className="
         flex items-center justify-between
-        h-7 px-4
+        h-6 md:h-7 px-2.5 md:px-4
         bg-slate-900/80 backdrop-blur-xl
         border-t border-white/[0.05]
-        text-[10px] font-mono
+        text-[9px] md:text-[10px] font-mono
         shrink-0 select-none
       "
     >
@@ -102,7 +102,7 @@ export function StatusBar() {
         </span>
 
         {healthStatus && (
-          <>
+          <span className="hidden md:contents">
             <span className="text-white/[0.06]">|</span>
             <span className="flex items-center gap-1">
               <Activity size={9} className={
@@ -116,25 +116,29 @@ export function StatusBar() {
                 {healthStatus}
               </span>
             </span>
-          </>
+          </span>
         )}
 
-        <span className="text-white/[0.06]">|</span>
-        <span className="flex items-center gap-1 text-slate-600">
-          <Clock size={9} />
-          Uptime: <span className="text-slate-400">{uptime}</span>
+        <span className="hidden md:contents">
+          <span className="text-white/[0.06]">|</span>
+          <span className="flex items-center gap-1 text-slate-600">
+            <Clock size={9} />
+            Uptime: <span className="text-slate-400">{uptime}</span>
+          </span>
         </span>
 
-        <span className="text-white/[0.06]">|</span>
-        <span className="text-slate-600">
-          API <span className="text-slate-500">v{apiVersion}</span>
+        <span className="hidden md:contents">
+          <span className="text-white/[0.06]">|</span>
+          <span className="text-slate-600">
+            API <span className="text-slate-500">v{apiVersion}</span>
+          </span>
         </span>
       </div>
 
       {/* Right: CPU + Memory + Containers + Last refresh + clock */}
       <div className="flex items-center gap-2.5">
         {cpuCount > 0 && (
-          <>
+          <span className="hidden md:contents">
             <span className="flex items-center gap-1 text-slate-600">
               <Cpu size={9} />
               CPU
@@ -149,17 +153,17 @@ export function StatusBar() {
               <span className="text-[10px] text-slate-500 tabular-nums">{cpuPct}%</span>
             </div>
             <span className="text-white/[0.06]">|</span>
-          </>
+          </span>
         )}
         {memTotal > 0 && (
-          <>
+          <span className="hidden md:contents">
             <span className="flex items-center gap-1 text-slate-600">
               <MemoryStick size={9} />
               RAM
             </span>
             <MemoryBar used={memUsed} total={memTotal} />
             <span className="text-white/[0.06]">|</span>
-          </>
+          </span>
         )}
 
         <span className="flex items-center gap-1 text-slate-600">
@@ -170,13 +174,13 @@ export function StatusBar() {
         </span>
 
         {lastRefreshAgo && (
-          <>
+          <span className="hidden md:contents">
             <span className="text-white/[0.06]">|</span>
             <span className="flex items-center gap-1 text-slate-600">
               <Wifi size={9} className="text-emerald-500/60" />
               <span className="text-slate-500">{lastRefreshAgo}</span>
             </span>
-          </>
+          </span>
         )}
 
         <span className="text-white/[0.06]">|</span>

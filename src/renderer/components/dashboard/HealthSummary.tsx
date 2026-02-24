@@ -154,7 +154,7 @@ export default function HealthSummary() {
   // Show skeleton while connected but no data has arrived yet
   if (!report && connectionStatus === 'connected') {
     return (
-      <div className="glass-card p-6 animate-pulse">
+      <div className="glass-card p-4 md:p-6 animate-pulse">
         <div className="h-5 w-40 rounded bg-slate-700/50 mb-4" />
         <div className="h-16 rounded-lg bg-slate-800/40" />
         <div className="mt-4 h-2.5 rounded-full bg-slate-800/60" />
@@ -195,7 +195,7 @@ export default function HealthSummary() {
   const runningCount = (report?.containers ?? []).filter((c) => c.state === 'running').length
 
   return (
-    <div className={`glass-card p-6 animate-fade-in ${config.glow}`}>
+    <div className={`glass-card p-4 md:p-6 animate-fade-in ${config.glow}`}>
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
           Health Overview

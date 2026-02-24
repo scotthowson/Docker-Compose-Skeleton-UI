@@ -192,12 +192,12 @@ export default function Backup() {
   }
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin p-6">
+    <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
       <div className="flex flex-col gap-5 animate-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Backup & Restore</h1>
+            <h1 className="text-lg md:text-2xl font-bold text-white">Backup & Restore</h1>
             <p className="text-sm text-slate-400 mt-1">
               Create, manage, and restore server backups
             </p>

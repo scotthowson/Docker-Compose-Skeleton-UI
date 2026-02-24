@@ -235,7 +235,7 @@ export function Header() {
       className="
         drag-region
         flex items-center justify-between
-        h-14 px-5
+        h-11 md:h-14 px-3 md:px-5
         bg-slate-900/80 backdrop-blur-2xl
         border-b border-white/[0.06]
         shrink-0
@@ -247,12 +247,12 @@ export function Header() {
           {title}
         </h1>
         {hostname && (
-          <>
+          <span className="hidden md:contents">
             <span className="text-white/[0.08]">/</span>
             <span className="text-xs text-slate-500 font-mono select-none">
               {hostname}
             </span>
-          </>
+          </span>
         )}
       </div>
 
@@ -262,7 +262,7 @@ export function Header() {
         <button
           onClick={toggleDrawer}
           className="
-            relative flex items-center justify-center w-8 h-8
+            relative flex items-center justify-center w-7 h-7 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200
@@ -336,7 +336,7 @@ export function Header() {
         <button
           onClick={toggleTheme}
           className="
-            flex items-center justify-center w-8 h-8
+            flex items-center justify-center w-7 h-7 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200

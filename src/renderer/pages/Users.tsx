@@ -152,11 +152,11 @@ export default function Users() {
   const usedInvites = invites.filter((i) => i.used)
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
             <span className="text-gradient">User Management</span>
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -195,9 +195,9 @@ export default function Users() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
         {/* ---- Users List ---- */}
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 md:p-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <UsersIcon className="h-4 w-4 text-emerald-400" />
@@ -290,7 +290,7 @@ export default function Users() {
         </div>
 
         {/* ---- Invite Codes ---- */}
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 md:p-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-cyan-400" />

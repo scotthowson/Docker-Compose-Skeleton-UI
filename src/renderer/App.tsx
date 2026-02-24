@@ -225,7 +225,7 @@ export default function App() {
           <Sidebar />
 
           {/* Main content area */}
-          <main className="flex-1 overflow-y-auto p-6 transition-all duration-300 scrollbar-thin">
+          <main className="flex-1 overflow-y-auto p-3 md:p-6 transition-all duration-300 scrollbar-thin">
             <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
               <ActivePage />
             </div>

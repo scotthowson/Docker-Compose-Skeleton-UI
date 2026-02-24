@@ -136,7 +136,7 @@ export default function RecentEvents({ collapsible = false }: { collapsible?: bo
 
   if (loading && events.length === 0) {
     return (
-      <div className="glass-card p-6 animate-pulse">
+      <div className="glass-card p-4 md:p-6 animate-pulse">
         <div className="h-5 w-32 rounded bg-slate-700/50 mb-4" />
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -153,7 +153,7 @@ export default function RecentEvents({ collapsible = false }: { collapsible?: bo
   }
 
   return (
-    <div className="glass-card p-6 animate-fade-in">
+    <div className="glass-card p-4 md:p-6 animate-fade-in">
       <div
         className={`flex items-center justify-between ${collapsible ? 'cursor-pointer select-none' : ''} ${collapsed ? '' : 'mb-3'}`}
         onClick={collapsible ? toggleCollapsed : undefined}

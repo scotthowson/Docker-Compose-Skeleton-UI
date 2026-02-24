@@ -604,7 +604,7 @@ export default function Networks() {
   const totalContainers = networks.reduce((sum, n) => sum + n.containers.length, 0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* Modals */}
       {showCreateModal && (
         <CreateNetworkModal
@@ -630,7 +630,7 @@ export default function Networks() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-100">Networks</h2>
+          <h2 className="text-base md:text-xl font-bold text-slate-100">Networks</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             Docker network topology and container connections
           </p>

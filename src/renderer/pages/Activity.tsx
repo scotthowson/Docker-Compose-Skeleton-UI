@@ -477,11 +477,11 @@ export default function Activity() {
   const showDisconnected = !isConnected && hasNoData
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
             <span className="text-gradient">Activity Timeline</span>
           </h1>
           <p className="mt-1 text-sm text-slate-500">

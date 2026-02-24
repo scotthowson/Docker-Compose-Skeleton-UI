@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Keyboard, X } from 'lucide-react'
+import { isNative } from '../hooks/useMobile'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +107,8 @@ export function KeyboardShortcuts() {
   )
 
   useEffect(() => {
+    // Don't register keyboard listeners on native touch devices
+    if (isNative) return
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
@@ -115,7 +118,8 @@ export function KeyboardShortcuts() {
     setOpen(false)
   }, [])
 
-  if (!open) return null
+  // Keyboard shortcuts are meaningless on touch devices
+  if (isNative || !open) return null
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[12vh]">

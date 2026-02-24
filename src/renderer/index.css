@@ -946,3 +946,21 @@
     display: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE OVERRIDES — phones < 768px
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  :root {
+    font-size: 15px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+
+  .mobile-compact {
+    padding: 0.75rem !important;
+  }
+}

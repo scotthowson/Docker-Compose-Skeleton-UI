@@ -289,7 +289,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
   // Show skeleton while connected but no data yet
   if (!status && connectionStatus === 'connected') {
     return (
-      <div className="glass-card p-6 animate-pulse">
+      <div className="glass-card p-4 md:p-6 animate-pulse">
         <div className="h-5 w-36 rounded bg-slate-700/50 mb-6" />
         <div className="flex items-center justify-around">
           <div className="h-36 w-36 rounded-full bg-slate-800/40" />
@@ -307,7 +307,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
   // No data + disconnected — show empty state
   if (!status && isDisconnected) {
     return (
-      <div className="glass-card p-6 animate-fade-in">
+      <div className="glass-card p-4 md:p-6 animate-fade-in">
         <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400">
           System Resources
         </h3>
@@ -358,7 +358,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
   ]
 
   return (
-    <div className="glass-card p-6 animate-fade-in">
+    <div className="glass-card p-4 md:p-6 animate-fade-in">
       {/* Header with tabs */}
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
