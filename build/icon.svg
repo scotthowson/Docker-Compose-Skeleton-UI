@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background circle with dark slate -->
+  <rect width="512" height="512" rx="108" fill="#0f172a"/>
+
+  <!-- Subtle gradient overlay -->
+  <defs>
+    <linearGradient id="glow" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="accentLight" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="108" fill="url(#glow)"/>
+
+  <!-- Inner rounded rect border -->
+  <rect x="24" y="24" width="464" height="464" rx="88" fill="none" stroke="url(#accent)" stroke-width="2" stroke-opacity="0.3"/>
+
+  <!-- Container/Stack icon — 3 stacked layers -->
+  <!-- Bottom layer -->
+  <path d="M256 368 L128 304 L256 240 L384 304 Z" fill="url(#accent)" fill-opacity="0.3" stroke="url(#accent)" stroke-width="3"/>
+  <!-- Middle layer -->
+  <path d="M256 316 L128 252 L256 188 L384 252 Z" fill="url(#accent)" fill-opacity="0.5" stroke="url(#accent)" stroke-width="3"/>
+  <!-- Top layer -->
+  <path d="M256 264 L128 200 L256 136 L384 200 Z" fill="url(#accent)" fill-opacity="0.85" stroke="url(#accentLight)" stroke-width="3"/>
+
+  <!-- Small diamond accents -->
+  <circle cx="256" cy="136" r="6" fill="#34d399"/>
+  <circle cx="128" cy="200" r="4" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="384" cy="200" r="4" fill="#06b6d4" opacity="0.7"/>
+
+  <!-- Connection dots -->
+  <circle cx="256" cy="408" r="5" fill="#10b981" opacity="0.4"/>
+  <circle cx="220" cy="420" r="3" fill="#06b6d4" opacity="0.3"/>
+  <circle cx="292" cy="420" r="3" fill="#06b6d4" opacity="0.3"/>
+</svg>

@@ -1,0 +1,155 @@
+import { create } from 'zustand'
+import { ConnectionStatus } from '../../shared/types'
+import { apiClient } from '../api/client'
+
+const MAX_RECONNECT_ATTEMPTS = 50
+const BASE_RECONNECT_DELAY_MS = 1000
+const HEARTBEAT_INTERVAL_MS = 10000
+
+interface ConnectionState {
+  status: ConnectionStatus
+  serverUrl: string
+  lastError: string | null
+  lastConnected: number | null
+  reconnectAttempts: number
+  consecutiveFailures: number
+  setServerUrl: (url: string) => void
+  setStatus: (status: ConnectionStatus) => void
+  setError: (error: string | null) => void
+  connect: () => Promise<boolean>
+  disconnect: () => void
+  reportPollSuccess: () => void
+  reportPollFailure: () => void
+}
+
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+function startHeartbeat(connectFn: () => Promise<boolean>) {
+  stopHeartbeat()
+  heartbeatTimer = setInterval(async () => {
+    const ok = await apiClient.testConnection()
+    if (!ok) {
+      // Connection lost — trigger reconnect
+      const store = useConnectionStore.getState()
+      if (store.status === 'connected') {
+        store.setStatus('error')
+        store.setError('Lost connection to API server')
+        connectFn()
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS)
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+}
+
+export const useConnectionStore = create<ConnectionState>((set, get) => ({
+  status: 'disconnected',
+  serverUrl: apiClient.getBaseUrl(),
+  lastError: null,
+  lastConnected: null,
+  reconnectAttempts: 0,
+  consecutiveFailures: 0,
+
+  setServerUrl: (url) => {
+    apiClient.setBaseUrl(url)
+    set({ serverUrl: url })
+  },
+
+  setStatus: (status) => set({ status }),
+
+  setError: (error) => set({ lastError: error }),
+
+  connect: async () => {
+    const { status } = get()
+    if (status === 'connecting') return false
+
+    set({ status: 'connecting', lastError: null })
+
+    try {
+      const ok = await apiClient.testConnection()
+      if (ok) {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
+        set({
+          status: 'connected',
+          lastConnected: Date.now(),
+          reconnectAttempts: 0,
+          consecutiveFailures: 0,
+          lastError: null,
+        })
+        // Start heartbeat to detect disconnections
+        startHeartbeat(() => get().connect())
+        return true
+      }
+      throw new Error('Server returned unsuccessful response')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const attempts = get().reconnectAttempts + 1
+
+      set({
+        status: 'error',
+        lastError: message,
+        reconnectAttempts: attempts,
+      })
+
+      // Schedule reconnect with exponential backoff
+      if (attempts < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(
+          BASE_RECONNECT_DELAY_MS * Math.pow(2, Math.min(attempts - 1, 5)),
+          30000,
+        )
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          get().connect()
+        }, delay)
+      }
+
+      return false
+    }
+  },
+
+  disconnect: () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    stopHeartbeat()
+    set({
+      status: 'disconnected',
+      lastError: null,
+      reconnectAttempts: 0,
+      consecutiveFailures: 0,
+    })
+  },
+
+  // Call this when a polling endpoint succeeds — resets failure counter
+  reportPollSuccess: () => {
+    const { consecutiveFailures, status } = get()
+    if (consecutiveFailures > 0) {
+      set({ consecutiveFailures: 0 })
+    }
+    // If we were in error state but a poll succeeded, we're actually connected
+    if (status === 'error') {
+      set({ status: 'connected', lastError: null, reconnectAttempts: 0 })
+    }
+  },
+
+  // Call this when a polling endpoint fails — after N consecutive failures, mark disconnected
+  reportPollFailure: () => {
+    const failures = get().consecutiveFailures + 1
+    set({ consecutiveFailures: failures })
+    // After 3 consecutive poll failures, trigger reconnection
+    if (failures >= 3 && get().status === 'connected') {
+      set({ status: 'error', lastError: 'Multiple API requests failed' })
+      get().connect()
+    }
+  },
+}))

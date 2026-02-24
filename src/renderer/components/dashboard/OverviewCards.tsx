@@ -1,0 +1,207 @@
+// =============================================================================
+// OverviewCards — Quick stats grid (4 columns) for the Dashboard
+// =============================================================================
+
+import React from 'react'
+import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
+import { useSystemStore } from '../../stores/systemStore'
+import { useHealthStore } from '../../stores/healthStore'
+import { useConnectionStore } from '../../stores/connectionStore'
+
+interface CardProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  subtitle?: string
+  accentColor: 'emerald' | 'cyan' | 'amber' | 'rose'
+  trend?: 'up' | 'down' | 'stable'
+  loading?: boolean
+  index?: number
+}
+
+const accentBorderMap: Record<CardProps['accentColor'], string> = {
+  emerald: 'border-t-emerald-500',
+  cyan: 'border-t-cyan-500',
+  amber: 'border-t-amber-500',
+  rose: 'border-t-rose-500',
+}
+
+const accentBgMap: Record<CardProps['accentColor'], string> = {
+  emerald: 'bg-emerald-500/10 text-emerald-400',
+  cyan: 'bg-cyan-500/10 text-cyan-400',
+  amber: 'bg-amber-500/10 text-amber-400',
+  rose: 'bg-rose-500/10 text-rose-400',
+}
+
+const trendIcons: Record<NonNullable<CardProps['trend']>, { symbol: string; color: string }> = {
+  up: { symbol: '\u2191', color: 'text-emerald-400' },
+  down: { symbol: '\u2193', color: 'text-rose-400' },
+  stable: { symbol: '\u2192', color: 'text-slate-400' },
+}
+
+function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0 }: CardProps) {
+  return (
+    <div
+      className={`
+        relative overflow-hidden rounded-xl border-t-2 ${accentBorderMap[accentColor]}
+        border border-white/5 bg-slate-900/60 backdrop-blur-md
+        p-5 transition-all duration-300 hover:bg-slate-900/80 hover:border-white/10
+        hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5
+        animate-fade-in
+      `}
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      {loading ? (
+        <div className="animate-pulse">
+          <div className="flex items-start justify-between">
+            <div className="h-10 w-10 rounded-lg bg-slate-700/50" />
+            <div className="h-4 w-4 rounded bg-slate-700/30" />
+          </div>
+          <div className="mt-4">
+            <div className="h-3 w-20 rounded bg-slate-700/40" />
+            <div className="mt-2 h-7 w-14 rounded bg-slate-700/50" />
+            <div className="mt-1 h-2.5 w-28 rounded bg-slate-800/40" />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between">
+            <div className={`rounded-lg p-2.5 ${accentBgMap[accentColor]}`}>
+              {icon}
+            </div>
+            {trend && (
+              <span className={`text-sm font-medium ${trendIcons[trend].color}`}>
+                {trendIcons[trend].symbol}
+              </span>
+            )}
+          </div>
+          <div className="mt-4">
+            <p className="text-sm font-medium text-slate-400">{label}</p>
+            <p className="mt-1 text-2xl font-bold text-white tracking-tight">{value}</p>
+            {subtitle && (
+              <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Subtle gradient glow */}
+      <div className={`
+        pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full opacity-10 blur-2xl
+        ${accentColor === 'emerald' ? 'bg-emerald-500' : ''}
+        ${accentColor === 'cyan' ? 'bg-cyan-500' : ''}
+        ${accentColor === 'amber' ? 'bg-amber-500' : ''}
+        ${accentColor === 'rose' ? 'bg-rose-500' : ''}
+      `} />
+    </div>
+  )
+}
+
+export default function OverviewCards() {
+  // Read store data directly — no loading flags, just check if data is null
+  const status = useSystemStore((s) => s.status)
+  const report = useHealthStore((s) => s.report)
+  const connectionStatus = useConnectionStore((s) => s.status)
+
+  // Status data hasn't arrived yet — show loading skeletons for first 3 cards
+  const statusLoading = !status
+
+  // --- Stacks ---
+  const runningStacks = status?.stacks.running ?? 0
+  const totalStacks = status?.stacks.total ?? 0
+  const stackTrend: CardProps['trend'] =
+    totalStacks === 0 ? 'stable' : runningStacks === totalStacks ? 'up' : 'down'
+
+  // --- Containers ---
+  const runningContainers = status?.docker.containers.running ?? 0
+  const totalContainers = status?.docker.containers.total ?? 0
+  const stoppedContainers = status?.docker.containers.stopped ?? 0
+  const containerTrend: CardProps['trend'] =
+    stoppedContainers > 0 ? 'down' : runningContainers > 0 ? 'up' : 'stable'
+
+  // --- Images ---
+  const imageCount = status?.docker.images ?? 0
+
+  // --- Health ---
+  // When no report AND not connected, show "Unknown"
+  // When no report AND connected (still loading), show "Checking..."
+  // When report exists, show real status
+  const hasReport = !!report
+  const isDisconnected = connectionStatus !== 'connected'
+  const healthStatus = hasReport
+    ? report.status
+    : isDisconnected
+      ? ('unknown' as const)
+      : ('loading' as const)
+
+  const healthLabel = hasReport
+    ? report.status === 'healthy' ? 'Healthy'
+      : report.status === 'degraded' ? 'Degraded'
+      : 'Critical'
+    : isDisconnected ? 'Unknown' : 'Checking...'
+
+  const healthAccent: CardProps['accentColor'] = hasReport
+    ? report.status === 'healthy' ? 'emerald'
+      : report.status === 'degraded' ? 'amber'
+      : 'rose'
+    : isDisconnected ? 'rose' : 'amber'
+
+  const healthTrend: CardProps['trend'] = hasReport
+    ? report.status === 'healthy' ? 'up'
+      : report.status === 'degraded' ? 'stable'
+      : 'down'
+    : isDisconnected ? 'down' : 'stable'
+
+  // Only show skeleton when connected and still waiting for first data
+  const healthLoading = !hasReport && connectionStatus === 'connected'
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <StatCard
+        icon={<Layers className="h-5 w-5" />}
+        label="Total Stacks"
+        value={`${runningStacks} / ${totalStacks}`}
+        subtitle={`${runningStacks} running`}
+        accentColor={runningStacks === totalStacks && totalStacks > 0 ? 'emerald' : 'amber'}
+        trend={stackTrend}
+        loading={statusLoading}
+        index={0}
+      />
+      <StatCard
+        icon={<Box className="h-5 w-5" />}
+        label="Running Containers"
+        value={runningContainers}
+        subtitle={`${totalContainers} total, ${stoppedContainers} stopped`}
+        accentColor={stoppedContainers > 0 ? 'amber' : 'emerald'}
+        trend={containerTrend}
+        loading={statusLoading}
+        index={1}
+      />
+      <StatCard
+        icon={<HardDrive className="h-5 w-5" />}
+        label="Docker Images"
+        value={imageCount}
+        accentColor="cyan"
+        trend="stable"
+        loading={statusLoading}
+        index={2}
+      />
+      <StatCard
+        icon={<HeartPulse className="h-5 w-5" />}
+        label="System Health"
+        value={healthLabel}
+        subtitle={
+          hasReport
+            ? `${report.summary.healthy} healthy, ${report.summary.unhealthy} unhealthy`
+            : isDisconnected
+              ? 'API not reachable'
+              : 'Loading health data...'
+        }
+        accentColor={healthAccent}
+        trend={healthTrend}
+        loading={healthLoading}
+        index={3}
+      />
+    </div>
+  )
+}
