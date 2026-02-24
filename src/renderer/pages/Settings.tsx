@@ -28,6 +28,10 @@ interface ProfileData {
   email: string
   icon: string
   bio: string
+  statusEmoji: string
+  statusText: string
+  timezone: string
+  accentColor: string
 }
 
 function getProfileData(): ProfileData {
@@ -39,9 +43,13 @@ function getProfileData(): ProfileData {
       email: parsed.email ?? '',
       icon: parsed.icon ?? '',
       bio: parsed.bio ?? '',
+      statusEmoji: parsed.statusEmoji ?? '',
+      statusText: parsed.statusText ?? '',
+      timezone: parsed.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      accentColor: parsed.accentColor ?? 'emerald',
     }
   } catch {
-    return { displayName: '', email: '', icon: '', bio: '' }
+    return { displayName: '', email: '', icon: '', bio: '', statusEmoji: '', statusText: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, accentColor: 'emerald' }
   }
 }
 
@@ -207,14 +215,110 @@ function ProfileSettings() {
         />
       </div>
 
+      {/* Status */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+          <Eye size={12} />
+          Status
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={profile.statusEmoji}
+            onChange={(e) => handleChange('statusEmoji', e.target.value.slice(0, 2))}
+            placeholder="🟢"
+            className="
+              w-12 px-2 py-2.5 bg-white/5 border border-white/10 rounded-lg text-center
+              text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all
+            "
+          />
+          <input
+            type="text"
+            value={profile.statusText}
+            onChange={(e) => handleChange('statusText', e.target.value)}
+            placeholder="What are you working on?"
+            className="
+              flex-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
+              text-sm text-slate-200 placeholder-slate-600
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all
+            "
+          />
+        </div>
+      </div>
+
+      {/* Timezone */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+          <Clock size={12} />
+          Timezone
+        </label>
+        <select
+          value={profile.timezone}
+          onChange={(e) => handleChange('timezone', e.target.value)}
+          className="
+            w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
+            text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
+            focus:ring-1 focus:ring-emerald-500/25 transition-all
+          "
+        >
+          {Intl.supportedValuesOf('timeZone').filter((tz) =>
+            tz.startsWith('America/') || tz.startsWith('Europe/') || tz.startsWith('Asia/') || tz.startsWith('Australia/') || tz.startsWith('Pacific/') || tz === 'UTC'
+          ).map((tz) => (
+            <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Accent Color */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+          <Palette size={12} />
+          Accent Color
+        </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { id: 'emerald', label: 'Emerald', tw: 'bg-emerald-500' },
+            { id: 'cyan', label: 'Cyan', tw: 'bg-cyan-500' },
+            { id: 'violet', label: 'Violet', tw: 'bg-violet-500' },
+            { id: 'rose', label: 'Rose', tw: 'bg-rose-500' },
+            { id: 'amber', label: 'Amber', tw: 'bg-amber-500' },
+            { id: 'blue', label: 'Blue', tw: 'bg-blue-500' },
+            { id: 'fuchsia', label: 'Fuchsia', tw: 'bg-fuchsia-500' },
+            { id: 'lime', label: 'Lime', tw: 'bg-lime-500' },
+          ].map((color) => (
+            <button
+              key={color.id}
+              onClick={() => handleChange('accentColor', color.id)}
+              title={color.label}
+              className={`
+                w-8 h-8 rounded-full ${color.tw} transition-all duration-200
+                ${profile.accentColor === color.id
+                  ? 'ring-2 ring-white/40 ring-offset-2 ring-offset-slate-900 scale-110'
+                  : 'opacity-60 hover:opacity-100 hover:scale-105'
+                }
+              `}
+            />
+          ))}
+        </div>
+      </div>
+
       {/* Account info */}
-      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <User size={12} className="text-slate-500" />
             <span className="text-xs text-slate-500">Username</span>
           </div>
           <span className="text-xs text-slate-300 font-mono">{currentUser ?? '--'}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock size={12} className="text-slate-500" />
+            <span className="text-xs text-slate-500">Local Time</span>
+          </div>
+          <span className="text-xs text-slate-300 font-mono">
+            {new Date().toLocaleTimeString(undefined, { timeZone: profile.timezone, hour: '2-digit', minute: '2-digit', hour12: false })}
+          </span>
         </div>
       </div>
 

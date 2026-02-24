@@ -5,6 +5,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
+import { useToast } from '../common/Toast'
 import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer } from '../../api/endpoints'
 import {
   ArrowLeft,
@@ -325,15 +326,19 @@ interface ContainerDetailProps {
   /** The basic container info from the list (available immediately). */
   containerInfo: ContainerInfo
   onBack: () => void
+  /** Trigger immediate refresh of the containers list after actions. */
+  onRefreshList?: () => void
 }
 
 const ContainerDetail: React.FC<ContainerDetailProps> = ({
   containerName,
   containerInfo,
   onBack,
+  onRefreshList,
 }) => {
   const setStats = useContainerStore((s) => s.setStats)
   const storedStats = useContainerStore((s) => s.stats[containerName])
+  const { addToast } = useToast()
 
   const [detail, setDetail] = useState<ContainerDetailType | null>(null)
   const [stats, setLocalStats] = useState<ContainerStats | null>(storedStats ?? null)
@@ -393,18 +398,34 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
   // Container action handler
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+    const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted' }
+    const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting' }
+
     setActionLoading(action)
+    addToast({ type: 'info', message: `${gerund[action]} "${containerName}"...`, duration: 2000 })
+
     try {
       const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer }[action]
-      await actionFn(containerName)
-      // Refresh stats after action
-      setTimeout(fetchStats, 1000)
-    } catch {
-      // Error handling could show a toast
+      const result = await actionFn(containerName)
+
+      if (result.success) {
+        addToast({ type: 'success', message: `"${containerName}" ${pastTense[action]} successfully!` })
+      } else {
+        addToast({ type: 'error', message: `Failed to ${action} "${containerName}": ${result.output || 'Unknown error'}`, duration: 6000 })
+      }
+
+      // Refresh stats and container list after action
+      setTimeout(() => {
+        fetchStats()
+        onRefreshList?.()
+      }, 1000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast({ type: 'error', message: `Failed to ${action} "${containerName}": ${msg}`, duration: 6000 })
     } finally {
       setActionLoading(null)
     }
-  }, [containerName, fetchStats])
+  }, [containerName, fetchStats, addToast, onRefreshList])
 
   // Fetch container logs
   const handleFetchLogs = useCallback(async () => {

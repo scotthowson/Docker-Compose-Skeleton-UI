@@ -1,22 +1,28 @@
 // =============================================================================
-// StackList — Premium stack grid with create card, sorting, bulk actions
+// StackList — Premium stack grid with create card, sorting, batch mode toggle
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react'
 import {
   Search, Layers, Filter, Plus, Play, Square, Download,
   ArrowUpDown, X, Loader2, AlertTriangle, Check, Sparkles,
-  Trash2,
+  Trash2, ListChecks,
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { createStack, deleteStack } from '../../api/endpoints'
+import { deleteStack } from '../../api/endpoints'
 import StackCard from './StackCard'
 
 interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
   onSelect: (stackName: string) => void
   onRefresh: () => void
+  onEdit?: (stackName: string) => void
+  onCreateStack?: () => void
+  batchMode?: boolean
+  selectedStacks?: Set<string>
+  onToggleSelect?: (name: string) => void
+  onToggleBatchMode?: () => void
 }
 
 type StatusFilter = 'all' | 'running' | 'stopped'
@@ -29,19 +35,15 @@ const priorityOrder: Record<string, number> = {
   low: 3,
 }
 
-export default function StackList({ onAction, onSelect, onRefresh }: Props) {
+export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode }: Props) {
   const { stacks, actionLoading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('priority')
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [newStackName, setNewStackName] = useState('')
 
   const sorted = useMemo(() => {
     const list = [...stacks]
@@ -87,26 +89,6 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
   const stoppedCount = stacks.filter((s) => s.status === 'stopped').length
   const criticalCount = stacks.filter((s) => stackAnnotations[s.name]?.priority === 'critical').length
 
-  const handleCreate = useCallback(async () => {
-    if (!newStackName.trim()) return
-    setCreating(true)
-    setCreateError(null)
-    try {
-      const result = await createStack(newStackName.trim().toLowerCase().replace(/\s+/g, '-'))
-      if (result.success) {
-        setShowCreateModal(false)
-        setNewStackName('')
-        onRefresh()
-      } else {
-        setCreateError(result.message || 'Failed to create stack')
-      }
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create stack')
-    } finally {
-      setCreating(false)
-    }
-  }, [newStackName, onRefresh])
-
   const handleDelete = useCallback(async (name: string) => {
     setDeleting(true)
     setDeleteError(null)
@@ -127,84 +109,6 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Create Stack Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass p-6 max-w-md w-full mx-4 space-y-5 animate-scale-in">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100">Create New Stack</h3>
-                <p className="text-xs text-slate-500">
-                  Creates a new directory with base docker-compose.yml and .env
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Stack Name</label>
-                <input
-                  type="text"
-                  value={newStackName}
-                  onChange={(e) => {
-                    setNewStackName(e.target.value)
-                    setCreateError(null)
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                  placeholder="my-new-stack"
-                  autoFocus
-                  className="
-                    w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg
-                    text-sm text-slate-200 placeholder-slate-600 font-mono
-                    focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
-                    transition-all duration-200
-                  "
-                />
-                <p className="text-[10px] text-slate-600 mt-1.5">
-                  Use lowercase letters, numbers, and hyphens (e.g., media-services)
-                </p>
-              </div>
-
-              {createError && (
-                <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
-                  <AlertTriangle size={14} className="text-rose-400 shrink-0" />
-                  <p className="text-xs text-rose-300">{createError}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => { setShowCreateModal(false); setNewStackName(''); setCreateError(null) }}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !newStackName.trim()}
-                className="
-                  flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
-                  bg-emerald-500 text-white hover:bg-emerald-400
-                  shadow-lg shadow-emerald-500/20 transition-all
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                "
-              >
-                {creating ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Plus size={14} />
-                )}
-                Create Stack
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -283,8 +187,25 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
 
         {/* Header actions */}
         <div className="flex items-center gap-2">
+          {/* Batch mode toggle */}
+          {onToggleBatchMode && (
+            <button
+              onClick={onToggleBatchMode}
+              className={`
+                flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
+                border transition-all duration-200
+                ${batchMode
+                  ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25 ring-1 ring-cyan-500/20'
+                  : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200 hover:bg-white/10'}
+              `}
+            >
+              <ListChecks size={15} />
+              {batchMode ? 'Exit Batch' : 'Batch'}
+            </button>
+          )}
+
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={onCreateStack}
             className="
               flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
               bg-emerald-500 text-white hover:bg-emerald-400
@@ -371,6 +292,21 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
         </div>
       </div>
 
+      {/* Batch mode indicator */}
+      {batchMode && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/15">
+          <ListChecks size={14} className="text-cyan-400" />
+          <span className="text-xs text-cyan-300 font-medium">
+            Batch mode active — click cards to select, then use the action bar below
+          </span>
+          {selectedStacks && selectedStacks.size > 0 && (
+            <span className="ml-auto text-xs text-cyan-400/70">
+              {selectedStacks.size} selected
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Stack grid */}
       {filtered.length > 0 || stacks.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -381,36 +317,42 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
               isActionLoading={actionLoading === stack.name}
               onAction={onAction}
               onSelect={onSelect}
+              onEdit={onEdit}
               onDelete={(name) => setShowDeleteModal(name)}
+              batchMode={batchMode}
+              isSelected={selectedStacks?.has(stack.name)}
+              onToggleSelect={onToggleSelect}
             />
           ))}
 
-          {/* Create Stack Card — always at the end */}
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="
-              group relative flex flex-col items-center justify-center
-              min-h-[200px] rounded-xl border-2 border-dashed
-              border-white/[0.12] hover:border-emerald-500/40
-              bg-slate-800/40 hover:bg-emerald-500/[0.06]
-              transition-all duration-300 cursor-pointer
-            "
-          >
-            <div className="
-              flex items-center justify-center w-14 h-14 rounded-2xl
-              bg-slate-700/30 group-hover:bg-emerald-500/15
-              ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
-              transition-all duration-300 mb-3
-            ">
-              <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
-            </div>
-            <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
-              Create New Stack
-            </span>
-            <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-              Add a new service category
-            </span>
-          </button>
+          {/* Create Stack Card — always at the end (hidden in batch mode) */}
+          {!batchMode && (
+            <button
+              onClick={onCreateStack}
+              className="
+                group relative flex flex-col items-center justify-center
+                min-h-[200px] rounded-xl border-2 border-dashed
+                border-white/[0.12] hover:border-emerald-500/40
+                bg-slate-800/40 hover:bg-emerald-500/[0.06]
+                transition-all duration-300 cursor-pointer
+              "
+            >
+              <div className="
+                flex items-center justify-center w-14 h-14 rounded-2xl
+                bg-slate-700/30 group-hover:bg-emerald-500/15
+                ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
+                transition-all duration-300 mb-3
+              ">
+                <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
+              </div>
+              <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
+                Create New Stack
+              </span>
+              <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+                Add a new service category
+              </span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="glass-subtle flex flex-col items-center justify-center py-16 rounded-xl">
@@ -432,6 +374,11 @@ export default function StackList({ onAction, onSelect, onRefresh }: Props) {
             </button>
           )}
         </div>
+      )}
+
+      {/* Bottom spacer when batch mode is active to avoid floating bar overlap */}
+      {batchMode && selectedStacks && selectedStacks.size > 0 && (
+        <div className="h-20" />
       )}
     </div>
   )

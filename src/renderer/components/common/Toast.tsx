@@ -1,5 +1,5 @@
 // =============================================================================
-// Toast — Notification toast system with context provider and useToast hook
+// Toast — Premium notification toast system with glassmorphic design
 // =============================================================================
 
 import React, {
@@ -41,35 +41,51 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 
 const toastConfig: Record<
   Toast['type'],
-  { icon: React.ElementType; bg: string; border: string; text: string; iconColor: string }
+  {
+    icon: React.ElementType
+    gradient: string
+    border: string
+    text: string
+    iconColor: string
+    iconBg: string
+    progressColor: string
+  }
 > = {
   success: {
     icon: CheckCircle2,
-    bg: 'bg-emerald-500/10',
+    gradient: 'from-emerald-500/15 via-emerald-500/5 to-transparent',
     border: 'border-emerald-500/20',
-    text: 'text-emerald-300',
+    text: 'text-slate-200',
     iconColor: 'text-emerald-400',
+    iconBg: 'bg-emerald-500/15',
+    progressColor: 'bg-emerald-400',
   },
   error: {
     icon: XCircle,
-    bg: 'bg-rose-500/10',
+    gradient: 'from-rose-500/15 via-rose-500/5 to-transparent',
     border: 'border-rose-500/20',
-    text: 'text-rose-300',
+    text: 'text-slate-200',
     iconColor: 'text-rose-400',
+    iconBg: 'bg-rose-500/15',
+    progressColor: 'bg-rose-400',
   },
   warning: {
     icon: AlertTriangle,
-    bg: 'bg-amber-500/10',
+    gradient: 'from-amber-500/15 via-amber-500/5 to-transparent',
     border: 'border-amber-500/20',
-    text: 'text-amber-300',
+    text: 'text-slate-200',
     iconColor: 'text-amber-400',
+    iconBg: 'bg-amber-500/15',
+    progressColor: 'bg-amber-400',
   },
   info: {
     icon: Info,
-    bg: 'bg-cyan-500/10',
+    gradient: 'from-cyan-500/15 via-cyan-500/5 to-transparent',
     border: 'border-cyan-500/20',
-    text: 'text-cyan-300',
+    text: 'text-slate-200',
     iconColor: 'text-cyan-400',
+    iconBg: 'bg-cyan-500/15',
+    progressColor: 'bg-cyan-400',
   },
 }
 
@@ -84,54 +100,105 @@ function ToastItem({
   toast: Toast
   onDismiss: (id: string) => void
 }) {
-  const { icon: Icon, bg, border, text, iconColor } = toastConfig[toast.type]
+  const { icon: Icon, gradient, border, text, iconColor, iconBg, progressColor } = toastConfig[toast.type]
   const [exiting, setExiting] = useState(false)
+  const [progress, setProgress] = useState(100)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const duration = toast.duration ?? 4000
 
   const dismiss = useCallback(() => {
     setExiting(true)
-    setTimeout(() => onDismiss(toast.id), 200)
+    setTimeout(() => onDismiss(toast.id), 250)
   }, [toast.id, onDismiss])
 
   useEffect(() => {
-    const duration = toast.duration ?? 4000
-    if (duration > 0) {
-      timerRef.current = setTimeout(dismiss, duration)
-      return () => {
-        if (timerRef.current) clearTimeout(timerRef.current)
+    if (duration <= 0) return
+
+    // Progress bar animation
+    const startTime = Date.now()
+    progressRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const remaining = Math.max(0, 100 - (elapsed / duration) * 100)
+      setProgress(remaining)
+      if (remaining <= 0 && progressRef.current) {
+        clearInterval(progressRef.current)
       }
+    }, 30)
+
+    // Auto-dismiss
+    timerRef.current = setTimeout(dismiss, duration)
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (progressRef.current) clearInterval(progressRef.current)
     }
-  }, [toast.duration, dismiss])
+  }, [duration, dismiss])
 
   return (
     <div
       className={`
-        flex items-start gap-3
-        w-80 px-4 py-3
+        relative overflow-hidden
+        w-[340px]
         backdrop-blur-2xl rounded-xl
-        border ${border} ${bg}
-        shadow-xl shadow-black/30
-        transition-all duration-200 ease-out
-        ${exiting ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0 animate-slide-in'}
+        border ${border}
+        bg-gradient-to-r ${gradient}
+        bg-slate-900/80
+        shadow-2xl shadow-black/40
+        transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]
+        ${exiting
+          ? 'opacity-0 translate-x-8 scale-95'
+          : 'opacity-100 translate-x-0 scale-100'
+        }
       `}
       style={{
-        animation: exiting ? undefined : 'slideInRight 0.25s ease-out',
+        animation: exiting ? undefined : 'toastSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <Icon size={18} strokeWidth={2} className={`shrink-0 mt-0.5 ${iconColor}`} />
-      <p className={`flex-1 text-sm ${text}`}>{toast.message}</p>
-      <button
-        onClick={dismiss}
-        className="shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
-        aria-label="Dismiss"
-      >
-        <X size={14} />
-      </button>
+      {/* Content */}
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        {/* Icon */}
+        <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${iconBg} shrink-0 mt-0.5`}>
+          <Icon size={16} strokeWidth={2.2} className={iconColor} />
+        </div>
+
+        {/* Message */}
+        <div className="flex-1 min-w-0 pt-0.5">
+          <p className={`text-[13px] font-medium leading-snug ${text}`}>
+            {toast.message}
+          </p>
+        </div>
+
+        {/* Dismiss */}
+        <button
+          onClick={dismiss}
+          className="shrink-0 p-1 rounded-md text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150 mt-0.5"
+          aria-label="Dismiss"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      {duration > 0 && (
+        <div className="h-[2px] w-full bg-white/[0.04]">
+          <div
+            className={`h-full ${progressColor} opacity-60 transition-none`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
 
       <style>{`
-        @keyframes slideInRight {
-          0% { opacity: 0; transform: translateX(16px); }
-          100% { opacity: 1; transform: translateX(0); }
+        @keyframes toastSlideIn {
+          0% {
+            opacity: 0;
+            transform: translateX(24px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+          }
         }
       `}</style>
     </div>
@@ -163,7 +230,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {/* Toast container — fixed bottom-right */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
             <ToastItem toast={toast} onDismiss={removeToast} />

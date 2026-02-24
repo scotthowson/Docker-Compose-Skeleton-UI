@@ -449,6 +449,7 @@ export interface AuthVerifyResponse {
 export interface InviteResponse {
   success: boolean
   code: string
+  role: string
   expires_at: string
 }
 
@@ -459,9 +460,12 @@ export interface InviteListResponse {
 export interface InviteCode {
   code: string
   role: string
+  created_by?: string
   created_at: string
   expires_at: string
+  expired?: boolean
   used: boolean
+  used_by?: string
 }
 
 export interface UserListResponse {
@@ -527,6 +531,234 @@ export interface AppSettings {
   projectSubtitle: string
 }
 
+// ---------------------------------------------------------------------------
+// Phase 1: Compose Editor
+// ---------------------------------------------------------------------------
+
+// POST /stacks/:name/compose/validate
+export interface ComposeValidateResponse {
+  valid: boolean
+  stack: string
+  output: string
+}
+
+// POST /stacks/:name/compose
+export interface ComposeSaveResponse {
+  success: boolean
+  stack: string
+  message: string
+  validated: boolean
+  validation_errors?: string
+}
+
+// GET /stacks/:name/env
+export interface StackEnvVariable {
+  key: string
+  value: string
+  line: number
+  comment: string
+}
+
+export interface StackEnvResponse {
+  stack: string
+  raw: string
+  variables: StackEnvVariable[]
+}
+
+// POST /stacks/:name/env
+export interface StackEnvSaveResponse {
+  success: boolean
+  stack: string
+  message: string
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Maintenance
+// ---------------------------------------------------------------------------
+
+export interface MaintenanceReport {
+  containers: { total: number; running: number; stopped: number }
+  images: { total: number; dangling: number }
+  volumes: { total: number; dangling: number }
+  networks: { total: number; custom: number }
+  docker_df: string
+  app_data_size: string
+  log_size: string
+}
+
+export interface OrphanContainer {
+  name: string
+  image: string
+  status: string
+}
+
+export interface DanglingImage {
+  id: string
+  size: string
+  created: string
+}
+
+export interface DanglingVolume {
+  name: string
+  driver: string
+}
+
+export interface OrphanReport {
+  containers: OrphanContainer[]
+  images: DanglingImage[]
+  volumes: DanglingVolume[]
+}
+
+export interface DiskStackSize {
+  name: string
+  size: string
+}
+
+export interface DiskDfEntry {
+  type: string
+  total: string
+  active: string
+  size: string
+  reclaimable: string
+}
+
+export interface DiskAnalysis {
+  stack_sizes: DiskStackSize[]
+  docker_df: DiskDfEntry[]
+  total_app_data: string
+}
+
+export interface LogRotateResponse {
+  success: boolean
+  message: string
+  archived_as?: string
+  previous_size?: string
+  previous_lines?: number
+  purged_archives?: number
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Enhanced Logs
+// ---------------------------------------------------------------------------
+
+export interface LogLevelCounts {
+  error: number
+  critical: number
+  warning: number
+  success: number
+  info: number
+  debug: number
+  step: number
+  timing: number
+}
+
+export interface LogStatsResponse {
+  total_lines: number
+  file_size: string
+  levels: LogLevelCounts
+  sessions: number
+  archives: { count: number; total_size: string }
+}
+
+export interface LogArchiveEntry {
+  filename: string
+  size: string
+  date: string
+}
+
+export interface LogArchivesResponse {
+  archives: LogArchiveEntry[]
+  total_size: string
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Batch Operations
+// ---------------------------------------------------------------------------
+
+export interface BatchStackResult {
+  stack: string
+  success: boolean
+  message: string
+  changes_detected?: boolean
+}
+
+export interface BatchStackResponse {
+  action: string
+  total: number
+  results: BatchStackResult[]
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Environment Manager
+// ---------------------------------------------------------------------------
+
+export interface EnvVariable {
+  key: string
+  value: string
+  line: number
+  comment: string
+}
+
+export interface RootEnvResponse {
+  raw: string
+  variables: EnvVariable[]
+}
+
+export interface EnvValidationError {
+  line: number
+  message: string
+}
+
+export interface EnvValidateResponse {
+  valid: boolean
+  errors: EnvValidationError[]
+  warnings: EnvValidationError[]
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: Backup & Restore
+// ---------------------------------------------------------------------------
+
+export interface BackupEntry {
+  filename: string
+  size: string
+  timestamp: number
+}
+
+export interface BackupListResponse {
+  backups: BackupEntry[]
+  total: number
+}
+
+export interface BackupStatusResponse {
+  status: 'idle' | 'running' | 'error' | 'restoring'
+  last_backup?: { filename: string; size: string; timestamp: string } | null
+  last_restore?: { filename: string; timestamp: string } | null
+  progress?: string | null
+  error?: string
+  started_at?: string
+  filename?: string
+}
+
+export interface BackupConfigResponse {
+  configured: boolean
+  destination: string
+  source: string
+  retention_count: number
+}
+
+export interface BackupTriggerResponse {
+  success: boolean
+  message: string
+  filename: string
+}
+
+export interface BackupRestoreResponse {
+  success: boolean
+  message: string
+  filename: string
+}
+
 // Navigation
 export type PageId =
   | 'dashboard'
@@ -543,3 +775,7 @@ export type PageId =
   | 'settings'
   | 'bookmarks'
   | 'activity'
+  | 'users'
+  | 'maintenance'
+  | 'environment'
+  | 'backup'

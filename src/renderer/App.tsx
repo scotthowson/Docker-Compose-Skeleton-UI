@@ -22,6 +22,10 @@ import Settings from './pages/Settings'
 import Bookmarks from './pages/Bookmarks'
 import Activity from './pages/Activity'
 import Diagnostics from './pages/Diagnostics'
+import Users from './pages/Users'
+import Maintenance from './pages/Maintenance'
+import Environment from './pages/Environment'
+import Backup from './pages/Backup'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -39,10 +43,14 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   diagnostics: Diagnostics,
   config: Config,
   settings: Settings,
+  users: Users,
+  maintenance: Maintenance,
+  environment: Environment,
+  backup: Backup,
 }
 
 // Page order for Ctrl+1-9 navigation
-const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'uptime', 'networks', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
+const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics']
 
 export default function App() {
   const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes } = useSettingsStore()

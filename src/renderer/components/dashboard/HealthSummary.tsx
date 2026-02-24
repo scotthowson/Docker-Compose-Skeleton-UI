@@ -167,16 +167,28 @@ export default function HealthSummary() {
   }
 
   const isDisconnected = !report && connectionStatus !== 'connected'
-  // NEVER default to 'healthy' — only the API data can confirm health
-  const status = report?.status ?? 'unknown'
-  const config = statusConfig[status]
-  const StatusIcon = config.icon
 
   const summary = report?.summary ?? { total: 0, healthy: 0, unhealthy: 0, stopped: 0 }
 
-  // Filter containers with issues
-  const issueContainers = (report?.containers ?? []).filter(
-    (c) => c.health === 'unhealthy' || c.state !== 'running',
+  // Smart status override: stopped containers are normal/expected and shouldn't trigger alerts.
+  // Only containers that are actually "unhealthy" (failed healthcheck) matter for health status.
+  const effectiveStatus: 'healthy' | 'degraded' | 'critical' | 'unknown' = (() => {
+    if (!report) return 'unknown'
+    if (summary.unhealthy >= 3) return 'critical'
+    if (summary.unhealthy > 0) return 'degraded'
+    return 'healthy'
+  })()
+
+  const config = statusConfig[effectiveStatus]
+  const StatusIcon = config.icon
+
+  // Only show containers with real health issues (actually unhealthy via healthcheck)
+  // Stopped containers appear separately — they're not "issues" unless they crashed
+  const unhealthyContainers = (report?.containers ?? []).filter(
+    (c) => c.health === 'unhealthy',
+  )
+  const stoppedContainers = (report?.containers ?? []).filter(
+    (c) => c.state !== 'running' && c.health !== 'unhealthy',
   )
 
   // Count containers by state
@@ -208,10 +220,18 @@ export default function HealthSummary() {
           ) : (
             <>
               <p className="text-lg font-bold text-white">
-                {summary.healthy} <span className="text-sm font-normal text-slate-400">of</span>{' '}
-                {summary.total} <span className="text-sm font-normal text-slate-400">containers healthy</span>
+                {summary.unhealthy > 0 ? (
+                  <>{summary.unhealthy} <span className="text-sm font-normal text-rose-400">unhealthy container{summary.unhealthy !== 1 ? 's' : ''} detected</span></>
+                ) : (
+                  <>{runningCount} <span className="text-sm font-normal text-slate-400">of</span>{' '}
+                  {runningCount} <span className="text-sm font-normal text-slate-400">running containers healthy</span></>
+                )}
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">{config.description}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {summary.stopped > 0 && summary.unhealthy === 0
+                  ? `${summary.stopped} container${summary.stopped !== 1 ? 's' : ''} stopped — all running containers are healthy.`
+                  : config.description}
+              </p>
             </>
           )}
         </div>
@@ -254,14 +274,28 @@ export default function HealthSummary() {
         stopped={summary.stopped}
       />
 
-      {/* Issue list */}
-      {issueContainers.length > 0 && (
+      {/* Unhealthy containers — real issues */}
+      {unhealthyContainers.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
-            Containers with Issues
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-rose-500">
+            Unhealthy Containers
           </p>
           <div className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-thin">
-            {issueContainers.map((container) => (
+            {unhealthyContainers.map((container) => (
+              <ContainerIssueRow key={container.name} container={container} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stopped containers — informational, not critical */}
+      {stoppedContainers.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+            Stopped Containers
+          </p>
+          <div className="space-y-1.5 max-h-28 overflow-y-auto scrollbar-thin">
+            {stoppedContainers.map((container) => (
               <ContainerIssueRow key={container.name} container={container} />
             ))}
           </div>

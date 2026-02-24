@@ -4,6 +4,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react'
 import { useContainerStore } from '../stores/containerStore'
+import { useConnectionStore } from '../stores/connectionStore'
 import { useApi } from '../hooks/useApi'
 import { fetchContainers } from '../api/endpoints'
 import ContainerList from '../components/containers/ContainerList'
@@ -15,6 +16,7 @@ const Containers: React.FC = () => {
   const setContainers = useContainerStore((s) => s.setContainers)
   const setLoading = useContainerStore((s) => s.setLoading)
   const containers = useContainerStore((s) => s.containers)
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
 
@@ -27,7 +29,9 @@ const Containers: React.FC = () => {
     return result
   }, [setContainers, setLoading])
 
-  useApi(handleFetch, CONTAINER_POLL_INTERVAL)
+  const { refresh } = useApi(handleFetch, CONTAINER_POLL_INTERVAL, {
+    enabled: isConnected,
+  })
 
   // Find the currently selected container info
   const selectedContainer = useMemo(
@@ -56,6 +60,7 @@ const Containers: React.FC = () => {
           containerName={selectedName}
           containerInfo={selectedContainer}
           onBack={handleBack}
+          onRefreshList={refresh}
         />
       ) : (
         <ContainerList

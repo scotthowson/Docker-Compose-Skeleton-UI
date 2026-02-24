@@ -1,9 +1,30 @@
 // =============================================================================
-// ComposeViewer — YAML compose file viewer with syntax highlighting and search
+// ComposeViewer — Dual-mode YAML compose editor with syntax highlighting,
+// in-file search, validation, diff view, and stack .env tab
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Copy, Check, Search, FileCode2 } from 'lucide-react'
+import {
+  X,
+  Copy,
+  Check,
+  Search,
+  FileCode2,
+  Pencil,
+  Save,
+  CheckCircle,
+  AlertTriangle,
+  GitCompare,
+  FileText,
+} from 'lucide-react'
+import {
+  validateStackCompose,
+  saveStackCompose,
+  fetchStackEnv,
+  saveStackEnv,
+} from '../../api/endpoints'
+import { useToast } from '../common/Toast'
+import type { ComposeValidateResponse, StackEnvResponse } from '../../../shared/types'
 
 interface ComposeViewerProps {
   stackName: string
@@ -142,6 +163,81 @@ function highlightValue(
 }
 
 // ---------------------------------------------------------------------------
+// Simple line-by-line diff
+// ---------------------------------------------------------------------------
+
+interface DiffLine {
+  type: 'same' | 'added' | 'removed'
+  content: string
+  lineNumber: number | null
+}
+
+interface DiffResult {
+  left: DiffLine[]
+  right: DiffLine[]
+}
+
+/** Simple line-by-line comparison producing side-by-side diff */
+function computeDiff(original: string, edited: string): DiffResult {
+  const origLines = original.split('\n')
+  const editLines = edited.split('\n')
+
+  const left: DiffLine[] = []
+  const right: DiffLine[] = []
+
+  // Use longest common subsequence (LCS) approach for better diffs
+  const m = origLines.length
+  const n = editLines.length
+
+  // Build LCS table
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (origLines[i - 1] === editLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
+      }
+    }
+  }
+
+  // Backtrack to build diff
+  const diffOps: Array<{ type: 'same' | 'removed' | 'added'; origIdx?: number; editIdx?: number }> = []
+  let i = m
+  let j = n
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && origLines[i - 1] === editLines[j - 1]) {
+      diffOps.unshift({ type: 'same', origIdx: i - 1, editIdx: j - 1 })
+      i--
+      j--
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      diffOps.unshift({ type: 'added', editIdx: j - 1 })
+      j--
+    } else {
+      diffOps.unshift({ type: 'removed', origIdx: i - 1 })
+      i--
+    }
+  }
+
+  // Convert ops to side-by-side lines
+  for (const op of diffOps) {
+    if (op.type === 'same') {
+      left.push({ type: 'same', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
+      right.push({ type: 'same', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
+    } else if (op.type === 'removed') {
+      left.push({ type: 'removed', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
+      right.push({ type: 'removed', content: '', lineNumber: null })
+    } else {
+      left.push({ type: 'added', content: '', lineNumber: null })
+      right.push({ type: 'added', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
+    }
+  }
+
+  return { left, right }
+}
+
+// ---------------------------------------------------------------------------
 // ComposeViewer component
 // ---------------------------------------------------------------------------
 
@@ -149,14 +245,66 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   const overlayRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const codeContainerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const { addToast } = useToast()
+
+  // Existing state
   const [copied, setCopied] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMatchIndex, setActiveMatchIndex] = useState(0)
 
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; output: string } | null>(null)
+  const [validating, setValidating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [showDiff, setShowDiff] = useState(false)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'compose' | 'env'>('compose')
+
+  // Env state
+  const [envContent, setEnvContent] = useState<string | null>(null)
+  const [envLoading, setEnvLoading] = useState(false)
+  const [envEditContent, setEnvEditContent] = useState('')
+  const [envSaving, setEnvSaving] = useState(false)
+  const [envEditMode, setEnvEditMode] = useState(false)
+  const [envError, setEnvError] = useState<string | null>(null)
+
   const yaml = content ?? defaultPlaceholder(stackName)
   const lines = useMemo(() => yaml.split('\n'), [yaml])
+
+  // ---- Load .env when tab switches ----
+  useEffect(() => {
+    if (activeTab === 'env' && envContent === null && !envLoading) {
+      setEnvLoading(true)
+      setEnvError(null)
+      fetchStackEnv(stackName)
+        .then((res: StackEnvResponse) => {
+          setEnvContent(res.raw)
+          setEnvEditContent(res.raw)
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Failed to load .env'
+          setEnvError(msg)
+          setEnvContent('')
+          setEnvEditContent('')
+        })
+        .finally(() => setEnvLoading(false))
+    }
+  }, [activeTab, stackName, envContent, envLoading])
+
+  // ---- Initialize edit content when entering edit mode ----
+  useEffect(() => {
+    if (editMode) {
+      setEditContent(yaml)
+      setValidationResult(null)
+      setShowDiff(false)
+    }
+  }, [editMode, yaml])
 
   // ---- Search logic ----
   /** Map of line index -> array of match ranges for the current search query */
@@ -224,18 +372,34 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         if (searchOpen) {
           setSearchOpen(false)
           setSearchQuery('')
+        } else if (editMode) {
+          setEditMode(false)
+          setShowDiff(false)
+          setValidationResult(null)
         } else {
           onClose()
         }
         return
       }
 
-      // Ctrl+F / Cmd+F opens search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      // Ctrl+F / Cmd+F opens search (only in view mode for compose tab)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f' && !editMode) {
         e.preventDefault()
         setSearchOpen(true)
         // Focus the search input after render
         setTimeout(() => searchInputRef.current?.focus(), 0)
+        return
+      }
+
+      // Ctrl+S / Cmd+S to save in edit mode
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        if (editMode && validationResult?.valid) {
+          e.preventDefault()
+          handleSave()
+        } else if (envEditMode && activeTab === 'env') {
+          e.preventDefault()
+          handleEnvSave()
+        }
         return
       }
 
@@ -249,7 +413,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         }
       }
     },
-    [onClose, searchOpen, totalMatches],
+    [onClose, searchOpen, totalMatches, editMode, validationResult, envEditMode, activeTab],
   )
 
   useEffect(() => {
@@ -268,13 +432,71 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   // ---- Copy to clipboard ----
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(yaml)
+      const textToCopy = editMode ? editContent : yaml
+      await navigator.clipboard.writeText(textToCopy)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
       // Clipboard API may fail in some environments — ignore silently
     }
-  }, [yaml])
+  }, [yaml, editMode, editContent])
+
+  // ---- Validate compose ----
+  const handleValidate = useCallback(async () => {
+    setValidating(true)
+    try {
+      const res: ComposeValidateResponse = await validateStackCompose(stackName, editContent)
+      setValidationResult({ valid: res.valid, output: res.output })
+      if (res.valid) {
+        addToast({ type: 'success', message: 'Compose file is valid' })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Validation failed'
+      setValidationResult({ valid: false, output: msg })
+    } finally {
+      setValidating(false)
+    }
+  }, [stackName, editContent, addToast])
+
+  // ---- Save compose ----
+  const handleSave = useCallback(async () => {
+    if (!validationResult?.valid) return
+    setSaving(true)
+    try {
+      await saveStackCompose(stackName, editContent)
+      addToast({ type: 'success', message: `Compose file saved for ${stackName}` })
+      setEditMode(false)
+      setShowDiff(false)
+      setValidationResult(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Save failed'
+      addToast({ type: 'error', message: msg })
+    } finally {
+      setSaving(false)
+    }
+  }, [stackName, editContent, validationResult, addToast])
+
+  // ---- Save env ----
+  const handleEnvSave = useCallback(async () => {
+    setEnvSaving(true)
+    try {
+      await saveStackEnv(stackName, envEditContent)
+      setEnvContent(envEditContent)
+      addToast({ type: 'success', message: `.env saved for ${stackName}` })
+      setEnvEditMode(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Save failed'
+      addToast({ type: 'error', message: msg })
+    } finally {
+      setEnvSaving(false)
+    }
+  }, [stackName, envEditContent, addToast])
+
+  // ---- Diff computation ----
+  const diff = useMemo(() => {
+    if (!showDiff) return null
+    return computeDiff(yaml, editContent)
+  }, [showDiff, yaml, editContent])
 
   // ---- Pretty stack name ----
   const formattedName = stackName
@@ -291,6 +513,30 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     searchMatches.forEach((_, lineIdx) => s.add(lineIdx))
     return s
   }, [searchMatches])
+
+  // ---- Clear edit/validation state when switching tabs ----
+  const switchTab = useCallback((tab: 'compose' | 'env') => {
+    if (tab === activeTab) return
+    // Exit edit modes when switching
+    if (editMode) {
+      setEditMode(false)
+      setShowDiff(false)
+      setValidationResult(null)
+    }
+    if (envEditMode) {
+      setEnvEditMode(false)
+    }
+    setSearchOpen(false)
+    setSearchQuery('')
+    setActiveTab(tab)
+  }, [activeTab, editMode, envEditMode])
+
+  // ---- Reset validation when edit content changes ----
+  useEffect(() => {
+    if (editMode) {
+      setValidationResult(null)
+    }
+  }, [editContent])
 
   // ---- Render highlighted line with search overlays ----
   function renderLine(line: string, lineIdx: number) {
@@ -405,6 +651,241 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     )
   }
 
+  // ---- Render diff view ----
+  function renderDiffView() {
+    if (!diff) return null
+
+    return (
+      <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+        <div className="flex font-mono text-sm leading-relaxed">
+          {/* Left side — original */}
+          <div className="flex-1 border-r border-white/[0.06]">
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
+              Original
+            </div>
+            <div className="bg-slate-950">
+              {diff.left.map((dl, idx) => (
+                <div
+                  key={idx}
+                  className={`
+                    flex px-3 min-h-[1.625rem]
+                    ${dl.type === 'removed'
+                      ? 'bg-rose-500/10'
+                      : dl.type === 'added'
+                        ? 'bg-transparent'
+                        : 'hover:bg-white/[0.02]'
+                    }
+                  `}
+                >
+                  <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+                    {dl.lineNumber ?? ''}
+                  </span>
+                  <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
+                    dl.type === 'removed' ? 'text-rose-300' : 'text-slate-300'
+                  }`}>
+                    {dl.content}
+                  </span>
+                </div>
+              ))}
+              <div className="h-4" />
+            </div>
+          </div>
+
+          {/* Right side — edited */}
+          <div className="flex-1">
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
+              Edited
+            </div>
+            <div className="bg-slate-950">
+              {diff.right.map((dl, idx) => (
+                <div
+                  key={idx}
+                  className={`
+                    flex px-3 min-h-[1.625rem]
+                    ${dl.type === 'added'
+                      ? 'bg-emerald-500/10'
+                      : dl.type === 'removed'
+                        ? 'bg-transparent'
+                        : 'hover:bg-white/[0.02]'
+                    }
+                  `}
+                >
+                  <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+                    {dl.lineNumber ?? ''}
+                  </span>
+                  <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
+                    dl.type === 'added' ? 'text-emerald-300' : 'text-slate-300'
+                  }`}>
+                    {dl.content}
+                  </span>
+                </div>
+              ))}
+              <div className="h-4" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Render .env tab content ----
+  function renderEnvTab() {
+    if (envLoading) {
+      return (
+        <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-400 rounded-full animate-spin" />
+            Loading .env...
+          </div>
+        </div>
+      )
+    }
+
+    if (envError) {
+      return (
+        <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+          <div className="flex items-center gap-2 text-rose-400">
+            <AlertTriangle size={16} />
+            {envError}
+          </div>
+        </div>
+      )
+    }
+
+    if (envEditMode) {
+      return (
+        <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+          <textarea
+            value={envEditContent}
+            onChange={(e) => setEnvEditContent(e.target.value)}
+            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
+            style={{ minHeight: '60vh' }}
+            spellCheck={false}
+          />
+        </div>
+      )
+    }
+
+    // Read-only view of .env with basic highlighting
+    const envLines = (envContent ?? '').split('\n')
+    return (
+      <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+        <div className="bg-slate-950 font-mono text-sm leading-relaxed">
+          {envLines.map((line, idx) => {
+            const isComment = line.trimStart().startsWith('#')
+            const isEmpty = line.trim() === ''
+
+            let rendered: React.ReactNode
+            if (isEmpty) {
+              rendered = <span className="text-slate-300">{line}</span>
+            } else if (isComment) {
+              rendered = <span className="text-slate-500 italic">{line}</span>
+            } else {
+              // Try to split on first =
+              const eqIdx = line.indexOf('=')
+              if (eqIdx > 0) {
+                const key = line.slice(0, eqIdx)
+                const val = line.slice(eqIdx)
+                rendered = (
+                  <span>
+                    <span className="text-cyan-400">{key}</span>
+                    <span className="text-slate-500">=</span>
+                    <span className="text-emerald-400">{val.slice(1)}</span>
+                  </span>
+                )
+              } else {
+                rendered = <span className="text-slate-300">{line}</span>
+              }
+            }
+
+            return (
+              <div
+                key={idx}
+                className="flex px-5 hover:bg-white/[0.02]"
+              >
+                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+                  {idx + 1}
+                </span>
+                <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
+                  {rendered}
+                </span>
+              </div>
+            )
+          })}
+          <div className="h-4" />
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Render compose tab content ----
+  function renderComposeTab() {
+    // Diff view
+    if (editMode && showDiff) {
+      return renderDiffView()
+    }
+
+    // Edit mode — textarea
+    if (editMode) {
+      return (
+        <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+          <textarea
+            ref={textareaRef}
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
+            style={{ minHeight: '60vh' }}
+            spellCheck={false}
+          />
+        </div>
+      )
+    }
+
+    // View mode — syntax-highlighted read-only view
+    return (
+      <div
+        ref={codeContainerRef}
+        className="overflow-y-auto max-h-[70vh] scrollbar-thin"
+      >
+        <div className="bg-slate-950 font-mono text-sm leading-relaxed">
+          {lines.map((line, idx) => {
+            const isMatchedLine = matchedLineSet.has(idx)
+            const isActiveLine = idx === activeMatchLine
+
+            return (
+              <div
+                key={idx}
+                data-line-index={idx}
+                className={`
+                  flex px-5 transition-colors duration-100
+                  ${isActiveLine
+                    ? 'bg-amber-400/[0.06]'
+                    : isMatchedLine
+                      ? 'bg-amber-400/[0.03]'
+                      : 'hover:bg-white/[0.02]'
+                  }
+                `}
+              >
+                {/* Line number */}
+                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+                  {idx + 1}
+                </span>
+
+                {/* Line content */}
+                <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
+                  {renderLine(line, idx)}
+                </span>
+              </div>
+            )
+          })}
+
+          {/* Bottom padding for comfortable scrolling */}
+          <div className="h-4" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={overlayRef}
@@ -435,7 +916,11 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/20 shrink-0">
-              <FileCode2 className="w-4 h-4 text-cyan-400" />
+              {activeTab === 'compose' ? (
+                <FileCode2 className="w-4 h-4 text-cyan-400" />
+              ) : (
+                <FileText className="w-4 h-4 text-cyan-400" />
+              )}
             </div>
             <div className="min-w-0">
               <h2
@@ -445,60 +930,265 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 {formattedName}
               </h2>
               <p className="text-[11px] text-slate-500 font-mono truncate">
-                docker-compose.yml
+                {activeTab === 'compose' ? 'docker-compose.yml' : '.env'}
               </p>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex items-center gap-0.5 ml-3 bg-slate-900/60 rounded-lg p-0.5">
+              <button
+                onClick={() => switchTab('compose')}
+                className={`
+                  flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors duration-150
+                  ${activeTab === 'compose'
+                    ? 'bg-white/[0.08] text-slate-200'
+                    : 'text-slate-500 hover:text-slate-300'
+                  }
+                `}
+              >
+                <FileCode2 size={12} />
+                Compose
+              </button>
+              <button
+                onClick={() => switchTab('env')}
+                className={`
+                  flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors duration-150
+                  ${activeTab === 'env'
+                    ? 'bg-white/[0.08] text-slate-200'
+                    : 'text-slate-500 hover:text-slate-300'
+                  }
+                `}
+              >
+                <FileText size={12} />
+                .env
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Search toggle */}
-            <button
-              onClick={() => {
-                setSearchOpen((prev) => !prev)
-                if (!searchOpen) {
-                  setTimeout(() => searchInputRef.current?.focus(), 0)
-                } else {
-                  setSearchQuery('')
-                }
-              }}
-              className={`
-                flex items-center justify-center
-                w-8 h-8 rounded-lg
-                transition-colors duration-150
-                ${searchOpen
-                  ? 'text-cyan-400 bg-cyan-500/10'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
-                }
-              `}
-              title="Search (Ctrl+F)"
-              aria-label="Search within file"
-            >
-              <Search size={15} strokeWidth={2} />
-            </button>
+            {/* ---- Compose tab buttons ---- */}
+            {activeTab === 'compose' && (
+              <>
+                {/* Edit / View toggle */}
+                <button
+                  onClick={() => {
+                    if (editMode) {
+                      setEditMode(false)
+                      setShowDiff(false)
+                      setValidationResult(null)
+                    } else {
+                      setEditMode(true)
+                      setSearchOpen(false)
+                      setSearchQuery('')
+                    }
+                  }}
+                  className={`
+                    flex items-center justify-center gap-1
+                    h-8 px-2.5 rounded-lg
+                    text-xs font-medium
+                    transition-colors duration-150
+                    ${editMode
+                      ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                    }
+                  `}
+                  title={editMode ? 'Switch to view mode' : 'Switch to edit mode'}
+                  aria-label={editMode ? 'Switch to view mode' : 'Switch to edit mode'}
+                >
+                  <Pencil size={13} strokeWidth={2} />
+                  <span>{editMode ? 'Editing' : 'Edit'}</span>
+                </button>
 
-            {/* Copy button */}
-            <button
-              onClick={handleCopy}
-              className={`
-                flex items-center justify-center
-                w-8 h-8 rounded-lg
-                transition-colors duration-150
-                ${copied
-                  ? 'text-emerald-400 bg-emerald-500/10'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
-                }
-              `}
-              title={copied ? 'Copied!' : 'Copy to clipboard'}
-              aria-label="Copy to clipboard"
-            >
-              {copied ? (
-                <Check size={15} strokeWidth={2} />
-              ) : (
-                <Copy size={15} strokeWidth={2} />
-              )}
-            </button>
+                {/* Diff toggle (edit mode only) */}
+                {editMode && (
+                  <button
+                    onClick={() => setShowDiff((prev) => !prev)}
+                    className={`
+                      flex items-center justify-center gap-1
+                      h-8 px-2.5 rounded-lg
+                      text-xs font-medium
+                      transition-colors duration-150
+                      ${showDiff
+                        ? 'text-violet-400 bg-violet-500/10 ring-1 ring-violet-500/20'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      }
+                    `}
+                    title="Toggle diff view"
+                    aria-label="Toggle diff view"
+                  >
+                    <GitCompare size={13} strokeWidth={2} />
+                    <span>Diff</span>
+                  </button>
+                )}
 
-            {/* Close button */}
+                {/* Validate (edit mode only) */}
+                {editMode && (
+                  <button
+                    onClick={handleValidate}
+                    disabled={validating}
+                    className={`
+                      flex items-center justify-center gap-1
+                      h-8 px-2.5 rounded-lg
+                      text-xs font-medium
+                      transition-colors duration-150
+                      ${validating
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      }
+                    `}
+                    title="Validate compose file"
+                    aria-label="Validate compose file"
+                  >
+                    {validating ? (
+                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-slate-400 rounded-full animate-spin" />
+                    ) : (
+                      <CheckCircle size={13} strokeWidth={2} />
+                    )}
+                    <span>Validate</span>
+                  </button>
+                )}
+
+                {/* Save (edit mode only, disabled until validated) */}
+                {editMode && (
+                  <button
+                    onClick={handleSave}
+                    disabled={!validationResult?.valid || saving}
+                    className={`
+                      flex items-center justify-center gap-1
+                      h-8 px-2.5 rounded-lg
+                      text-xs font-medium
+                      transition-colors duration-150
+                      ${!validationResult?.valid || saving
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-emerald-400 hover:bg-emerald-500/10'
+                      }
+                    `}
+                    title={!validationResult?.valid ? 'Validate first before saving' : 'Save compose file'}
+                    aria-label="Save compose file"
+                  >
+                    {saving ? (
+                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-emerald-400 rounded-full animate-spin" />
+                    ) : (
+                      <Save size={13} strokeWidth={2} />
+                    )}
+                    <span>Save</span>
+                  </button>
+                )}
+
+                {/* Search toggle (view mode only) */}
+                {!editMode && (
+                  <button
+                    onClick={() => {
+                      setSearchOpen((prev) => !prev)
+                      if (!searchOpen) {
+                        setTimeout(() => searchInputRef.current?.focus(), 0)
+                      } else {
+                        setSearchQuery('')
+                      }
+                    }}
+                    className={`
+                      flex items-center justify-center
+                      w-8 h-8 rounded-lg
+                      transition-colors duration-150
+                      ${searchOpen
+                        ? 'text-cyan-400 bg-cyan-500/10'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      }
+                    `}
+                    title="Search (Ctrl+F)"
+                    aria-label="Search within file"
+                  >
+                    <Search size={15} strokeWidth={2} />
+                  </button>
+                )}
+
+                {/* Copy button */}
+                <button
+                  onClick={handleCopy}
+                  className={`
+                    flex items-center justify-center
+                    w-8 h-8 rounded-lg
+                    transition-colors duration-150
+                    ${copied
+                      ? 'text-emerald-400 bg-emerald-500/10'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                    }
+                  `}
+                  title={copied ? 'Copied!' : 'Copy to clipboard'}
+                  aria-label="Copy to clipboard"
+                >
+                  {copied ? (
+                    <Check size={15} strokeWidth={2} />
+                  ) : (
+                    <Copy size={15} strokeWidth={2} />
+                  )}
+                </button>
+              </>
+            )}
+
+            {/* ---- .env tab buttons ---- */}
+            {activeTab === 'env' && (
+              <>
+                {/* Edit / View toggle */}
+                <button
+                  onClick={() => {
+                    if (envEditMode) {
+                      setEnvEditMode(false)
+                    } else {
+                      setEnvEditMode(true)
+                      setEnvEditContent(envContent ?? '')
+                    }
+                  }}
+                  disabled={envLoading || envError !== null}
+                  className={`
+                    flex items-center justify-center gap-1
+                    h-8 px-2.5 rounded-lg
+                    text-xs font-medium
+                    transition-colors duration-150
+                    ${envLoading || envError !== null
+                      ? 'text-slate-600 cursor-not-allowed'
+                      : envEditMode
+                        ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                    }
+                  `}
+                  title={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
+                  aria-label={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
+                >
+                  <Pencil size={13} strokeWidth={2} />
+                  <span>{envEditMode ? 'Editing' : 'Edit'}</span>
+                </button>
+
+                {/* Save (edit mode only) */}
+                {envEditMode && (
+                  <button
+                    onClick={handleEnvSave}
+                    disabled={envSaving}
+                    className={`
+                      flex items-center justify-center gap-1
+                      h-8 px-2.5 rounded-lg
+                      text-xs font-medium
+                      transition-colors duration-150
+                      ${envSaving
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-emerald-400 hover:bg-emerald-500/10'
+                      }
+                    `}
+                    title="Save .env file"
+                    aria-label="Save .env file"
+                  >
+                    {envSaving ? (
+                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-emerald-400 rounded-full animate-spin" />
+                    ) : (
+                      <Save size={13} strokeWidth={2} />
+                    )}
+                    <span>Save</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Close button (always visible) */}
             <button
               onClick={onClose}
               className="
@@ -515,8 +1205,28 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
           </div>
         </div>
 
-        {/* ---- Search bar ---- */}
-        {searchOpen && (
+        {/* ---- Validation result bar ---- */}
+        {activeTab === 'compose' && editMode && validationResult && (
+          <div className={`
+            flex items-start gap-2 px-5 py-2.5 border-b border-white/[0.06] shrink-0 text-xs
+            ${validationResult.valid
+              ? 'bg-emerald-500/[0.06] text-emerald-400'
+              : 'bg-rose-500/[0.06] text-rose-400'
+            }
+          `}>
+            {validationResult.valid ? (
+              <CheckCircle size={14} className="shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            )}
+            <pre className="flex-1 whitespace-pre-wrap font-mono leading-relaxed">
+              {validationResult.valid ? 'Valid compose file' : validationResult.output}
+            </pre>
+          </div>
+        )}
+
+        {/* ---- Search bar (compose view mode only) ---- */}
+        {activeTab === 'compose' && !editMode && searchOpen && (
           <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/[0.06] bg-slate-900/50 shrink-0">
             <Search size={14} className="text-slate-500 shrink-0" />
             <input
@@ -587,56 +1297,34 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
           </div>
         )}
 
-        {/* ---- Code area ---- */}
-        <div
-          ref={codeContainerRef}
-          className="overflow-y-auto max-h-[70vh] scrollbar-thin"
-        >
-          <div className="bg-slate-950 font-mono text-sm leading-relaxed">
-            {lines.map((line, idx) => {
-              const isMatchedLine = matchedLineSet.has(idx)
-              const isActiveLine = idx === activeMatchLine
-
-              return (
-                <div
-                  key={idx}
-                  data-line-index={idx}
-                  className={`
-                    flex px-5 transition-colors duration-100
-                    ${isActiveLine
-                      ? 'bg-amber-400/[0.06]'
-                      : isMatchedLine
-                        ? 'bg-amber-400/[0.03]'
-                        : 'hover:bg-white/[0.02]'
-                    }
-                  `}
-                >
-                  {/* Line number */}
-                  <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                    {idx + 1}
-                  </span>
-
-                  {/* Line content */}
-                  <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
-                    {renderLine(line, idx)}
-                  </span>
-                </div>
-              )
-            })}
-
-            {/* Bottom padding for comfortable scrolling */}
-            <div className="h-4" />
-          </div>
-        </div>
+        {/* ---- Content area ---- */}
+        {activeTab === 'compose' ? renderComposeTab() : renderEnvTab()}
 
         {/* ---- Footer ---- */}
         <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.06] shrink-0">
           <span className="text-[11px] text-slate-600 font-mono">
-            {lines.length} line{lines.length !== 1 ? 's' : ''}
+            {activeTab === 'compose'
+              ? `${editMode ? editContent.split('\n').length : lines.length} line${(editMode ? editContent.split('\n').length : lines.length) !== 1 ? 's' : ''}`
+              : envContent !== null
+                ? `${(envEditMode ? envEditContent : envContent).split('\n').length} line${(envEditMode ? envEditContent : envContent).split('\n').length !== 1 ? 's' : ''}`
+                : ''
+            }
           </span>
-          <span className="text-[11px] text-slate-600">
-            YAML
-          </span>
+          <div className="flex items-center gap-3">
+            {activeTab === 'compose' && editMode && (
+              <span className="text-[11px] text-amber-500/70 font-medium">
+                EDITING
+              </span>
+            )}
+            {activeTab === 'env' && envEditMode && (
+              <span className="text-[11px] text-amber-500/70 font-medium">
+                EDITING
+              </span>
+            )}
+            <span className="text-[11px] text-slate-600">
+              {activeTab === 'compose' ? 'YAML' : 'ENV'}
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -43,6 +43,24 @@ import type {
   InviteResponse,
   InviteListResponse,
   UserListResponse,
+  ComposeValidateResponse,
+  ComposeSaveResponse,
+  StackEnvResponse,
+  StackEnvSaveResponse,
+  MaintenanceReport,
+  OrphanReport,
+  DiskAnalysis,
+  LogRotateResponse,
+  LogStatsResponse,
+  LogArchivesResponse,
+  BatchStackResponse,
+  RootEnvResponse,
+  EnvValidateResponse,
+  BackupListResponse,
+  BackupStatusResponse,
+  BackupConfigResponse,
+  BackupTriggerResponse,
+  BackupRestoreResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -381,4 +399,161 @@ export function authListInvites(): Promise<InviteListResponse> {
 /** POST /auth/revoke — Revoke a user's access */
 export function authRevokeUser(username: string): Promise<{ success: boolean; message: string }> {
   return apiClient.post<{ success: boolean; message: string }>('/auth/revoke', { username })
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: Compose Editor & Stack Env
+// ---------------------------------------------------------------------------
+
+/** POST /stacks/:name/compose/validate — Validate compose YAML */
+export function validateStackCompose(name: string, content: string): Promise<ComposeValidateResponse> {
+  return apiClient.post<ComposeValidateResponse>(
+    `/stacks/${encodeURIComponent(name)}/compose/validate`,
+    { content },
+  )
+}
+
+/** POST /stacks/:name/compose — Save compose file */
+export function saveStackCompose(name: string, content: string): Promise<ComposeSaveResponse> {
+  return apiClient.post<ComposeSaveResponse>(
+    `/stacks/${encodeURIComponent(name)}/compose`,
+    { content },
+  )
+}
+
+/** GET /stacks/:name/env — Read stack .env */
+export function fetchStackEnv(name: string): Promise<StackEnvResponse> {
+  return apiClient.get<StackEnvResponse>(
+    `/stacks/${encodeURIComponent(name)}/env`,
+  )
+}
+
+/** POST /stacks/:name/env — Save stack .env */
+export function saveStackEnv(name: string, content: string): Promise<StackEnvSaveResponse> {
+  return apiClient.post<StackEnvSaveResponse>(
+    `/stacks/${encodeURIComponent(name)}/env`,
+    { content },
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Advanced Maintenance
+// ---------------------------------------------------------------------------
+
+/** GET /maintenance/report — Full system report */
+export function fetchMaintenanceReport(): Promise<MaintenanceReport> {
+  return apiClient.get<MaintenanceReport>('/maintenance/report')
+}
+
+/** GET /maintenance/orphans — Orphaned resources */
+export function fetchMaintenanceOrphans(): Promise<OrphanReport> {
+  return apiClient.get<OrphanReport>('/maintenance/orphans')
+}
+
+/** GET /maintenance/disk — Disk analysis */
+export function fetchMaintenanceDisk(): Promise<DiskAnalysis> {
+  return apiClient.get<DiskAnalysis>('/maintenance/disk')
+}
+
+/** POST /maintenance/deep-prune — Aggressive docker prune */
+export function triggerDeepPrune(): Promise<MaintenanceResponse> {
+  return apiClient.post<MaintenanceResponse>('/maintenance/deep-prune', { confirm: 'CONFIRM' })
+}
+
+/** POST /maintenance/log-rotate — Rotate logs */
+export function triggerLogRotate(): Promise<LogRotateResponse> {
+  return apiClient.post<LogRotateResponse>('/maintenance/log-rotate')
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Enhanced Log Viewer
+// ---------------------------------------------------------------------------
+
+/** GET /logs — Application logs (with optional server-side filtering) */
+export function fetchLogsFiltered(params?: {
+  level?: string
+  search?: string
+  lines?: number
+}): Promise<LogsResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.level) searchParams.set('level', params.level)
+  if (params?.search) searchParams.set('search', params.search)
+  if (params?.lines) searchParams.set('lines', String(params.lines))
+  const qs = searchParams.toString()
+  return apiClient.get<LogsResponse>(qs ? `/logs?${qs}` : '/logs')
+}
+
+/** GET /logs/stats — Log statistics */
+export function fetchLogStats(): Promise<LogStatsResponse> {
+  return apiClient.get<LogStatsResponse>('/logs/stats')
+}
+
+/** GET /logs/archives — Archived log files */
+export function fetchLogArchives(): Promise<LogArchivesResponse> {
+  return apiClient.get<LogArchivesResponse>('/logs/archives')
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Batch Operations
+// ---------------------------------------------------------------------------
+
+/** POST /batch/stacks — Start/stop/restart multiple stacks */
+export function batchStackAction(
+  action: 'start' | 'stop' | 'restart',
+  stacks: string[] | 'all',
+): Promise<BatchStackResponse> {
+  return apiClient.post<BatchStackResponse>('/batch/stacks', { action, stacks })
+}
+
+/** POST /batch/update — Pull + rolling update multiple stacks */
+export function batchStackUpdate(stacks: string[] | 'all'): Promise<BatchStackResponse> {
+  return apiClient.post<BatchStackResponse>('/batch/update', { stacks })
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Environment Variable Manager
+// ---------------------------------------------------------------------------
+
+/** GET /env — Root .env as raw + parsed */
+export function fetchRootEnv(): Promise<RootEnvResponse> {
+  return apiClient.get<RootEnvResponse>('/env')
+}
+
+/** POST /env — Save root .env */
+export function saveRootEnv(content: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.post<{ success: boolean; message: string }>('/env', { content })
+}
+
+/** POST /env/validate — Validate .env content */
+export function validateEnv(content: string): Promise<EnvValidateResponse> {
+  return apiClient.post<EnvValidateResponse>('/env/validate', { content })
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: Backup & Restore
+// ---------------------------------------------------------------------------
+
+/** GET /backups — List backup archives */
+export function fetchBackups(): Promise<BackupListResponse> {
+  return apiClient.get<BackupListResponse>('/backups')
+}
+
+/** GET /backups/status — Current backup status */
+export function fetchBackupStatus(): Promise<BackupStatusResponse> {
+  return apiClient.get<BackupStatusResponse>('/backups/status')
+}
+
+/** GET /backups/config — Backup configuration */
+export function fetchBackupConfig(): Promise<BackupConfigResponse> {
+  return apiClient.get<BackupConfigResponse>('/backups/config')
+}
+
+/** POST /backups/trigger — Start a backup */
+export function triggerBackup(stack?: string): Promise<BackupTriggerResponse> {
+  return apiClient.post<BackupTriggerResponse>('/backups/trigger', stack ? { stack } : {})
+}
+
+/** POST /backups/restore — Restore from archive */
+export function restoreBackup(filename: string): Promise<BackupRestoreResponse> {
+  return apiClient.post<BackupRestoreResponse>('/backups/restore', { filename, confirm: 'RESTORE' })
 }

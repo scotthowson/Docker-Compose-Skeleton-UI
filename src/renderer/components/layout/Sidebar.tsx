@@ -26,6 +26,10 @@ import {
   Bookmark,
   Zap,
   Shield,
+  Users,
+  Wrench,
+  FileCode,
+  Archive,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -45,14 +49,18 @@ const navItems: NavItem[] = [
   { id: 'stacks', label: 'Stacks', icon: Layers, section: 'main' },
   { id: 'containers', label: 'Containers', icon: Box, section: 'main' },
   { id: 'images', label: 'Images', icon: HardDrive, section: 'main' },
+  { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
   { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
   { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },
-  { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },
   { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
+  { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
+  { id: 'environment', label: 'Environment', icon: FileCode, section: 'system' },
+  { id: 'backup', label: 'Backup', icon: Archive, section: 'system' },
   { id: 'logs', label: 'Logs', icon: ScrollText, section: 'system' },
   { id: 'system', label: 'System', icon: Monitor, section: 'system' },
   { id: 'diagnostics', label: 'Diagnostics', icon: Shield, section: 'system' },
+  { id: 'users', label: 'Users', icon: Users, section: 'system' },
   { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]

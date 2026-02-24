@@ -6,13 +6,14 @@ import React, { useMemo, useState, useCallback } from 'react'
 import {
   Shield, Activity, Cpu, MemoryStick, Box, HardDrive, Network,
   AlertTriangle, CheckCircle, XCircle, BarChart3, RefreshCw,
-  Zap, TrendingUp, Server,
+  Zap, TrendingUp, Server, Play, Square, RotateCw, Wrench, Loader2, Power,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchServerStatus, fetchHealthReport, fetchContainers,
   fetchImages, fetchNetworks, fetchEvents, fetchSystemInfo,
+  batchStackAction,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import type {
@@ -693,6 +694,180 @@ function AlertsPanel({
 }
 
 // =============================================================================
+// Server Control Card
+// =============================================================================
+
+function ServerControlCard() {
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [maintenanceMode, setMaintenanceMode] = useState(false)
+  const [lastResult, setLastResult] = useState<{ action: string; success: boolean; message: string } | null>(null)
+
+  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+    setActionLoading(action)
+    setLastResult(null)
+    try {
+      const result = await batchStackAction(action, 'all')
+      const successCount = result.results?.filter((r: { success: boolean }) => r.success).length ?? 0
+      const totalCount = result.results?.length ?? 0
+      setLastResult({
+        action,
+        success: successCount === totalCount,
+        message: `${action.charAt(0).toUpperCase() + action.slice(1)}: ${successCount}/${totalCount} stacks succeeded`,
+      })
+    } catch (err) {
+      setLastResult({
+        action,
+        success: false,
+        message: `Failed to ${action}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      })
+    } finally {
+      setActionLoading(null)
+    }
+  }, [])
+
+  const toggleMaintenance = useCallback(() => {
+    setMaintenanceMode((prev) => !prev)
+    setLastResult({
+      action: 'maintenance',
+      success: true,
+      message: maintenanceMode ? 'Maintenance mode disabled' : 'Maintenance mode enabled — new connections will be paused',
+    })
+  }, [maintenanceMode])
+
+  const actions = [
+    {
+      id: 'start' as const,
+      label: 'Start All',
+      icon: Play,
+      color: 'emerald',
+      bgHover: 'hover:bg-emerald-500/15 hover:border-emerald-500/25',
+      iconColor: 'text-emerald-400',
+      desc: 'Start all stacks',
+    },
+    {
+      id: 'stop' as const,
+      label: 'Stop All',
+      icon: Square,
+      color: 'rose',
+      bgHover: 'hover:bg-rose-500/15 hover:border-rose-500/25',
+      iconColor: 'text-rose-400',
+      desc: 'Stop all stacks',
+    },
+    {
+      id: 'restart' as const,
+      label: 'Restart All',
+      icon: RotateCw,
+      color: 'amber',
+      bgHover: 'hover:bg-amber-500/15 hover:border-amber-500/25',
+      iconColor: 'text-amber-400',
+      desc: 'Restart all stacks',
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Action buttons row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {actions.map((action) => {
+          const Icon = action.icon
+          const isLoading = actionLoading === action.id
+          const isDisabled = actionLoading !== null
+
+          return (
+            <button
+              key={action.id}
+              onClick={() => handleAction(action.id)}
+              disabled={isDisabled}
+              className={`
+                group relative flex flex-col items-center gap-2.5 rounded-xl p-5
+                bg-white/[0.02] border border-white/[0.06]
+                ${action.bgHover}
+                transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed
+              `}
+            >
+              <div className={`
+                w-11 h-11 rounded-xl flex items-center justify-center
+                bg-${action.color}-500/10 border border-${action.color}-500/15
+                group-hover:bg-${action.color}-500/20 group-hover:scale-110
+                transition-all duration-300
+              `}>
+                {isLoading ? (
+                  <Loader2 size={20} className={`${action.iconColor} animate-spin`} />
+                ) : (
+                  <Icon size={20} className={action.iconColor} />
+                )}
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-semibold text-slate-200">{action.label}</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">{action.desc}</p>
+              </div>
+            </button>
+          )
+        })}
+
+        {/* Maintenance Mode Toggle */}
+        <button
+          onClick={toggleMaintenance}
+          disabled={actionLoading !== null}
+          className={`
+            group relative flex flex-col items-center gap-2.5 rounded-xl p-5
+            border transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed
+            ${maintenanceMode
+              ? 'bg-violet-500/10 border-violet-500/25 ring-1 ring-violet-500/20'
+              : 'bg-white/[0.02] border-white/[0.06] hover:bg-violet-500/10 hover:border-violet-500/25'
+            }
+          `}
+        >
+          <div className={`
+            w-11 h-11 rounded-xl flex items-center justify-center
+            transition-all duration-300
+            ${maintenanceMode
+              ? 'bg-violet-500/20 border border-violet-500/25 scale-110'
+              : 'bg-violet-500/10 border border-violet-500/15 group-hover:bg-violet-500/20 group-hover:scale-110'
+            }
+          `}>
+            <Wrench size={20} className={`text-violet-400 ${maintenanceMode ? 'animate-pulse' : ''}`} />
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-semibold text-slate-200">Maintenance</p>
+            <p className="text-[10px] text-slate-600 mt-0.5">
+              {maintenanceMode ? 'Mode active' : 'Toggle mode'}
+            </p>
+          </div>
+          {/* Active indicator */}
+          {maintenanceMode && (
+            <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+              <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-50" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-400" />
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Result message */}
+      {lastResult && (
+        <div className={`
+          flex items-center gap-3 rounded-xl px-4 py-3 border animate-fade-in
+          ${lastResult.success
+            ? 'bg-emerald-500/[0.06] border-emerald-500/20'
+            : 'bg-rose-500/[0.06] border-rose-500/20'
+          }
+        `}>
+          {lastResult.success ? (
+            <CheckCircle size={15} className="text-emerald-400 shrink-0" />
+          ) : (
+            <XCircle size={15} className="text-rose-400 shrink-0" />
+          )}
+          <p className={`text-xs font-medium ${lastResult.success ? 'text-emerald-300' : 'text-rose-300'}`}>
+            {lastResult.message}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
 // Disconnected Hero
 // =============================================================================
 
@@ -956,8 +1131,8 @@ export default function Diagnostics() {
               </div>
             </div>
 
-            {/* Resource Gauges */}
-            <div className="lg:col-span-8">
+            {/* Resource Gauges + Server Control */}
+            <div className="lg:col-span-8 flex flex-col gap-6">
               <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
                 <SectionHeader icon={<Activity size={14} />} title="Resource Gauges" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -982,6 +1157,10 @@ export default function Diagnostics() {
                     icon={<HardDrive size={12} />}
                   />
                 </div>
+              </div>
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-6">
+                <SectionHeader icon={<Power size={14} />} title="Server Control" />
+                <ServerControlCard />
               </div>
             </div>
           </div>

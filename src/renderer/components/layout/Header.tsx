@@ -26,9 +26,13 @@ const pageTitles: Record<PageId, string> = {
   networks: 'Networks',
   bookmarks: 'Bookmarks',
   activity: 'Activity',
+  maintenance: 'Maintenance',
+  environment: 'Environment',
+  backup: 'Backup & Restore',
   logs: 'Logs',
   system: 'System Info',
   diagnostics: 'Diagnostics',
+  users: 'User Management',
   config: 'Server Config',
   settings: 'Settings',
 }

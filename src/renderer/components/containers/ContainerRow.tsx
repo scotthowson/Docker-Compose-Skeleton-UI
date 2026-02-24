@@ -4,7 +4,7 @@
 
 import React from 'react'
 import { ContainerInfo } from '../../../shared/types'
-import { Box, RefreshCw } from 'lucide-react'
+import { Box, RefreshCw, CheckSquare, Square } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,9 +119,11 @@ interface ContainerRowProps {
   container: ContainerInfo
   isSelected: boolean
   onClick: (name: string) => void
+  batchMode?: boolean
+  batchSelected?: boolean
 }
 
-const ContainerRow: React.FC<ContainerRowProps> = ({ container, isSelected, onClick }) => {
+const ContainerRow: React.FC<ContainerRowProps> = ({ container, isSelected, onClick, batchMode, batchSelected }) => {
   const stateKey = container.state.toLowerCase()
   const sv = STATE_VARIANTS[stateKey] ?? DEFAULT_STATE_VARIANT
 
@@ -133,12 +135,23 @@ const ContainerRow: React.FC<ContainerRowProps> = ({ container, isSelected, onCl
       onClick={() => onClick(container.name)}
       className={`
         group cursor-pointer transition-all duration-200 border-b border-white/[0.04]
-        ${isSelected
-          ? 'bg-emerald-500/10 border-l-2 border-l-emerald-400'
-          : 'hover:bg-white/[0.04] border-l-2 border-l-transparent'
+        ${batchMode && batchSelected
+          ? 'bg-cyan-500/[0.08] border-l-2 border-l-cyan-400'
+          : isSelected
+            ? 'bg-emerald-500/10 border-l-2 border-l-emerald-400'
+            : 'hover:bg-white/[0.04] border-l-2 border-l-transparent'
         }
       `}
     >
+      {/* Batch checkbox */}
+      {batchMode && (
+        <td className="px-3 py-3 w-10">
+          {batchSelected
+            ? <CheckSquare size={15} className="text-cyan-400" />
+            : <Square size={15} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
+          }
+        </td>
+      )}
       {/* Name */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">

@@ -77,6 +77,9 @@ export function StatusBar() {
   const memUsed = status?.system?.memory_mb?.available ?? 0
   const memTotal = status?.system?.memory_mb?.total ?? 0
   const healthStatus = healthReport?.status
+  const cpuCount = status?.system?.cpu_count ?? 0
+  const loadAvg = status?.system?.load_average?.[0] ?? 0
+  const cpuPct = cpuCount > 0 ? Math.min(100, Math.round((loadAvg / cpuCount) * 100)) : 0
 
   return (
     <footer
@@ -128,8 +131,26 @@ export function StatusBar() {
         </span>
       </div>
 
-      {/* Right: Memory + Containers + Last refresh + clock */}
+      {/* Right: CPU + Memory + Containers + Last refresh + clock */}
       <div className="flex items-center gap-2.5">
+        {cpuCount > 0 && (
+          <>
+            <span className="flex items-center gap-1 text-slate-600">
+              <Cpu size={9} />
+              CPU
+            </span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                <div
+                  className={`h-full rounded-full progress-bar ${cpuPct > 80 ? 'bg-rose-400' : cpuPct > 60 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                  style={{ width: `${cpuPct}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 tabular-nums">{cpuPct}%</span>
+            </div>
+            <span className="text-white/[0.06]">|</span>
+          </>
+        )}
         {memTotal > 0 && (
           <>
             <span className="flex items-center gap-1 text-slate-600">
