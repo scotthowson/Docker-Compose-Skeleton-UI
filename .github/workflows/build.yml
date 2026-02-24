@@ -39,8 +39,11 @@ jobs:
         if: matrix.target == 'rpm'
         run: sudo apt-get update && sudo apt-get install -y rpm
 
+      - name: Build main process
+        run: npm run build:main
+
       - name: Build renderer
-        run: npx tsc && npx vite build
+        run: npm run build:renderer
 
       - name: Build Electron (${{ matrix.target }})
         run: npx electron-builder --linux ${{ matrix.target }}
@@ -57,8 +60,43 @@ jobs:
             release/*.rpm
           if-no-files-found: ignore
 
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build main process
+        run: npm run build:main
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Build Electron (NSIS)
+        run: npx electron-builder --win nsis
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-nsis
+          path: |
+            release/*.exe
+          if-no-files-found: ignore
+
   release:
-    needs: build-linux
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -79,6 +117,7 @@ jobs:
             artifacts/**/*.AppImage
             artifacts/**/*.deb
             artifacts/**/*.rpm
+            artifacts/**/*.exe
           generate_release_notes: true
           draft: false
           prerelease: false

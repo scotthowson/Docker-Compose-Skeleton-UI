@@ -29,7 +29,7 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     frame: process.platform === 'darwin' ? false : true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
