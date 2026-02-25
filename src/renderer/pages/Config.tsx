@@ -146,7 +146,7 @@ function TextRow({
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
       {readOnly ? (
-        <span className="text-sm text-slate-400 font-mono truncate max-w-[260px]" title={value}>{value}</span>
+        <span className="text-sm text-slate-400 font-mono truncate max-w-[180px] md:max-w-[260px]" title={value}>{value}</span>
       ) : (
         <input
           type="text"
@@ -154,7 +154,7 @@ function TextRow({
           onChange={(e) => onChange(configKey, e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
-          className="rounded-lg bg-slate-800 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-48 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
+          className="rounded-lg bg-slate-800 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-40 md:w-48 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
         />
       )}
     </div>

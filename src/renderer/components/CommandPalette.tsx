@@ -9,6 +9,7 @@ import {
   RotateCw, Command, Wrench, Sun, Moon, PanelLeftClose, PanelLeft,
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
+  TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -64,6 +65,13 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   backup: <Archive size={16} />,
   terminal: <TerminalSquare size={16} />,
   cronjobs: <CalendarClock size={16} />,
+  trends: <TrendingUp size={16} />,
+  updates: <ArrowUpCircle size={16} />,
+  notifications: <BellIcon size={16} />,
+  snapshots: <Camera size={16} />,
+  templates: <LayoutTemplate size={16} />,
+  automations: <Bot size={16} />,
+  topology: <Share2 size={16} />,
 }
 
 const pageLabels: Record<PageId, string> = {
@@ -88,6 +96,13 @@ const pageLabels: Record<PageId, string> = {
   config: 'Server Config',
   settings: 'Settings',
   cronjobs: 'Cron Jobs',
+  trends: 'Resource Trends',
+  updates: 'Image Updates',
+  notifications: 'Notifications',
+  snapshots: 'Snapshots',
+  templates: 'Templates',
+  automations: 'Automations',
+  topology: 'Network Topology',
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +166,7 @@ export function CommandPalette() {
     const items: CommandItem[] = []
 
     // Navigation commands
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'terminal', 'cronjobs', 'maintenance', 'environment', 'backup', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'templates', 'updates', 'trends', 'terminal', 'cronjobs', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,

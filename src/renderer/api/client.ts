@@ -30,6 +30,7 @@ export class ApiClient {
   private baseUrl: string
   private timeout: number
   private maxRetries: number
+  private authToken: string | null = null
 
   constructor(baseUrl = 'http://127.0.0.1:9876', timeout = 30000) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
@@ -49,6 +50,14 @@ export class ApiClient {
     this.timeout = ms
   }
 
+  setAuthToken(token: string | null): void {
+    this.authToken = token
+  }
+
+  getAuthToken(): string | null {
+    return this.authToken
+  }
+
   private async requestOnce<T>(method: string, path: string, body?: string): Promise<T> {
     const url = `${this.baseUrl}${path}`
     const controller = new AbortController()
@@ -59,6 +68,7 @@ export class ApiClient {
       headers: {
         Accept: 'application/json',
         ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
       },
       signal: controller.signal,
     }
@@ -88,6 +98,12 @@ export class ApiClient {
         }
       } catch {
         // response body was not JSON — use statusText
+      }
+      // Handle 401 — token expired or invalid
+      if (response.status === 401) {
+        this.authToken = null
+        window.dispatchEvent(new CustomEvent('api-auth-expired'))
+        throw new ApiError(401, errorMessage)
       }
       throw new ApiError(response.status, errorMessage)
     }
@@ -143,7 +159,10 @@ export class ApiClient {
       try {
         const response = await fetch(url, {
           method: 'GET',
-          headers: { Accept: 'application/json' },
+          headers: {
+            Accept: 'application/json',
+            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          },
           signal: controller.signal,
         })
         return response.ok

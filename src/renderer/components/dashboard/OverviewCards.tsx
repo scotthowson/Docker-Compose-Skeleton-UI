@@ -163,7 +163,7 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
           </div>
           <div className="mt-4">
             <p className="text-sm font-medium text-slate-400">{label}</p>
-            <p className="mt-1 text-2xl font-bold text-white tracking-tight tabular-nums">
+            <p className="mt-1 text-lg md:text-2xl font-bold text-white tracking-tight tabular-nums">
               {typeof value === 'number' ? (
                 <AnimatedCounter value={value} />
               ) : (

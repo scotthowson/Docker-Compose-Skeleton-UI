@@ -2,9 +2,9 @@
 // ContainerDetail — Detailed view for a single container with live stats
 // =============================================================================
 
-import React, { useEffect, useCallback, useRef, useState } from 'react'
+import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
-import { useContainerStore } from '../../stores/containerStore'
+import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
 import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
 import ContainerFileBrowser from './ContainerFileBrowser'
@@ -396,7 +396,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const setStats = useContainerStore((s) => s.setStats)
   const pushStatsHistory = useContainerStore((s) => s.pushStatsHistory)
   const storedStats = useContainerStore((s) => s.stats[containerName])
-  const statsHistory = useContainerStore((s) => s.statsHistory[containerName] ?? [])
+  const statsHistorySelector = useMemo(() => selectStatsHistory(containerName), [containerName])
+  const statsHistory = useContainerStore(statsHistorySelector)
   const { addToast } = useToast()
 
   const [detail, setDetail] = useState<ContainerDetailType | null>(null)
@@ -707,24 +708,25 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   return (
     <div className="flex flex-col gap-5 animate-in">
       {/* ---- Back button + title ---- */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="
-            flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm
-            text-slate-400 hover:text-white
-            bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
-            transition-all duration-200
-          "
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </button>
+      <div className="flex flex-col gap-3">
+        {/* Top row: back + name + badges */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onBack}
+            className="
+              flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm flex-shrink-0
+              text-slate-400 hover:text-white
+              bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
+              transition-all duration-200
+            "
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back</span>
+          </button>
 
-        <div className="flex items-center gap-3 flex-1 min-w-0">
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
           {renaming ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <input
                 autoFocus
                 value={renameValue}
@@ -733,33 +735,35 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   if (e.key === 'Enter') handleRename()
                   if (e.key === 'Escape') { setRenaming(false); setRenameValue(containerName) }
                 }}
-                className="px-2 py-1 text-lg font-bold text-white bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                className="px-2 py-1 text-base md:text-lg font-bold text-white bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0 flex-1"
               />
-              <button onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all">
+              <button onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all flex-shrink-0">
                 {renameLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               </button>
-              <button onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all">
+              <button onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all flex-shrink-0">
                 <X size={16} />
               </button>
             </div>
           ) : (
             <>
-              <h1 className="text-xl font-bold text-white truncate">{containerName}</h1>
+              <h1 className="text-base md:text-xl font-bold text-white truncate">{containerName}</h1>
               <button
                 onClick={() => setRenaming(true)}
                 title="Rename container"
-                className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/10 rounded transition-all"
+                className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/10 rounded transition-all flex-shrink-0"
               >
                 <Pencil size={14} />
               </button>
             </>
           )}
-          <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
-          <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
+            <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
+          </div>
         </div>
 
-        {/* Container actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Action buttons row — wraps on mobile */}
+        <div className="flex flex-wrap items-center gap-2">
           {containerInfo.state !== 'running' && (
             <button
               onClick={() => handleAction('start')}
@@ -798,7 +802,6 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
             Logs
           </button>
-          {/* 4C: Processes toggle button — only for running containers */}
           {isRunning && (
             <button
               onClick={handleToggleProcesses}
@@ -1003,6 +1006,74 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               </div>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* ---- Container Logs (right below Metrics History) ---- */}
+      {showLogs && (
+        <section>
+          <div className="flex items-center justify-between">
+            <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container Logs" />
+            <div className="flex items-center gap-2">
+              {/* Live / Snapshot toggle */}
+              <div className="flex rounded-md bg-white/[0.03] border border-white/[0.06] p-0.5">
+                <button
+                  onClick={() => setLiveLogsMode(false)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${!liveLogsMode ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
+                >
+                  Snapshot
+                </button>
+                <button
+                  onClick={() => setLiveLogsMode(true)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${liveLogsMode ? 'bg-emerald-500/15 text-emerald-400' : 'text-slate-500 hover:text-slate-400'}`}
+                >
+                  Live
+                </button>
+              </div>
+              {!liveLogsMode && (
+                <>
+                  <button
+                    onClick={handleDownloadLogs}
+                    disabled={!containerLogs}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Download logs as text file"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </button>
+                  <button
+                    onClick={handleFetchLogs}
+                    disabled={logsLoading}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowLogs(false)}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          {liveLogsMode ? (
+            <div className="mt-3 h-80">
+              <LiveLogViewer containerName={containerName} initialLines={100} pollInterval={2000} />
+            </div>
+          ) : (
+            <pre
+              className="
+                glass-subtle mt-3 p-4 max-h-80 overflow-auto
+                text-xs leading-relaxed font-mono text-slate-300
+                whitespace-pre-wrap break-words scrollbar-thin
+              "
+            >
+              {containerLogs || 'No logs available.'}
+            </pre>
+          )}
         </section>
       )}
 
@@ -1284,7 +1355,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                             <Lock className="h-3 w-3 text-amber-500/60 flex-shrink-0" />
                           )}
                           <span
-                            className="text-xs font-mono text-cyan-400 w-56 flex-shrink-0 truncate"
+                            className="text-xs font-mono text-cyan-400 w-32 md:w-56 flex-shrink-0 truncate"
                             title={entry.key}
                           >
                             {entry.key}
@@ -1491,74 +1562,6 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         </section>
       )}
 
-      {/* ---- Container Logs ---- */}
-      {showLogs && (
-        <section>
-          <div className="flex items-center justify-between">
-            <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container Logs" />
-            <div className="flex items-center gap-2">
-              {/* Live / Snapshot toggle */}
-              <div className="flex rounded-md bg-white/[0.03] border border-white/[0.06] p-0.5">
-                <button
-                  onClick={() => setLiveLogsMode(false)}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${!liveLogsMode ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
-                >
-                  Snapshot
-                </button>
-                <button
-                  onClick={() => setLiveLogsMode(true)}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${liveLogsMode ? 'bg-emerald-500/15 text-emerald-400' : 'text-slate-500 hover:text-slate-400'}`}
-                >
-                  Live
-                </button>
-              </div>
-              {!liveLogsMode && (
-                <>
-                  <button
-                    onClick={handleDownloadLogs}
-                    disabled={!containerLogs}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Download logs as text file"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download
-                  </button>
-                  <button
-                    onClick={handleFetchLogs}
-                    disabled={logsLoading}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => setShowLogs(false)}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          {liveLogsMode ? (
-            <div className="mt-3 h-80">
-              <LiveLogViewer containerName={containerName} initialLines={100} pollInterval={2000} />
-            </div>
-          ) : (
-            <pre
-              className="
-                glass-subtle mt-3 p-4 max-h-80 overflow-auto
-                text-xs leading-relaxed font-mono text-slate-300
-                whitespace-pre-wrap break-words scrollbar-thin
-              "
-            >
-              {containerLogs || 'No logs available.'}
-            </pre>
-          )}
-        </section>
-      )}
-
       {/* ---- File Browser ---- */}
       {detail?.state === 'running' && (
         <ContainerFileBrowser containerName={containerName} />
@@ -1616,7 +1619,7 @@ interface InfoRowProps {
 
 const InfoRow: React.FC<InfoRowProps> = ({ label, value, mono, highlight }) => (
   <div className="flex items-center gap-4 px-4 py-2.5">
-    <span className="text-xs text-slate-500 uppercase tracking-wide w-32 flex-shrink-0">
+    <span className="text-xs text-slate-500 uppercase tracking-wide w-24 md:w-32 flex-shrink-0">
       {label}
     </span>
     <span

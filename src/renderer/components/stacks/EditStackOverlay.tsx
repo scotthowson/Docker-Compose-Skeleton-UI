@@ -19,6 +19,8 @@ import {
   Pencil,
   Tag,
   Shield,
+  History,
+  RotateCcw,
 } from 'lucide-react'
 import {
   fetchStackCompose,
@@ -26,10 +28,12 @@ import {
   validateStackCompose,
   saveStackCompose,
   saveStackEnv,
+  fetchComposeHistory,
+  rollbackCompose,
 } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
 import { useSettingsStore } from '../../stores/settingsStore'
-import type { StackInfo, StackAnnotation } from '../../../shared/types'
+import type { StackInfo, StackAnnotation, ComposeVersion } from '../../../shared/types'
 
 interface Props {
   stack: StackInfo
@@ -245,8 +249,14 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   const [savingCompose, setSavingCompose] = useState(false)
   const [savingEnv, setSavingEnv] = useState(false)
 
+  // Compose history
+  const [composeVersions, setComposeVersions] = useState<ComposeVersion[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [rollingBack, setRollingBack] = useState<string | null>(null)
+
   // Tab
-  const [activeTab, setActiveTab] = useState<'compose' | 'env' | 'annotations'>('compose')
+  const [activeTab, setActiveTab] = useState<'compose' | 'env' | 'annotations' | 'history'>('compose')
 
   // Search
   const [searchOpen, setSearchOpen] = useState(false)
@@ -296,6 +306,43 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         .finally(() => setEnvLoading(false))
     }
   }, [activeTab, stack.name, envLoading, envLoaded])
+
+  // Load compose history when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && !historyLoading && !historyLoaded) {
+      setHistoryLoading(true)
+      fetchComposeHistory(stack.name)
+        .then((res) => {
+          setComposeVersions(res.versions || [])
+          setHistoryLoaded(true)
+        })
+        .catch(() => {
+          setComposeVersions([])
+          setHistoryLoaded(true)
+        })
+        .finally(() => setHistoryLoading(false))
+    }
+  }, [activeTab, stack.name, historyLoading, historyLoaded])
+
+  // Rollback handler
+  const handleRollback = useCallback(async (versionId: string) => {
+    setRollingBack(versionId)
+    try {
+      await rollbackCompose(stack.name, versionId)
+      addToast({ type: 'success', message: `Rolled back to ${versionId}` })
+      // Reload compose content
+      const res = await fetchStackCompose(stack.name)
+      setOriginalCompose(res.content)
+      setComposeContent(res.content)
+      setHistoryLoaded(false) // Force reload history
+      onSaved()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rollback failed'
+      addToast({ type: 'error', message: msg })
+    } finally {
+      setRollingBack(null)
+    }
+  }, [stack.name, addToast, onSaved])
 
   // Reset validation when compose content changes
   useEffect(() => {
@@ -910,6 +957,66 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     )
   }
 
+  // ---- Render history tab ----
+  function renderHistoryTab() {
+    if (historyLoading) {
+      return (
+        <div className="flex items-center justify-center h-64 text-slate-500 text-sm">
+          <div className="flex items-center gap-2">
+            <Loader2 size={16} className="animate-spin" />
+            Loading version history...
+          </div>
+        </div>
+      )
+    }
+
+    if (composeVersions.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+          <History size={32} className="mb-3 opacity-30" />
+          <p className="text-sm">No version history yet</p>
+          <p className="text-xs text-slate-600 mt-1">Versions are saved automatically when you edit the compose file</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="overflow-y-auto flex-1 scrollbar-thin p-6 space-y-2">
+        <p className="text-xs text-slate-500 mb-4">{composeVersions.length} saved version{composeVersions.length !== 1 ? 's' : ''}</p>
+        {[...composeVersions].reverse().map((v) => {
+          const date = new Date(v.timestamp)
+          const isRolling = rollingBack === v.version_id
+          return (
+            <div
+              key={v.version_id}
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-mono text-slate-300 truncate">{v.version_id}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {date.toLocaleDateString()} {date.toLocaleTimeString()} — {v.size > 0 ? `${(v.size / 1024).toFixed(1)} KB` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => handleRollback(v.version_id)}
+                disabled={isRolling}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-400 hover:bg-amber-500/10 transition-colors shrink-0 disabled:opacity-50"
+                title="Rollback to this version"
+              >
+                {isRolling ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={12} />
+                )}
+                Rollback
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return createPortal(
     <div
       ref={overlayRef}
@@ -1005,6 +1112,19 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               >
                 <Tag size={12} />
                 Labels
+              </button>
+              <button
+                onClick={() => switchTab('history')}
+                className={`
+                  flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150
+                  ${activeTab === 'history'
+                    ? 'bg-white/[0.08] text-slate-200 ring-1 ring-white/[0.1]'
+                    : 'text-slate-500 hover:text-slate-300'
+                  }
+                `}
+              >
+                <History size={12} />
+                History
               </button>
             </div>
           </div>
@@ -1264,6 +1384,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           {activeTab === 'compose' && renderComposeTab()}
           {activeTab === 'env' && renderEnvTab()}
           {activeTab === 'annotations' && renderAnnotationsTab()}
+          {activeTab === 'history' && renderHistoryTab()}
         </div>
 
         {/* Footer */}

@@ -38,6 +38,13 @@ const pageTitles: Record<PageId, string> = {
   settings: 'Settings',
   terminal: 'Terminal',
   cronjobs: 'Cron Jobs',
+  trends: 'Resource Trends',
+  updates: 'Image Updates',
+  notifications: 'Notifications',
+  snapshots: 'Snapshots',
+  templates: 'Templates',
+  automations: 'Automations',
+  topology: 'Network Topology',
 }
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {
@@ -309,7 +316,7 @@ export function Header() {
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="
-                flex items-center gap-2 px-2 py-1.5 rounded-lg
+                flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1 md:py-1.5 rounded-lg
                 bg-white/[0.03] border border-white/[0.06]
                 hover:bg-white/[0.06] hover:border-white/[0.1]
                 transition-all duration-200
@@ -323,7 +330,7 @@ export function Header() {
                 </div>
               )}
               <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">{currentUser}</span>
-              <ChevronDown size={10} className={`text-slate-600 transition-transform duration-200 ${showProfileMenu ? 'rotate-180' : ''}`} />
+              <ChevronDown size={10} className={`text-slate-600 transition-transform duration-200 hidden sm:block ${showProfileMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showProfileMenu && (
@@ -349,7 +356,7 @@ export function Header() {
 
         {/* Connection status pill */}
         <div className={`
-          inline-flex items-center gap-2 rounded-full px-3 py-1.5
+          inline-flex items-center gap-1.5 md:gap-2 rounded-full px-2 md:px-3 py-1 md:py-1.5
           border transition-all duration-300
           ${connectionStatus === 'connected'
             ? 'bg-emerald-500/8 border-emerald-500/15'
@@ -369,7 +376,7 @@ export function Header() {
             )}
             <span className={`relative inline-flex rounded-full h-2 w-2 ${color} ring-2 ${ringColor}`} />
           </span>
-          <span className="text-[11px] text-slate-400 font-medium">{label}</span>
+          <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">{label}</span>
         </div>
       </div>
     </header>

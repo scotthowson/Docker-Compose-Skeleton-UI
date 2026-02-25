@@ -175,7 +175,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         <div className="glass p-6 space-y-4">
           <div className="w-64 h-8 rounded bg-white/5 animate-pulse" />
           <div className="w-32 h-5 rounded bg-white/5 animate-pulse" />
-          <div className="grid grid-cols-4 gap-3 pt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-10 rounded-lg bg-white/5 animate-pulse" />
             ))}

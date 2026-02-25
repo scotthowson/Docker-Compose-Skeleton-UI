@@ -76,6 +76,30 @@ import type {
   AlertConfigResponse,
   CrontabResponse,
   LiveLogsResponse,
+  MetricsSnapshotResponse,
+  MetricsTrendsResponse,
+  ImageCheckResponse,
+  ImageRegistryCheckResponse,
+  ImageUpdateResponse,
+  NotificationRule,
+  NotificationRulesResponse,
+  NotificationHistoryResponse,
+  NotificationTestResponse,
+  SnapshotListResponse,
+  SnapshotCreateResponse,
+  SnapshotRestoreResponse,
+  ComposeHistoryResponse,
+  ComposeRollbackResponse,
+  TemplateListResponse,
+  TemplateDetailResponse,
+  TemplateDeployResponse,
+  TemplateImportResponse,
+  TemplateUpdateResponse,
+  TemplateDeleteResponse,
+  AutomationRule,
+  AutomationListResponse,
+  AutomationHistoryResponse,
+  TopologyResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -710,4 +734,182 @@ export function fetchAppLogsLive(lines = 100, since?: string): Promise<LiveLogsR
   let url = `/logs/live?lines=${lines}`
   if (since) url += `&since=${encodeURIComponent(since)}`
   return apiClient.get<LiveLogsResponse>(url)
+}
+
+// ---------------------------------------------------------------------------
+// v4.0: Resource Trends, Image Updates, Notifications, Snapshots,
+//       Compose History, Templates, Automations, Network Topology
+// ---------------------------------------------------------------------------
+
+/** POST /metrics/snapshot — Capture and persist current metrics */
+export function captureMetricsSnapshot(): Promise<MetricsSnapshotResponse> {
+  return apiClient.post<MetricsSnapshotResponse>('/metrics/snapshot')
+}
+
+/** GET /metrics/trends — Query historical metrics */
+export function fetchMetricsTrends(range: '1h' | '6h' | '24h' | '7d' = '1h'): Promise<MetricsTrendsResponse> {
+  return apiClient.get<MetricsTrendsResponse>(`/metrics/trends?range=${range}`)
+}
+
+/** GET /images/check-updates — Quick local staleness check */
+export function fetchImageUpdates(): Promise<ImageCheckResponse> {
+  return apiClient.get<ImageCheckResponse>('/images/check-updates')
+}
+
+/** POST /images/check-updates — Registry check for updates (slow) */
+export function checkImageRegistry(): Promise<ImageRegistryCheckResponse> {
+  return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates')
+}
+
+/** POST /images/:name/update — Pull image and restart containers */
+export function updateImage(name: string): Promise<ImageUpdateResponse> {
+  return apiClient.post<ImageUpdateResponse>(`/images/${encodeURIComponent(name)}/update`)
+}
+
+/** GET /notifications/rules — List notification rules */
+export function fetchNotificationRules(): Promise<NotificationRulesResponse> {
+  return apiClient.get<NotificationRulesResponse>('/notifications/rules')
+}
+
+/** POST /notifications/rules — Create/update a notification rule */
+export function createNotificationRule(rule: Partial<NotificationRule>): Promise<NotificationRule> {
+  return apiClient.post<NotificationRule>('/notifications/rules', rule)
+}
+
+/** DELETE /notifications/rules/:id — Delete a notification rule */
+export function deleteNotificationRule(id: string): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(`/notifications/rules/${encodeURIComponent(id)}`)
+}
+
+/** GET /notifications/history — Notification send history */
+export function fetchNotificationHistory(): Promise<NotificationHistoryResponse> {
+  return apiClient.get<NotificationHistoryResponse>('/notifications/history')
+}
+
+/** POST /notifications/test — Send a test notification */
+export function sendTestNotification(opts?: {
+  message?: string
+  priority?: string
+  title?: string
+  tags?: string
+}): Promise<NotificationTestResponse> {
+  return apiClient.post<NotificationTestResponse>('/notifications/test', opts || {})
+}
+
+/** GET /snapshots — List all snapshots */
+export function fetchSnapshots(): Promise<SnapshotListResponse> {
+  return apiClient.get<SnapshotListResponse>('/snapshots')
+}
+
+/** POST /snapshots/create — Create a new snapshot */
+export function createSnapshot(label?: string): Promise<SnapshotCreateResponse> {
+  return apiClient.post<SnapshotCreateResponse>('/snapshots/create', { label: label || '' })
+}
+
+/** POST /snapshots/:id/restore — Restore from a snapshot */
+export function restoreSnapshot(id: string): Promise<SnapshotRestoreResponse> {
+  return apiClient.post<SnapshotRestoreResponse>(`/snapshots/${encodeURIComponent(id)}/restore`, { confirm: 'RESTORE' })
+}
+
+/** DELETE /snapshots/:id — Delete a snapshot */
+export function deleteSnapshot(id: string): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(`/snapshots/${encodeURIComponent(id)}`)
+}
+
+/** GET /stacks/:name/compose/history — Compose version history */
+export function fetchComposeHistory(name: string): Promise<ComposeHistoryResponse> {
+  return apiClient.get<ComposeHistoryResponse>(`/stacks/${encodeURIComponent(name)}/compose/history`)
+}
+
+/** POST /stacks/:name/compose/rollback — Rollback compose file */
+export function rollbackCompose(name: string, versionId: string): Promise<ComposeRollbackResponse> {
+  return apiClient.post<ComposeRollbackResponse>(
+    `/stacks/${encodeURIComponent(name)}/compose/rollback`,
+    { version_id: versionId },
+  )
+}
+
+/** GET /templates — List available templates */
+export function fetchTemplates(): Promise<TemplateListResponse> {
+  return apiClient.get<TemplateListResponse>('/templates')
+}
+
+/** GET /templates/:name — Template detail */
+export function fetchTemplateDetail(name: string): Promise<TemplateDetailResponse> {
+  return apiClient.get<TemplateDetailResponse>(`/templates/${encodeURIComponent(name)}`)
+}
+
+/** POST /templates/:name/deploy — Deploy a template */
+export function deployTemplate(name: string, opts: {
+  stack_name: string
+  variables?: Record<string, string>
+  auto_start?: boolean
+}): Promise<TemplateDeployResponse> {
+  return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts)
+}
+
+/** POST /templates/import — Import a custom template */
+export function importTemplate(opts: {
+  name: string
+  compose: string
+  metadata?: Record<string, unknown>
+  env?: string
+}): Promise<TemplateImportResponse> {
+  return apiClient.post<TemplateImportResponse>('/templates/import', opts)
+}
+
+/** POST /templates/:name/update — Update an existing template */
+export function updateTemplate(name: string, opts: {
+  compose?: string
+  metadata?: Record<string, unknown>
+  env?: string
+}): Promise<TemplateUpdateResponse> {
+  return apiClient.post<TemplateUpdateResponse>(
+    `/templates/${encodeURIComponent(name)}/update`,
+    opts,
+  )
+}
+
+/** DELETE /templates/:name — Delete a template */
+export function deleteTemplate(name: string): Promise<TemplateDeleteResponse> {
+  return apiClient.delete<TemplateDeleteResponse>(
+    `/templates/${encodeURIComponent(name)}`,
+  )
+}
+
+/** GET /automations — List automation rules */
+export function fetchAutomations(): Promise<AutomationListResponse> {
+  return apiClient.get<AutomationListResponse>('/automations')
+}
+
+/** POST /automations — Create an automation rule */
+export function createAutomation(rule: {
+  name: string
+  trigger_type: string
+  trigger_value?: string
+  action_type: string
+  action_target?: string
+  enabled?: boolean
+}): Promise<AutomationRule> {
+  return apiClient.post<AutomationRule>('/automations', rule)
+}
+
+/** POST /automations/:id/update — Update an automation rule */
+export function updateAutomation(id: string, updates: Partial<AutomationRule>): Promise<AutomationRule> {
+  return apiClient.post<AutomationRule>(`/automations/${encodeURIComponent(id)}/update`, updates)
+}
+
+/** DELETE /automations/:id — Delete an automation rule */
+export function deleteAutomation(id: string): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(`/automations/${encodeURIComponent(id)}`)
+}
+
+/** GET /automations/:id/history — Automation run history */
+export function fetchAutomationHistory(id: string): Promise<AutomationHistoryResponse> {
+  return apiClient.get<AutomationHistoryResponse>(`/automations/${encodeURIComponent(id)}/history`)
+}
+
+/** GET /topology — Network topology graph data */
+export function fetchTopology(): Promise<TopologyResponse> {
+  return apiClient.get<TopologyResponse>('/topology')
 }

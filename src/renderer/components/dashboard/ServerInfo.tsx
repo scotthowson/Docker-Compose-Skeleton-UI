@@ -19,7 +19,7 @@ function InfoRow({ icon, label, value, color }: {
   return (
     <div className="flex items-center gap-2.5 py-2 border-b border-white/[0.03] last:border-b-0">
       <span className={`${color} opacity-60 shrink-0`}>{icon}</span>
-      <span className="text-[10px] text-slate-500 uppercase tracking-wider shrink-0 w-20">{label}</span>
+      <span className="text-[10px] text-slate-500 uppercase tracking-wider shrink-0 w-16 md:w-20">{label}</span>
       <span className={`ml-auto text-xs font-mono ${color} text-right truncate`}>{value}</span>
     </div>
   )

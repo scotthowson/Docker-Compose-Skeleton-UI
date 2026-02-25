@@ -50,7 +50,7 @@ function DonutChart({ title, data, colors, centerLabel, centerValue }: DonutProp
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
         {title}
       </p>
-      <div className="relative h-36 w-36">
+      <div className="relative h-28 w-28 md:h-36 md:w-36">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -386,7 +386,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       {/* Tab content */}
       {activeTab === 'gauges' ? (
         <>
-          <div className="flex flex-wrap items-start justify-around gap-6">
+          <div className="flex flex-wrap items-start justify-around gap-3 md:gap-6">
             <DonutChart
               title="CPU"
               data={cpuData}

@@ -805,6 +805,13 @@ export type PageId =
   | 'backup'
   | 'terminal'
   | 'cronjobs'
+  | 'trends'
+  | 'updates'
+  | 'notifications'
+  | 'snapshots'
+  | 'templates'
+  | 'automations'
+  | 'topology'
 
 // ---------------------------------------------------------------------------
 // v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
@@ -969,4 +976,273 @@ export interface LiveLogsResponse {
   entries: LogStreamEntry[]
   count: number
   container?: string
+}
+
+// ---------------------------------------------------------------------------
+// v4.0: Resource Trends, Image Updates, Notifications, Snapshots,
+//       Compose History, Templates, Automations, Network Topology
+// ---------------------------------------------------------------------------
+
+// GET /metrics/trends
+export interface MetricsPoint {
+  ts: string
+  epoch: number
+  cpu_pct: number
+  load1: number
+  load5: number
+  load15: number
+  mem_used_mb: number
+  mem_total_mb: number
+  mem_pct: number
+  disk_pct: number
+}
+
+export interface MetricsSnapshotResponse {
+  success: boolean
+  timestamp: string
+  cpu_pct: number
+  mem_pct: number
+  disk_pct: number
+}
+
+export interface MetricsTrendsResponse {
+  range: string
+  points: MetricsPoint[]
+  count: number
+}
+
+// GET/POST /images/check-updates
+export interface ImageUpdateInfo {
+  image: string
+  repository?: string
+  tag?: string
+  age_days: number
+  staleness: 'current' | 'aging' | 'stale' | 'unknown'
+  containers: string
+  stack: string
+  size: string
+  old_id?: string
+  new_id?: string
+  update_available?: boolean
+}
+
+export interface ImageCheckResponse {
+  images: ImageUpdateInfo[]
+  total: number
+  stale: number
+  aging: number
+  current: number
+}
+
+export interface ImageRegistryCheckResponse {
+  images: { image: string; old_id: string; new_id: string; update_available: boolean }[]
+  total: number
+  updates_available: number
+  checked_at: string
+}
+
+export interface ImageUpdateResponse {
+  success: boolean
+  image: string
+  containers_restarted: string[]
+  timestamp: string
+}
+
+// Notification Rules
+export interface NotificationRule {
+  id: string
+  name: string
+  enabled: boolean
+  trigger: string
+  target: string
+  priority: string
+  tags: string[]
+  created_at: string
+}
+
+export interface NotificationRulesResponse {
+  rules: NotificationRule[]
+}
+
+export interface NotificationHistoryEntry {
+  timestamp: string
+  type: string
+  title: string
+  priority: string
+  status_code: number
+}
+
+export interface NotificationHistoryResponse {
+  history: NotificationHistoryEntry[]
+}
+
+export interface NotificationTestResponse {
+  success: boolean
+  message: string
+  status_code: number
+  timestamp: string
+}
+
+// Snapshots
+export interface SnapshotEntry {
+  filename: string
+  label: string
+  size: string
+  timestamp: string
+  epoch: number
+}
+
+export interface SnapshotListResponse {
+  snapshots: SnapshotEntry[]
+  total: number
+}
+
+export interface SnapshotCreateResponse {
+  success: boolean
+  filename: string
+  label: string
+  size: string
+  timestamp: string
+}
+
+export interface SnapshotRestoreResponse {
+  success: boolean
+  message: string
+  filename: string
+}
+
+// Compose History
+export interface ComposeVersion {
+  version_id: string
+  timestamp: string
+  size: number
+}
+
+export interface ComposeHistoryResponse {
+  stack: string
+  versions: ComposeVersion[]
+  count: number
+}
+
+export interface ComposeRollbackResponse {
+  success: boolean
+  stack: string
+  restored_version: string
+  message: string
+}
+
+// Templates
+export interface TemplateInfo {
+  name: string
+  title?: string
+  description: string
+  category: string
+  tags: string[]
+  icon?: string
+  variables?: TemplateVariable[]
+}
+
+export interface TemplateVariable {
+  name: string
+  label: string
+  default?: string
+  required?: boolean
+  type?: string
+}
+
+export interface TemplateListResponse {
+  templates: TemplateInfo[]
+  total: number
+}
+
+export interface TemplateDetailResponse {
+  template: TemplateInfo
+  compose: string
+  env?: string
+}
+
+export interface TemplateUpdateResponse {
+  success: boolean
+  name: string
+  message: string
+}
+
+export interface TemplateDeleteResponse {
+  success: boolean
+  name: string
+  message: string
+}
+
+export interface TemplateDeployResponse {
+  success: boolean
+  stack_name: string
+  started: boolean
+  message: string
+}
+
+export interface TemplateImportResponse {
+  success: boolean
+  name: string
+  message: string
+}
+
+// Automations
+export interface AutomationRule {
+  id: string
+  name: string
+  enabled: boolean
+  trigger_type: 'schedule' | 'condition'
+  trigger_value: string
+  action_type: string
+  action_target: string
+  created_at: string
+  run_count: number
+  last_run: string | null
+  history: AutomationHistoryEntry[]
+}
+
+export interface AutomationHistoryEntry {
+  timestamp: string
+  success: boolean
+  message: string
+}
+
+export interface AutomationListResponse {
+  automations: AutomationRule[]
+  total: number
+}
+
+export interface AutomationHistoryResponse {
+  automation_id: string
+  history: AutomationHistoryEntry[]
+}
+
+// Network Topology
+export interface TopologyNode {
+  id: string
+  state: string
+  health: string
+  image: string
+  stack: string
+  networks: string[]
+  ports: string
+}
+
+export interface TopologyEdge {
+  source: string
+  target: string
+  network: string
+}
+
+export interface TopologyNetwork {
+  name: string
+  driver: string
+  subnet: string
+  container_count: number
+}
+
+export interface TopologyResponse {
+  nodes: TopologyNode[]
+  edges: TopologyEdge[]
+  networks: TopologyNetwork[]
 }

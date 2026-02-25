@@ -655,7 +655,7 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       {/* Summary Stat Cards                                                */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Database size={14} className="text-cyan-400" />
@@ -663,7 +663,7 @@ export default function Volumes() {
               Total Volumes
             </span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
+          <p className="text-xl md:text-2xl font-bold text-slate-100">
             {hasLoaded ? volumes.length : '--'}
           </p>
         </div>
@@ -674,7 +674,7 @@ export default function Volumes() {
               Total Storage
             </span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
+          <p className="text-xl md:text-2xl font-bold text-slate-100">
             {hasLoaded ? formatBytes(totalSize) : '--'}
           </p>
         </div>
@@ -686,7 +686,7 @@ export default function Volumes() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <p className="text-2xl font-bold text-slate-100">
+            <p className="text-xl md:text-2xl font-bold text-slate-100">
               {hasLoaded ? Object.keys(driverCounts).length : '--'}
             </p>
             {hasLoaded && Object.keys(driverCounts).length > 0 && (

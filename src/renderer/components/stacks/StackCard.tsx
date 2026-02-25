@@ -241,7 +241,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
         {/* Action buttons (hidden in batch mode) */}
         {!batchMode && (
           <div
-            className="flex items-center gap-1.5 pt-3 border-t border-white/[0.06]"
+            className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/[0.06]"
             onClick={(e) => e.stopPropagation()}
           >
             {actionButtons.map(({ action, icon: Icon, label, color, hoverColor, disabled }) => {

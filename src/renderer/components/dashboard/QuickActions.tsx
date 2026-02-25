@@ -192,7 +192,7 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'}`}
       >
-        <div className={`grid grid-cols-3 gap-2.5 stagger-children ${collapsed ? '' : 'pt-0'}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-3 gap-2.5 stagger-children ${collapsed ? '' : 'pt-0'}`}>
           {allActions.map((action) => {
             const isLoading = loadingAction === action.id
             return (

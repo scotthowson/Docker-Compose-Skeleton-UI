@@ -673,21 +673,21 @@ export default function Networks() {
             <Network size={14} className="text-cyan-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">Total Networks</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{networks.length}</p>
+          <p className="text-xl md:text-2xl font-bold text-slate-100">{networks.length}</p>
         </div>
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Plus size={14} className="text-emerald-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">User Networks</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{userNetworks.length}</p>
+          <p className="text-xl md:text-2xl font-bold text-slate-100">{userNetworks.length}</p>
         </div>
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Plug size={14} className="text-amber-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">Connections</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{totalContainers}</p>
+          <p className="text-xl md:text-2xl font-bold text-slate-100">{totalContainers}</p>
         </div>
       </div>
 

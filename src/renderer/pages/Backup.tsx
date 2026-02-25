@@ -553,7 +553,7 @@ export default function Backup() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
                         <Archive size={14} className="text-slate-500 shrink-0" />
-                        <span className="font-mono text-xs text-slate-200 truncate max-w-[320px]">
+                        <span className="font-mono text-xs text-slate-200 truncate max-w-[200px] md:max-w-[320px]">
                           {backup.filename}
                         </span>
                       </div>

@@ -11,6 +11,7 @@ import {
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
   Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff,
 } from 'lucide-react'
+import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -907,12 +908,23 @@ function AppearanceSettings() {
 
         {/* Preview */}
         {backgroundImage && (
-          <div className="mt-3 rounded-lg overflow-hidden border border-white/[0.06] h-24">
+          <div className="mt-3 rounded-lg overflow-hidden border border-white/[0.06] h-24 relative bg-slate-800/50">
             <img
               src={backgroundImage}
               alt="Background preview"
               className="w-full h-full object-cover opacity-60"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = '0.6' }}
+              onError={(e) => {
+                const img = e.target as HTMLImageElement
+                img.style.display = 'none'
+                const parent = img.parentElement
+                if (parent && !parent.querySelector('.bg-err')) {
+                  const err = document.createElement('p')
+                  err.className = 'bg-err absolute inset-0 flex items-center justify-center text-xs text-rose-400'
+                  err.textContent = 'Failed to load image — check URL'
+                  parent.appendChild(err)
+                }
+              }}
             />
           </div>
         )}
@@ -2197,14 +2209,16 @@ export default function Settings() {
           <AppSettingsForm />
         </SectionCard>
 
-        {/* Row 4: Keyboard Shortcuts + Disk Config (side by side) */}
-        <SectionCard
-          icon={<Keyboard size={16} className="text-violet-400" />}
-          title="Keyboard Shortcuts"
-          accentColor="border-t-violet-500"
-        >
-          <KeyboardShortcuts />
-        </SectionCard>
+        {/* Row 4: Keyboard Shortcuts (hidden on mobile) + Disk Config */}
+        {!isMobileDevice && (
+          <SectionCard
+            icon={<Keyboard size={16} className="text-violet-400" />}
+            title="Keyboard Shortcuts"
+            accentColor="border-t-violet-500"
+          >
+            <KeyboardShortcuts />
+          </SectionCard>
+        )}
 
         <SectionCard
           icon={<HardDrive size={16} className="text-cyan-400" />}

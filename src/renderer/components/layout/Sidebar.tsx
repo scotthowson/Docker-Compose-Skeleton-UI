@@ -33,6 +33,13 @@ import {
   Database,
   TerminalSquare,
   CalendarClock,
+  TrendingUp,
+  ArrowUpCircle,
+  Bell,
+  Camera,
+  LayoutTemplate,
+  Bot,
+  Share2,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -60,6 +67,10 @@ const navItems: NavItem[] = [
   { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },
   { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
+  { id: 'topology', label: 'Topology', icon: Share2, section: 'main' },
+  { id: 'templates', label: 'Templates', icon: LayoutTemplate, section: 'main' },
+  { id: 'updates', label: 'Updates', icon: ArrowUpCircle, section: 'main' },
+  { id: 'trends', label: 'Trends', icon: TrendingUp, section: 'main' },
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
   { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock, section: 'system' },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
@@ -69,6 +80,9 @@ const navItems: NavItem[] = [
   { id: 'system', label: 'System', icon: Monitor, section: 'system' },
   { id: 'diagnostics', label: 'Diagnostics', icon: Shield, section: 'system' },
   { id: 'users', label: 'Users', icon: Users, section: 'system' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, section: 'system' },
+  { id: 'automations', label: 'Automations', icon: Bot, section: 'system' },
+  { id: 'snapshots', label: 'Snapshots', icon: Camera, section: 'system' },
   { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]

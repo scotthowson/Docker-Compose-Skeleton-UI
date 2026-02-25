@@ -284,7 +284,7 @@ const Images: React.FC = () => {
         )}
 
         {/* ---- Summary stat cards ---- */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryCard
             icon={<HardDrive className="h-4 w-4 text-cyan-400" />}
             label="Total Images"

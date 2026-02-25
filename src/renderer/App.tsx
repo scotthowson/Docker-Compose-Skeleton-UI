@@ -30,6 +30,13 @@ import Volumes from './pages/Volumes'
 import Backup from './pages/Backup'
 import Terminal from './pages/Terminal'
 import CronJobs from './pages/CronJobs'
+import Trends from './pages/Trends'
+import Updates from './pages/Updates'
+import Notifications from './pages/Notifications'
+import Snapshots from './pages/Snapshots'
+import Templates from './pages/Templates'
+import Automations from './pages/Automations'
+import Topology from './pages/Topology'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -54,6 +61,13 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   backup: Backup,
   terminal: Terminal,
   cronjobs: CronJobs,
+  trends: Trends,
+  updates: Updates,
+  notifications: Notifications,
+  snapshots: Snapshots,
+  templates: Templates,
+  automations: Automations,
+  topology: Topology,
 }
 
 // Page order for Ctrl+1-9 navigation
@@ -61,22 +75,34 @@ const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'hea
 
 export default function App() {
   const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes, customCSS } = useSettingsStore()
-  const { connect } = useConnectionStore()
+  const { connect, setServerUrl } = useConnectionStore()
   const { isAuthenticated, loading: authLoading, checkAccountExists, logout } = useAuthStore()
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [transitionPage, setTransitionPage] = useState(currentPage)
   const [transitioning, setTransitioning] = useState(false)
+  const [settingsReady, setSettingsReady] = useState(false)
 
+  // Load settings first, then sync server URL to the connection layer
   useEffect(() => {
-    checkAccountExists()
-    loadSettings()
-  }, [checkAccountExists, loadSettings])
+    async function init() {
+      checkAccountExists()
+      await loadSettings()
+      // After settings load, sync the persisted server URL to apiClient + connectionStore
+      const { serverUrl } = useSettingsStore.getState()
+      if (serverUrl) {
+        setServerUrl(serverUrl)
+      }
+      setSettingsReady(true)
+    }
+    init()
+  }, [checkAccountExists, loadSettings, setServerUrl])
 
+  // Only connect after settings are loaded and server URL is synced
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && settingsReady) {
       connect()
     }
-  }, [isAuthenticated, connect])
+  }, [isAuthenticated, settingsReady, connect])
 
   // Apply theme class to document
   useEffect(() => {
@@ -198,7 +224,7 @@ export default function App() {
   return (
     <ToastProvider>
       <div
-        className="h-screen flex flex-col bg-slate-950 overflow-hidden theme-bg"
+        className="h-screen flex flex-col bg-slate-950 overflow-hidden theme-bg safe-area-top safe-area-bottom"
         style={backgroundImage ? {
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',

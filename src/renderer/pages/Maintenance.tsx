@@ -267,7 +267,7 @@ export default function Maintenance() {
                   <Box size={12} className="text-cyan-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Containers</span>
                 </div>
-                <p className="text-2xl font-bold text-slate-100">{report.containers.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.containers.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -286,7 +286,7 @@ export default function Maintenance() {
                   <Image size={12} className="text-violet-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Images</span>
                 </div>
-                <p className="text-2xl font-bold text-slate-100">{report.images.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.images.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   {report.images.dangling > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400">
@@ -308,7 +308,7 @@ export default function Maintenance() {
                   <HardDrive size={12} className="text-amber-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Volumes</span>
                 </div>
-                <p className="text-2xl font-bold text-slate-100">{report.volumes.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.volumes.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   {report.volumes.dangling > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400">
@@ -330,7 +330,7 @@ export default function Maintenance() {
                   <Network size={12} className="text-emerald-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Networks</span>
                 </div>
-                <p className="text-2xl font-bold text-slate-100">{report.networks.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.networks.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-400">
                     {report.networks.custom} custom

@@ -302,7 +302,7 @@ function StatCard({
           <Icon size={16} />
         </div>
       </div>
-      <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
+      <p className={`text-lg md:text-2xl font-bold tabular-nums ${color}`}>{value}</p>
       {sub && <p className="text-[11px] text-slate-500 mt-1">{sub}</p>}
     </div>
   )
@@ -454,7 +454,7 @@ export default function Uptime() {
       )}
 
       {/* Summary stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
         <StatCard
           label="Overall Availability"
           value={`${stats.overallAvailability}%`}
@@ -541,7 +541,7 @@ export default function Uptime() {
             return (
               <div
                 key={container.name}
-                className="grid grid-cols-[220px_1fr_140px] items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up"
+                className="grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up"
                 style={{
                   animationDelay: `${Math.min(idx * 30, 600)}ms`,
                   animationFillMode: 'both',

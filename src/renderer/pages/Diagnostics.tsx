@@ -1135,7 +1135,7 @@ export default function Diagnostics() {
             <div className="lg:col-span-8 flex flex-col gap-3 md:gap-6">
               <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
                 <SectionHeader icon={<Activity size={14} />} title="Resource Gauges" />
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
                   <SemiGauge
                     label="CPU Load"
                     value={cpuLoadPct}

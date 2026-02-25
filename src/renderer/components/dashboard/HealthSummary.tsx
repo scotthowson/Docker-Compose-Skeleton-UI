@@ -239,7 +239,7 @@ export default function HealthSummary() {
 
       {/* Stats badges */}
       {report && (
-        <div className="mt-4 grid grid-cols-4 gap-2">
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
           <StatBadge
             icon={<Activity size={12} />}
             label="Running"

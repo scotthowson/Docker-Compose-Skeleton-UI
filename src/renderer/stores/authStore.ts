@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { create } from 'zustand'
+import { apiClient } from '../api/client'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,6 +221,26 @@ function isLockedOut(): { locked: boolean; remainingMs: number } {
 // Auth state
 // ---------------------------------------------------------------------------
 
+const API_TOKEN_KEY = 'api-auth-token'
+
+/** Persist API token to localStorage */
+function persistApiToken(token: string | null): void {
+  if (token) {
+    localStorage.setItem(API_TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(API_TOKEN_KEY)
+  }
+}
+
+/** Restore API token from localStorage */
+function getPersistedApiToken(): string | null {
+  try {
+    return localStorage.getItem(API_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
 interface AuthState {
   isAuthenticated: boolean
   currentUser: string | null
@@ -227,16 +248,26 @@ interface AuthState {
   loading: boolean
   initialized: boolean
   error: string | null
+  /** Bearer token for server API authentication */
+  apiToken: string | null
 
   checkAccountExists: () => Promise<void>
   register: (username: string, password: string) => Promise<boolean>
   login: (username: string, password: string, rememberMe: boolean) => Promise<boolean>
   logout: () => void
   clearError: () => void
+  /** Set the API Bearer token (from server auth) */
+  setApiToken: (token: string | null) => void
   /** Change password for the current user */
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
   /** Delete account */
   deleteAccount: (password: string) => Promise<boolean>
+}
+
+// Restore API token on startup
+const _initialApiToken = getPersistedApiToken()
+if (_initialApiToken) {
+  apiClient.setAuthToken(_initialApiToken)
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -246,6 +277,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   initialized: false,
   error: null,
+  apiToken: _initialApiToken,
 
   checkAccountExists: async () => {
     if (!get().initialized) {
@@ -384,11 +416,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return true
   },
 
+  setApiToken: (token: string | null) => {
+    apiClient.setAuthToken(token)
+    persistApiToken(token)
+    set({ apiToken: token })
+  },
+
   logout: () => {
     clearPersistedSession()
+    apiClient.setAuthToken(null)
+    persistApiToken(null)
     set({
       isAuthenticated: false,
       currentUser: null,
+      apiToken: null,
     })
   },
 
@@ -472,3 +513,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }))
+
+// Listen for API auth expiry (dispatched by ApiClient on 401)
+window.addEventListener('api-auth-expired', () => {
+  const { isAuthenticated, logout } = useAuthStore.getState()
+  if (isAuthenticated) {
+    logout()
+    // Set error message so Login page shows expiry notice
+    useAuthStore.setState({ error: 'Session expired — please sign in again' })
+  }
+})

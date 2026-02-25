@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { ConnectionStatus } from '../../shared/types'
 import { apiClient } from '../api/client'
 import { useNotificationStore } from './notificationStore'
+import { useAuthStore } from './authStore'
 
 const MAX_RECONNECT_ATTEMPTS = 50
 const BASE_RECONNECT_DELAY_MS = 1000
@@ -77,6 +78,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   connect: async () => {
     const { status, reconnectAttempts: prevAttempts } = get()
     if (status === 'connecting') return false
+
+    // Restore API auth token from authStore before connecting
+    const { apiToken } = useAuthStore.getState()
+    if (apiToken && !apiClient.getAuthToken()) {
+      apiClient.setAuthToken(apiToken)
+    }
 
     const wasError = status === 'error'
     set({ status: 'connecting', lastError: null })

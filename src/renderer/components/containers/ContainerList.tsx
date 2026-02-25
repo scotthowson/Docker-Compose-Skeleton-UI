@@ -1,12 +1,12 @@
 // =============================================================================
-// ContainerList — Full container table with sorting, filtering, and selection
+// ContainerList — Full container table + mobile cards with favorites, stats
 // =============================================================================
 
 import React, { useState, useMemo, useCallback } from 'react'
 import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
 import { startContainer, stopContainer, restartContainer } from '../../api/endpoints'
-import ContainerRow from './ContainerRow'
+import ContainerRow, { ContainerCard } from './ContainerRow'
 import {
   Search,
   ChevronUp,
@@ -39,11 +39,7 @@ interface SortConfig {
 
 function compareValues(a: unknown, b: unknown, direction: SortDirection): number {
   const mult = direction === 'asc' ? 1 : -1
-
-  if (typeof a === 'number' && typeof b === 'number') {
-    return (a - b) * mult
-  }
-
+  if (typeof a === 'number' && typeof b === 'number') return (a - b) * mult
   const strA = String(a ?? '').toLowerCase()
   const strB = String(b ?? '').toLowerCase()
   return strA.localeCompare(strB) * mult
@@ -57,16 +53,16 @@ interface ColumnDef {
   key: SortKey
   label: string
   align?: 'left' | 'center' | 'right'
+  hiddenClass?: string
 }
 
 const COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Name' },
   { key: 'state', label: 'State' },
-  { key: 'health', label: 'Health' },
-  { key: 'image', label: 'Image' },
-  { key: 'uptime_seconds', label: 'Uptime' },
-  { key: 'ports', label: 'Ports' },
-  { key: 'restart_count', label: 'Restarts', align: 'center' },
+  { key: 'image', label: 'Resources' },
+  { key: 'image', label: 'Image', hiddenClass: 'hidden lg:table-cell' },
+  { key: 'uptime_seconds', label: 'Uptime', hiddenClass: 'hidden xl:table-cell' },
+  { key: 'restart_count', label: 'Restarts', align: 'center', hiddenClass: 'hidden xl:table-cell' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -81,6 +77,8 @@ interface ContainerListProps {
 const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect }) => {
   const containers = useContainerStore((s) => s.containers)
   const loading = useContainerStore((s) => s.loading)
+  const favorites = useContainerStore((s) => s.favorites)
+  const toggleFavorite = useContainerStore((s) => s.toggleFavorite)
 
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortConfig>({ key: 'name', direction: 'asc' })
@@ -136,7 +134,6 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
   // Filter by tab + search
   const filtered = useMemo(() => {
     let result = containers
-    // Apply tab filter
     if (filter === 'running') {
       result = result.filter((c) => c.state.toLowerCase() === 'running')
     } else if (filter === 'stopped') {
@@ -144,7 +141,6 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
     } else if (filter === 'paused') {
       result = result.filter((c) => c.state.toLowerCase() === 'paused')
     }
-    // Apply text search
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(
@@ -158,14 +154,18 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
     return result
   }, [containers, search, filter])
 
-  // Sort
+  // Sort — favorites always first
   const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) =>
-      compareValues(a[sort.key], b[sort.key], sort.direction),
-    )
-  }, [filtered, sort])
+    const favSet = new Set(favorites)
+    return [...filtered].sort((a, b) => {
+      // Favorites first
+      const aFav = favSet.has(a.name) ? 0 : 1
+      const bFav = favSet.has(b.name) ? 0 : 1
+      if (aFav !== bFav) return aFav - bFav
+      return compareValues(a[sort.key], b[sort.key], sort.direction)
+    })
+  }, [filtered, sort, favorites])
 
-  // Toggle sort column
   const handleSort = (key: SortKey) => {
     setSort((prev) =>
       prev.key === key
@@ -176,30 +176,25 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
 
   // Summary counts
   const runningCount = containers.filter((c) => c.state.toLowerCase() === 'running').length
-  const stoppedCount = containers.filter(
-    (c) => c.state.toLowerCase() === 'exited' || c.state.toLowerCase() === 'dead',
-  ).length
+  const stoppedCount = containers.filter((c) => ['exited', 'dead'].includes(c.state.toLowerCase())).length
   const pausedCount = containers.filter((c) => c.state.toLowerCase() === 'paused').length
 
-  // Sort indicator icon
   const SortIcon: React.FC<{ columnKey: SortKey }> = ({ columnKey }) => {
-    if (sort.key !== columnKey) {
-      return <ChevronsUpDown className="h-3 w-3 text-slate-600" />
-    }
-    return sort.direction === 'asc' ? (
-      <ChevronUp className="h-3 w-3 text-emerald-400" />
-    ) : (
-      <ChevronDown className="h-3 w-3 text-emerald-400" />
-    )
+    if (sort.key !== columnKey) return <ChevronsUpDown className="h-3 w-3 text-slate-600" />
+    return sort.direction === 'asc'
+      ? <ChevronUp className="h-3 w-3 text-emerald-400" />
+      : <ChevronDown className="h-3 w-3 text-emerald-400" />
   }
 
+  const favSet = new Set(favorites)
+
   return (
-    <div className="flex flex-col gap-5 animate-in">
+    <div className="flex flex-col gap-4 md:gap-5 animate-in">
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Containers</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-xl md:text-2xl font-bold text-white">Containers</h1>
+          <p className="text-xs md:text-sm text-slate-400 mt-1">
             Manage and monitor all Docker containers
           </p>
         </div>
@@ -215,55 +210,31 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
           `}
         >
           <CheckSquare size={14} />
-          {batchMode ? 'Exit Batch' : 'Batch Select'}
+          <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
         </button>
       </div>
 
       {/* ---- Batch Action Bar ---- */}
       {batchMode && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 animate-fade-in">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 animate-fade-in">
           <div className="flex items-center gap-2 flex-1">
-            <span className="text-xs font-semibold text-cyan-400">
-              {selectedContainers.size} selected
-            </span>
-            <button
-              onClick={selectAll}
-              className="text-[11px] text-slate-400 hover:text-cyan-400 transition-colors"
-            >
-              Select All
-            </button>
+            <span className="text-xs font-semibold text-cyan-400">{selectedContainers.size} selected</span>
+            <button onClick={selectAll} className="text-[11px] text-slate-400 hover:text-cyan-400 transition-colors">Select All</button>
             <span className="text-white/10">|</span>
-            <button
-              onClick={clearSelection}
-              className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              Clear
-            </button>
+            <button onClick={clearSelection} className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleBatchAction('start')}
-              disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-40"
-            >
-              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              Start
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => handleBatchAction('start')} disabled={batchLoading || selectedContainers.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-40">
+              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Start
             </button>
-            <button
-              onClick={() => handleBatchAction('stop')}
-              disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-40"
-            >
-              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />}
-              Stop
+            <button onClick={() => handleBatchAction('stop')} disabled={batchLoading || selectedContainers.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-40">
+              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />} Stop
             </button>
-            <button
-              onClick={() => handleBatchAction('restart')}
-              disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all disabled:opacity-40"
-            >
-              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />}
-              Restart
+            <button onClick={() => handleBatchAction('restart')} disabled={batchLoading || selectedContainers.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all disabled:opacity-40">
+              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />} Restart
             </button>
           </div>
         </div>
@@ -274,20 +245,13 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Batch Results</p>
-            <button onClick={() => setBatchResults(null)} className="text-slate-500 hover:text-slate-300 transition-colors">
-              <X size={14} />
-            </button>
+            <button onClick={() => setBatchResults(null)} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={14} /></button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {batchResults.map((r) => (
-              <div
-                key={r.name}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${
-                  r.success
-                    ? 'bg-emerald-500/[0.06] border-emerald-500/15 text-emerald-400'
-                    : 'bg-rose-500/[0.06] border-rose-500/15 text-rose-400'
-                }`}
-              >
+              <div key={r.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${
+                r.success ? 'bg-emerald-500/[0.06] border-emerald-500/15 text-emerald-400' : 'bg-rose-500/[0.06] border-rose-500/15 text-rose-400'
+              }`}>
                 {r.success ? <CircleCheck size={12} /> : <CircleX size={12} />}
                 <span className="truncate font-medium">{r.name}</span>
               </div>
@@ -297,35 +261,15 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
       )}
 
       {/* ---- Summary cards ---- */}
-      <div className="grid grid-cols-4 gap-3">
-        <SummaryCard
-          icon={<Box className="h-4 w-4 text-cyan-400" />}
-          label="Total"
-          value={containers.length}
-          color="cyan"
-        />
-        <SummaryCard
-          icon={<CircleCheck className="h-4 w-4 text-emerald-400" />}
-          label="Running"
-          value={runningCount}
-          color="emerald"
-        />
-        <SummaryCard
-          icon={<CircleX className="h-4 w-4 text-rose-400" />}
-          label="Stopped"
-          value={stoppedCount}
-          color="rose"
-        />
-        <SummaryCard
-          icon={<CirclePause className="h-4 w-4 text-amber-400" />}
-          label="Paused"
-          value={pausedCount}
-          color="amber"
-        />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <SummaryCard icon={<Box className="h-4 w-4 text-cyan-400" />} label="Total" value={containers.length} color="cyan" />
+        <SummaryCard icon={<CircleCheck className="h-4 w-4 text-emerald-400" />} label="Running" value={runningCount} color="emerald" />
+        <SummaryCard icon={<CircleX className="h-4 w-4 text-rose-400" />} label="Stopped" value={stoppedCount} color="rose" />
+        <SummaryCard icon={<CirclePause className="h-4 w-4 text-amber-400" />} label="Paused" value={pausedCount} color="amber" />
       </div>
 
       {/* ---- Filter tabs ---- */}
-      <div className="flex items-center gap-1.5 bg-white/[0.02] border border-white/[0.05] rounded-xl p-1">
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none bg-white/[0.02] border border-white/[0.05] rounded-xl p-1">
         {(['all', 'running', 'stopped', 'paused'] as const).map((filterVal) => {
           const labelMap = { all: 'All', running: 'Running', stopped: 'Stopped', paused: 'Paused' }
           const countMap = { all: containers.length, running: runningCount, stopped: stoppedCount, paused: pausedCount }
@@ -336,7 +280,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
               key={filterVal}
               onClick={() => setFilter(filterVal)}
               className={`
-                flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap
                 transition-all duration-200
                 ${filter === filterVal
                   ? `${activeBgMap[filterVal]} ${colorMap[filterVal]}`
@@ -345,10 +289,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
               `}
             >
               {labelMap[filterVal]}
-              <span className={`
-                text-[10px] px-1.5 py-0.5 rounded-full
-                ${filter === filterVal ? 'bg-white/10' : 'bg-white/[0.04]'}
-              `}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filter === filterVal ? 'bg-white/10' : 'bg-white/[0.04]'}`}>
                 {countMap[filterVal]}
               </span>
             </button>
@@ -363,7 +304,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search containers by name, image, state, or health..."
+          placeholder="Search containers..."
           className="
             w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
             bg-white/[0.04] border border-white/[0.08]
@@ -379,8 +320,38 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
         )}
       </div>
 
-      {/* ---- Table ---- */}
-      <div className="glass overflow-hidden">
+      {/* ---- Mobile card view ---- */}
+      <div className="md:hidden">
+        {loading && containers.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16">
+            <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
+            <span className="text-sm text-slate-500">Loading containers...</span>
+          </div>
+        ) : sorted.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16">
+            <Box className="h-8 w-8 text-slate-600" />
+            <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 stagger-children">
+            {sorted.map((container) => (
+              <ContainerCard
+                key={container.name}
+                container={container}
+                isSelected={selectedName === container.name}
+                onClick={batchMode ? () => toggleContainer(container.name) : onSelect}
+                batchMode={batchMode}
+                batchSelected={selectedContainers.has(container.name)}
+                isFavorite={favSet.has(container.name)}
+                onToggleFavorite={toggleFavorite}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Desktop table ---- */}
+      <div className="hidden md:block glass overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full">
             <thead>
@@ -398,14 +369,16 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
                     </button>
                   </th>
                 )}
-                {COLUMNS.map((col) => (
+                <th className="w-8" />
+                {COLUMNS.map((col, idx) => (
                   <th
-                    key={col.key}
+                    key={`${col.key}-${idx}`}
                     onClick={() => handleSort(col.key)}
                     className={`
-                      px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400
+                      px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400
                       cursor-pointer select-none hover:text-slate-200 transition-colors
                       ${col.align === 'center' ? 'text-center' : 'text-left'}
+                      ${col.hiddenClass ?? ''}
                     `}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -419,7 +392,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
             <tbody>
               {loading && containers.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
+                  <td colSpan={COLUMNS.length + 2} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
                       <span className="text-sm text-slate-500">Loading containers...</span>
@@ -428,12 +401,10 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
+                  <td colSpan={COLUMNS.length + 2} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Box className="h-8 w-8 text-slate-600" />
-                      <span className="text-sm text-slate-500">
-                        {search ? 'No containers match your search.' : 'No containers found.'}
-                      </span>
+                      <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
                     </div>
                   </td>
                 </tr>
@@ -446,6 +417,8 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
                     onClick={batchMode ? () => toggleContainer(container.name) : onSelect}
                     batchMode={batchMode}
                     batchSelected={selectedContainers.has(container.name)}
+                    isFavorite={favSet.has(container.name)}
+                    onToggleFavorite={toggleFavorite}
                   />
                 ))
               )}
@@ -458,7 +431,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
 }
 
 // ---------------------------------------------------------------------------
-// SummaryCard — small stat card used in the top row
+// SummaryCard
 // ---------------------------------------------------------------------------
 
 interface SummaryCardProps {
@@ -476,11 +449,11 @@ const GLOW_MAP: Record<string, string> = {
 }
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ icon, label, value, color }) => (
-  <div className={`glass-subtle p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
+  <div className={`glass-subtle p-3 md:p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
     <div className="flex-shrink-0">{icon}</div>
     <div>
-      <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className="text-xl font-bold text-white">{value}</p>
+      <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className="text-lg md:text-xl font-bold text-white">{value}</p>
     </div>
   </div>
 )

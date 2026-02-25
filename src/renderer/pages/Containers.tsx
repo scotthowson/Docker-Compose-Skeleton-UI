@@ -2,7 +2,7 @@
 // Containers — Container management page
 // =============================================================================
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useContainerStore } from '../stores/containerStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useApi } from '../hooks/useApi'
@@ -40,11 +40,13 @@ const Containers: React.FC = () => {
     [containers, selectedName],
   )
 
-  // When a name is selected but the container vanishes from the list, deselect
-  if (selectedName && !selectedContainer) {
-    // Use a microtask to avoid setState-during-render warnings
-    queueMicrotask(() => setSelectedName(null))
-  }
+  // When a name is selected but the container vanishes from the list, deselect.
+  // This must be in a useEffect — calling setState during render causes infinite loops.
+  useEffect(() => {
+    if (selectedName && !selectedContainer) {
+      setSelectedName(null)
+    }
+  }, [selectedName, selectedContainer])
 
   const handleSelect = useCallback((name: string) => {
     setSelectedName(name)
