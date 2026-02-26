@@ -32,6 +32,7 @@ interface Props {
   onBack: () => void
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
   isActionLoading: boolean
+  onContainerClick?: (containerName: string) => void
 }
 
 /** Format seconds into human-readable uptime */
@@ -76,7 +77,7 @@ function stateBadge(state: string) {
   return 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
 }
 
-export default function StackDetail({ stackName, onBack, onAction, isActionLoading }: Props) {
+export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick }: Props) {
   const [detail, setDetail] = useState<StackDetailType | null>(null)
   const [logs, setLogs] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -452,7 +453,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 
       {/* Tab content */}
       {activeTab === 'containers' && (
-        <ContainersTable containers={detail?.containers ?? []} />
+        <ContainersTable containers={detail?.containers ?? []} onContainerClick={onContainerClick} />
       )}
 
       {activeTab === 'services' && (
@@ -475,7 +476,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 // Sub-components
 // -----------------------------------------------------------------------------
 
-function ContainersTable({ containers }: { containers: ContainerInfo[] }) {
+function ContainersTable({ containers, onContainerClick }: { containers: ContainerInfo[]; onContainerClick?: (name: string) => void }) {
   if (containers.length === 0) {
     return (
       <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
@@ -521,10 +522,11 @@ function ContainersTable({ containers }: { containers: ContainerInfo[] }) {
               return (
                 <tr
                   key={c.name}
-                  className="hover:bg-white/[0.03] transition-colors"
+                  onClick={() => onContainerClick?.(c.name)}
+                  className={`hover:bg-white/[0.03] transition-colors ${onContainerClick ? 'cursor-pointer' : ''}`}
                 >
                   <td className="px-4 py-3">
-                    <span className="text-sm font-medium text-slate-200 font-mono">
+                    <span className={`text-sm font-medium font-mono ${onContainerClick ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-200'}`}>
                       {c.name}
                     </span>
                   </td>

@@ -7,12 +7,14 @@ import { useState, useCallback, useMemo } from 'react'
 import {
   TrendingUp, Clock, Cpu, HardDrive, MemoryStick,
   RefreshCw, Loader2, Database, WifiOff, Camera,
-  Activity, BarChart3, Timer,
+  Activity, BarChart3, Timer, Settings2, X, Save,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
-import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig } from '../api/endpoints'
-import type { MetricsTrendsResponse, AlertConfigResponse } from '../../shared/types'
+import { useToast } from '../components/common/Toast'
+import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
+import type { MetricsTrendsResponse, AlertConfigResponse, AlertThresholds } from '../../shared/types'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -265,10 +267,16 @@ function ChartCard({
 
 export default function Trends() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const { addToast } = useToast()
 
   const [range, setRange] = useState<TimeRange>('1h')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [capturing, setCapturing] = useState(false)
+
+  // Alert threshold config modal state
+  const [showAlertConfig, setShowAlertConfig] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [editThresholds, setEditThresholds] = useState<AlertThresholds | null>(null)
 
   // Fetch trends data with polling
   const fetchTrends = useCallback(() => fetchMetricsTrends(range), [range])
@@ -314,6 +322,35 @@ export default function Trends() {
   const handleRefresh = useCallback(() => {
     refresh()
   }, [refresh])
+
+  // Open alert config modal
+  const openAlertConfig = useCallback(() => {
+    setEditThresholds(thresholds ? { ...thresholds } : {
+      cpu_warning: 75,
+      cpu_critical: 90,
+      memory_warning: 80,
+      memory_critical: 95,
+      disk_warning: 80,
+      disk_critical: 95,
+      restart_threshold: 5,
+    })
+    setShowAlertConfig(true)
+  }, [thresholds])
+
+  // Save alert thresholds
+  const handleSaveAlertConfig = useCallback(async () => {
+    if (!editThresholds) return
+    setSavingConfig(true)
+    try {
+      await updateAlertConfig(editThresholds)
+      addToast({ type: 'success', message: 'Alert thresholds updated' })
+      setShowAlertConfig(false)
+    } catch {
+      addToast({ type: 'error', message: 'Failed to update alert thresholds' })
+    } finally {
+      setSavingConfig(false)
+    }
+  }, [editThresholds, addToast])
 
   // -------------------------------------------------------------------------
   // Disconnected state
@@ -418,6 +455,16 @@ export default function Trends() {
             </button>
           ))}
         </div>
+
+        {/* Configure Alerts gear button */}
+        <button
+          onClick={openAlertConfig}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 transition-all duration-200 press"
+          title="Configure alert thresholds"
+        >
+          <Settings2 size={13} />
+          <span className="hidden sm:inline">Alerts</span>
+        </button>
 
         {/* Subtle connection indicator */}
         {autoRefresh && (
@@ -567,6 +614,169 @@ export default function Trends() {
             delay={120}
           />
         </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* Alert Threshold Configuration Modal                                  */}
+      {/* ------------------------------------------------------------------- */}
+      {showAlertConfig && editThresholds && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings2 size={16} className="text-emerald-400" />
+                <h3 className="text-sm font-semibold text-slate-200">Alert Thresholds</h3>
+              </div>
+              <button
+                onClick={() => setShowAlertConfig(false)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* CPU */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Cpu size={14} className="text-amber-400" />
+                  <span className="text-xs font-semibold text-slate-300">CPU Load</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
+                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.cpu_warning}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.cpu_warning}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, cpu_warning: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
+                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.cpu_critical}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.cpu_critical}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, cpu_critical: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.04]" />
+
+              {/* Memory */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <MemoryStick size={14} className="text-emerald-400" />
+                  <span className="text-xs font-semibold text-slate-300">Memory Usage</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
+                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.memory_warning}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.memory_warning}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, memory_warning: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
+                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.memory_critical}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.memory_critical}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, memory_critical: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.04]" />
+
+              {/* Disk */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <HardDrive size={14} className="text-cyan-400" />
+                  <span className="text-xs font-semibold text-slate-300">Disk Usage</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
+                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.disk_warning}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.disk_warning}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, disk_warning: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
+                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.disk_critical}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={editThresholds.disk_critical}
+                      onChange={(e) => setEditThresholds({ ...editThresholds, disk_critical: Number(e.target.value) })}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06] shrink-0">
+              <button
+                onClick={() => setShowAlertConfig(false)}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAlertConfig}
+                disabled={savingConfig}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+              >
+                {savingConfig ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                Save Thresholds
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

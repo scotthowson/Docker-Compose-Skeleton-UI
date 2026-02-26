@@ -37,6 +37,10 @@ import Snapshots from './pages/Snapshots'
 import Templates from './pages/Templates'
 import Automations from './pages/Automations'
 import Topology from './pages/Topology'
+import FileBrowser from './pages/FileBrowser'
+import DiskAnalysis from './pages/DiskAnalysis'
+import SetupWizard from './pages/SetupWizard'
+import { fetchSetupStatus } from './api/endpoints'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -68,6 +72,9 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   templates: Templates,
   automations: Automations,
   topology: Topology,
+  'file-browser': FileBrowser,
+  'disk-analysis': DiskAnalysis,
+  setup: SetupWizard as unknown as React.ComponentType,
 }
 
 // Page order for Ctrl+1-9 navigation
@@ -92,10 +99,23 @@ export default function App() {
       if (serverUrl) {
         setServerUrl(serverUrl)
       }
+
+      // Check if server needs first-run setup
+      try {
+        const status = await fetchSetupStatus()
+        if (!status.initialized) {
+          setCurrentPage('setup')
+          setSettingsReady(true)
+          return // Skip normal auth flow
+        }
+      } catch {
+        // Server unreachable or no setup endpoint — proceed to normal login
+      }
+
       setSettingsReady(true)
     }
     init()
-  }, [checkAccountExists, loadSettings, setServerUrl])
+  }, [checkAccountExists, loadSettings, setServerUrl, setCurrentPage])
 
   // Only connect after settings are loaded and server URL is synced
   useEffect(() => {
@@ -171,13 +191,19 @@ export default function App() {
         const page = pageOrder[digit - 1]
         if (page) {
           e.preventDefault()
-          setCurrentPage(page)
+          const current = useSettingsStore.getState().currentPage
+          current === page
+            ? setCurrentPage(page, { resetView: true })
+            : setCurrentPage(page)
         }
       }
       // Ctrl+0 → Settings (10th page)
       if (e.key === '0') {
         e.preventDefault()
-        setCurrentPage('settings')
+        const current = useSettingsStore.getState().currentPage
+        current === 'settings'
+          ? setCurrentPage('settings', { resetView: true })
+          : setCurrentPage('settings')
       }
       // Ctrl+B → Toggle sidebar
       if (e.key === 'b' || e.key === 'B') {
@@ -209,6 +235,11 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setCurrentPage, isAuthenticated, toggleSidebar, updateSetting])
+
+  // Show setup wizard if server needs first-run setup
+  if (currentPage === 'setup' && settingsReady) {
+    return <SetupWizard onComplete={() => setCurrentPage('dashboard')} />
+  }
 
   // Show login screen if not authenticated
   if (authLoading) {

@@ -112,11 +112,11 @@ function ProfileSettings() {
             <img
               src={avatarPreview}
               alt="Profile"
-              className="w-20 h-20 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-lg"
+              className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-lg"
               onError={() => setAvatarPreview('')}
             />
           ) : (
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-emerald-500/20">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-emerald-500/20">
               {userInitial}
             </div>
           )}
@@ -2314,7 +2314,6 @@ export default function Settings() {
           icon={<Bell size={16} className="text-amber-400" />}
           title="Alert Thresholds"
           accentColor="border-t-amber-500"
-          defaultCollapsed
         >
           <AlertThresholdsEditor />
         </SectionCard>

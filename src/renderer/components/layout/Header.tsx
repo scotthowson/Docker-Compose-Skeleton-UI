@@ -45,6 +45,9 @@ const pageTitles: Record<PageId, string> = {
   templates: 'Templates',
   automations: 'Automations',
   topology: 'Network Topology',
+  'file-browser': 'File Browser',
+  'disk-analysis': 'Disk Analysis',
+  setup: 'Setup Wizard',
 }
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {
@@ -136,9 +139,9 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
       <div className="px-4 py-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           {profileIcon ? (
-            <img src={profileIcon} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/20" />
+            <img src={profileIcon} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover ring-2 ring-emerald-500/20" />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/20">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/20">
               {userInitial}
             </div>
           )}

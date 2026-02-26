@@ -5,6 +5,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useContainerStore } from '../stores/containerStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useApi } from '../hooks/useApi'
 import { fetchContainers } from '../api/endpoints'
 import ContainerList from '../components/containers/ContainerList'
@@ -20,6 +21,20 @@ const Containers: React.FC = () => {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
+  const navigationPayload = useSettingsStore((s) => s.navigationPayload)
+
+  // React to navigation payloads: resetView (sidebar re-click) or focusContainer (from Stacks)
+  useEffect(() => {
+    if (!navigationPayload) return
+    const payload = useSettingsStore.getState().consumeNavigationPayload()
+    if (!payload) return
+
+    if (payload.resetView) {
+      setSelectedName(null)
+    } else if (payload.focusContainer && typeof payload.focusContainer === 'string') {
+      setSelectedName(payload.focusContainer)
+    }
+  }, [navigationPayload])
 
   // Fetch containers via the connection-aware polling hook
   const handleFetch = useCallback(async () => {

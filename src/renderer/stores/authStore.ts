@@ -5,6 +5,7 @@
 
 import { create } from 'zustand'
 import { apiClient } from '../api/client'
+import { authLogout } from '../api/endpoints'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -254,7 +255,7 @@ interface AuthState {
   checkAccountExists: () => Promise<void>
   register: (username: string, password: string) => Promise<boolean>
   login: (username: string, password: string, rememberMe: boolean) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
   clearError: () => void
   /** Set the API Bearer token (from server auth) */
   setApiToken: (token: string | null) => void
@@ -302,8 +303,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false
     }
 
-    if (password.length < 6) {
-      set({ error: 'Password must be at least 6 characters' })
+    if (password.length < 8) {
+      set({ error: 'Password must be at least 8 characters' })
       return false
     }
 
@@ -422,7 +423,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ apiToken: token })
   },
 
-  logout: () => {
+  logout: async () => {
+    // Attempt server-side token invalidation (best-effort)
+    try {
+      await authLogout()
+    } catch {
+      // Network error or server unreachable — proceed with local logout
+    }
     clearPersistedSession()
     apiClient.setAuthToken(null)
     persistApiToken(null)
@@ -441,8 +448,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false
     }
 
-    if (newPassword.length < 6) {
-      set({ error: 'New password must be at least 6 characters' })
+    if (newPassword.length < 8) {
+      set({ error: 'New password must be at least 8 characters' })
       return false
     }
 

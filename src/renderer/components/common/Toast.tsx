@@ -140,7 +140,7 @@ function ToastItem({
     <div
       className={`
         relative overflow-hidden
-        w-[340px]
+        w-[calc(100vw-2rem)] max-w-[340px]
         backdrop-blur-2xl rounded-xl
         border ${border}
         bg-gradient-to-r ${gradient}
@@ -235,8 +235,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={contextValue}>
       {children}
 
-      {/* Toast container — fixed bottom-right */}
-      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 pointer-events-none">
+      {/* Toast container — fixed bottom-right, safe area aware */}
+      <div
+        className="fixed right-5 z-[9998] flex flex-col gap-2.5 pointer-events-none"
+        style={{
+          bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))',
+          right: 'calc(1.25rem + env(safe-area-inset-right, 0px))',
+        }}
+      >
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
             <ToastItem toast={toast} onDismiss={removeToast} />

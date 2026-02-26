@@ -353,6 +353,26 @@
     box-shadow: 0 0 6px rgba(5,150,105,0.3) !important;
   }
 
+  /* ── Chart tooltips — always light text on dark bg ─────────── */
+  .light .recharts-tooltip-wrapper .recharts-default-tooltip {
+    background-color: rgba(15, 23, 42, 0.95) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .light .recharts-tooltip-wrapper .recharts-tooltip-label {
+    color: #94a3b8 !important;
+  }
+
+  .light .recharts-tooltip-wrapper .recharts-tooltip-item {
+    color: #e2e8f0 !important;
+  }
+
+  .light .recharts-tooltip-wrapper .recharts-tooltip-item-name,
+  .light .recharts-tooltip-wrapper .recharts-tooltip-item-separator,
+  .light .recharts-tooltip-wrapper .recharts-tooltip-item-value {
+    color: #e2e8f0 !important;
+  }
+
   /* ── Chart area backgrounds ────────────────────────────────── */
   .light .recharts-cartesian-grid line {
     stroke: #e2e8f0 !important;
@@ -948,6 +968,62 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
+   RECHARTS TOOLTIP — Always readable on dark glassmorphism bg
+   ══════════════════════════════════════════════════════════════ */
+
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  color: #e2e8f0 !important;
+}
+
+.recharts-tooltip-wrapper .recharts-tooltip-item,
+.recharts-tooltip-wrapper .recharts-tooltip-item-name,
+.recharts-tooltip-wrapper .recharts-tooltip-item-separator,
+.recharts-tooltip-wrapper .recharts-tooltip-item-value,
+.recharts-tooltip-wrapper .recharts-tooltip-item-unit {
+  color: #e2e8f0 !important;
+}
+
+.recharts-tooltip-wrapper .recharts-tooltip-label {
+  color: #94a3b8 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOUCH & ACCESSIBILITY ENHANCEMENTS
+   ══════════════════════════════════════════════════════════════ */
+
+/* Touch optimization for coarse pointer devices (phones, tablets) */
+@media (pointer: coarse) {
+  * { -webkit-tap-highlight-color: transparent; }
+  button, a, [role="button"] { touch-action: manipulation; }
+}
+
+/* GPU acceleration for animations */
+.animate-fade-in, .animate-scale-in, .animate-slide-up {
+  will-change: transform, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SAFE AREA INSETS — applies on all screen sizes (APK, PWA, etc.)
+   ══════════════════════════════════════════════════════════════ */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ══════════════════════════════════════════════════════════════
    MOBILE OVERRIDES — phones < 768px
    ══════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
@@ -962,13 +1038,5 @@
 
   .mobile-compact {
     padding: 0.75rem !important;
-  }
-
-  .safe-area-top {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
   }
 }

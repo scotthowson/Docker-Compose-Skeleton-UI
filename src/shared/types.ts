@@ -159,6 +159,11 @@ export interface ContainerDetail extends ContainerInfo {
   environment: string
   mounts: string
   networks: string
+  ip_addresses?: string
+  platform?: string
+  hostname?: string
+  working_dir?: string
+  restart_policy?: string
 }
 
 // POST /containers/:name/(start|stop|restart)
@@ -445,6 +450,11 @@ export interface AuthVerifyResponse {
   valid: boolean
   username: string
   role: string
+}
+
+export interface AuthLogoutResponse {
+  success: boolean
+  message: string
 }
 
 export interface InviteResponse {
@@ -812,6 +822,9 @@ export type PageId =
   | 'templates'
   | 'automations'
   | 'topology'
+  | 'file-browser'
+  | 'disk-analysis'
+  | 'setup'
 
 // ---------------------------------------------------------------------------
 // v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
@@ -1137,6 +1150,7 @@ export interface TemplateInfo {
   title?: string
   description: string
   category: string
+  target_stack?: string
   tags: string[]
   icon?: string
   variables?: TemplateVariable[]
@@ -1175,15 +1189,62 @@ export interface TemplateDeleteResponse {
 
 export interface TemplateDeployResponse {
   success: boolean
-  stack_name: string
+  target_stack: string
+  services_added: string[]
   started: boolean
   message: string
+  backup_file?: string
 }
 
 export interface TemplateImportResponse {
   success: boolean
   name: string
   message: string
+}
+
+// Deploy History / Audit Log
+export interface DeployHistoryEntry {
+  id: string
+  action: 'deploy' | 'undeploy'
+  template: string
+  target_stack: string
+  services: string[]
+  backup_file?: string
+  timestamp: string
+  epoch: number
+}
+
+export interface DeployHistoryResponse {
+  history: DeployHistoryEntry[]
+  total: number
+}
+
+// Template Undeploy
+export interface TemplateUndeployResponse {
+  success: boolean
+  template: string
+  target_stack: string
+  services_removed: string[]
+  containers_removed: string[]
+  backup_file: string
+  message: string
+}
+
+// Template Dry Run / Preview
+export interface TemplateDryRunResponse {
+  success: boolean
+  template: string
+  target_stack: string
+  services: string[]
+  service_conflicts: string
+  has_service_conflicts: boolean
+  port_conflicts: string
+  has_port_conflicts: boolean
+  port_conflicts_detail?: { port: number; owner: string; type: 'stack' | 'container' }[]
+  env_additions: { key: string; value: string }[]
+  env_existing?: { key: string; current_value: string; new_value: string }[]
+  lines_added: number
+  compose_preview: string
 }
 
 // Automations
@@ -1245,4 +1306,71 @@ export interface TopologyResponse {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
   networks: TopologyNetwork[]
+}
+
+// ---------------------------------------------------------------------------
+// Setup Wizard
+// ---------------------------------------------------------------------------
+
+// GET /setup/status
+export interface SetupStatusResponse {
+  initialized: boolean
+  needs_admin?: boolean
+  needs_config?: boolean
+}
+
+// GET /setup/defaults
+export interface SetupDefaultsResponse {
+  defaults: Record<string, string>
+  stacks: string[]
+  system: {
+    hostname: string
+    timezone: string
+    puid: number
+    pgid: number
+    docker_version: string
+    compose_version: string
+  }
+}
+
+// POST /setup/configure
+export interface SetupConfigureRequest {
+  env_vars: Record<string, string>
+  stacks: string[]
+}
+
+export interface SetupConfigureResponse {
+  success: boolean
+  stacks_created: string[]
+  stacks_removed: string[]
+  stacks_warned: string[]
+  env_updated: number
+}
+
+// POST /setup/complete
+export interface SetupCompleteResponse {
+  initialized: boolean
+  message: string
+}
+
+// POST /stacks/rename
+export interface StackRenameRequest {
+  old_name: string
+  new_name: string
+}
+
+export interface StackRenameResponse {
+  success: boolean
+  old_name: string
+  new_name: string
+}
+
+// POST /stacks/reorder
+export interface StackReorderRequest {
+  stacks: string[]
+}
+
+export interface StackReorderResponse {
+  success: boolean
+  order: string[]
 }

@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Bell, BellOff, X, Info, CheckCircle, AlertTriangle, XCircle,
   Clock, Trash2, Check, Settings2, Monitor,
@@ -153,7 +154,7 @@ function NotificationCard({
 
       {/* Unread indicator */}
       {!notification.read && (
-        <div className="absolute top-3.5 right-3.5 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-cyan-400/20 flex-shrink-0" />
+        <div className="absolute bottom-3.5 right-3.5 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-cyan-400/20 flex-shrink-0" />
       )}
     </div>
   )
@@ -267,13 +268,13 @@ export function NotificationDrawer() {
     return counts
   }, [notifications])
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
         onClick={handleBackdropClick}
         className={`
-          fixed inset-0 z-50 bg-black/40 backdrop-blur-sm
+          fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm
           transition-opacity duration-300
           ${drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}
@@ -282,12 +283,17 @@ export function NotificationDrawer() {
         <div
           ref={panelRef}
           className={`
-            absolute top-0 right-0 h-full w-[380px]
+            absolute top-0 right-0 h-full w-[380px] max-w-[calc(100vw-2rem)]
             bg-slate-950 border-l border-white/[0.06]
             flex flex-col
             transition-transform duration-300 ease-out
             ${drawerOpen ? 'translate-x-0' : 'translate-x-full'}
           `}
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            paddingRight: 'env(safe-area-inset-right, 0px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.06] shrink-0">
@@ -481,6 +487,7 @@ export function NotificationDrawer() {
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

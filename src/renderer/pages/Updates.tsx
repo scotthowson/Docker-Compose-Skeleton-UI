@@ -387,7 +387,7 @@ export default function Updates() {
           </div>
         ) : images.length === 0 ? (
           /* Empty state */
-          <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
             <Package className="h-10 w-10 text-slate-600 mb-3" />
             <p className="text-sm text-slate-400 font-medium">No images found</p>
             <p className="text-xs text-slate-500 mt-1">

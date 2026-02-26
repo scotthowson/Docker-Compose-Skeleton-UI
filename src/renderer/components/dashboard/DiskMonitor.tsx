@@ -55,6 +55,7 @@ function DiskRow({ disk, label, onLabelChange }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(label)
+  const [barHovered, setBarHovered] = useState(false)
   const pct = parsePercent(disk.percent)
   const isNearCapacity = pct >= 90
 
@@ -116,12 +117,41 @@ function DiskRow({ disk, label, onLabelChange }: {
         </span>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden mb-2">
+      {/* Progress bar with hover tooltip */}
+      <div
+        className="relative mb-2"
+        onMouseEnter={() => setBarHovered(true)}
+        onMouseLeave={() => setBarHovered(false)}
+      >
+        {/* Tooltip above the bar */}
         <div
-          className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''}`}
-          style={{ width: `${pct}%` }}
-        />
+          className={`
+            absolute -top-9 z-20
+            flex items-center gap-2
+            px-2.5 py-1 rounded-lg
+            bg-slate-800/95 border border-white/10 backdrop-blur-md
+            shadow-lg shadow-black/30
+            text-[11px] font-medium
+            whitespace-nowrap pointer-events-none
+            transition-all duration-150 origin-bottom
+            ${barHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
+          `}
+          style={{ left: `clamp(0px, calc(${pct}% - 60px), calc(100% - 120px))` }}
+        >
+          <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${percentColor(pct)}`} />
+          <span className="text-slate-200">{disk.used}</span>
+          <span className="text-slate-500">/</span>
+          <span className="text-slate-400">{disk.total}</span>
+          <span className="text-slate-600">|</span>
+          <span className="text-slate-400">{disk.available} free</span>
+        </div>
+
+        <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden">
+          <div
+            className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125' : ''}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </div>
 
       {/* Details row */}
@@ -152,6 +182,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(label)
+  const [barHovered, setBarHovered] = useState(false)
 
   const handleSave = () => {
     onLabelChange(custom.mount, editValue.trim())
@@ -211,8 +242,35 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
           </div>
           <span className={`text-xs font-bold tabular-nums ${percentTextColor(pct)}`}>{serverDisk.percent}</span>
         </div>
-        <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden mb-2">
-          <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''}`} style={{ width: `${pct}%` }} />
+        <div
+          className="relative mb-2"
+          onMouseEnter={() => setBarHovered(true)}
+          onMouseLeave={() => setBarHovered(false)}
+        >
+          <div
+            className={`
+              absolute -top-9 z-20
+              flex items-center gap-2
+              px-2.5 py-1 rounded-lg
+              bg-slate-800/95 border border-white/10 backdrop-blur-md
+              shadow-lg shadow-black/30
+              text-[11px] font-medium
+              whitespace-nowrap pointer-events-none
+              transition-all duration-150 origin-bottom
+              ${barHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
+            `}
+            style={{ left: `clamp(0px, calc(${pct}% - 60px), calc(100% - 120px))` }}
+          >
+            <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${percentColor(pct)}`} />
+            <span className="text-slate-200">{serverDisk.used}</span>
+            <span className="text-slate-500">/</span>
+            <span className="text-slate-400">{serverDisk.total}</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">{serverDisk.available} free</span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden">
+            <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125' : ''}`} style={{ width: `${pct}%` }} />
+          </div>
         </div>
         <div className="flex items-center justify-between text-[10px] text-slate-500">
           <span>{serverDisk.used} / {serverDisk.total} used</span>

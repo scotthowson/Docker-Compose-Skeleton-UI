@@ -161,6 +161,5 @@ function formatUptime(seconds: number): string {
 }
 
 function formatMb(mb: number): string {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
-  return `${mb.toFixed(0)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
 }

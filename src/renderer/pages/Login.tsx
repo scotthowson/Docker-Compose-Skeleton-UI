@@ -11,7 +11,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { authRegister, authLogin, authSetup, authVerify } from '../api/endpoints'
-import { apiClient, ApiError } from '../api/client'
+import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 import { isNative } from '../hooks/useMobile'
 
 export default function Login() {
@@ -41,7 +41,9 @@ export default function Login() {
   // Mode is determined by whether an account exists
   const isSetup = !hasAccount
 
-  /** Attempt server-side Bearer token auth after local auth succeeds */
+  /** Attempt server-side Bearer token auth after local auth succeeds.
+   *  Only network errors (server unreachable) allow offline fallback.
+   *  All other errors (401, 403, 500) are real failures that block login. */
   const attemptServerAuth = async (user: string, pass: string, isInitialSetup: boolean): Promise<boolean> => {
     setServerAuthError(null)
     try {
@@ -51,8 +53,12 @@ export default function Login() {
         // If verify succeeds, server has no auth required (localhost) — skip
         return true
       } catch (err) {
+        if (err instanceof ApiNetworkError) {
+          // Server unreachable — allow offline/local-only mode
+          return true
+        }
         if (err instanceof ApiError && err.status === 401) {
-          // Server requires auth — proceed to login/setup
+          // Server requires auth — proceed to login/setup below
         } else if (err instanceof ApiError && err.status === 404) {
           // Server has no auth endpoint or needs initial setup
           if (isInitialSetup) {
@@ -63,14 +69,16 @@ export default function Login() {
                 return true
               }
             } catch (setupErr) {
-              // Setup failed — server may not support auth, continue anyway
-              return true
+              if (setupErr instanceof ApiNetworkError) return true
+              setServerAuthError(setupErr instanceof ApiError ? setupErr.message : 'Server setup failed')
+              return false
             }
           }
           return true
         } else {
-          // Network error or server down — let connection store handle it
-          return true
+          // Real server error (500, etc.) — block login
+          setServerAuthError(err instanceof ApiError ? err.message : 'Server error')
+          return false
         }
       }
 
@@ -86,17 +94,17 @@ export default function Login() {
         setServerAuthError('Server authentication failed')
         return false
       } catch (err) {
-        if (err instanceof ApiError) {
-          setServerAuthError(err.message)
-        } else {
-          // Network error — server may not be reachable yet, allow login
+        if (err instanceof ApiNetworkError) {
+          // Server unreachable — allow offline fallback
           return true
         }
+        setServerAuthError(err instanceof ApiError ? err.message : 'Authentication failed')
         return false
       }
-    } catch {
-      // Unexpected error — allow login to proceed
-      return true
+    } catch (err) {
+      if (err instanceof ApiNetworkError) return true
+      setServerAuthError('Unexpected authentication error')
+      return false
     }
   }
 
@@ -127,8 +135,8 @@ export default function Login() {
       setRegisterError('Username and password are required')
       return
     }
-    if (password.length < 6) {
-      setRegisterError('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setRegisterError('Password must be at least 8 characters')
       return
     }
     if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
@@ -365,7 +373,7 @@ export default function Login() {
                     </button>
                   </div>
                   <p className="text-[10px] text-slate-600 mt-1">
-                    Min 6 characters, must include an uppercase letter and a number
+                    Min 8 characters, must include an uppercase letter and a number
                   </p>
                 </div>
 
@@ -707,7 +715,7 @@ export default function Login() {
                     </button>
                   </div>
                   <p className="text-[10px] text-slate-600 mt-1">
-                    Min 6 characters, must include an uppercase letter and a number
+                    Min 8 characters, must include an uppercase letter and a number
                   </p>
                 </div>
 

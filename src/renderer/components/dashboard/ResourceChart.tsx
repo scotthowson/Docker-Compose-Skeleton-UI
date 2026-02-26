@@ -5,7 +5,8 @@
 
 import React, { useState } from 'react'
 import {
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  PieChart, Pie, Cell, ResponsiveContainer,
+  Tooltip as RechartsTooltip,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { useSystemStore } from '../../stores/systemStore'
@@ -42,45 +43,75 @@ interface DonutProps {
   colors: string[]
   centerLabel: string
   centerValue: string
+  unit?: string
 }
 
-function DonutChart({ title, data, colors, centerLabel, centerValue }: DonutProps) {
+function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '' }: DonutProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const activeSegment = activeIndex !== null ? data[activeIndex] : null
+
   return (
     <div className="flex flex-col items-center">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
         {title}
       </p>
       <div className="relative h-28 w-28 md:h-36 md:w-36">
+        {/* Tooltip rendered outside/above the donut */}
+        <div
+          className={`
+            absolute -top-9 left-1/2 -translate-x-1/2 z-20
+            flex items-center gap-1.5
+            px-2.5 py-1 rounded-lg
+            bg-slate-800/95 border border-white/10 backdrop-blur-md
+            shadow-lg shadow-black/30
+            text-[11px] text-slate-200 font-medium
+            whitespace-nowrap pointer-events-none
+            transition-all duration-150 origin-bottom
+            ${activeSegment ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
+          `}
+        >
+          {activeSegment && (
+            <>
+              <span
+                className="inline-block h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: colors[activeIndex!] }}
+              />
+              <span>{activeSegment.name}</span>
+              <span className="text-slate-400">
+                {activeSegment.value.toLocaleString()}{unit}
+              </span>
+            </>
+          )}
+        </div>
+
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               cx="50%"
               cy="50%"
-              innerRadius={42}
-              outerRadius={60}
+              innerRadius={38}
+              outerRadius={52}
               paddingAngle={2}
               dataKey="value"
               stroke="none"
               animationBegin={0}
               animationDuration={800}
+              onMouseEnter={(_, index) => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
             >
               {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={colors[index % colors.length]}
+                  style={{
+                    filter: activeIndex === index ? 'brightness(1.3)' : 'none',
+                    transition: 'filter 0.2s ease',
+                    cursor: 'pointer',
+                  }}
+                />
               ))}
             </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '10px',
-                fontSize: '12px',
-                color: '#e2e8f0',
-                backdropFilter: 'blur(12px)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              }}
-              formatter={(value: number) => [`${value.toLocaleString()}`, '']}
-            />
           </PieChart>
         </ResponsiveContainer>
         {/* Center label */}
@@ -181,10 +212,11 @@ function TrendingCharts({ history }: { history: ResourceHistoryPoint[] }) {
                 axisLine={false}
                 tickFormatter={(v: number) => `${v}%`}
               />
-              <Tooltip
+              <RechartsTooltip
                 contentStyle={tooltipStyle}
                 formatter={(value: number) => [`${value.toFixed(1)}%`, 'CPU']}
                 labelStyle={{ color: '#94a3b8', fontSize: '10px' }}
+                itemStyle={{ color: '#e2e8f0' }}
               />
               <Area
                 type="monotone"
@@ -228,10 +260,11 @@ function TrendingCharts({ history }: { history: ResourceHistoryPoint[] }) {
                 axisLine={false}
                 tickFormatter={(v: number) => `${v}%`}
               />
-              <Tooltip
+              <RechartsTooltip
                 contentStyle={tooltipStyle}
                 formatter={(value: number) => [`${value.toFixed(1)}%`, 'Memory']}
                 labelStyle={{ color: '#94a3b8', fontSize: '10px' }}
+                itemStyle={{ color: '#e2e8f0' }}
               />
               <Area
                 type="monotone"
@@ -393,6 +426,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               colors={[COLORS.cpuUsed, COLORS.cpuAvailable]}
               centerValue={`${cpuPercent}%`}
               centerLabel="load"
+              unit="%"
             />
             <DonutChart
               title="Memory"
@@ -400,6 +434,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               colors={[COLORS.used, COLORS.available]}
               centerValue={`${memPercent}%`}
               centerLabel="used"
+              unit=" MB"
             />
             <DonutChart
               title="Disk"
@@ -407,6 +442,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               colors={[COLORS.diskUsed, COLORS.diskAvailable]}
               centerValue={diskPercent.replace('%', '') + '%'}
               centerLabel="used"
+              unit=" MB"
             />
           </div>
 

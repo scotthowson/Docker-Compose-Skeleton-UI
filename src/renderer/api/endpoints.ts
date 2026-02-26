@@ -40,6 +40,7 @@ import type {
   StackComposeResponse,
   AuthResponse,
   AuthVerifyResponse,
+  AuthLogoutResponse,
   InviteResponse,
   InviteListResponse,
   UserListResponse,
@@ -96,10 +97,20 @@ import type {
   TemplateImportResponse,
   TemplateUpdateResponse,
   TemplateDeleteResponse,
+  DeployHistoryResponse,
+  TemplateUndeployResponse,
+  TemplateDryRunResponse,
   AutomationRule,
   AutomationListResponse,
   AutomationHistoryResponse,
   TopologyResponse,
+  SetupStatusResponse,
+  SetupDefaultsResponse,
+  SetupConfigureRequest,
+  SetupConfigureResponse,
+  SetupCompleteResponse,
+  StackRenameResponse,
+  StackReorderResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -290,6 +301,13 @@ export function restartContainer(name: string): Promise<ContainerActionResponse>
   )
 }
 
+/** POST /containers/:name/remove — Force-remove a container */
+export function removeContainer(name: string): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>(
+    `/containers/${encodeURIComponent(name)}/remove`,
+  )
+}
+
 /** GET /containers/:name/processes — Running processes in a container */
 export function fetchContainerProcesses(name: string): Promise<ContainerProcessesResponse> {
   return apiClient.get<ContainerProcessesResponse>(
@@ -446,6 +464,21 @@ export function authListInvites(): Promise<InviteListResponse> {
 /** POST /auth/revoke — Revoke a user's access */
 export function authRevokeUser(username: string): Promise<{ success: boolean; message: string }> {
   return apiClient.post<{ success: boolean; message: string }>('/auth/revoke', { username })
+}
+
+/** POST /auth/logout — Invalidate current session token on server */
+export function authLogout(): Promise<AuthLogoutResponse> {
+  return apiClient.post<AuthLogoutResponse>('/auth/logout')
+}
+
+/** POST /auth/logout-all — Invalidate all sessions for a user (admin) */
+export function authLogoutAll(username: string): Promise<AuthLogoutResponse> {
+  return apiClient.post<AuthLogoutResponse>('/auth/logout-all', { username })
+}
+
+/** POST /auth/refresh — Refresh current session token */
+export function authRefresh(): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/refresh')
 }
 
 // ---------------------------------------------------------------------------
@@ -839,9 +872,9 @@ export function fetchTemplateDetail(name: string): Promise<TemplateDetailRespons
   return apiClient.get<TemplateDetailResponse>(`/templates/${encodeURIComponent(name)}`)
 }
 
-/** POST /templates/:name/deploy — Deploy a template */
+/** POST /templates/:name/deploy — Deploy (merge) a template into an existing stack */
 export function deployTemplate(name: string, opts: {
-  stack_name: string
+  target_stack: string
   variables?: Record<string, string>
   auto_start?: boolean
 }): Promise<TemplateDeployResponse> {
@@ -875,6 +908,25 @@ export function deleteTemplate(name: string): Promise<TemplateDeleteResponse> {
   return apiClient.delete<TemplateDeleteResponse>(
     `/templates/${encodeURIComponent(name)}`,
   )
+}
+
+/** GET /templates/deploy-history — Deployment audit log */
+export function fetchDeployHistory(): Promise<DeployHistoryResponse> {
+  return apiClient.get<DeployHistoryResponse>('/templates/deploy-history')
+}
+
+/** POST /templates/:name/undeploy — Remove deployed services from a stack */
+export function undeployTemplate(name: string, opts: {
+  target_stack: string; services: string[]; remove_containers?: boolean
+}): Promise<TemplateUndeployResponse> {
+  return apiClient.post<TemplateUndeployResponse>(`/templates/${encodeURIComponent(name)}/undeploy`, opts)
+}
+
+/** POST /templates/:name/dry-run — Preview deployment without writing */
+export function dryRunTemplate(name: string, opts: {
+  target_stack: string; variables?: Record<string, string>
+}): Promise<TemplateDryRunResponse> {
+  return apiClient.post<TemplateDryRunResponse>(`/templates/${encodeURIComponent(name)}/dry-run`, opts)
 }
 
 /** GET /automations — List automation rules */
@@ -912,4 +964,38 @@ export function fetchAutomationHistory(id: string): Promise<AutomationHistoryRes
 /** GET /topology — Network topology graph data */
 export function fetchTopology(): Promise<TopologyResponse> {
   return apiClient.get<TopologyResponse>('/topology')
+}
+
+// ---------------------------------------------------------------------------
+// Setup Wizard
+// ---------------------------------------------------------------------------
+
+/** GET /setup/status — Check if server needs first-run setup (no auth) */
+export function fetchSetupStatus(): Promise<SetupStatusResponse> {
+  return apiClient.get<SetupStatusResponse>('/setup/status')
+}
+
+/** GET /setup/defaults — Get setup defaults and system info (no auth, setup mode only) */
+export function fetchSetupDefaults(): Promise<SetupDefaultsResponse> {
+  return apiClient.get<SetupDefaultsResponse>('/setup/defaults')
+}
+
+/** POST /setup/configure — Apply setup configuration (auth required, setup mode only) */
+export function setupConfigure(data: SetupConfigureRequest): Promise<SetupConfigureResponse> {
+  return apiClient.post<SetupConfigureResponse>('/setup/configure', data)
+}
+
+/** POST /setup/complete — Finalize first-run setup (auth required, setup mode only) */
+export function setupComplete(): Promise<SetupCompleteResponse> {
+  return apiClient.post<SetupCompleteResponse>('/setup/complete')
+}
+
+/** POST /stacks/rename — Rename a stack directory (admin only) */
+export function renameStack(oldName: string, newName: string): Promise<StackRenameResponse> {
+  return apiClient.post<StackRenameResponse>('/stacks/rename', { old_name: oldName, new_name: newName })
+}
+
+/** POST /stacks/reorder — Set stack startup order (admin only) */
+export function reorderStacks(stacks: string[]): Promise<StackReorderResponse> {
+  return apiClient.post<StackReorderResponse>('/stacks/reorder', { stacks })
 }

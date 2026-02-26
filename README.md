@@ -4,6 +4,15 @@ A premium Electron desktop application for managing [Docker Compose Skeleton](ht
 
 ## Features
 
+### First-Run Setup Wizard
+- **5-step guided configuration** — Connect, Admin Account, Server Config, Stack Categories, Review & Complete
+- **Server connection** — enter server IP, auto-detect system info (hostname, timezone, Docker/Compose versions, PUID/PGID)
+- **Admin account creation** — username, password with strength indicator, server + local auth registration
+- **Server configuration** — pre-populated timezone, domain, data directory, user/group IDs
+- **Stack management** — choose, rename, reorder, add, or remove stack categories with drag-to-reorder
+- **Review & apply** — summary cards, one-click configuration write to server `.env`
+- Auto-detected when connecting to an uninitialized server (`/setup/status`)
+
 ### Dashboard
 - **Live overview** with polling — container counts, stack status, health, resource usage
 - **Resource charts** — real-time memory and load visualisation (Recharts)
@@ -230,9 +239,9 @@ src/
     preload.ts           # contextBridge IPC exposure
     store.ts             # electron-store persistence
   renderer/              # React app
-    api/                 # HTTP client and ~50 typed endpoint wrappers
-      client.ts          # Axios instance, auth headers, error handling
-      endpoints.ts       # Typed functions for all ~70 API endpoints
+    api/                 # HTTP client and ~80 typed endpoint wrappers
+      client.ts          # Fetch instance, auth headers, error handling
+      endpoints.ts       # Typed functions for all ~80 API endpoints
     hooks/               # usePolling, useConnection, useApi
     stores/              # Zustand stores (14 stores)
       authStore.ts       # Authentication state and session management
@@ -262,7 +271,8 @@ src/
       CommandPalette.tsx  # Global Ctrl+K search
       KeyboardShortcuts.tsx # Ctrl+/ or ? overlay
       NotificationDrawer.tsx
-    pages/               # 20 pages
+    pages/               # 30+ pages
+      SetupWizard.tsx    # 5-step first-run configuration wizard
       Dashboard.tsx      # Live overview, charts, quick actions
       Stacks.tsx         # Stack list with batch operations
       Containers.tsx     # Container list with batch operations
@@ -283,15 +293,26 @@ src/
       Users.tsx          # User management and invite codes
       Activity.tsx       # Activity feed
       Uptime.tsx         # Uptime monitoring
+      Templates.tsx      # Template browser and deployment
+      Automations.tsx    # Automation rules and triggers
+      Topology.tsx       # Network topology visualization
+      Trends.tsx         # Resource usage trends and history
+      FileBrowser.tsx    # Server file browser
+      DiskAnalysis.tsx   # Disk usage analysis
+      Terminal.tsx       # Remote terminal access
+      CronJobs.tsx       # Cron job viewer
+      Snapshots.tsx      # Container snapshots
+      Notifications.tsx  # Notification center
+      Updates.tsx        # Image update checker
   shared/
     types.ts             # TypeScript interfaces for all API responses
 ```
 
 ## API Compatibility
 
-Connects to the Docker Compose Skeleton REST API (default `http://127.0.0.1:9876`). All ~70 endpoints are supported across status, health, stacks, containers, images, networks, volumes, logs, events, config, system, environment, maintenance, and backup domains:
+Connects to the Docker Compose Skeleton REST API (default `http://127.0.0.1:9876`). All ~80 endpoints are supported across status, health, stacks, containers, images, networks, volumes, logs, events, config, system, environment, maintenance, backup, and setup domains:
 
-`/status` `/health` `/stacks` `/containers` `/images` `/networks` `/volumes` `/logs` `/events` `/config` `/system` `/version` `/disks` `/env` `/maintenance` `/backup` and action endpoints for start/stop/restart/update/create/delete/prune/restore.
+`/setup` `/status` `/health` `/stacks` `/containers` `/images` `/networks` `/volumes` `/logs` `/events` `/config` `/system` `/version` `/disks` `/env` `/maintenance` `/backup` `/auth` `/terminal` `/batch` and action endpoints for start/stop/restart/update/create/delete/prune/restore/rename/reorder.
 
 Server-side filtering is supported via query string parameters (e.g., log level, keyword search). Background operations like backup and restore use status polling for progress tracking.
 

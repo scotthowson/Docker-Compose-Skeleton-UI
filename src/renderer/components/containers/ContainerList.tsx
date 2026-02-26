@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
-import { startContainer, stopContainer, restartContainer } from '../../api/endpoints'
+import { startContainer, stopContainer, restartContainer, removeContainer } from '../../api/endpoints'
 import ContainerRow, { ContainerCard } from './ContainerRow'
 import {
   Search,
@@ -23,6 +23,7 @@ import {
   RotateCw,
   X,
   Minus,
+  Trash2,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -107,12 +108,15 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
     setSelectedContainers(new Set())
   }, [])
 
-  const handleBatchAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+  const handleBatchAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'remove') => {
     if (selectedContainers.size === 0) return
+    if (action === 'remove') {
+      if (!window.confirm(`Remove ${selectedContainers.size} container(s)? This will force-remove them and cannot be undone.`)) return
+    }
     setBatchLoading(true)
     setBatchResults(null)
     const results: { name: string; action: string; success: boolean }[] = []
-    const actionFn = action === 'start' ? startContainer : action === 'stop' ? stopContainer : restartContainer
+    const actionFn = action === 'start' ? startContainer : action === 'stop' ? stopContainer : action === 'restart' ? restartContainer : removeContainer
     for (const name of selectedContainers) {
       try {
         await actionFn(name)
@@ -123,6 +127,17 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
     }
     setBatchResults(results)
     setBatchLoading(false)
+    // After remove, clear successfully removed containers from selection
+    if (action === 'remove') {
+      const removed = new Set(results.filter((r) => r.success).map((r) => r.name))
+      if (removed.size > 0) {
+        setSelectedContainers((prev) => {
+          const next = new Set(prev)
+          for (const name of removed) next.delete(name)
+          return next
+        })
+      }
+    }
   }, [selectedContainers])
 
   const exitBatchMode = useCallback(() => {
@@ -235,6 +250,11 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
             <button onClick={() => handleBatchAction('restart')} disabled={batchLoading || selectedContainers.size === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all disabled:opacity-40">
               {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />} Restart
+            </button>
+            <span className="w-px h-5 bg-white/[0.08]" />
+            <button onClick={() => handleBatchAction('remove')} disabled={batchLoading || selectedContainers.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-40">
+              {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove
             </button>
           </div>
         </div>

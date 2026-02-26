@@ -6,6 +6,7 @@ import { useCallback, useState, useEffect } from 'react'
 import { useApi } from '../hooks/useApi'
 import { useStackStore } from '../stores/stackStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import {
   fetchStacks,
@@ -267,6 +268,9 @@ export default function Stacks() {
           onBack={() => setSelectedStackName(null)}
           onAction={handleAction}
           isActionLoading={actionLoading === selectedStackName}
+          onContainerClick={(containerName) => {
+            useSettingsStore.getState().setCurrentPage('containers', { focusContainer: containerName })
+          }}
         />
       ) : (
         <StackList

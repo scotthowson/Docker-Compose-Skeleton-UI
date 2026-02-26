@@ -24,7 +24,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 interface SettingsState extends AppSettings {
   currentPage: PageId
-  setCurrentPage: (page: PageId) => void
+  navigationPayload: Record<string, unknown> | null
+  setCurrentPage: (page: PageId, payload?: Record<string, unknown>) => void
+  consumeNavigationPayload: () => Record<string, unknown> | null
   toggleSidebar: () => void
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
   loadSettings: () => Promise<void>
@@ -63,8 +65,15 @@ async function loadPersistedSettings(): Promise<Partial<AppSettings>> {
 export const useSettingsStore = create<SettingsState>((set) => ({
   ...DEFAULT_SETTINGS,
   currentPage: 'dashboard',
+  navigationPayload: null,
 
-  setCurrentPage: (page) => set({ currentPage: page }),
+  setCurrentPage: (page, payload) => set({ currentPage: page, navigationPayload: payload ?? null }),
+
+  consumeNavigationPayload: () => {
+    const { navigationPayload } = useSettingsStore.getState()
+    if (navigationPayload) set({ navigationPayload: null })
+    return navigationPayload
+  },
 
   toggleSidebar: () =>
     set((state) => {

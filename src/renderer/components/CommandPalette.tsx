@@ -10,6 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
+  FolderOpen, PieChart, Sparkles,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -72,6 +73,9 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   templates: <LayoutTemplate size={16} />,
   automations: <Bot size={16} />,
   topology: <Share2 size={16} />,
+  'file-browser': <FolderOpen size={16} />,
+  'disk-analysis': <PieChart size={16} />,
+  setup: <Sparkles size={16} />,
 }
 
 const pageLabels: Record<PageId, string> = {
@@ -103,6 +107,9 @@ const pageLabels: Record<PageId, string> = {
   templates: 'Templates',
   automations: 'Automations',
   topology: 'Network Topology',
+  'file-browser': 'File Browser',
+  'disk-analysis': 'Disk Analysis',
+  setup: 'Setup Wizard',
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +173,7 @@ export function CommandPalette() {
     const items: CommandItem[] = []
 
     // Navigation commands
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'templates', 'updates', 'trends', 'terminal', 'cronjobs', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,

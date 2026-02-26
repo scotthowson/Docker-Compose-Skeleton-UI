@@ -6,7 +6,7 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
-import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
+import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import {
@@ -51,6 +51,7 @@ import {
   Pencil,
   Check,
   X,
+  Trash2,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,32 @@ function parseNetworks(networkStr: string): string[] {
     .split(/[\n,]/)
     .map((n) => n.trim())
     .filter(Boolean)
+}
+
+/** Parse IP addresses string (newline-separated "network=ip") into entries. */
+function parseIpAddresses(ipStr: string | undefined): Array<{ network: string; ip: string }> {
+  if (!ipStr || ipStr === '--') return []
+  return ipStr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const idx = line.indexOf('=')
+      if (idx === -1) return { network: 'default', ip: line }
+      return { network: line.slice(0, idx), ip: line.slice(idx + 1) }
+    })
+    .filter((e) => e.ip)
+}
+
+/** Split an image string into name and tag. */
+function splitImageTag(image: string): { name: string; tag: string } {
+  if (!image) return { name: '--', tag: '' }
+  const lastColon = image.lastIndexOf(':')
+  // Check that the colon is not part of a registry hostname (e.g. registry.io:5000/image)
+  if (lastColon > 0 && !image.slice(lastColon + 1).includes('/')) {
+    return { name: image.slice(0, lastColon), tag: image.slice(lastColon + 1) }
+  }
+  return { name: image, tag: 'latest' }
 }
 
 /** Check if an env key name is sensitive (password, secret, token, key). */
@@ -503,19 +530,28 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   }, [fetchStats])
 
   // Container action handler
-  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
-    const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted' }
-    const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting' }
+  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'remove') => {
+    const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', remove: 'removed' }
+    const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', remove: 'Removing' }
+
+    if (action === 'remove') {
+      if (!window.confirm(`Remove container "${containerName}"? This will force-remove it and cannot be undone.`)) return
+    }
 
     setActionLoading(action)
     addToast({ type: 'info', message: `${gerund[action]} "${containerName}"...`, duration: 2000 })
 
     try {
-      const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer }[action]
+      const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer, remove: removeContainer }[action]
       const result = await actionFn(containerName)
 
       if (result.success) {
         addToast({ type: 'success', message: `"${containerName}" ${pastTense[action]} successfully!` })
+        if (action === 'remove') {
+          onRefreshList?.()
+          onBack()
+          return
+        }
       } else {
         addToast({ type: 'error', message: `Failed to ${action} "${containerName}": ${result.output || 'Unknown error'}`, duration: 6000 })
       }
@@ -531,7 +567,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setActionLoading(null)
     }
-  }, [containerName, fetchStats, addToast, onRefreshList])
+  }, [containerName, fetchStats, addToast, onRefreshList, onBack])
 
   // Fetch container logs
   const handleFetchLogs = useCallback(async () => {
@@ -802,6 +838,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
             Logs
           </button>
+          <button
+            onClick={() => handleAction('remove')}
+            disabled={!!actionLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+          >
+            {actionLoading === 'remove' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Remove
+          </button>
           {isRunning && (
             <button
               onClick={handleToggleProcesses}
@@ -934,6 +978,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           color: '#e2e8f0',
                         }}
                         labelStyle={{ color: '#94a3b8' }}
+                        itemStyle={{ color: '#e2e8f0' }}
                         formatter={(value: number) => [`${value}%`, 'CPU']}
                       />
                       <Area
@@ -989,6 +1034,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           color: '#e2e8f0',
                         }}
                         labelStyle={{ color: '#94a3b8' }}
+                        itemStyle={{ color: '#e2e8f0' }}
                         formatter={(value: number) => [`${value} MB`, 'Memory']}
                       />
                       <Area
@@ -1080,17 +1126,88 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       {/* ---- Info section ---- */}
       <section>
         <SectionHeader icon={<Info className="h-4 w-4 text-emerald-400" />} title="Container Info" />
-        <div className="glass-subtle mt-3 divide-y divide-white/[0.04]">
-          <InfoRow label="Image" value={containerInfo.image} mono />
-          <InfoRow label="Image ID" value={containerInfo.image_id} mono />
-          <InfoRow label="Created" value={formatDate(containerInfo.created)} />
-          <InfoRow label="Uptime" value={formatUptime(containerInfo.uptime_seconds)} />
-          <InfoRow label="Ports" value={containerInfo.ports || '--'} mono />
-          <InfoRow
-            label="Restart Count"
-            value={String(containerInfo.restart_count)}
-            highlight={containerInfo.restart_count > 0}
-          />
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl mt-3 overflow-hidden">
+          {/* Image header */}
+          <div className="px-5 py-4 border-b border-white/[0.04]">
+            {(() => {
+              const img = splitImageTag(containerInfo.image)
+              return (
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                    <Layers className="h-4 w-4 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-semibold text-slate-200 font-mono truncate block">{img.name}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/15">{img.tag}</span>
+                      <span className="text-[10px] text-slate-600 font-mono truncate" title={containerInfo.image_id}>{containerInfo.image_id ? containerInfo.image_id.slice(0, 16) : '--'}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Details grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.03]">
+            {/* Created */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Created</span>
+              <span className="text-xs text-slate-300">{formatDate(containerInfo.created)}</span>
+            </div>
+            {/* Uptime */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Uptime</span>
+              <span className={`text-xs ${isRunning ? 'text-emerald-400' : 'text-slate-500'}`}>{formatUptime(containerInfo.uptime_seconds)}</span>
+            </div>
+            {/* Restart Policy */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart Policy</span>
+              <span className="text-xs text-slate-300 font-mono">{detail?.restart_policy || '--'}</span>
+            </div>
+            {/* Restart Count */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart Count</span>
+              <span className={`text-xs font-mono ${containerInfo.restart_count > 0 ? 'text-amber-400' : 'text-slate-300'}`}>{containerInfo.restart_count}</span>
+            </div>
+            {/* Hostname */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Hostname</span>
+              <span className="text-xs text-slate-300 font-mono">{detail?.hostname || '--'}</span>
+            </div>
+            {/* Platform */}
+            <div className="bg-slate-900/80 px-4 py-3">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Platform</span>
+              <span className="text-xs text-slate-300">{detail?.platform || '--'}</span>
+            </div>
+            {/* Working Dir */}
+            {detail?.working_dir && (
+              <div className="bg-slate-900/80 px-4 py-3 col-span-2 lg:col-span-3">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Working Directory</span>
+                <span className="text-xs text-slate-300 font-mono">{detail.working_dir}</span>
+              </div>
+            )}
+          </div>
+
+          {/* IP Addresses */}
+          {(() => {
+            const ips = parseIpAddresses(detail?.ip_addresses)
+            if (ips.length === 0) return null
+            return (
+              <div className="px-5 py-3 border-t border-white/[0.04]">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-2">IP Addresses</span>
+                <div className="flex flex-wrap gap-2">
+                  {ips.map((entry, idx) => (
+                    <div key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                      <Network className="h-3 w-3 text-purple-400 flex-shrink-0" />
+                      <span className="text-[10px] text-slate-500">{entry.network}</span>
+                      <span className="text-xs font-mono text-cyan-400">{entry.ip}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </section>
 

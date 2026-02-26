@@ -7,7 +7,7 @@ import {
   Zap, Plus, Trash2, Clock, Play, Pause, Loader2,
   CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
   AlertTriangle, Box, Layers, HardDrive, Bell, Archive,
-  X,
+  X, History, CheckCircle, XCircle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -18,8 +18,9 @@ import {
   createAutomation,
   updateAutomation,
   deleteAutomation,
+  fetchAutomationHistory,
 } from '../api/endpoints'
-import type { AutomationRule } from '../../shared/types'
+import type { AutomationRule, AutomationHistoryEntry } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Constants & Helpers
@@ -135,6 +136,13 @@ export default function Automations() {
   // Toggle loading state
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
+  // History panel state
+  const [historyRuleId, setHistoryRuleId] = useState<string | null>(null)
+  const [historyRuleName, setHistoryRuleName] = useState('')
+  const [historyEntries, setHistoryEntries] = useState<AutomationHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [expandedHistoryIdx, setExpandedHistoryIdx] = useState<number | null>(null)
+
   // Polling
   const { data, loading, refresh } = usePolling(
     fetchAutomations,
@@ -224,6 +232,29 @@ export default function Automations() {
     resetForm()
     setShowCreateModal(true)
   }, [resetForm])
+
+  // Open history panel for a rule
+  const openHistory = useCallback(async (rule: AutomationRule) => {
+    setHistoryRuleId(rule.id)
+    setHistoryRuleName(rule.name)
+    setHistoryEntries([])
+    setExpandedHistoryIdx(null)
+    setHistoryLoading(true)
+    try {
+      const result = await fetchAutomationHistory(rule.id)
+      setHistoryEntries(result.history ?? [])
+    } catch {
+      addToast({ type: 'error', message: `Failed to load history for ${rule.name}` })
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [addToast])
+
+  const closeHistory = useCallback(() => {
+    setHistoryRuleId(null)
+    setHistoryEntries([])
+    setExpandedHistoryIdx(null)
+  }, [])
 
   // -------------------------------------------------------------------------
   // Disconnected state
@@ -327,7 +358,7 @@ export default function Automations() {
 
       {/* Empty state */}
       {data && automations.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
           <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
             <Zap size={22} className="text-slate-600" />
           </div>
@@ -435,8 +466,16 @@ export default function Automations() {
                 </div>
               </div>
 
-              {/* Delete button */}
+              {/* Actions row */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.04]">
+                {/* History button */}
+                <button
+                  onClick={() => openHistory(rule)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors mr-auto"
+                >
+                  <History size={11} />
+                  History
+                </button>
                 {confirmDeleteId === rule.id ? (
                   <>
                     <span className="text-[11px] text-rose-400 mr-1">Delete this rule?</span>
@@ -473,6 +512,133 @@ export default function Automations() {
       {/* ------------------------------------------------------------------- */}
       {/* Create Automation Modal                                              */}
       {/* ------------------------------------------------------------------- */}
+      {/* ------------------------------------------------------------------- */}
+      {/* Automation History Panel                                             */}
+      {/* ------------------------------------------------------------------- */}
+      {historyRuleId && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+              <div className="flex items-center gap-2">
+                <History size={16} className="text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-200">Run History</h3>
+                  <p className="text-[10px] text-slate-500">{historyRuleName}</p>
+                </div>
+              </div>
+              <button
+                onClick={closeHistory}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2">
+              {historyLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={20} className="animate-spin text-slate-600" />
+                </div>
+              )}
+
+              {!historyLoading && historyEntries.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <History size={24} className="text-slate-700" />
+                  <p className="text-xs text-slate-500">No run history yet</p>
+                  <p className="text-[10px] text-slate-600 text-center max-w-xs">
+                    History entries will appear here once this automation rule has been triggered.
+                  </p>
+                </div>
+              )}
+
+              {!historyLoading && historyEntries.length > 0 && (
+                <div className="space-y-1.5">
+                  {historyEntries.map((entry, idx) => {
+                    const isExpanded = expandedHistoryIdx === idx
+                    const date = new Date(entry.timestamp)
+                    const timeStr = date.toLocaleString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false,
+                    })
+
+                    return (
+                      <div key={idx} className="rounded-lg border border-white/[0.04] overflow-hidden">
+                        <button
+                          onClick={() => setExpandedHistoryIdx(isExpanded ? null : idx)}
+                          className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+                        >
+                          {/* Status dot */}
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${
+                            entry.success ? 'bg-emerald-400' : 'bg-rose-400'
+                          }`} />
+
+                          {/* Status icon */}
+                          {entry.success ? (
+                            <CheckCircle size={13} className="text-emerald-400 shrink-0" />
+                          ) : (
+                            <XCircle size={13} className="text-rose-400 shrink-0" />
+                          )}
+
+                          {/* Timestamp */}
+                          <span className="text-xs text-slate-400 font-mono tabular-nums flex-1">
+                            {timeStr}
+                          </span>
+
+                          {/* Status badge */}
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            entry.success
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-rose-500/15 text-rose-400'
+                          }`}>
+                            {entry.success ? 'Success' : 'Failed'}
+                          </span>
+
+                          {/* Expand chevron */}
+                          {isExpanded ? (
+                            <ChevronUp size={12} className="text-slate-600 shrink-0" />
+                          ) : (
+                            <ChevronDown size={12} className="text-slate-600 shrink-0" />
+                          )}
+                        </button>
+
+                        {/* Expanded output log */}
+                        {isExpanded && entry.message && (
+                          <div className="px-3 pb-3 pt-0">
+                            <pre className="text-[11px] text-slate-400 font-mono bg-slate-950/60 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap border border-white/[0.04] max-h-48 overflow-y-auto scrollbar-thin">
+                              {entry.message}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06] shrink-0">
+              <span className="text-[10px] text-slate-600">
+                {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={closeHistory}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-lg bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">

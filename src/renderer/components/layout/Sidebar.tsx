@@ -40,6 +40,8 @@ import {
   LayoutTemplate,
   Bot,
   Share2,
+  FolderOpen,
+  PieChart,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -68,11 +70,13 @@ const navItems: NavItem[] = [
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },
   { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
   { id: 'topology', label: 'Topology', icon: Share2, section: 'main' },
+  { id: 'file-browser', label: 'File Browser', icon: FolderOpen, section: 'main' },
   { id: 'templates', label: 'Templates', icon: LayoutTemplate, section: 'main' },
   { id: 'updates', label: 'Updates', icon: ArrowUpCircle, section: 'main' },
   { id: 'trends', label: 'Trends', icon: TrendingUp, section: 'main' },
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
   { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock, section: 'system' },
+  { id: 'disk-analysis', label: 'Disk Analysis', icon: PieChart, section: 'system' },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
   { id: 'environment', label: 'Environment', icon: FileCode, section: 'system' },
   { id: 'backup', label: 'Backup', icon: Archive, section: 'system' },
@@ -218,7 +222,10 @@ export function Sidebar() {
               collapsed={sidebarCollapsed}
               badge={badges[item.id]}
               statusIcon={statusIcons[item.id]}
-              onClick={() => setCurrentPage(item.id)}
+              onClick={() => currentPage === item.id
+                ? setCurrentPage(item.id, { resetView: true })
+                : setCurrentPage(item.id)
+              }
             />
           ))}
         </div>
@@ -240,7 +247,10 @@ export function Sidebar() {
               isActive={currentPage === item.id}
               collapsed={sidebarCollapsed}
               statusIcon={statusIcons[item.id]}
-              onClick={() => setCurrentPage(item.id)}
+              onClick={() => currentPage === item.id
+                ? setCurrentPage(item.id, { resetView: true })
+                : setCurrentPage(item.id)
+              }
             />
           ))}
         </div>

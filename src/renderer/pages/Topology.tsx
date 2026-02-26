@@ -28,18 +28,19 @@ const NETWORK_COLORS = [
 // Node dimensions
 const STACK_H = 48
 const STACK_RX = 12
-const CONTAINER_W = 148
+const CONTAINER_W = 172
 const CONTAINER_H = 44
 const CONTAINER_RX = 10
-const NETWORK_W = 154
+const NETWORK_W = 168
 const NETWORK_H = 38
 const NETWORK_RX = 19
 
 // Spacing
-const LEVEL_GAP = 92
-const NODE_GAP = 22
-const STACK_GROUP_GAP = 44
-const PAD = 36
+const LEVEL_GAP = 130
+const NODE_GAP = 26
+const STACK_GROUP_GAP = 56
+const PAD = 40
+const TIER_LABEL_OFFSET = 18   // vertical space above each tier for the label
 const HEALTH_R = 4
 
 // Zoom
@@ -100,6 +101,8 @@ interface Layout {
   stacks: StackL[]
   containers: ContainerL[]
   networks: NetworkL[]
+  unusedNetworkY: number | null  // Y position of unused network row (null if none)
+  connectedNetworkY: number      // Y position of connected network row
   w: number
   h: number
 }
@@ -125,7 +128,8 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
   })
 
   // Position stacks (top tier) and containers (middle tier)
-  const stackY = PAD
+  // Leave room for tier labels above each row
+  const stackY = PAD + TIER_LABEL_OFFSET
   const containerY = stackY + STACK_H + LEVEL_GAP
 
   const stacks: StackL[] = []
@@ -134,7 +138,7 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
 
   for (const [name, nodes] of entries) {
     const fanW = nodes.length * (CONTAINER_W + NODE_GAP) - NODE_GAP
-    const stackW = Math.max(180, fanW + 24)
+    const stackW = Math.max(240, fanW + 32)
     const center = cx + stackW / 2
 
     stacks.push({ name, x: center, y: stackY, width: stackW, count: nodes.length })
@@ -152,19 +156,29 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
     cx += stackW + STACK_GROUP_GAP
   }
 
-  // Position networks (bottom tier) — sorted by center-of-mass of connected containers
+  // Separate connected vs unused networks
+  const connectedNets: TopologyNetwork[] = []
+  const unusedNets: TopologyNetwork[] = []
+  for (const net of data.networks) {
+    const hasConnection = containers.some((c) => c.node.networks.includes(net.name))
+    if (hasConnection) {
+      connectedNets.push(net)
+    } else {
+      unusedNets.push(net)
+    }
+  }
+
+  // Position connected networks (bottom tier) — aligned beneath their connected containers
   const networkY = containerY + CONTAINER_H + LEVEL_GAP
 
   type NP = { net: TopologyNetwork; idealX: number; color: string }
-  const netPos: NP[] = data.networks.map((net) => {
+  const netPos: NP[] = connectedNets.map((net) => {
     const connected = containers.filter((c) => c.node.networks.includes(net.name))
-    const idealX =
-      connected.length > 0
-        ? connected.reduce((s, c) => s + c.x, 0) / connected.length
-        : cx / 2
+    const idealX = connected.reduce((s, c) => s + c.x, 0) / connected.length
     return { net, idealX, color: netColor(net.name, netNames) }
   })
 
+  // Sort by position to reduce crossing wires
   netPos.sort((a, b) => a.idealX - b.idealX)
 
   const networks: NetworkL[] = []
@@ -172,13 +186,38 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
   for (const p of netPos) {
     const finalX = Math.max(nx, p.idealX)
     networks.push({ network: p.net, x: finalX, y: networkY, color: p.color })
-    nx = finalX + NETWORK_W + NODE_GAP
+    nx = finalX + NETWORK_W + NODE_GAP + 8
   }
 
-  const totalW = Math.max(cx, nx + NETWORK_W / 2) + PAD
-  const totalH = networkY + NETWORK_H + PAD * 2
+  // Position unused networks in a separate row below connected ones
+  const unusedY = networks.length > 0
+    ? networkY + NETWORK_H + 60
+    : networkY
+  let ux = PAD + NETWORK_W / 2
+  for (const net of unusedNets) {
+    networks.push({
+      network: net,
+      x: ux,
+      y: unusedY,
+      color: netColor(net.name, netNames),
+    })
+    ux += NETWORK_W + NODE_GAP + 8
+  }
 
-  return { stacks, containers, networks, w: totalW, h: totalH }
+  const maxNetX = Math.max(nx, ux) + NETWORK_W / 2
+  const totalW = Math.max(cx, maxNetX) + PAD
+  const bottomY = unusedNets.length > 0 ? unusedY : networkY
+  const totalH = bottomY + NETWORK_H + PAD * 2
+
+  return {
+    stacks,
+    containers,
+    networks,
+    connectedNetworkY: networkY,
+    unusedNetworkY: unusedNets.length > 0 ? unusedY : null,
+    w: totalW,
+    h: totalH,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +369,7 @@ export default function Topology() {
 
   // Selection / hover
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
+  const [hoveredStack, setHoveredStack] = useState<string | null>(null)
   const [hoveredContainer, setHoveredContainer] = useState<string | null>(null)
   const [hoveredNetwork, setHoveredNetwork] = useState<string | null>(null)
 
@@ -441,11 +481,26 @@ export default function Topology() {
   }, [])
 
   // --- Highlight logic ---
-  // Which containers & networks are highlighted?
+  // Which stacks, containers & networks are highlighted?
+  const highlightedStacks = useMemo(() => {
+    const set = new Set<string>()
+    if (hoveredStack) set.add(hoveredStack)
+    if (hoveredContainer) {
+      const cl = layout?.containers.find((c) => c.node.id === hoveredContainer)
+      if (cl) set.add(cl.stack)
+    }
+    return set
+  }, [hoveredStack, hoveredContainer, layout])
+
   const highlightedContainers = useMemo(() => {
     const set = new Set<string>()
     if (hoveredContainer) {
       set.add(hoveredContainer)
+    }
+    if (hoveredStack) {
+      for (const c of layout?.containers ?? []) {
+        if (c.stack === hoveredStack) set.add(c.node.id)
+      }
     }
     if (hoveredNetwork) {
       for (const c of layout?.containers ?? []) {
@@ -453,7 +508,7 @@ export default function Topology() {
       }
     }
     return set
-  }, [hoveredContainer, hoveredNetwork, layout])
+  }, [hoveredStack, hoveredContainer, hoveredNetwork, layout])
 
   const highlightedNetworks = useMemo(() => {
     const set = new Set<string>()
@@ -464,10 +519,17 @@ export default function Topology() {
       const node = topoData?.nodes.find((n) => n.id === hoveredContainer)
       if (node) node.networks.forEach((n) => set.add(n))
     }
+    if (hoveredStack) {
+      for (const c of layout?.containers ?? []) {
+        if (c.stack === hoveredStack) {
+          c.node.networks.forEach((n) => set.add(n))
+        }
+      }
+    }
     return set
-  }, [hoveredContainer, hoveredNetwork, topoData])
+  }, [hoveredStack, hoveredContainer, hoveredNetwork, topoData, layout])
 
-  const hasHighlight = highlightedContainers.size > 0 || highlightedNetworks.size > 0
+  const hasHighlight = highlightedStacks.size > 0 || highlightedContainers.size > 0 || highlightedNetworks.size > 0
 
   // --- Disconnected ---
   if (!isConnected) {
@@ -564,7 +626,7 @@ export default function Topology() {
             <Loader2 size={28} className="animate-spin text-slate-500" />
           </div>
         ) : isEmpty ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
             <Network size={40} className="text-slate-700 mb-4" />
             <p className="text-sm text-slate-400 mb-1">No containers running</p>
             <p className="text-xs text-slate-600">Start some stacks to see the network topology.</p>
@@ -607,8 +669,8 @@ export default function Topology() {
 
                   {/* Structural wire gradient (stack → container) */}
                   <linearGradient id="structGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="white" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="white" stopOpacity={0.08} />
+                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.2} />
                   </linearGradient>
 
                   {/* Glow filter for highlighted wires */}
@@ -634,17 +696,47 @@ export default function Topology() {
                   const stack = layout.stacks.find((s) => s.name === c.stack)
                   if (!stack) return null
                   const path = stackToContainerPath(stack, c)
-                  const dim = hasHighlight && !highlightedContainers.has(c.node.id)
+                  const isHigh = highlightedContainers.has(c.node.id)
+                  const dim = hasHighlight && !isHigh
+                  const wireColor = stack.name === 'Standalone' ? '#475569' : '#8b5cf6'
+
                   return (
-                    <path
-                      key={`sw-${c.node.id}`}
-                      d={path}
-                      fill="none"
-                      stroke="url(#structGrad)"
-                      strokeWidth={dim ? 0.8 : 1.3}
-                      opacity={dim ? 0.25 : 1}
-                      style={{ transition: 'opacity 0.2s, stroke-width 0.2s' }}
-                    />
+                    <g key={`sw-${c.node.id}`}>
+                      {/* Glow layer when highlighted */}
+                      {isHigh && (
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke={wireColor}
+                          strokeWidth={5}
+                          strokeOpacity={0.1}
+                          filter="url(#wireGlow)"
+                        />
+                      )}
+                      {/* Main wire */}
+                      <path
+                        d={path}
+                        fill="none"
+                        stroke={isHigh ? wireColor : 'url(#structGrad)'}
+                        strokeWidth={dim ? 0.7 : isHigh ? 2 : 1.1}
+                        opacity={dim ? 0.12 : isHigh ? 0.8 : 0.5}
+                        strokeLinecap="round"
+                        style={{ transition: 'opacity 0.2s, stroke-width 0.2s' }}
+                      />
+                      {/* Animated flow dot when highlighted */}
+                      {isHigh && (
+                        <circle r={2.2} fill={wireColor} opacity={0.8}>
+                          <animateMotion dur="2s" repeatCount="indefinite" path={path} />
+                        </circle>
+                      )}
+                      {/* Endpoint dots */}
+                      {isHigh && (
+                        <>
+                          <circle cx={stack.x} cy={stack.y + STACK_H} r={2} fill={wireColor} opacity={0.5} />
+                          <circle cx={c.x} cy={c.y} r={2} fill={wireColor} opacity={0.5} />
+                        </>
+                      )}
+                    </g>
                   )
                 })}
 
@@ -677,8 +769,8 @@ export default function Topology() {
                           d={path}
                           fill="none"
                           stroke={`url(#netGrad${gi})`}
-                          strokeWidth={isHigh ? 2.2 : 1.4}
-                          opacity={dim ? 0.15 : isHigh ? 1 : 0.55}
+                          strokeWidth={isHigh ? 2.2 : 1.2}
+                          opacity={dim ? 0.08 : isHigh ? 1 : 0.35}
                           strokeLinecap="round"
                           style={{ transition: 'opacity 0.2s, stroke-width 0.2s' }}
                         />
@@ -689,8 +781,8 @@ export default function Topology() {
                           </circle>
                         )}
                         {/* Endpoint dots */}
-                        <circle cx={c.x} cy={c.y + CONTAINER_H} r={dim ? 1.5 : 2} fill={net.color} opacity={dim ? 0.15 : 0.6} />
-                        <circle cx={net.x} cy={net.y} r={dim ? 1.5 : 2} fill={net.color} opacity={dim ? 0.15 : 0.6} />
+                        <circle cx={c.x} cy={c.y + CONTAINER_H} r={dim ? 1 : 1.8} fill={net.color} opacity={dim ? 0.08 : 0.45} />
+                        <circle cx={net.x} cy={net.y} r={dim ? 1 : 1.8} fill={net.color} opacity={dim ? 0.08 : 0.45} />
                       </g>
                     )
                   }),
@@ -699,8 +791,33 @@ export default function Topology() {
                 {/* =========== STACK CARDS (top tier) =========== */}
                 {layout.stacks.map((s) => {
                   const isStandalone = s.name === 'Standalone'
+                  const isStackHigh = highlightedStacks.has(s.name)
+                  const stackDim = hasHighlight && !isStackHigh
+                  const stackAccent = isStandalone ? '#475569' : '#8b5cf6'
+
                   return (
-                    <g key={`stack-${s.name}`}>
+                    <g
+                      key={`stack-${s.name}`}
+                      data-node="true"
+                      style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                      opacity={stackDim ? 0.35 : 1}
+                      onMouseEnter={() => setHoveredStack(s.name)}
+                      onMouseLeave={() => setHoveredStack(null)}
+                    >
+                      {/* Outer glow ring on hover */}
+                      {isStackHigh && (
+                        <rect
+                          x={s.x - s.width / 2 - 4}
+                          y={s.y - 4}
+                          width={s.width + 8}
+                          height={STACK_H + 8}
+                          rx={STACK_RX + 4}
+                          fill="none"
+                          stroke={stackAccent}
+                          strokeWidth={1}
+                          strokeOpacity={0.25}
+                        />
+                      )}
                       {/* Shadow */}
                       <rect
                         x={s.x - s.width / 2 + 1}
@@ -719,20 +836,20 @@ export default function Topology() {
                         height={STACK_H}
                         rx={STACK_RX}
                         fill="rgba(15, 23, 42, 0.88)"
-                        stroke={isStandalone ? '#475569' : '#8b5cf6'}
-                        strokeWidth={1}
-                        strokeOpacity={0.35}
+                        stroke={stackAccent}
+                        strokeWidth={isStackHigh ? 1.4 : 1}
+                        strokeOpacity={isStackHigh ? 0.7 : 0.35}
                         strokeDasharray={isStandalone ? '4 3' : 'none'}
                       />
-                      {/* Accent gradient bar at top */}
+                      {/* Inner accent bar at top (inside card, below the rounded corner) */}
                       <rect
-                        x={s.x - s.width / 2}
-                        y={s.y}
-                        width={s.width}
-                        height={3}
-                        rx={1.5}
-                        fill={isStandalone ? '#475569' : '#8b5cf6'}
-                        fillOpacity={0.5}
+                        x={s.x - s.width / 2 + 4}
+                        y={s.y + 4}
+                        width={s.width - 8}
+                        height={2}
+                        rx={1}
+                        fill={stackAccent}
+                        fillOpacity={isStackHigh ? 0.6 : 0.4}
                       />
                       {/* Stack icon */}
                       <g transform={`translate(${s.x - s.width / 2 + 14}, ${s.y + STACK_H / 2 - 7})`}>
@@ -752,7 +869,7 @@ export default function Topology() {
                         fontWeight={700}
                         fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                       >
-                        {trunc(s.name, 20)}
+                        {trunc(s.name, 28)}
                       </text>
                       {/* Count badge */}
                       <rect
@@ -871,7 +988,7 @@ export default function Topology() {
                         fontWeight={600}
                         fontFamily="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace"
                       >
-                        {trunc(c.node.id, 15)}
+                        {trunc(c.node.id, 19)}
                       </text>
 
                       {/* Image subtitle */}
@@ -883,7 +1000,7 @@ export default function Topology() {
                         fontSize={8}
                         fontFamily="ui-sans-serif, system-ui, sans-serif"
                       >
-                        {trunc(c.node.image, 18)}
+                        {trunc(c.node.image, 22)}
                       </text>
 
                       {/* Health dot with glow ring */}
@@ -977,7 +1094,7 @@ export default function Topology() {
                         fontFamily="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace"
                         opacity={isHigh ? 1 : 0.8}
                       >
-                        {trunc(n.network.name, 14)}
+                        {trunc(n.network.name, 17)}
                       </text>
 
                       {/* Subnet */}
@@ -1012,49 +1129,115 @@ export default function Topology() {
                   )
                 })}
 
-                {/* =========== TIER LABELS (left edge) =========== */}
+                {/* =========== TIER LABELS (above each tier) =========== */}
                 {layout.stacks.length > 0 && (
                   <>
+                    {/* Stacks label — above stack row */}
                     <text
-                      x={8}
-                      y={layout.stacks[0].y + STACK_H / 2}
-                      dominantBaseline="central"
-                      fill="white"
-                      fontSize={7}
+                      x={PAD}
+                      y={layout.stacks[0].y - 8}
+                      fill="#8b5cf6"
+                      fontSize={8}
                       fontWeight={700}
-                      letterSpacing={2}
-                      opacity={0.09}
-                      fontFamily="ui-sans-serif, system-ui, sans-serif"
+                      letterSpacing={2.5}
+                      opacity={0.35}
+                      fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                     >
                       STACKS
                     </text>
-                    <text
-                      x={8}
-                      y={layout.containers[0]?.y + CONTAINER_H / 2}
-                      dominantBaseline="central"
-                      fill="white"
-                      fontSize={7}
-                      fontWeight={700}
-                      letterSpacing={2}
-                      opacity={0.09}
-                      fontFamily="ui-sans-serif, system-ui, sans-serif"
-                    >
-                      CONTAINERS
-                    </text>
+                    <line
+                      x1={PAD}
+                      y1={layout.stacks[0].y - 3}
+                      x2={PAD + 44}
+                      y2={layout.stacks[0].y - 3}
+                      stroke="#8b5cf6"
+                      strokeWidth={1}
+                      strokeOpacity={0.15}
+                      strokeLinecap="round"
+                    />
+
+                    {/* Containers label — above container row */}
+                    {layout.containers.length > 0 && (
+                      <>
+                        <text
+                          x={PAD}
+                          y={layout.containers[0].y - 8}
+                          fill="#10b981"
+                          fontSize={8}
+                          fontWeight={700}
+                          letterSpacing={2.5}
+                          opacity={0.35}
+                          fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
+                        >
+                          CONTAINERS
+                        </text>
+                        <line
+                          x1={PAD}
+                          y1={layout.containers[0].y - 3}
+                          x2={PAD + 66}
+                          y2={layout.containers[0].y - 3}
+                          stroke="#10b981"
+                          strokeWidth={1}
+                          strokeOpacity={0.15}
+                          strokeLinecap="round"
+                        />
+                      </>
+                    )}
+
+                    {/* Networks label — above connected network row */}
                     {layout.networks.length > 0 && (
-                      <text
-                        x={8}
-                        y={layout.networks[0].y + NETWORK_H / 2}
-                        dominantBaseline="central"
-                        fill="white"
-                        fontSize={7}
-                        fontWeight={700}
-                        letterSpacing={2}
-                        opacity={0.09}
-                        fontFamily="ui-sans-serif, system-ui, sans-serif"
-                      >
-                        NETWORKS
-                      </text>
+                      <>
+                        <text
+                          x={PAD}
+                          y={layout.connectedNetworkY - 8}
+                          fill="#06b6d4"
+                          fontSize={8}
+                          fontWeight={700}
+                          letterSpacing={2.5}
+                          opacity={0.35}
+                          fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
+                        >
+                          NETWORKS
+                        </text>
+                        <line
+                          x1={PAD}
+                          y1={layout.connectedNetworkY - 3}
+                          x2={PAD + 55}
+                          y2={layout.connectedNetworkY - 3}
+                          stroke="#06b6d4"
+                          strokeWidth={1}
+                          strokeOpacity={0.15}
+                          strokeLinecap="round"
+                        />
+                      </>
+                    )}
+
+                    {/* Unused networks label — above unused network row */}
+                    {layout.unusedNetworkY !== null && (
+                      <>
+                        <text
+                          x={PAD}
+                          y={layout.unusedNetworkY - 8}
+                          fill="#64748b"
+                          fontSize={8}
+                          fontWeight={700}
+                          letterSpacing={2.5}
+                          opacity={0.3}
+                          fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
+                        >
+                          UNUSED NETWORKS
+                        </text>
+                        <line
+                          x1={PAD}
+                          y1={layout.unusedNetworkY - 3}
+                          x2={PAD + 96}
+                          y2={layout.unusedNetworkY - 3}
+                          stroke="#64748b"
+                          strokeWidth={1}
+                          strokeOpacity={0.12}
+                          strokeLinecap="round"
+                        />
+                      </>
                     )}
                   </>
                 )}

@@ -32,7 +32,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   })
 
@@ -89,19 +89,27 @@ app.whenReady().then(() => {
       callback({ requestHeaders: { ...details.requestHeaders, Origin: '' } })
     },
   )
-  session.defaultSession.webRequest.onHeadersReceived(
-    { urls: ['http://127.0.0.1:*/*', 'http://localhost:*/*'] },
-    (details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Access-Control-Allow-Origin': ['*'],
-          'Access-Control-Allow-Methods': ['GET, POST, OPTIONS'],
-          'Access-Control-Allow-Headers': ['Content-Type, Authorization'],
-        },
-      })
-    },
-  )
+  // CORS proxy + CSP — merged into a single handler (Electron only allows one)
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isApiRequest =
+      details.url.startsWith('http://127.0.0.1:') ||
+      details.url.startsWith('http://localhost:')
+    const headers = { ...details.responseHeaders }
+
+    // Inject CORS headers for API requests
+    if (isApiRequest) {
+      headers['Access-Control-Allow-Origin'] = ['*']
+      headers['Access-Control-Allow-Methods'] = ['GET, POST, DELETE, OPTIONS']
+      headers['Access-Control-Allow-Headers'] = ['Content-Type, Authorization']
+    }
+
+    // Content Security Policy for all responses
+    headers['Content-Security-Policy'] = [
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*; font-src 'self' data:; frame-ancestors 'none'",
+    ]
+
+    callback({ responseHeaders: headers })
+  })
   createWindow()
 })
 

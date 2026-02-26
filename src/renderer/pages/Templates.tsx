@@ -26,16 +26,30 @@ import {
   Save,
   Upload,
   Download,
+  CheckCircle,
+  AlertTriangle,
+  ArrowRight,
+  History,
+  Undo2,
+  Scan,
+  Circle,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate } from '../api/endpoints'
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers } from '../api/endpoints'
 import type {
   TemplateInfo,
   TemplateDetailResponse,
   TemplateListResponse,
+  TemplateDeployResponse,
+  StackInfo,
+  DeployHistoryEntry,
+  DeployHistoryResponse,
+  TemplateDryRunResponse,
+  ContainerInfo,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -93,6 +107,22 @@ const DEFAULT_CATEGORY_COLOR = {
   iconColor: 'text-slate-400',
 }
 
+/** Maps template categories to their default target stack directory name */
+const CATEGORY_TO_STACK: Record<string, string> = {
+  databases: 'development-tools',
+  database: 'development-tools',
+  development: 'development-tools',
+  dev: 'development-tools',
+  media: 'media-services',
+  monitoring: 'monitoring-management',
+  metrics: 'monitoring-management',
+  web: 'networking-security',
+  storage: 'storage-backup',
+  backup: 'storage-backup',
+  automation: 'miscellaneous-services',
+  utilities: 'core-infrastructure',
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -148,13 +178,17 @@ interface DeployModalProps {
   template: TemplateInfo
   detail: TemplateDetailResponse | null
   detailLoading: boolean
+  stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (stackName: string, variables: Record<string, string>, autoStart: boolean) => void
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean) => Promise<TemplateDeployResponse | null>
   deploying: boolean
+  onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
 }
 
-function DeployModal({ template, detail, detailLoading, onClose, onDeploy, deploying }: DeployModalProps) {
-  const [stackName, setStackName] = useState(template.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-'))
+function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy }: DeployModalProps) {
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+  const defaultStack = template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
+  const [targetStack, setTargetStack] = useState(defaultStack)
   const [variables, setVariables] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     const vars = detail?.template.variables ?? template.variables ?? []
@@ -165,6 +199,17 @@ function DeployModal({ template, detail, detailLoading, onClose, onDeploy, deplo
   })
   const [autoStart, setAutoStart] = useState(true)
   const [showCompose, setShowCompose] = useState(false)
+  // F1: Confirmation step
+  const [confirming, setConfirming] = useState(false)
+  // F2: Custom dropdown open state
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  // F4: Success result
+  const [deployResult, setDeployResult] = useState<TemplateDeployResponse | null>(null)
+  // F4: Undeploy loading
+  const [undeploying, setUndeploying] = useState(false)
+  // F5: Dry-run state
+  const [dryRunResult, setDryRunResult] = useState<TemplateDryRunResponse | null>(null)
+  const [dryRunLoading, setDryRunLoading] = useState(false)
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -186,24 +231,79 @@ function DeployModal({ template, detail, detailLoading, onClose, onDeploy, deplo
     setVariables((prev) => ({ ...prev, [name]: value }))
   }, [])
 
-  const canDeploy = stackName.trim().length > 0 && !deploying && !detailLoading
+  const canDeploy = targetStack.length > 0 && !deploying && !detailLoading
+
+  // F2: Resolve selected stack info
+  const selectedStack = stacks.find((s) => s.name === targetStack)
+
+  // F4: Extract service names from template for confirmation panel
+  const templateServiceNames = useMemo(() => {
+    if (!detail?.compose) return [template.name]
+    const matches = detail.compose.match(/^  [a-zA-Z_-][a-zA-Z0-9_-]*:/gm)
+    return matches ? matches.map((m) => m.trim().replace(/:$/, '')) : [template.name]
+  }, [detail, template.name])
+
+  // F1: Handle deploy click — first click shows confirmation, second executes
+  const handleDeployClick = useCallback(async () => {
+    if (!confirming) {
+      setConfirming(true)
+      return
+    }
+    const result = await onDeploy(targetStack, variables, autoStart)
+    if (result) {
+      setDeployResult(result)
+    }
+  }, [confirming, onDeploy, targetStack, variables, autoStart])
+
+  // F4: Handle "View Stack" navigation
+  const handleViewStack = useCallback(() => {
+    setCurrentPage('stacks', { highlight: deployResult?.target_stack ?? targetStack })
+  }, [setCurrentPage, deployResult, targetStack])
+
+  // F4: Handle "Undo Deploy" (undeploy)
+  const handleUndoDeploy = useCallback(async () => {
+    if (!deployResult || !onUndeploy) return
+    if (!window.confirm(`Undo deploy? This will remove the deployed services from "${deployResult.target_stack}".`)) return
+    setUndeploying(true)
+    const ok = await onUndeploy(template.name, deployResult.target_stack, deployResult.services_added || [])
+    setUndeploying(false)
+    if (ok) onClose()
+  }, [deployResult, onUndeploy, template.name, onClose])
+
+  // F5: Handle dry-run preview
+  const handleDryRun = useCallback(async () => {
+    setDryRunLoading(true)
+    setDryRunResult(null)
+    try {
+      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables })
+      setDryRunResult(res)
+    } catch (err) {
+      setDryRunResult(null)
+    } finally {
+      setDryRunLoading(false)
+    }
+  }, [template.name, targetStack, variables])
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       {/* Backdrop click to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+      <div className="absolute inset-0" onClick={deploying ? undefined : onClose} />
 
       {/* Modal */}
       <div className="relative w-full max-w-2xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
-              <Rocket size={16} className="text-emerald-400" />
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${deployResult ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-emerald-500/15 border border-emerald-500/20'}`}>
+              {deployResult ? <CheckCircle size={16} className="text-emerald-400" /> : <Rocket size={16} className="text-emerald-400" />}
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-slate-200 truncate">Deploy: {template.name}</h3>
-              <p className="text-[11px] text-slate-500 truncate">{template.description}</p>
+              <h3 className="text-sm font-semibold text-slate-200 truncate">
+                {deployResult ? 'Deploy Successful' : `Deploy: ${template.name}`}
+              </h3>
+              <p className="text-[11px] text-slate-500 truncate">
+                {deployResult ? `Merged into ${deployResult.target_stack}` : template.description}
+              </p>
             </div>
           </div>
           <button
@@ -214,128 +314,382 @@ function DeployModal({ template, detail, detailLoading, onClose, onDeploy, deplo
           </button>
         </div>
 
-        {/* Body — scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
-          {/* Stack name */}
-          <div>
-            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-              Stack Name <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={stackName}
-              onChange={(e) => setStackName(e.target.value)}
-              placeholder="my-stack-name"
-              className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
-            />
-          </div>
-
-          {/* Template variables */}
-          {templateVars.length > 0 && (
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Variables
-              </label>
-              <div className="space-y-2.5">
-                {templateVars.map((v) => (
-                  <div key={v.name}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-slate-400 font-medium">{v.label || v.name}</span>
-                      {v.required && (
-                        <span className="text-[9px] text-rose-400 font-semibold">Required</span>
-                      )}
-                    </div>
-                    <input
-                      type={v.type === 'password' ? 'password' : 'text'}
-                      value={variables[v.name] ?? ''}
-                      onChange={(e) => handleVariableChange(v.name, e.target.value)}
-                      placeholder={v.default || v.name}
-                      className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
-                    />
+        {/* F4: Success state */}
+        {deployResult ? (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
+              <div className="flex flex-col items-center text-center py-4 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                  <CheckCircle size={28} className="text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">
+                    Successfully merged {deployResult.services_added?.length || 0} service{(deployResult.services_added?.length || 0) !== 1 ? 's' : ''} into <span className="font-mono text-emerald-400">{deployResult.target_stack}</span>
+                  </p>
+                  {deployResult.started && (
+                    <p className="text-xs text-slate-400 mt-1">Stack restarted with new services</p>
+                  )}
+                </div>
+                {deployResult.services_added && deployResult.services_added.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-1.5 mt-1">
+                    {deployResult.services_added.map((svc) => (
+                      <span key={svc} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
+                        {svc}
+                      </span>
+                    ))}
                   </div>
-                ))}
+                )}
+                {deployResult.backup_file && (
+                  <p className="text-[10px] text-slate-600 mt-2">
+                    Backup: <span className="font-mono">{deployResult.backup_file}</span>
+                  </p>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Auto-start toggle */}
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-xs font-medium text-slate-300">Auto-start after deploy</p>
-              <p className="text-[11px] text-slate-500">Automatically start the stack after creation</p>
+            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/[0.06] shrink-0">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                Done
+              </button>
+              {onUndeploy && (
+                <button
+                  onClick={handleUndoDeploy}
+                  disabled={undeploying}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all duration-200 disabled:opacity-50 press"
+                >
+                  {undeploying ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
+                  Undo Deploy
+                </button>
+              )}
+              <button
+                onClick={handleViewStack}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
+              >
+                View Stack
+                <ArrowRight size={13} />
+              </button>
             </div>
-            <button
-              onClick={() => setAutoStart((prev) => !prev)}
-              className={`relative w-10 h-[22px] rounded-full border transition-colors duration-200 ${
-                autoStart
-                  ? 'bg-emerald-500/30 border-emerald-500/40'
-                  : 'bg-white/[0.06] border-white/[0.08]'
-              }`}
-            >
-              <span
-                className={`absolute top-[2px] w-4 h-4 rounded-full transition-all duration-200 ${
-                  autoStart
-                    ? 'left-[22px] bg-emerald-400'
-                    : 'left-[2px] bg-slate-500'
-                }`}
-              />
-            </button>
-          </div>
+          </>
+        ) : (
+          <>
+            {/* Body — scrollable */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
+              {/* F2: Enriched target stack dropdown */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Target Stack <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setDropdownOpen((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors text-left"
+                  >
+                    {targetStack ? (
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selectedStack?.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                        <span className="truncate">{targetStack}</span>
+                        {selectedStack && (
+                          <span className="text-[10px] text-slate-500 shrink-0">
+                            {selectedStack.status === 'running' ? `${selectedStack.running_containers} running` : 'stopped'}
+                          </span>
+                        )}
+                        {targetStack === defaultStack && (
+                          <span className="text-[9px] text-emerald-500/70 font-semibold shrink-0">recommended</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Select a stack...</span>
+                    )}
+                    <ChevronDown size={14} className={`text-slate-500 transition-transform duration-150 shrink-0 ml-2 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {dropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg bg-slate-800 border border-white/[0.08] shadow-xl shadow-black/30 scrollbar-thin">
+                      {stacks.map((s) => (
+                        <button
+                          key={s.name}
+                          onClick={() => { setTargetStack(s.name); setDropdownOpen(false); setConfirming(false) }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/[0.06] transition-colors ${s.name === targetStack ? 'bg-white/[0.04]' : ''}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                          <span className="font-mono text-slate-200 truncate flex-1">{s.name}</span>
+                          <span className="text-[10px] text-slate-500 shrink-0">
+                            {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
+                          </span>
+                          {s.name === defaultStack && (
+                            <span className="text-[9px] text-emerald-500/70 font-semibold shrink-0">recommended</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {defaultStack && targetStack !== defaultStack && (
+                  <p className="text-[10px] text-amber-400/70 mt-1">
+                    Suggested stack for this template: <span className="font-mono">{defaultStack}</span>
+                  </p>
+                )}
+              </div>
 
-          {/* Compose preview (collapsible) */}
-          <div>
-            <button
-              onClick={() => setShowCompose((prev) => !prev)}
-              className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-            >
-              <ChevronDown
-                size={14}
-                className={`transition-transform duration-200 ${showCompose ? '' : '-rotate-90'}`}
-              />
-              <Eye size={13} />
-              Compose Preview
-            </button>
-            {showCompose && (
-              <div className="mt-2">
-                {detailLoading ? (
-                  <div className="flex items-center justify-center py-8 bg-slate-950 rounded-lg">
-                    <Loader2 size={18} className="animate-spin text-slate-600" />
+              {/* Template variables */}
+              {templateVars.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    Variables
+                  </label>
+                  <div className="space-y-2.5">
+                    {templateVars.map((v) => (
+                      <div key={v.name}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs text-slate-400 font-medium">{v.label || v.name}</span>
+                          {v.required && (
+                            <span className="text-[9px] text-rose-400 font-semibold">Required</span>
+                          )}
+                        </div>
+                        <input
+                          type={v.type === 'password' ? 'password' : 'text'}
+                          value={variables[v.name] ?? ''}
+                          onChange={(e) => handleVariableChange(v.name, e.target.value)}
+                          placeholder={v.default || v.name}
+                          className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                        />
+                      </div>
+                    ))}
                   </div>
-                ) : detail?.compose ? (
-                  <pre className="bg-slate-950 rounded-lg p-3 text-[11px] font-mono text-slate-400 overflow-x-auto max-h-64 scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
-                    {detail.compose}
-                  </pre>
-                ) : (
-                  <div className="bg-slate-950 rounded-lg p-3 text-xs text-slate-600 italic">
-                    No compose content available
+                </div>
+              )}
+
+              {/* Auto-start toggle */}
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="text-xs font-medium text-slate-300">Auto-start after deploy</p>
+                  <p className="text-[11px] text-slate-500">Automatically start the stack after creation</p>
+                </div>
+                <button
+                  onClick={() => setAutoStart((prev) => !prev)}
+                  className={`relative w-10 h-[22px] rounded-full border transition-colors duration-200 ${
+                    autoStart
+                      ? 'bg-emerald-500/30 border-emerald-500/40'
+                      : 'bg-white/[0.06] border-white/[0.08]'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-[2px] w-4 h-4 rounded-full transition-all duration-200 ${
+                      autoStart
+                        ? 'left-[22px] bg-emerald-400'
+                        : 'left-[2px] bg-slate-500'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Compose preview (collapsible) */}
+              <div>
+                <button
+                  onClick={() => setShowCompose((prev) => !prev)}
+                  className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${showCompose ? '' : '-rotate-90'}`}
+                  />
+                  <Eye size={13} />
+                  Compose Preview
+                </button>
+                {showCompose && (
+                  <div className="mt-2">
+                    {detailLoading ? (
+                      <div className="flex items-center justify-center py-8 bg-slate-950 rounded-lg">
+                        <Loader2 size={18} className="animate-spin text-slate-600" />
+                      </div>
+                    ) : detail?.compose ? (
+                      <pre className="bg-slate-950 rounded-lg p-3 text-[11px] font-mono text-slate-400 overflow-x-auto max-h-64 scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
+                        {detail.compose}
+                      </pre>
+                    ) : (
+                      <div className="bg-slate-950 rounded-lg p-3 text-xs text-slate-600 italic">
+                        No compose content available
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/[0.06] shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onDeploy(stackName.trim(), variables, autoStart)}
-            disabled={!canDeploy}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
-          >
-            {deploying ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Rocket size={13} />
-            )}
-            Deploy Stack
-          </button>
-        </div>
+              {/* F5: Dry-run preview result */}
+              {dryRunResult && (
+                <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2.5 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <Scan size={14} className="text-cyan-400 shrink-0" />
+                    <p className="text-xs font-semibold text-cyan-300">Deployment Preview</p>
+                  </div>
+                  <div className="text-[11px] space-y-2.5 pl-[22px]">
+                    {/* Services to add */}
+                    <div className="flex flex-wrap gap-1">
+                      <span className="text-slate-500">Services:</span>
+                      {dryRunResult.services.map((svc) => (
+                        <span key={svc} className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">{svc}</span>
+                      ))}
+                    </div>
+
+                    {/* Service Conflicts */}
+                    {dryRunResult.has_service_conflicts && (
+                      <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2">
+                        <p className="text-rose-400 font-semibold text-[11px]">
+                          <AlertTriangle size={11} className="inline mr-1" />
+                          Service Name Conflicts
+                        </p>
+                        <p className="text-rose-300/80 text-[10px] mt-0.5 font-mono">{dryRunResult.service_conflicts}</p>
+                      </div>
+                    )}
+
+                    {/* Port Conflicts — detailed */}
+                    {dryRunResult.has_port_conflicts && (
+                      <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2 space-y-1.5">
+                        <p className="text-rose-400 font-semibold text-[11px]">
+                          <AlertTriangle size={11} className="inline mr-1" />
+                          Port Conflicts Detected
+                        </p>
+                        {dryRunResult.port_conflicts_detail && dryRunResult.port_conflicts_detail.length > 0 ? (
+                          <div className="space-y-1">
+                            {dryRunResult.port_conflicts_detail.map((pc, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-[10px]">
+                                <span className="font-mono text-rose-300 font-bold">:{pc.port}</span>
+                                <span className="text-rose-400/70">in use by</span>
+                                <span className={`font-mono px-1.5 py-0.5 rounded ${pc.type === 'stack' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15'}`}>
+                                  {pc.type === 'stack' ? `stack: ${pc.owner}` : `container: ${pc.owner}`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-rose-300/80 text-[10px] font-mono">{dryRunResult.port_conflicts}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* No conflicts */}
+                    {!dryRunResult.has_service_conflicts && !dryRunResult.has_port_conflicts && (
+                      <p className="text-emerald-400/80">
+                        <CheckCircle size={11} className="inline mr-1" />
+                        No conflicts detected — safe to deploy
+                      </p>
+                    )}
+
+                    {/* Env vars — new additions */}
+                    {dryRunResult.env_additions.length > 0 && (
+                      <div>
+                        <span className="text-slate-500 font-semibold">New env vars to add:</span>
+                        <div className="mt-1 space-y-0.5">
+                          {dryRunResult.env_additions.map((e) => (
+                            <div key={e.key} className="flex items-center gap-2 text-[10px]">
+                              <span className="text-emerald-500 font-bold">+</span>
+                              <code className="font-mono text-cyan-400">{e.key}</code>
+                              <span className="text-slate-600">=</span>
+                              <code className="font-mono text-slate-400 truncate">{e.value}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Env vars — already existing */}
+                    {dryRunResult.env_existing && dryRunResult.env_existing.length > 0 && (
+                      <div>
+                        <span className="text-amber-400/80 font-semibold">Env vars already set (will keep existing):</span>
+                        <div className="mt-1 space-y-0.5">
+                          {dryRunResult.env_existing.map((e) => (
+                            <div key={e.key} className="flex items-center gap-2 text-[10px]">
+                              <span className="text-amber-500 font-bold">~</span>
+                              <code className="font-mono text-amber-400">{e.key}</code>
+                              <span className="text-slate-600">=</span>
+                              <code className="font-mono text-slate-500 truncate">{e.current_value}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-slate-500">
+                      +{dryRunResult.lines_added} lines of compose
+                    </p>
+                    {/* Compose snippet preview */}
+                    {dryRunResult.compose_preview && (
+                      <pre className="mt-1 bg-slate-950 rounded p-2 text-[10px] font-mono text-slate-500 overflow-x-auto max-h-32 scrollbar-thin whitespace-pre-wrap break-all leading-relaxed">
+                        {dryRunResult.compose_preview}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* F1: Confirmation panel */}
+              {confirming && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                    <p className="text-xs font-semibold text-amber-300">Confirm Deployment</p>
+                  </div>
+                  <div className="text-[11px] text-slate-400 space-y-1 pl-[22px]">
+                    <p>
+                      Target: <span className="font-mono text-slate-300">{targetStack}</span>
+                      {selectedStack && (
+                        <span className={`ml-1.5 ${selectedStack.status === 'running' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          ({selectedStack.status}{selectedStack.status === 'running' ? `, ${selectedStack.running_containers} containers` : ''})
+                        </span>
+                      )}
+                    </p>
+                    <p>
+                      Services to add: <span className="font-mono text-slate-300">{templateServiceNames.join(', ')}</span>
+                    </p>
+                    <p className="text-amber-400/70 mt-1">
+                      This will modify the compose file of <span className="font-mono">{targetStack}</span>. A backup will be created.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/[0.06] shrink-0">
+              <button
+                onClick={() => { if (confirming) { setConfirming(false) } else { onClose() } }}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                {confirming ? 'Back' : 'Cancel'}
+              </button>
+              {!confirming && (
+                <button
+                  onClick={handleDryRun}
+                  disabled={!targetStack || dryRunLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+                >
+                  {dryRunLoading ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
+                  Preview
+                </button>
+              )}
+              <button
+                onClick={handleDeployClick}
+                disabled={!canDeploy}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
+                  confirming
+                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'
+                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25'
+                }`}
+              >
+                {deploying ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : confirming ? (
+                  <AlertTriangle size={13} />
+                ) : (
+                  <Rocket size={13} />
+                )}
+                {confirming ? 'Confirm & Deploy' : 'Deploy Stack'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>,
     document.body,
@@ -349,16 +703,18 @@ function DeployModal({ template, detail, detailLoading, onClose, onDeploy, deplo
 interface CreateEditModalProps {
   mode: 'create' | 'edit'
   initial?: { name: string; compose: string; env: string; metadata: Record<string, unknown> }
+  stacks: StackInfo[]
   onClose: () => void
   onSave: (data: { name: string; compose: string; env: string; metadata: Record<string, unknown> }) => void
   saving: boolean
 }
 
-function CreateEditModal({ mode, initial, onClose, onSave, saving }: CreateEditModalProps) {
+function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: CreateEditModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [title, setTitle] = useState((initial?.metadata?.title as string) ?? '')
   const [description, setDescription] = useState((initial?.metadata?.description as string) ?? '')
   const [category, setCategory] = useState((initial?.metadata?.category as string) ?? 'other')
+  const [targetStack, setTargetStack] = useState((initial?.metadata?.target_stack as string) ?? '')
   const [compose, setCompose] = useState(initial?.compose ?? 'services:\n  app:\n    image: example:latest\n    restart: unless-stopped\n    volumes:\n      - ${APP_DATA_DIR:-./App-Data}/App:/data\n')
   const [env, setEnv] = useState(initial?.env ?? `# =============================================================================
 # Stack Configuration
@@ -442,7 +798,12 @@ function CreateEditModal({ mode, initial, onClose, onSave, saving }: CreateEditM
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Category</label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    const cat = e.target.value
+                    setCategory(cat)
+                    const suggested = CATEGORY_TO_STACK[cat]
+                    if (suggested) setTargetStack(suggested)
+                  }}
                   className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
                 >
                   <option value="databases">Databases</option>
@@ -451,9 +812,25 @@ function CreateEditModal({ mode, initial, onClose, onSave, saving }: CreateEditM
                   <option value="web">Web</option>
                   <option value="development">Development</option>
                   <option value="storage">Storage</option>
+                  <option value="automation">Automation</option>
+                  <option value="utilities">Utilities</option>
                   <option value="other">Other</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Default Target Stack</label>
+              <select
+                value={targetStack}
+                onChange={(e) => setTargetStack(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
+              >
+                <option value="">None (user selects at deploy time)</option>
+                {stacks.map((s) => (
+                  <option key={s.name} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-600 mt-1">Stack where this template's services will be merged when deployed</p>
             </div>
           </div>
 
@@ -529,7 +906,7 @@ function CreateEditModal({ mode, initial, onClose, onSave, saving }: CreateEditM
             Cancel
           </button>
           <button
-            onClick={() => onSave({ name, compose, env, metadata: { title: title || name, description, category, tags: [], variables: [] } })}
+            onClick={() => onSave({ name, compose, env, metadata: { title: title || name, description, category, target_stack: targetStack || undefined, tags: [], variables: [] } })}
             disabled={!canSave}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed press"
           >
@@ -547,28 +924,43 @@ function CreateEditModal({ mode, initial, onClose, onSave, saving }: CreateEditM
 // Template Card
 // ---------------------------------------------------------------------------
 
+type DeployStatus = { state: 'running' | 'deployed' | 'none'; targetStack?: string }
+
 interface TemplateCardProps {
   template: TemplateInfo
   onDeploy: (template: TemplateInfo) => void
   onEdit: (template: TemplateInfo) => void
   onDelete: (template: TemplateInfo) => void
   onExport: (template: TemplateInfo) => void
+  deployStatus?: DeployStatus
 }
 
-function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport }: TemplateCardProps) {
+function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deployStatus }: TemplateCardProps) {
   const CatIcon = getCategoryIcon(template.category)
   const colors = getCategoryColors(template.category)
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 flex flex-col gap-3 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-200 group">
-      {/* Top row: category badge + actions */}
+      {/* Top row: category badge + deploy status + actions */}
       <div className="flex items-center justify-between">
-        <span
-          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colors.badge}`}
-        >
-          <CatIcon size={10} />
-          {template.category}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colors.badge}`}
+          >
+            <CatIcon size={10} />
+            {template.category}
+          </span>
+          {deployStatus && deployStatus.state !== 'none' && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${
+              deployStatus.state === 'running'
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15'
+                : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
+            }`}>
+              <Circle size={6} className={deployStatus.state === 'running' ? 'fill-emerald-400 text-emerald-400 animate-pulse' : 'fill-slate-500 text-slate-500'} />
+              {deployStatus.state === 'running' ? 'Running' : 'Deployed'}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <button
             onClick={(e) => { e.stopPropagation(); onExport(template) }}
@@ -603,6 +995,13 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport }: Templa
       <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 flex-1">
         {template.description || 'No description provided.'}
       </p>
+
+      {/* F6: Deployed-to indicator */}
+      {deployStatus && deployStatus.state !== 'none' && deployStatus.targetStack && (
+        <p className="text-[10px] text-slate-600">
+          Deployed to: <span className="font-mono text-slate-500">{deployStatus.targetStack}</span>
+        </p>
+      )}
 
       {/* Tags */}
       {template.tags.length > 0 && (
@@ -656,12 +1055,85 @@ export default function Templates() {
   const [editInitial, setEditInitial] = useState<{ name: string; compose: string; env: string; metadata: Record<string, unknown> } | undefined>(undefined)
   const [saving, setSaving] = useState(false)
 
+  // F3: Deploy history state
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyData, setHistoryData] = useState<DeployHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // F6: Container list for deploy status
+  const [containerList, setContainerList] = useState<ContainerInfo[]>([])
+
   // Polling
   const { data, loading, refresh } = usePolling<TemplateListResponse>(
     fetchTemplates,
     30000,
     { enabled: isConnected },
   )
+
+  // Fetch available stacks for the deploy/edit dropdowns
+  const [availableStacks, setAvailableStacks] = useState<StackInfo[]>([])
+  useEffect(() => {
+    if (!isConnected) return
+    fetchStacks().then((res) => setAvailableStacks(res.stacks)).catch(() => {})
+  }, [isConnected])
+
+  // F3: Fetch deploy history + F6: containers
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const [histRes, ctrRes] = await Promise.all([
+        fetchDeployHistory().catch(() => ({ history: [], total: 0 } as DeployHistoryResponse)),
+        fetchContainers().catch(() => ({ containers: [], total: 0 })),
+      ])
+      setHistoryData(histRes.history)
+      setContainerList(ctrRes.containers)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isConnected) return
+    refreshHistory()
+  }, [isConnected, refreshHistory])
+
+  // F6: Build deploy status map
+  const deployStatusMap = useMemo(() => {
+    const map: Record<string, DeployStatus> = {}
+    const runningNames = new Set(containerList.filter((c) => c.state === 'running').map((c) => c.name))
+    const allNames = new Set(containerList.map((c) => c.name))
+
+    // Walk history newest first — find active deploys (deploy without matching undeploy)
+    const undeployed = new Set<string>()
+    for (const entry of historyData) {
+      const key = `${entry.template}__${entry.target_stack}`
+      if (entry.action === 'undeploy') {
+        undeployed.add(key)
+      } else if (entry.action === 'deploy' && !undeployed.has(key)) {
+        // This is an active deploy
+        if (!map[entry.template]) {
+          // Check if any of the services are running
+          const hasRunning = entry.services.some((svc) => {
+            for (const cname of runningNames) {
+              if (cname.includes(svc)) return true
+            }
+            return false
+          })
+          const hasContainer = entry.services.some((svc) => {
+            for (const cname of allNames) {
+              if (cname.includes(svc)) return true
+            }
+            return false
+          })
+          map[entry.template] = {
+            state: hasRunning ? 'running' : hasContainer ? 'deployed' : 'deployed',
+            targetStack: entry.target_stack,
+          }
+        }
+      }
+    }
+    return map
+  }, [historyData, containerList])
 
   const templates = data?.templates ?? []
 
@@ -678,8 +1150,12 @@ export default function Templates() {
     setDetail(null)
     setDetailLoading(true)
     try {
-      const res = await fetchTemplateDetail(template.name)
+      const [res, stacksRes] = await Promise.all([
+        fetchTemplateDetail(template.name),
+        fetchStacks().catch(() => null),
+      ])
       setDetail(res)
+      if (stacksRes) setAvailableStacks(stacksRes.stacks)
     } catch {
       // Detail fetch failed; modal will show with limited info
     } finally {
@@ -694,37 +1170,77 @@ export default function Templates() {
     setDetail(null)
   }, [deploying])
 
-  // Execute deployment
+  // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (stackName: string, variables: Record<string, string>, autoStart: boolean) => {
-      if (!deployTarget) return
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean): Promise<TemplateDeployResponse | null> => {
+      if (!deployTarget) return null
       setDeploying(true)
       try {
         const res = await deployTemplate(deployTarget.name, {
-          stack_name: stackName,
+          target_stack: targetStack,
           variables,
           auto_start: autoStart,
         })
         if (res.success) {
-          addToast({
-            type: 'success',
-            message: `Stack "${res.stack_name}" deployed successfully${res.started ? ' and started' : ''}`,
-          })
-          setDeployTarget(null)
-          setDetail(null)
           refresh()
+          refreshHistory()
+          return res
         } else {
           addToast({ type: 'error', message: res.message || 'Deployment failed', duration: 6000 })
+          return null
         }
       } catch (err) {
+        // F3: Conflict-aware error handling with structured toast messages
         const message = err instanceof Error ? err.message : String(err)
-        addToast({ type: 'error', message: `Deploy failed: ${message}`, duration: 6000 })
+        if (message.includes('409') || message.toLowerCase().includes('conflict')) {
+          addToast({
+            type: 'warning',
+            message: message.toLowerCase().includes('port')
+              ? `Port conflict — a host port is already in use. Change the port variable or choose a different target stack.`
+              : `Service name conflict — one or more services already exist in "${targetStack}". Choose a different stack or rename the conflicting service.`,
+            duration: 8000,
+          })
+        } else if (message.includes('422') || message.toLowerCase().includes('invalid compose')) {
+          addToast({
+            type: 'error',
+            message: 'Merge failed validation and was rolled back. Check template compose syntax.',
+            duration: 8000,
+          })
+        } else if (message.includes('403')) {
+          addToast({
+            type: 'error',
+            message: 'Admin access required to deploy templates.',
+            duration: 6000,
+          })
+        } else {
+          addToast({ type: 'error', message: `Deploy failed: ${message}`, duration: 6000 })
+        }
+        return null
       } finally {
         setDeploying(false)
       }
     },
-    [deployTarget, addToast, refresh],
+    [deployTarget, addToast, refresh, refreshHistory],
   )
+
+  // F4: Undeploy handler
+  const handleUndeploy = useCallback(async (templateName: string, targetStack: string, services: string[]): Promise<boolean> => {
+    try {
+      const res = await undeployTemplate(templateName, { target_stack: targetStack, services, remove_containers: true })
+      if (res.success) {
+        addToast({ type: 'success', message: `Undeployed ${res.services_removed.length} service(s) from ${targetStack}` })
+        refresh()
+        refreshHistory()
+        return true
+      } else {
+        addToast({ type: 'error', message: res.message || 'Undeploy failed', duration: 6000 })
+        return false
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: `Undeploy failed: ${err instanceof Error ? err.message : String(err)}`, duration: 6000 })
+      return false
+    }
+  }, [addToast, refresh, refreshHistory])
 
   // Open create modal
   const handleOpenCreate = useCallback(() => {
@@ -740,7 +1256,7 @@ export default function Templates() {
         name: template.name,
         compose: res.compose || '',
         env: res.env || '',
-        metadata: { title: template.title || template.name, description: template.description, category: template.category, tags: template.tags, variables: template.variables || [] },
+        metadata: { title: template.title || template.name, description: template.description, category: template.category, target_stack: template.target_stack || '', tags: template.tags, variables: template.variables || [] },
       })
       setCreateEditMode('edit')
     } catch {
@@ -784,7 +1300,7 @@ export default function Templates() {
       const res = await fetchTemplateDetail(template.name)
       const exportData = {
         name: template.name,
-        metadata: { title: template.title || template.name, description: template.description, category: template.category, tags: template.tags, variables: template.variables || [] },
+        metadata: { title: template.title || template.name, description: template.description, category: template.category, target_stack: template.target_stack || '', tags: template.tags, variables: template.variables || [] },
         compose: res.compose || '',
         env: res.env || '',
       }
@@ -906,6 +1422,17 @@ export default function Templates() {
             Import
           </button>
           <button
+            onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
+              showHistory
+                ? 'bg-violet-500/15 text-violet-400 border-violet-500/25 hover:bg-violet-500/25'
+                : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.08]'
+            }`}
+          >
+            <History size={13} />
+            History
+          </button>
+          <button
             onClick={refresh}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
@@ -915,6 +1442,83 @@ export default function Templates() {
           </button>
         </div>
       </div>
+
+      {/* F3: Deploy History Panel */}
+      {showHistory && (
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 animate-fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <History size={14} className="text-violet-400" />
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
+              <span className="text-[10px] text-slate-600">{historyData.length} events</span>
+            </div>
+            <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 size={18} className="animate-spin text-slate-600" />
+            </div>
+          ) : historyData.length === 0 ? (
+            <p className="text-xs text-slate-600 text-center py-6">No deployment history yet</p>
+          ) : (
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/[0.06]">
+                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Time</th>
+                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Action</th>
+                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Template</th>
+                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Stack</th>
+                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Services</th>
+                    <th className="text-right py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyData.slice(0, 20).map((entry) => (
+                    <tr key={entry.id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                      <td className="py-2 px-2 text-slate-500 whitespace-nowrap">
+                        {new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          entry.action === 'deploy'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-amber-500/10 text-amber-400'
+                        }`}>
+                          {entry.action}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 font-mono text-slate-300">{entry.template}</td>
+                      <td className="py-2 px-2 font-mono text-slate-400">{entry.target_stack}</td>
+                      <td className="py-2 px-2">
+                        <div className="flex flex-wrap gap-1">
+                          {entry.services.map((svc) => (
+                            <span key={svc} className="px-1 py-0.5 rounded text-[9px] bg-white/[0.04] text-slate-500">{svc}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {entry.action === 'deploy' && (
+                          <button
+                            onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            title="Undeploy these services"
+                          >
+                            <Undo2 size={10} />
+                            Undeploy
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Category filter bar + search */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
@@ -996,20 +1600,46 @@ export default function Templates() {
       )}
 
       {/* Template card grid */}
-      {filtered.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((template) => (
-            <TemplateCard
-              key={template.name}
-              template={template}
-              onDeploy={handleOpenDeploy}
-              onEdit={handleOpenEdit}
-              onDelete={handleDeleteTemplate}
-              onExport={handleExportTemplate}
-            />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map((template) => (
+          <TemplateCard
+            key={template.name}
+            template={template}
+            onDeploy={handleOpenDeploy}
+            onEdit={handleOpenEdit}
+            onDelete={handleDeleteTemplate}
+            onExport={handleExportTemplate}
+            deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+          />
+        ))}
+
+        {/* Create Template Card */}
+        <button
+          onClick={handleOpenCreate}
+          className="
+            group relative flex flex-col items-center justify-center
+            min-h-[200px] rounded-xl border-2 border-dashed
+            border-white/[0.12] hover:border-emerald-500/40
+            bg-slate-800/40 hover:bg-emerald-500/[0.06]
+            transition-all duration-300 cursor-pointer
+          "
+        >
+          <div className="
+            flex items-center justify-center w-14 h-14 rounded-2xl
+            bg-slate-700/30 group-hover:bg-emerald-500/15
+            ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
+            transition-all duration-300 mb-3
+          ">
+            <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
+          </div>
+          <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
+            Create Template
+          </span>
+          <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+            Build a custom service template
+          </span>
+        </button>
+      </div>
 
       {/* Deploy modal */}
       {deployTarget && (
@@ -1017,9 +1647,11 @@ export default function Templates() {
           template={deployTarget}
           detail={detail}
           detailLoading={detailLoading}
+          stacks={availableStacks}
           onClose={handleCloseDeploy}
           onDeploy={handleDeploy}
           deploying={deploying}
+          onUndeploy={handleUndeploy}
         />
       )}
 
@@ -1028,6 +1660,7 @@ export default function Templates() {
         <CreateEditModal
           mode={createEditMode}
           initial={editInitial}
+          stacks={availableStacks}
           onClose={() => { if (!saving) setCreateEditMode(null) }}
           onSave={handleSaveTemplate}
           saving={saving}
