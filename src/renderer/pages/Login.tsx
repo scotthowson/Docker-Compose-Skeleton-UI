@@ -39,6 +39,8 @@ export default function Login() {
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [connected, setConnected] = useState(false)
+  const isFirstRender = useRef(true)
 
   // Derive session label from settings
   const sessionLabel = (() => {
@@ -69,35 +71,64 @@ export default function Login() {
     }
   }, [])
 
+  // Fire connection test immediately on first render, debounce subsequent changes
   useEffect(() => {
     if (connTestTimer.current) clearTimeout(connTestTimer.current)
     if (!serverUrl.trim()) {
       setConnStatus('idle')
       return
     }
-    connTestTimer.current = setTimeout(() => testConnection(serverUrl), 800)
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      testConnection(serverUrl)
+    } else {
+      connTestTimer.current = setTimeout(() => testConnection(serverUrl), 800)
+    }
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
   }, [serverUrl, testConnection])
 
-  // Auto-redirect to Setup Wizard when server is reachable but uninitialized
+  // Reset connected state when server URL changes (user is typing a new address)
   useEffect(() => {
-    if (connStatus !== 'ok') return
+    setConnected(false)
+  }, [serverUrl])
+
+  // When server is reachable, verify setup status before showing auth form.
+  // If server is uninitialized → redirect to Setup Wizard.
+  // If server is initialized  → reveal the auth form (Phase 2).
+  useEffect(() => {
+    if (connStatus !== 'ok') {
+      setConnected(false)
+      return
+    }
     let cancelled = false
     ;(async () => {
       try {
         apiClient.setBaseUrl(serverUrl)
         const status = await fetchSetupStatus()
-        if (!cancelled && !status.initialized) {
+        if (!cancelled) {
+          // Persist the verified server URL
           setServerUrl(serverUrl)
           useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-          setCurrentPage('setup')
+          if (!status.initialized) {
+            setCurrentPage('setup')
+          } else {
+            setConnected(true)
+          }
         }
       } catch {
-        // Server doesn't support setup endpoint or network issue — ignore
+        // Setup endpoint unavailable — treat server as initialized
+        if (!cancelled) {
+          setServerUrl(serverUrl)
+          useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+          setConnected(true)
+        }
       }
     })()
     return () => { cancelled = true }
-  }, [connStatus, serverUrl, setCurrentPage, setServerUrl])
+    // serverUrl intentionally omitted — effect should only fire on connStatus
+    // transitions; the URL reset effect above handles URL changes separately
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connStatus, setCurrentPage, setServerUrl])
 
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
@@ -372,6 +403,88 @@ export default function Login() {
 
         {/* Form card */}
         <div className="glass gradient-border p-8">
+
+          {/* ════════════════════════════════════════════════════════════════
+              Phase 1 — Server Connection (shown until server is verified)
+              ════════════════════════════════════════════════════════════════ */}
+          {!connected ? (
+            <div className="animate-fade-in">
+              {/* Connection banner */}
+              <div className="flex items-center gap-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-4 py-3 mb-6">
+                <Globe size={16} className="text-cyan-400 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-cyan-300">Server Connection</p>
+                  <p className="text-[10px] text-cyan-400/70 mt-0.5">
+                    Connect to your DCS server to get started
+                  </p>
+                </div>
+              </div>
+
+              {/* Header */}
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold text-slate-100">Connect to Server</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Enter the address of your DCS API server
+                </p>
+              </div>
+
+              {/* Server URL — press Enter to test immediately */}
+              <form onSubmit={(e) => {
+                e.preventDefault()
+                if (connTestTimer.current) clearTimeout(connTestTimer.current)
+                if (serverUrl.trim()) testConnection(serverUrl)
+              }}>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <input
+                      type="url"
+                      value={serverUrl}
+                      onChange={(e) => setServerUrlLocal(e.target.value)}
+                      placeholder="http://192.168.1.100:9876"
+                      autoFocus
+                      autoComplete="url"
+                      className="
+                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
+                        text-sm text-slate-200 placeholder-slate-600
+                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
+                        transition-all duration-300
+                      "
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
+                      {connStatus === 'ok' && <Loader2 size={14} className="text-emerald-400 animate-spin" />}
+                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
+                    </div>
+                  </div>
+                  {connStatus === 'ok' ? (
+                    <p className="text-[10px] text-emerald-400/80 mt-1">
+                      Connected — verifying server…
+                    </p>
+                  ) : connStatus === 'fail' ? (
+                    <p className="text-[10px] text-rose-400/80 mt-1">
+                      Server unreachable — check address and ensure API is running
+                    </p>
+                  ) : connStatus === 'testing' ? (
+                    <p className="text-[10px] text-cyan-400/80 mt-1">
+                      Connecting…
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      IP address and port of your DCS API server
+                    </p>
+                  )}
+                </div>
+              </form>
+            </div>
+
+          ) : (
+          <>
+          {/* ════════════════════════════════════════════════════════════════
+              Phase 2 — Authentication (server verified as initialized)
+              ════════════════════════════════════════════════════════════════ */}
+
           {/* ── Initial Setup (admin creation) — unchanged ── */}
           {isSetup && (
             <>
@@ -914,15 +1027,20 @@ export default function Login() {
               </div>
             </div>
           )}
+
+          </>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-2 mt-6">
           <Shield size={12} className="text-slate-600" />
           <p className="text-[10px] text-slate-600">
-            {!isSetup && mode === 'register'
-              ? 'Secure registration via server-validated invite codes'
-              : 'PBKDF2 encrypted credentials stored locally on this device only'
+            {!connected
+              ? 'Secure connection to your DCS API server'
+              : !isSetup && mode === 'register'
+                ? 'Secure registration via server-validated invite codes'
+                : 'PBKDF2 encrypted credentials stored locally on this device only'
             }
           </p>
         </div>
