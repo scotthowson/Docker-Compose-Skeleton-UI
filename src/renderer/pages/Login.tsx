@@ -79,6 +79,26 @@ export default function Login() {
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
   }, [serverUrl, testConnection])
 
+  // Auto-redirect to Setup Wizard when server is reachable but uninitialized
+  useEffect(() => {
+    if (connStatus !== 'ok') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        apiClient.setBaseUrl(serverUrl)
+        const status = await fetchSetupStatus()
+        if (!cancelled && !status.initialized) {
+          setServerUrl(serverUrl)
+          useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+          setCurrentPage('setup')
+        }
+      } catch {
+        // Server doesn't support setup endpoint or network issue — ignore
+      }
+    })()
+    return () => { cancelled = true }
+  }, [connStatus, serverUrl, setCurrentPage, setServerUrl])
+
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
 

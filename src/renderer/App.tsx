@@ -250,7 +250,7 @@ export default function App() {
   }
 
   // Show login screen if not authenticated
-  if (authLoading) {
+  if (!settingsReady || authLoading) {
     return (
       <div className="h-screen bg-slate-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-6 animate-fade-in">
