@@ -93,6 +93,9 @@ export default function Login() {
   }, [serverUrl])
 
   // When server is reachable, verify setup status before showing auth form.
+  // Uses raw fetch() — NOT apiClient.get() — because authStore eagerly restores a
+  // stale Bearer token on module load, and that Authorization header triggers a CORS
+  // preflight which fails on the file:// origin used by packaged Electron builds.
   // Retries up to 3 times for transient failures (server starting, CORS settling).
   // If server is uninitialized → clear stale local data + redirect to Setup Wizard.
   // If server is initialized  → reveal the auth form (Phase 2).
@@ -104,30 +107,43 @@ export default function Login() {
     }
     let cancelled = false
     ;(async () => {
-      apiClient.setBaseUrl(serverUrl)
       const maxAttempts = 3
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (cancelled) return
         try {
-          const status = await fetchSetupStatus()
+          const ctrl = new AbortController()
+          const tid = setTimeout(() => ctrl.abort(), 5000)
+          const resp = await fetch(`${serverUrl}/setup/status`, { method: 'GET', signal: ctrl.signal })
+          clearTimeout(tid)
           if (cancelled) return
-          // Persist the verified server URL
+          if (resp.ok) {
+            const status = await resp.json()
+            // Persist the verified server URL
+            apiClient.setBaseUrl(serverUrl)
+            setServerUrl(serverUrl)
+            useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+            if (!status.initialized) {
+              // Server was factory-reset — clear stale local accounts from prior install
+              if (window.electronAPI) {
+                await window.electronAPI.setSetting('userAccounts', undefined)
+              }
+              localStorage.removeItem('userAccounts')
+              localStorage.removeItem('auth-session')
+              localStorage.removeItem('api-auth-token')
+              apiClient.setAuthToken(null)
+              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+              setCurrentPage('setup')
+            } else {
+              setConnected(true)
+            }
+            return // Success — exit retry loop
+          }
+          // Non-ok response (404 etc.) — treat as initialized, show login
+          apiClient.setBaseUrl(serverUrl)
           setServerUrl(serverUrl)
           useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-          if (!status.initialized) {
-            // Server was factory-reset — clear stale local accounts from prior install
-            if (window.electronAPI) {
-              await window.electronAPI.setSetting('userAccounts', undefined)
-            }
-            localStorage.removeItem('userAccounts')
-            localStorage.removeItem('auth-session')
-            localStorage.removeItem('api-auth-token')
-            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-            setCurrentPage('setup')
-          } else {
-            setConnected(true)
-          }
-          return // Success — exit retry loop
+          setConnected(true)
+          return
         } catch {
           // Retry after a brief delay
           if (attempt < maxAttempts - 1) {

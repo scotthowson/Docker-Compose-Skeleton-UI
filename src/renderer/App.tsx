@@ -42,7 +42,7 @@ import Topology from './pages/Topology'
 import FileBrowser from './pages/FileBrowser'
 import DiskAnalysis from './pages/DiskAnalysis'
 import SetupWizard from './pages/SetupWizard'
-import { fetchSetupStatus } from './api/endpoints'
+import { apiClient } from './api/client'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -102,24 +102,36 @@ export default function App() {
         setServerUrl(serverUrl)
       }
 
-      // Check if server needs first-run setup (retry up to 3 times for transient failures)
+      // Check if server needs first-run setup (retry up to 3 times for transient failures).
+      // Uses raw fetch() instead of apiClient.get() because authStore eagerly restores a
+      // stale Bearer token from localStorage on module load.  That Authorization header
+      // triggers a CORS preflight which can fail on the file:// origin used by packaged
+      // Electron builds — even though the server is reachable for simple GET requests.
+      const setupUrl = `${useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'}/setup/status`
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const status = await fetchSetupStatus()
-          if (!status.initialized) {
-            // Server was factory-reset — clear stale local accounts from prior install
-            if (window.electronAPI) {
-              await window.electronAPI.setSetting('userAccounts', undefined)
+          const ctrl = new AbortController()
+          const tid = setTimeout(() => ctrl.abort(), 5000)
+          const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
+          clearTimeout(tid)
+          if (resp.ok) {
+            const status = await resp.json()
+            if (!status.initialized) {
+              // Server was factory-reset — clear stale local accounts from prior install
+              if (window.electronAPI) {
+                await window.electronAPI.setSetting('userAccounts', undefined)
+              }
+              localStorage.removeItem('userAccounts')
+              localStorage.removeItem('auth-session')
+              localStorage.removeItem('api-auth-token')
+              apiClient.setAuthToken(null)
+              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+              setCurrentPage('setup')
+              setSettingsReady(true)
+              return // Skip normal auth flow
             }
-            localStorage.removeItem('userAccounts')
-            localStorage.removeItem('auth-session')
-            localStorage.removeItem('api-auth-token')
-            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-            setCurrentPage('setup')
-            setSettingsReady(true)
-            return // Skip normal auth flow
           }
-          break // Server initialized — proceed to login
+          break // Server initialized or non-ok response — proceed to login
         } catch {
           // Retry after brief delay, or proceed to login on final attempt
           if (attempt < 2) await new Promise(r => setTimeout(r, 300))
