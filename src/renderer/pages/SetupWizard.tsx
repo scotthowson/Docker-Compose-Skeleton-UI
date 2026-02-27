@@ -110,7 +110,7 @@ function StepIndicator({ current, total }: { current: Step; total: number }) {
             </div>
             {i < steps.length - 1 && (
               <div className={`
-                w-10 md:w-16 h-px mx-1 mb-5 transition-colors duration-300
+                w-6 sm:w-10 md:w-16 h-px mx-0.5 sm:mx-1 mb-5 transition-colors duration-300
                 ${s < current ? 'bg-emerald-500/50' : 'bg-white/[0.06]'}
               `} />
             )}
@@ -463,8 +463,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // Success screen
   if (complete) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-center animate-scale-in max-w-sm">
+      <div className="h-screen flex items-center justify-center bg-slate-950 px-4">
+        <div className="text-center animate-scale-in max-w-sm w-full">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/30 mb-6 shadow-lg shadow-emerald-500/10">
             <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
           </div>
@@ -503,8 +503,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       />
 
       {/* Scrollable content area */}
-      <div className="relative z-10 min-h-screen flex items-start justify-center py-8 md:py-12 overflow-y-auto scrollbar-thin">
-        <div className="w-full max-w-2xl mx-4">
+      <div className="relative z-10 min-h-screen flex items-start justify-center pt-12 pb-8 md:py-12 overflow-y-auto scrollbar-thin">
+        <div className="w-full max-w-2xl mx-4 sm:mx-6">
           {/* Logo */}
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 mb-3">
@@ -516,7 +516,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           <StepIndicator current={step} total={5} />
 
           {/* Content card */}
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-6 md:p-8 shadow-2xl shadow-black/20">
+          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20">
           {/* Error banner */}
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 mb-6 animate-fade-in">
@@ -604,7 +604,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <Server size={16} className="text-emerald-400" />
                       <h3 className="text-sm font-semibold text-slate-300">Detected System</h3>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                       {[
                         { label: 'Hostname', value: defaults.system.hostname },
                         { label: 'Timezone', value: defaults.system.timezone },
@@ -837,7 +837,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* PUID / PGID */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1.5">User ID (PUID)</label>
                     <input
@@ -948,7 +948,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       />
 
                       {/* Number: Service start delay */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Start Delay (seconds)</label>
                           <input
@@ -1076,7 +1076,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     )}
 
                     {/* Actions */}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         onClick={() => startEdit(index)}
@@ -1177,11 +1177,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <Settings size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Server Identity</h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['SERVER_NAME', 'TZ', 'PROXY_DOMAIN'].map((key) => (
                       <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
-                        <span className="text-[10px] text-slate-500">{key}</span>
-                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
+                        <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                       </div>
                     ))}
                   </div>
@@ -1192,11 +1192,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <FolderOpen size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Storage & Permissions</h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['APP_DATA_DIR', 'PUID', 'PGID'].map((key) => (
                       <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
-                        <span className="text-[10px] text-slate-500">{key}</span>
-                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
+                        <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                       </div>
                     ))}
                   </div>
@@ -1210,8 +1210,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <h3 className="text-xs font-semibold text-slate-300">Notifications</h3>
                     </div>
                     <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
-                      <span className="text-[10px] text-slate-500">NTFY_URL</span>
-                      <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[200px]">{envVars.NTFY_URL}</span>
+                      <span className="text-[10px] text-slate-500 shrink-0">NTFY_URL</span>
+                      <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars.NTFY_URL}</span>
                     </div>
                   </div>
                 )}
@@ -1225,11 +1225,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <Zap size={14} className="text-cyan-400" />
                         <h3 className="text-xs font-semibold text-slate-300">Startup & Health</h3>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {changed.map(([key]) => (
                           <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
-                            <span className="text-[10px] text-slate-500">{key}</span>
-                            <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
+                            <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
+                            <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                           </div>
                         ))}
                       </div>
@@ -1246,8 +1246,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="grid grid-cols-1 gap-2">
                       {['BACKUP_SOURCE_DIR', 'BACKUP_DEST_DIR'].filter((k) => envVars[k]).map((key) => (
                         <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
-                          <span className="text-[10px] text-slate-500">{key}</span>
-                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[200px]">{envVars[key]}</span>
+                          <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                         </div>
                       ))}
                     </div>

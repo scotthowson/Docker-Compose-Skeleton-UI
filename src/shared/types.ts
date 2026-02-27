@@ -1233,6 +1233,7 @@ export interface TemplateUndeployResponse {
   services_removed: string[]
   containers_removed: string[]
   backup_file: string
+  stack_deleted: boolean
   message: string
 }
 
@@ -1345,6 +1346,7 @@ export interface FactoryResetResponse {
   success: boolean
   files_removed: string[]
   compose_reset: boolean
+  stacks_removed: string[]
 }
 
 // POST /setup/configure
