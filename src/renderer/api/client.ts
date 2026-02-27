@@ -152,17 +152,13 @@ export class ApiClient {
 
   async testConnection(): Promise<boolean> {
     try {
-      // Use a single attempt with short timeout for connection test
+      // Simple reachability check — no auth headers (avoids CORS preflight)
       const url = `${this.baseUrl}/`
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000)
       try {
         const response = await fetch(url, {
           method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-          },
           signal: controller.signal,
         })
         return response.ok

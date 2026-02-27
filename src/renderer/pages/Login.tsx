@@ -444,7 +444,7 @@ export default function Login() {
                 </p>
               </div>
 
-              {/* Server URL — press Enter to test immediately */}
+              {/* Server URL — press Enter or click button to test */}
               <form onSubmit={(e) => {
                 e.preventDefault()
                 if (connTestTimer.current) clearTimeout(connTestTimer.current)
@@ -470,7 +470,7 @@ export default function Login() {
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
-                      {connStatus === 'ok' && <Loader2 size={14} className="text-emerald-400 animate-spin" />}
+                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
                       {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
                   </div>
@@ -492,6 +492,37 @@ export default function Login() {
                     </p>
                   )}
                 </div>
+
+                {/* Test Connection button */}
+                <button
+                  type="submit"
+                  disabled={connStatus === 'testing' || connStatus === 'ok' || !serverUrl.trim()}
+                  className="
+                    w-full mt-4 py-2.5 rounded-lg text-sm font-medium
+                    transition-all duration-300 press
+                    bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
+                    hover:bg-cyan-500/30 hover:border-cyan-500/50
+                    disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/20
+                    flex items-center justify-center gap-2
+                  "
+                >
+                  {connStatus === 'testing' ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Testing Connection…
+                    </>
+                  ) : connStatus === 'ok' ? (
+                    <>
+                      <Wifi size={14} />
+                      Connected
+                    </>
+                  ) : (
+                    <>
+                      <Wifi size={14} />
+                      Test Connection
+                    </>
+                  )}
+                </button>
               </form>
             </div>
 
