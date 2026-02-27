@@ -59,8 +59,8 @@ export default function Login() {
       const prev = apiClient.getBaseUrl()
       apiClient.setBaseUrl(url)
       try {
-        await apiClient.testConnection()
-        setConnStatus('ok')
+        const ok = await apiClient.testConnection()
+        setConnStatus(ok ? 'ok' : 'fail')
       } catch {
         setConnStatus('fail')
       } finally {
@@ -115,12 +115,17 @@ export default function Login() {
             setConnected(true)
           }
         }
-      } catch {
-        // Setup endpoint unavailable — treat server as initialized
+      } catch (err) {
         if (!cancelled) {
-          setServerUrl(serverUrl)
-          useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-          setConnected(true)
+          if (err instanceof ApiNetworkError) {
+            // Server became unreachable — stay on Phase 1
+            setConnStatus('fail')
+          } else {
+            // Server responded but setup endpoint missing (404, etc.) — treat as initialized
+            setServerUrl(serverUrl)
+            useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+            setConnected(true)
+          }
         }
       }
     })()
