@@ -5,8 +5,10 @@ export interface ElectronAPI {
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<boolean>
   getVersion: () => Promise<string>
-  /** Fetch a URL via the main process (bypasses CORS/CSP/PNA restrictions) */
-  netFetchJson: (url: string) => Promise<{ ok: boolean; status: number; data: unknown }>
+  /** Combined server check: connectivity + setup status in one call (Node.js http, no CORS) */
+  checkServer: (serverUrl: string) => Promise<{ reachable: boolean; initialized: boolean; error?: string }>
+  /** Generic JSON fetch via Node.js http (bypasses all browser security) */
+  netFetchJson: (url: string) => Promise<{ ok: boolean; status: number; data: unknown; error?: string }>
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -14,5 +16,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSetting: (key: string) => ipcRenderer.invoke('get-setting', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('set-setting', key, value),
   getVersion: () => ipcRenderer.invoke('get-version'),
+  checkServer: (serverUrl: string) => ipcRenderer.invoke('check-server', serverUrl),
   netFetchJson: (url: string) => ipcRenderer.invoke('net-fetch-json', url),
 } satisfies ElectronAPI)

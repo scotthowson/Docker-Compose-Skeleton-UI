@@ -52,34 +52,89 @@ export default function Login() {
     return `Remember me for ${Math.round(sessionDurationMinutes / 1440)} days`
   })()
 
-  // Debounced connection test when serverUrl changes.
-  // In Electron, uses main-process net.fetch via IPC (bypasses CORS/PNA).
-  // In browser, falls back to apiClient.testConnection().
-  const testConnection = useCallback(async (url: string) => {
+  // Combined connection test + setup detection in ONE call.
+  // In Electron: uses checkServer IPC which runs Node.js http.get in the main
+  // process — completely bypasses Chromium (no CORS, no CSP, no PNA, nothing).
+  // In browser: falls back to sequential fetch() calls.
+  const checkServer = useCallback(async (url: string) => {
     setConnStatus('testing')
+    setConnected(false)
     try {
-      let ok = false
-      if (window.electronAPI?.netFetchJson) {
-        // Electron: test via main process — no CORS restrictions
-        const res = await window.electronAPI.netFetchJson(`${url}/`)
-        ok = res.ok
+      if (window.electronAPI?.checkServer) {
+        // ── Electron path: single IPC call, Node.js http in main process ──
+        const res = await window.electronAPI.checkServer(url)
+        if (!res.reachable) {
+          setConnStatus('fail')
+          return
+        }
+        // Server is reachable — persist URL and decide next step
+        setConnStatus('ok')
+        apiClient.setBaseUrl(url)
+        setServerUrl(url)
+        useSettingsStore.getState().updateSetting('serverUrl', url)
+
+        if (!res.initialized) {
+          // Server needs first-run setup — clear stale data + redirect
+          if (window.electronAPI) {
+            await window.electronAPI.setSetting('userAccounts', undefined)
+          }
+          localStorage.removeItem('userAccounts')
+          localStorage.removeItem('auth-session')
+          localStorage.removeItem('api-auth-token')
+          apiClient.setAuthToken(null)
+          useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+          setCurrentPage('setup')
+        } else {
+          setConnected(true)
+        }
       } else {
-        // Browser fallback
+        // ── Browser fallback: two fetch() calls ──
         const prev = apiClient.getBaseUrl()
         apiClient.setBaseUrl(url)
         try {
-          ok = await apiClient.testConnection()
+          const ok = await apiClient.testConnection()
+          if (!ok) { setConnStatus('fail'); return }
         } finally {
           apiClient.setBaseUrl(prev)
         }
+        setConnStatus('ok')
+
+        // Check setup status
+        try {
+          const ctrl = new AbortController()
+          const tid = setTimeout(() => ctrl.abort(), 5000)
+          const resp = await fetch(`${url}/setup/status`, { method: 'GET', signal: ctrl.signal })
+          clearTimeout(tid)
+          apiClient.setBaseUrl(url)
+          setServerUrl(url)
+          useSettingsStore.getState().updateSetting('serverUrl', url)
+          if (resp.ok) {
+            const data = await resp.json()
+            if (!data.initialized) {
+              localStorage.removeItem('userAccounts')
+              localStorage.removeItem('auth-session')
+              localStorage.removeItem('api-auth-token')
+              apiClient.setAuthToken(null)
+              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+              setCurrentPage('setup')
+              return
+            }
+          }
+          setConnected(true)
+        } catch {
+          // Setup check failed but connection was confirmed — show login
+          apiClient.setBaseUrl(url)
+          setServerUrl(url)
+          useSettingsStore.getState().updateSetting('serverUrl', url)
+          setConnected(true)
+        }
       }
-      setConnStatus(ok ? 'ok' : 'fail')
     } catch {
       setConnStatus('fail')
     }
-  }, [])
+  }, [setServerUrl, setCurrentPage])
 
-  // Fire connection test immediately on first render, debounce subsequent changes
+  // Fire check immediately on first render, debounce subsequent URL changes
   useEffect(() => {
     if (connTestTimer.current) clearTimeout(connTestTimer.current)
     if (!serverUrl.trim()) {
@@ -88,113 +143,13 @@ export default function Login() {
     }
     if (isFirstRender.current) {
       isFirstRender.current = false
-      testConnection(serverUrl)
+      checkServer(serverUrl)
     } else {
-      connTestTimer.current = setTimeout(() => testConnection(serverUrl), 800)
+      setConnected(false)
+      connTestTimer.current = setTimeout(() => checkServer(serverUrl), 800)
     }
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
-  }, [serverUrl, testConnection])
-
-  // Reset connected state when server URL changes (user is typing a new address)
-  useEffect(() => {
-    setConnected(false)
-  }, [serverUrl])
-
-  // When server is reachable, verify setup status before showing auth form.
-  // In Electron, uses main-process net.fetch via IPC (bypasses ALL renderer
-  // security: CORS, CSP, Private Network Access).
-  // In browser, falls back to raw fetch().
-  // If server is uninitialized → clear stale local data + redirect to Setup Wizard.
-  // If server is initialized  → reveal the auth form (Phase 2).
-  // If all attempts fail      → stay on Phase 1 (don't silently show login).
-  useEffect(() => {
-    if (connStatus !== 'ok') {
-      setConnected(false)
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      const setupUrl = `${serverUrl}/setup/status`
-      const maxAttempts = 3
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (cancelled) return
-        try {
-          let initialized = true
-          let gotResponse = false
-
-          if (window.electronAPI?.netFetchJson) {
-            // Electron: fetch through main process — no CORS restrictions
-            const res = await window.electronAPI.netFetchJson(setupUrl)
-            if (cancelled) return
-            if (res.ok && res.data && typeof res.data === 'object' && 'initialized' in res.data) {
-              initialized = (res.data as { initialized: boolean }).initialized
-              gotResponse = true
-            } else if (res.status > 0) {
-              // Server responded but not with expected data — treat as initialized
-              gotResponse = true
-            }
-          } else {
-            // Browser fallback
-            const ctrl = new AbortController()
-            const tid = setTimeout(() => ctrl.abort(), 5000)
-            const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
-            clearTimeout(tid)
-            if (cancelled) return
-            if (resp.ok) {
-              const data = await resp.json()
-              initialized = !!data.initialized
-              gotResponse = true
-            } else {
-              gotResponse = true // non-ok but server is there
-            }
-          }
-
-          if (!gotResponse) {
-            // No response at all — retry
-            if (attempt < maxAttempts - 1) {
-              await new Promise(r => setTimeout(r, 400))
-              continue
-            }
-            break
-          }
-
-          // Persist the verified server URL
-          apiClient.setBaseUrl(serverUrl)
-          setServerUrl(serverUrl)
-          useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-
-          if (!initialized) {
-            // Server was factory-reset — clear stale local accounts from prior install
-            if (window.electronAPI) {
-              await window.electronAPI.setSetting('userAccounts', undefined)
-            }
-            localStorage.removeItem('userAccounts')
-            localStorage.removeItem('auth-session')
-            localStorage.removeItem('api-auth-token')
-            apiClient.setAuthToken(null)
-            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-            setCurrentPage('setup')
-          } else {
-            setConnected(true)
-          }
-          return // Success — exit retry loop
-        } catch {
-          // Retry after a brief delay
-          if (attempt < maxAttempts - 1) {
-            await new Promise(r => setTimeout(r, 400))
-          }
-        }
-      }
-      // All attempts failed — stay on Phase 1 instead of silently showing login
-      if (!cancelled) {
-        setConnStatus('fail')
-      }
-    })()
-    return () => { cancelled = true }
-    // serverUrl intentionally omitted — effect should only fire on connStatus
-    // transitions; the URL reset effect above handles URL changes separately
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connStatus, setCurrentPage, setServerUrl])
+  }, [serverUrl, checkServer])
 
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
@@ -498,7 +453,7 @@ export default function Login() {
               <form onSubmit={(e) => {
                 e.preventDefault()
                 if (connTestTimer.current) clearTimeout(connTestTimer.current)
-                if (serverUrl.trim()) testConnection(serverUrl)
+                if (serverUrl.trim()) checkServer(serverUrl)
               }}>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>

@@ -103,24 +103,21 @@ export default function App() {
       }
 
       // Check if server needs first-run setup.
-      // In Electron, use the main-process net.fetch via IPC — this bypasses all
-      // renderer security restrictions (CORS, CSP, Private Network Access).
-      // In browser/Capacitor, fall back to a raw fetch().
-      const setupUrl = `${useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'}/setup/status`
+      // In Electron: single IPC call uses Node.js http in main process (no CORS).
+      // In browser: falls back to raw fetch().
+      const currentServerUrl = useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           let initialized = true
-          if (window.electronAPI?.netFetchJson) {
-            // Electron: fetch through main process (no CORS restrictions)
-            const res = await window.electronAPI.netFetchJson(setupUrl)
-            if (res.ok && res.data && typeof res.data === 'object' && 'initialized' in res.data) {
-              initialized = (res.data as { initialized: boolean }).initialized
+          if (window.electronAPI?.checkServer) {
+            const res = await window.electronAPI.checkServer(currentServerUrl)
+            if (res.reachable) {
+              initialized = res.initialized
             }
           } else {
-            // Browser fallback
             const ctrl = new AbortController()
             const tid = setTimeout(() => ctrl.abort(), 5000)
-            const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
+            const resp = await fetch(`${currentServerUrl}/setup/status`, { method: 'GET', signal: ctrl.signal })
             clearTimeout(tid)
             if (resp.ok) {
               const data = await resp.json()
@@ -128,7 +125,6 @@ export default function App() {
             }
           }
           if (!initialized) {
-            // Server was factory-reset — clear stale local accounts from prior install
             if (window.electronAPI) {
               await window.electronAPI.setSetting('userAccounts', undefined)
             }
@@ -139,11 +135,10 @@ export default function App() {
             useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
             setCurrentPage('setup')
             setSettingsReady(true)
-            return // Skip normal auth flow
+            return
           }
-          break // Server initialized — proceed to login
+          break
         } catch {
-          // Retry after brief delay, or proceed to login on final attempt
           if (attempt < 2) await new Promise(r => setTimeout(r, 300))
         }
       }
