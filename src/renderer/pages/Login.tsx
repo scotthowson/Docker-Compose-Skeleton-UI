@@ -313,7 +313,10 @@ export default function Login() {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden">
+    <div
+      className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-y-auto overflow-x-hidden scrollbar-thin"
+      style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
+    >
       {/* Animated background effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full rounded-full bg-emerald-500/[0.05] blur-3xl animate-float-slow" />

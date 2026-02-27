@@ -1198,6 +1198,32 @@ export default function Templates() {
     return map
   }, [historyData, containerList])
 
+  // Deduplicate consecutive history entries (same action/template/stack within 5s)
+  const deduplicatedHistory = useMemo(() => {
+    const result: typeof historyData = []
+    for (const entry of historyData) {
+      const prev = result[result.length - 1]
+      if (prev && prev.action === entry.action && prev.template === entry.template
+          && prev.target_stack === entry.target_stack
+          && Math.abs(new Date(prev.timestamp).getTime() - new Date(entry.timestamp).getTime()) < 5000) {
+        continue
+      }
+      result.push(entry)
+    }
+    return result
+  }, [historyData])
+
+  // Set of template__stack keys that have already been undeployed
+  const alreadyUndeployed = useMemo(() => {
+    const set = new Set<string>()
+    for (const entry of historyData) {
+      if (entry.action === 'undeploy') {
+        set.add(`${entry.template}__${entry.target_stack}`)
+      }
+    }
+    return set
+  }, [historyData])
+
   const templates = data?.templates ?? []
 
   // Filtered list
@@ -1514,7 +1540,7 @@ export default function Templates() {
             <div className="flex items-center gap-2">
               <History size={14} className="text-violet-400" />
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
-              <span className="text-[10px] text-slate-600">{historyData.length} events</span>
+              <span className="text-[10px] text-slate-600">{deduplicatedHistory.length} events</span>
             </div>
             <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
               <X size={14} />
@@ -1524,7 +1550,7 @@ export default function Templates() {
             <div className="flex items-center justify-center py-8">
               <Loader2 size={18} className="animate-spin text-slate-600" />
             </div>
-          ) : historyData.length === 0 ? (
+          ) : deduplicatedHistory.length === 0 ? (
             <p className="text-xs text-slate-600 text-center py-6">No deployment history yet</p>
           ) : (
             <div className="overflow-x-auto scrollbar-thin">
@@ -1540,7 +1566,7 @@ export default function Templates() {
                   </tr>
                 </thead>
                 <tbody>
-                  {historyData.slice(0, 20).map((entry) => (
+                  {deduplicatedHistory.slice(0, 20).map((entry) => (
                     <tr key={entry.id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
                       <td className="py-2 px-2 text-slate-500 whitespace-nowrap">
                         {new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -1564,7 +1590,7 @@ export default function Templates() {
                         </div>
                       </td>
                       <td className="py-2 px-2 text-right">
-                        {entry.action === 'deploy' && (
+                        {entry.action === 'deploy' && !alreadyUndeployed.has(`${entry.template}__${entry.target_stack}`) && (
                           <button
                             onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"

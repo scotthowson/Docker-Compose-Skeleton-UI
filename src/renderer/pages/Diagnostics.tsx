@@ -1184,7 +1184,7 @@ function FactoryResetCard() {
         <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
           <div>
             <p className="text-[11px] font-medium text-slate-300">Reset Compose Files</p>
-            <p className="text-[10px] text-slate-500">Restore all docker-compose.yml to git defaults</p>
+            <p className="text-[10px] text-slate-500">Restore compose files and stack categories to defaults</p>
           </div>
           <button
             type="button"

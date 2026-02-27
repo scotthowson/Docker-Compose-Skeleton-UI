@@ -8,7 +8,7 @@ import {
   Server, CheckCircle2, User, Lock, Shield, Eye, EyeOff,
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
-  Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight,
+  Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight, Palette,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -194,6 +194,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showStartup, setShowStartup] = useState(false)
   const [showBackup, setShowBackup] = useState(false)
+  const [showPreferences, setShowPreferences] = useState(false)
+
+  // Client-side dashboard preferences
+  const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
+  const [prefSessionMinutes, setPrefSessionMinutes] = useState(240)
+  const [prefAutoLock, setPrefAutoLock] = useState(0)
+  const [prefAppName, setPrefAppName] = useState('DCS Manager')
+  const [prefAppSubtitle, setPrefAppSubtitle] = useState('Docker Compose Skeleton')
 
   // Pre-flight validation
   const [alreadyConfigured, setAlreadyConfigured] = useState(false)
@@ -392,7 +400,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 2. Mark setup as complete
       await setupComplete()
 
-      // 3. Ensure authenticated before redirect (safety net)
+      // 3. Persist client-side dashboard preferences
+      const settingsState = useSettingsStore.getState()
+      settingsState.updateSetting('theme', prefTheme)
+      settingsState.updateSetting('sessionDurationMinutes', prefSessionMinutes)
+      settingsState.updateSetting('autoLockMinutes', prefAutoLock)
+      settingsState.updateSetting('projectName', prefAppName)
+      settingsState.updateSetting('projectSubtitle', prefAppSubtitle)
+
+      // 4. Ensure authenticated before redirect (safety net)
       const authState = useAuthStore.getState()
       if (!authState.isAuthenticated && adminUsername && adminPassword) {
         const ok = await login(adminUsername.trim(), adminPassword, true)
@@ -402,11 +418,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         }
       }
 
-      // 4. Show success + set session flag for welcome toast
+      // 5. Show success + set session flag for welcome toast
       setComplete(true)
       sessionStorage.setItem('dcs-just-setup', 'true')
 
-      // 5. Redirect after delay
+      // 6. Redirect after delay
       setTimeout(() => {
         onComplete()
       }, 3000)
@@ -503,7 +519,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       />
 
       {/* Scrollable content area */}
-      <div className="relative z-10 min-h-screen flex items-start justify-center pt-12 pb-8 md:py-12 overflow-y-auto scrollbar-thin">
+      <div
+        className="relative z-10 min-h-screen flex items-start justify-center pt-12 pb-8 md:py-12 overflow-y-auto scrollbar-thin"
+        style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
+      >
         <div className="w-full max-w-2xl mx-4 sm:mx-6">
           {/* Logo */}
           <div className="text-center mb-6">
@@ -1016,6 +1035,86 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   )}
                 </div>
+
+                {/* ── Dashboard Preferences (collapsible) ── */}
+                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreferences(!showPreferences)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Palette size={14} className="text-cyan-400" />
+                      <span className="text-xs font-semibold text-slate-300">Dashboard Preferences</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showPreferences ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showPreferences && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Theme</label>
+                        <select
+                          value={prefTheme}
+                          onChange={(e) => setPrefTheme(e.target.value as 'dark' | 'light')}
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        >
+                          <option value="dark">Dark</option>
+                          <option value="light">Light</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Session Duration</label>
+                        <select
+                          value={prefSessionMinutes}
+                          onChange={(e) => setPrefSessionMinutes(Number(e.target.value))}
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        >
+                          <option value={60}>1 hour</option>
+                          <option value={240}>4 hours</option>
+                          <option value={480}>8 hours</option>
+                          <option value={1440}>24 hours</option>
+                          <option value={0}>Indefinite</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-Lock</label>
+                        <select
+                          value={prefAutoLock}
+                          onChange={(e) => setPrefAutoLock(Number(e.target.value))}
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        >
+                          <option value={0}>Off</option>
+                          <option value={5}>5 minutes</option>
+                          <option value={15}>15 minutes</option>
+                          <option value={30}>30 minutes</option>
+                          <option value={60}>1 hour</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">App Name</label>
+                        <input
+                          type="text"
+                          value={prefAppName}
+                          onChange={(e) => setPrefAppName(e.target.value)}
+                          placeholder="DCS Manager"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">App Subtitle</label>
+                        <input
+                          type="text"
+                          value={prefAppSubtitle}
+                          onChange={(e) => setPrefAppSubtitle(e.target.value)}
+                          placeholder="Docker Compose Skeleton"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-600">These can be changed later in Settings</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1250,6 +1349,48 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dashboard Preferences (only if non-default) */}
+                {(prefTheme !== 'dark' || prefSessionMinutes !== 240 || prefAutoLock !== 0 || prefAppName !== 'DCS Manager' || prefAppSubtitle !== 'Docker Compose Skeleton') && (
+                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Palette size={14} className="text-cyan-400" />
+                      <h3 className="text-xs font-semibold text-slate-300">Dashboard</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {prefTheme !== 'dark' && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500 shrink-0">Theme</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefTheme}</span>
+                        </div>
+                      )}
+                      {prefSessionMinutes !== 240 && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500 shrink-0">Session</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefSessionMinutes === 0 ? 'Indefinite' : `${prefSessionMinutes / 60}h`}</span>
+                        </div>
+                      )}
+                      {prefAutoLock !== 0 && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500 shrink-0">Auto-Lock</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAutoLock}min</span>
+                        </div>
+                      )}
+                      {prefAppName !== 'DCS Manager' && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500 shrink-0">App Name</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAppName}</span>
+                        </div>
+                      )}
+                      {prefAppSubtitle !== 'Docker Compose Skeleton' && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500 shrink-0">Subtitle</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAppSubtitle}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
