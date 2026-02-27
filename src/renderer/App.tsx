@@ -102,36 +102,46 @@ export default function App() {
         setServerUrl(serverUrl)
       }
 
-      // Check if server needs first-run setup (retry up to 3 times for transient failures).
-      // Uses raw fetch() instead of apiClient.get() because authStore eagerly restores a
-      // stale Bearer token from localStorage on module load.  That Authorization header
-      // triggers a CORS preflight which can fail on the file:// origin used by packaged
-      // Electron builds — even though the server is reachable for simple GET requests.
+      // Check if server needs first-run setup.
+      // In Electron, use the main-process net.fetch via IPC — this bypasses all
+      // renderer security restrictions (CORS, CSP, Private Network Access).
+      // In browser/Capacitor, fall back to a raw fetch().
       const setupUrl = `${useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'}/setup/status`
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const ctrl = new AbortController()
-          const tid = setTimeout(() => ctrl.abort(), 5000)
-          const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
-          clearTimeout(tid)
-          if (resp.ok) {
-            const status = await resp.json()
-            if (!status.initialized) {
-              // Server was factory-reset — clear stale local accounts from prior install
-              if (window.electronAPI) {
-                await window.electronAPI.setSetting('userAccounts', undefined)
-              }
-              localStorage.removeItem('userAccounts')
-              localStorage.removeItem('auth-session')
-              localStorage.removeItem('api-auth-token')
-              apiClient.setAuthToken(null)
-              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-              setCurrentPage('setup')
-              setSettingsReady(true)
-              return // Skip normal auth flow
+          let initialized = true
+          if (window.electronAPI?.netFetchJson) {
+            // Electron: fetch through main process (no CORS restrictions)
+            const res = await window.electronAPI.netFetchJson(setupUrl)
+            if (res.ok && res.data && typeof res.data === 'object' && 'initialized' in res.data) {
+              initialized = (res.data as { initialized: boolean }).initialized
+            }
+          } else {
+            // Browser fallback
+            const ctrl = new AbortController()
+            const tid = setTimeout(() => ctrl.abort(), 5000)
+            const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
+            clearTimeout(tid)
+            if (resp.ok) {
+              const data = await resp.json()
+              initialized = !!data.initialized
             }
           }
-          break // Server initialized or non-ok response — proceed to login
+          if (!initialized) {
+            // Server was factory-reset — clear stale local accounts from prior install
+            if (window.electronAPI) {
+              await window.electronAPI.setSetting('userAccounts', undefined)
+            }
+            localStorage.removeItem('userAccounts')
+            localStorage.removeItem('auth-session')
+            localStorage.removeItem('api-auth-token')
+            apiClient.setAuthToken(null)
+            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+            setCurrentPage('setup')
+            setSettingsReady(true)
+            return // Skip normal auth flow
+          }
+          break // Server initialized — proceed to login
         } catch {
           // Retry after brief delay, or proceed to login on final attempt
           if (attempt < 2) await new Promise(r => setTimeout(r, 300))

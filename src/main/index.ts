@@ -3,6 +3,15 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 import Store from 'electron-store'
 
+// Disable Chromium's Private Network Access preflight checks.
+// Without this, requests from the renderer (even from a custom app:// scheme)
+// to loopback/private IPs like 127.0.0.1 can be blocked by PNA enforcement
+// before any webRequest handler fires.
+app.commandLine.appendSwitch(
+  'disable-features',
+  'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights',
+)
+
 // ---------------------------------------------------------------------------
 // Custom app:// protocol — MUST be registered before app.ready
 // ---------------------------------------------------------------------------
@@ -114,6 +123,25 @@ ipcMain.handle('set-setting', (_event, key: string, value: unknown) => {
 
 ipcMain.handle('get-version', () => {
   return app.getVersion()
+})
+
+// Proxy an HTTP GET through the main process using Electron's net module.
+// This bypasses ALL renderer security policies (CORS, CSP, Private Network
+// Access) because net.fetch runs in the main process, not the browser sandbox.
+ipcMain.handle('net-fetch-json', async (_event, url: string) => {
+  try {
+    const response = await net.fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) {
+      return { ok: false, status: response.status, data: null }
+    }
+    const data = await response.json()
+    return { ok: true, status: response.status, data }
+  } catch {
+    return { ok: false, status: 0, data: null }
+  }
 })
 
 app.whenReady().then(() => {

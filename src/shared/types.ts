@@ -9,6 +9,8 @@ export interface ElectronAPI {
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<boolean>
   getVersion: () => Promise<string>
+  /** Fetch a URL via the main process (bypasses CORS/CSP/PNA restrictions) */
+  netFetchJson: (url: string) => Promise<{ ok: boolean; status: number; data: unknown }>
 }
 
 declare global {

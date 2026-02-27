@@ -52,20 +52,28 @@ export default function Login() {
     return `Remember me for ${Math.round(sessionDurationMinutes / 1440)} days`
   })()
 
-  // Debounced connection test when serverUrl changes
+  // Debounced connection test when serverUrl changes.
+  // In Electron, uses main-process net.fetch via IPC (bypasses CORS/PNA).
+  // In browser, falls back to apiClient.testConnection().
   const testConnection = useCallback(async (url: string) => {
     setConnStatus('testing')
     try {
-      const prev = apiClient.getBaseUrl()
-      apiClient.setBaseUrl(url)
-      try {
-        const ok = await apiClient.testConnection()
-        setConnStatus(ok ? 'ok' : 'fail')
-      } catch {
-        setConnStatus('fail')
-      } finally {
-        apiClient.setBaseUrl(prev)
+      let ok = false
+      if (window.electronAPI?.netFetchJson) {
+        // Electron: test via main process — no CORS restrictions
+        const res = await window.electronAPI.netFetchJson(`${url}/`)
+        ok = res.ok
+      } else {
+        // Browser fallback
+        const prev = apiClient.getBaseUrl()
+        apiClient.setBaseUrl(url)
+        try {
+          ok = await apiClient.testConnection()
+        } finally {
+          apiClient.setBaseUrl(prev)
+        }
       }
+      setConnStatus(ok ? 'ok' : 'fail')
     } catch {
       setConnStatus('fail')
     }
@@ -93,10 +101,9 @@ export default function Login() {
   }, [serverUrl])
 
   // When server is reachable, verify setup status before showing auth form.
-  // Uses raw fetch() — NOT apiClient.get() — because authStore eagerly restores a
-  // stale Bearer token on module load, and that Authorization header triggers a CORS
-  // preflight which fails on the file:// origin used by packaged Electron builds.
-  // Retries up to 3 times for transient failures (server starting, CORS settling).
+  // In Electron, uses main-process net.fetch via IPC (bypasses ALL renderer
+  // security: CORS, CSP, Private Network Access).
+  // In browser, falls back to raw fetch().
   // If server is uninitialized → clear stale local data + redirect to Setup Wizard.
   // If server is initialized  → reveal the auth form (Phase 2).
   // If all attempts fail      → stay on Phase 1 (don't silently show login).
@@ -107,43 +114,70 @@ export default function Login() {
     }
     let cancelled = false
     ;(async () => {
+      const setupUrl = `${serverUrl}/setup/status`
       const maxAttempts = 3
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (cancelled) return
         try {
-          const ctrl = new AbortController()
-          const tid = setTimeout(() => ctrl.abort(), 5000)
-          const resp = await fetch(`${serverUrl}/setup/status`, { method: 'GET', signal: ctrl.signal })
-          clearTimeout(tid)
-          if (cancelled) return
-          if (resp.ok) {
-            const status = await resp.json()
-            // Persist the verified server URL
-            apiClient.setBaseUrl(serverUrl)
-            setServerUrl(serverUrl)
-            useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-            if (!status.initialized) {
-              // Server was factory-reset — clear stale local accounts from prior install
-              if (window.electronAPI) {
-                await window.electronAPI.setSetting('userAccounts', undefined)
-              }
-              localStorage.removeItem('userAccounts')
-              localStorage.removeItem('auth-session')
-              localStorage.removeItem('api-auth-token')
-              apiClient.setAuthToken(null)
-              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-              setCurrentPage('setup')
-            } else {
-              setConnected(true)
+          let initialized = true
+          let gotResponse = false
+
+          if (window.electronAPI?.netFetchJson) {
+            // Electron: fetch through main process — no CORS restrictions
+            const res = await window.electronAPI.netFetchJson(setupUrl)
+            if (cancelled) return
+            if (res.ok && res.data && typeof res.data === 'object' && 'initialized' in res.data) {
+              initialized = (res.data as { initialized: boolean }).initialized
+              gotResponse = true
+            } else if (res.status > 0) {
+              // Server responded but not with expected data — treat as initialized
+              gotResponse = true
             }
-            return // Success — exit retry loop
+          } else {
+            // Browser fallback
+            const ctrl = new AbortController()
+            const tid = setTimeout(() => ctrl.abort(), 5000)
+            const resp = await fetch(setupUrl, { method: 'GET', signal: ctrl.signal })
+            clearTimeout(tid)
+            if (cancelled) return
+            if (resp.ok) {
+              const data = await resp.json()
+              initialized = !!data.initialized
+              gotResponse = true
+            } else {
+              gotResponse = true // non-ok but server is there
+            }
           }
-          // Non-ok response (404 etc.) — treat as initialized, show login
+
+          if (!gotResponse) {
+            // No response at all — retry
+            if (attempt < maxAttempts - 1) {
+              await new Promise(r => setTimeout(r, 400))
+              continue
+            }
+            break
+          }
+
+          // Persist the verified server URL
           apiClient.setBaseUrl(serverUrl)
           setServerUrl(serverUrl)
           useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-          setConnected(true)
-          return
+
+          if (!initialized) {
+            // Server was factory-reset — clear stale local accounts from prior install
+            if (window.electronAPI) {
+              await window.electronAPI.setSetting('userAccounts', undefined)
+            }
+            localStorage.removeItem('userAccounts')
+            localStorage.removeItem('auth-session')
+            localStorage.removeItem('api-auth-token')
+            apiClient.setAuthToken(null)
+            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+            setCurrentPage('setup')
+          } else {
+            setConnected(true)
+          }
+          return // Success — exit retry loop
         } catch {
           // Retry after a brief delay
           if (attempt < maxAttempts - 1) {
