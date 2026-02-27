@@ -102,16 +102,28 @@ export default function App() {
         setServerUrl(serverUrl)
       }
 
-      // Check if server needs first-run setup
-      try {
-        const status = await fetchSetupStatus()
-        if (!status.initialized) {
-          setCurrentPage('setup')
-          setSettingsReady(true)
-          return // Skip normal auth flow
+      // Check if server needs first-run setup (retry up to 3 times for transient failures)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const status = await fetchSetupStatus()
+          if (!status.initialized) {
+            // Server was factory-reset — clear stale local accounts from prior install
+            if (window.electronAPI) {
+              await window.electronAPI.setSetting('userAccounts', undefined)
+            }
+            localStorage.removeItem('userAccounts')
+            localStorage.removeItem('auth-session')
+            localStorage.removeItem('api-auth-token')
+            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+            setCurrentPage('setup')
+            setSettingsReady(true)
+            return // Skip normal auth flow
+          }
+          break // Server initialized — proceed to login
+        } catch {
+          // Retry after brief delay, or proceed to login on final attempt
+          if (attempt < 2) await new Promise(r => setTimeout(r, 300))
         }
-      } catch {
-        // Server unreachable or no setup endpoint — proceed to normal login
       }
 
       setSettingsReady(true)

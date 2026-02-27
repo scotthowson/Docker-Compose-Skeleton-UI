@@ -93,8 +93,10 @@ export default function Login() {
   }, [serverUrl])
 
   // When server is reachable, verify setup status before showing auth form.
-  // If server is uninitialized → redirect to Setup Wizard.
+  // Retries up to 3 times for transient failures (server starting, CORS settling).
+  // If server is uninitialized → clear stale local data + redirect to Setup Wizard.
   // If server is initialized  → reveal the auth form (Phase 2).
+  // If all attempts fail      → stay on Phase 1 (don't silently show login).
   useEffect(() => {
     if (connStatus !== 'ok') {
       setConnected(false)
@@ -102,31 +104,40 @@ export default function Login() {
     }
     let cancelled = false
     ;(async () => {
-      try {
-        apiClient.setBaseUrl(serverUrl)
-        const status = await fetchSetupStatus()
-        if (!cancelled) {
+      apiClient.setBaseUrl(serverUrl)
+      const maxAttempts = 3
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (cancelled) return
+        try {
+          const status = await fetchSetupStatus()
+          if (cancelled) return
           // Persist the verified server URL
           setServerUrl(serverUrl)
           useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
           if (!status.initialized) {
+            // Server was factory-reset — clear stale local accounts from prior install
+            if (window.electronAPI) {
+              await window.electronAPI.setSetting('userAccounts', undefined)
+            }
+            localStorage.removeItem('userAccounts')
+            localStorage.removeItem('auth-session')
+            localStorage.removeItem('api-auth-token')
+            useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
             setCurrentPage('setup')
           } else {
             setConnected(true)
           }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          if (err instanceof ApiNetworkError) {
-            // Server became unreachable — stay on Phase 1
-            setConnStatus('fail')
-          } else {
-            // Server responded but setup endpoint missing (404, etc.) — treat as initialized
-            setServerUrl(serverUrl)
-            useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
-            setConnected(true)
+          return // Success — exit retry loop
+        } catch {
+          // Retry after a brief delay
+          if (attempt < maxAttempts - 1) {
+            await new Promise(r => setTimeout(r, 400))
           }
         }
+      }
+      // All attempts failed — stay on Phase 1 instead of silently showing login
+      if (!cancelled) {
+        setConnStatus('fail')
       }
     })()
     return () => { cancelled = true }
