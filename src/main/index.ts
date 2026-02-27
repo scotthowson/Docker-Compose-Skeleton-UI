@@ -1,6 +1,33 @@
-import { app, BrowserWindow, ipcMain, shell, session, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, net } from 'electron'
 import path from 'path'
+import { pathToFileURL } from 'url'
 import Store from 'electron-store'
+
+// ---------------------------------------------------------------------------
+// Custom app:// protocol — MUST be registered before app.ready
+// ---------------------------------------------------------------------------
+// In packaged builds, Electron loads the renderer from file:// which gives
+// the page an opaque "null" origin.  Chromium's Private Network Access
+// (CORS-RFC1918) blocks fetch() from null origins to loopback/private IPs
+// like 127.0.0.1 — BEFORE any webRequest handler can intercept.  This is
+// why the CORS proxy alone is not enough for packaged builds.
+//
+// Registering a custom scheme with `standard: true` + `secure: true` gives
+// the renderer a real origin (app://renderer) that Chromium treats like
+// https://, allowing normal CORS negotiation with the API server.
+// ---------------------------------------------------------------------------
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,        // RFC 3986 URI syntax — relative paths work
+      secure: true,          // Treated like https:// — no mixed-content blocks
+      supportFetchAPI: true, // fetch() works from this origin
+      corsEnabled: true,     // Participates in standard CORS negotiation
+      stream: true,          // Supports streaming responses
+    },
+  },
+])
 
 const store = new Store({
   defaults: {
@@ -41,7 +68,8 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    // Use custom app:// protocol instead of file:// to get a real origin
+    mainWindow.loadURL('app://renderer/index.html')
   }
 
   // Save window size on resize
@@ -89,36 +117,52 @@ ipcMain.handle('get-version', () => {
 })
 
 app.whenReady().then(() => {
-  // Allow renderer to fetch from the local API server without CORS issues
+  // -------------------------------------------------------------------------
+  // app:// protocol handler — serves renderer files from dist/renderer/
+  // -------------------------------------------------------------------------
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url)
+    // url.pathname is e.g. "/index.html" or "/assets/index-abc123.js"
+    const filePath = path.join(__dirname, '..', 'renderer', decodeURIComponent(url.pathname))
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+
+  // -------------------------------------------------------------------------
+  // CORS proxy — allow renderer to fetch from the local API server
+  // -------------------------------------------------------------------------
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['http://*/*'] },
     (details, callback) => {
       callback({ requestHeaders: { ...details.requestHeaders, Origin: '' } })
     },
   )
-  // CORS proxy + CSP — merged into a single handler (Electron only allows one)
+
+  // CORS headers + Private Network Access + CSP
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isApiRequest = details.url.startsWith('http://')
     const headers = { ...details.responseHeaders }
 
-    // Inject CORS headers for API requests
     if (isApiRequest) {
+      // Standard CORS headers
       headers['Access-Control-Allow-Origin'] = ['*']
       headers['Access-Control-Allow-Methods'] = ['GET, POST, DELETE, OPTIONS']
       headers['Access-Control-Allow-Headers'] = ['Content-Type, Authorization']
+      // Private Network Access (CORS-RFC1918) — required for requests to
+      // loopback/private IPs from non-localhost origins
+      headers['Access-Control-Allow-Private-Network'] = ['true']
     }
 
-    // Content Security Policy for all responses
-    // IMPORTANT: http://*:* (not http://*) — the port wildcard is required
-    // to allow connections to non-default ports like :9876. Without :*,
-    // CSP only permits the scheme's default port (80/443).
+    // Content Security Policy
     headers['Content-Security-Policy'] = [
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://*:* ws://*:* https://*:* wss://*:*; font-src 'self' data:; frame-ancestors 'none'",
     ]
 
     callback({ responseHeaders: headers })
   })
-  // Remove default menu bar on Windows/Linux; keep minimal menu on macOS
+
+  // -------------------------------------------------------------------------
+  // Menu
+  // -------------------------------------------------------------------------
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       {
