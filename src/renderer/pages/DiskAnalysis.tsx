@@ -15,6 +15,7 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMaintenanceDisk, triggerDeepPrune } from '../api/endpoints'
 import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry } from '../../shared/types'
 
@@ -329,6 +330,7 @@ export default function DiskAnalysis() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Deep Prune Confirmation Modal */}
       {showPruneModal && (
         <DeepPruneModal

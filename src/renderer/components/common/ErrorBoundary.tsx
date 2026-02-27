@@ -1,9 +1,10 @@
 import React from 'react'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
 
 interface Props {
   children: React.ReactNode
   fallbackMessage?: string
+  onNavigateHome?: () => void
 }
 
 interface State {
@@ -33,13 +34,24 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <p className="text-sm font-medium text-slate-200">{this.props.fallbackMessage || 'Something went wrong'}</p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm">{this.state.error?.message}</p>
           </div>
-          <button
-            onClick={this.handleReset}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/[0.08] text-slate-300 hover:bg-white/[0.1] transition-all"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Try Again
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={this.handleReset}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/[0.08] text-slate-300 hover:bg-white/[0.1] transition-all"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Try Again
+            </button>
+            {this.props.onNavigateHome && (
+              <button
+                onClick={this.props.onNavigateHome}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 hover:bg-white/[0.04] transition-all"
+              >
+                <Home className="h-3.5 w-3.5" />
+                Go to Dashboard
+              </button>
+            )}
+          </div>
         </div>
       )
     }

@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import {
   fetchAutomations,
@@ -277,6 +278,7 @@ export default function Automations() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">

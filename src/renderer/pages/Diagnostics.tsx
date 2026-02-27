@@ -2,20 +2,25 @@
 // Diagnostics — Deep-insight system diagnostics with gauges, matrices & alerts
 // =============================================================================
 
-import React, { useMemo, useState, useCallback } from 'react'
+import React, { useMemo, useState, useCallback, useEffect } from 'react'
 import {
   Shield, Activity, Cpu, MemoryStick, Box, HardDrive, Network,
   AlertTriangle, CheckCircle, XCircle, BarChart3, RefreshCw,
   Zap, TrendingUp, Server, Play, Square, RotateCw, Wrench, Loader2, Power,
+  Lock, Trash2, RotateCcw,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchServerStatus, fetchHealthReport, fetchContainers,
   fetchImages, fetchNetworks, fetchEvents, fetchSystemInfo,
-  batchStackAction,
+  batchStackAction, authFactoryReset,
 } from '../api/endpoints'
+import { apiClient } from '../api/client'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import type {
   ServerStatus, HealthReport, ContainerInfo, ImageInfo,
   NetworkInfo, EventEntry, SystemInfo,
@@ -868,6 +873,384 @@ function ServerControlCard() {
 }
 
 // =============================================================================
+// Factory Reset Card — shared password verification + two reset modes
+// =============================================================================
+
+/** Verify the current user's password using Web Crypto PBKDF2 / SHA-256 */
+async function verifyCurrentPassword(password: string): Promise<{ valid: boolean; error?: string }> {
+  const { currentUser } = useAuthStore.getState()
+  if (!currentUser) return { valid: false, error: 'Not logged in' }
+
+  const accounts: { username: string; passwordHash: string; salt?: string; hashVersion?: number }[] = await (async () => {
+    if (window.electronAPI) {
+      const accts = await window.electronAPI.getSetting('userAccounts')
+      return (accts as typeof accounts) ?? []
+    }
+    try {
+      const raw = localStorage.getItem('userAccounts')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+
+  const account = accounts.find((a) => a.username.toLowerCase() === currentUser.toLowerCase())
+  if (!account) return { valid: false, error: 'Account not found' }
+
+  let valid = false
+  if (account.hashVersion === 2 && account.salt) {
+    const encoder = new TextEncoder()
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
+    const saltBytes = new Uint8Array(account.salt.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)))
+    const derivedBits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
+      keyMaterial,
+      256,
+    )
+    const derived = Array.from(new Uint8Array(derivedBits)).map((b) => b.toString(16).padStart(2, '0')).join('')
+    valid = derived === account.passwordHash
+  } else {
+    const encoder = new TextEncoder()
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password))
+    const hash = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
+    valid = hash === account.passwordHash
+  }
+
+  return valid ? { valid: true } : { valid: false, error: 'Incorrect password' }
+}
+
+/** Perform the client-side reset (clear all local data, return to first-launch) */
+async function performClientReset(): Promise<void> {
+  // Preserve server URL so we can reconnect to setup wizard after reset
+  const currentServerUrl = useSettingsStore.getState().serverUrl
+
+  localStorage.clear()
+  sessionStorage.clear()
+
+  if (window.electronAPI) {
+    for (const key of Object.keys(DEFAULT_SETTINGS)) {
+      await window.electronAPI.setSetting(key, undefined)
+    }
+    await window.electronAPI.setSetting('userAccounts', undefined)
+  }
+
+  useSettingsStore.setState({ ...DEFAULT_SETTINGS, currentPage: 'dashboard' })
+
+  // Restore server URL so setup wizard can reconnect
+  useSettingsStore.getState().updateSetting('serverUrl', currentServerUrl)
+  useConnectionStore.getState().setServerUrl(currentServerUrl)
+  apiClient.setBaseUrl(currentServerUrl)
+
+  useConnectionStore.getState().disconnect()
+  useAuthStore.setState({
+    isAuthenticated: false,
+    currentUser: null,
+    hasAccount: false,
+    apiToken: null,
+  })
+}
+
+/** Perform server-side factory reset via dedicated endpoint */
+async function performServerReset(resetCompose: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await authFactoryReset({ confirm: 'FACTORY_RESET', reset_compose: resetCompose })
+    return result.success ? { success: true } : { success: false, error: 'Server reset returned failure' }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to reach server' }
+  }
+}
+
+function FactoryResetCard() {
+  const [activeMode, setActiveMode] = useState<'none' | 'app' | 'full'>('none')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirmText, setConfirmText] = useState('')
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [serverResetResult, setServerResetResult] = useState<string | null>(null)
+  const [resetCompose, setResetCompose] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
+
+  const confirmKeyword = activeMode === 'full' ? 'WIPE' : 'RESET'
+  const canReset = confirmText === confirmKeyword && confirmPassword.length > 0
+
+  const cancelConfirm = useCallback(() => {
+    setActiveMode('none')
+    setConfirmPassword('')
+    setConfirmText('')
+    setResetError(null)
+    setServerResetResult(null)
+    setResetCompose(false)
+    setCountdown(null)
+  }, [])
+
+  const handleAppReset = useCallback(async () => {
+    if (!canReset) return
+    setResetting(true)
+    setResetError(null)
+    const pw = await verifyCurrentPassword(confirmPassword)
+    if (!pw.valid) {
+      setResetError(pw.error ?? 'Verification failed')
+      setResetting(false)
+      return
+    }
+    await performClientReset()
+  }, [canReset, confirmPassword])
+
+  const handleFullReset = useCallback(async () => {
+    if (!canReset || countdown !== null) return
+    // Verify password first, then start countdown
+    setResetError(null)
+    setServerResetResult(null)
+    const pw = await verifyCurrentPassword(confirmPassword)
+    if (!pw.valid) {
+      setResetError(pw.error ?? 'Verification failed')
+      return
+    }
+    // Start 5-second countdown
+    setCountdown(5)
+  }, [canReset, confirmPassword, countdown])
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (countdown === null || countdown < 0) return
+    if (countdown === 0) {
+      // Execute the reset
+      ;(async () => {
+        setResetting(true)
+        const serverResult = await performServerReset(resetCompose)
+        if (!serverResult.success) {
+          setResetError(`Server reset failed: ${serverResult.error}`)
+          setResetting(false)
+          setCountdown(null)
+          return
+        }
+        await performClientReset()
+      })()
+      return
+    }
+    const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [countdown, resetCompose])
+
+  // ── Idle state: show both buttons ──
+  if (activeMode === 'none') {
+    return (
+      <div className="space-y-5">
+        {/* App-only reset */}
+        <div className="flex items-start gap-4 p-4 rounded-xl bg-amber-500/[0.04] border border-amber-500/10">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
+            <RefreshCw size={16} className="text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-amber-300">Reset App Settings</p>
+            <p className="text-[10px] text-amber-400/60 mt-1 leading-relaxed">
+              Clears all local data — saved credentials, sessions, connection profiles, themes, and preferences. Returns the app to its initial setup screen. <span className="text-slate-500">Server-side data (stacks, containers, compose files, server config) is not affected.</span>
+            </p>
+            <button
+              onClick={() => setActiveMode('app')}
+              className="
+                mt-3 flex items-center gap-2 px-3.5 py-2 rounded-lg text-[11px] font-medium
+                bg-amber-500/10 border border-amber-500/20 text-amber-400
+                hover:bg-amber-500/20 hover:border-amber-500/30
+                transition-all duration-200
+              "
+            >
+              <RefreshCw size={13} />
+              Reset App
+            </button>
+          </div>
+        </div>
+
+        {/* Full server + app reset */}
+        <div className="flex items-start gap-4 p-4 rounded-xl bg-rose-500/[0.04] border border-rose-500/10">
+          <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center shrink-0 mt-0.5">
+            <Trash2 size={16} className="text-rose-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-rose-300">Full Server Reset</p>
+            <p className="text-[10px] text-rose-400/60 mt-1 leading-relaxed">
+              Everything in App Reset, <span className="text-rose-300 font-medium">plus</span> wipes server-side authentication — all API users, tokens, and the setup-complete flag are removed. The server returns to first-run state and the Setup Wizard will launch on next connection. <span className="text-slate-500">Docker stacks, containers, images, and your .env configuration are preserved.</span>
+            </p>
+            <button
+              onClick={() => setActiveMode('full')}
+              className="
+                mt-3 flex items-center gap-2 px-3.5 py-2 rounded-lg text-[11px] font-medium
+                bg-rose-500/10 border border-rose-500/20 text-rose-400
+                hover:bg-rose-500/20 hover:border-rose-500/30
+                transition-all duration-200
+              "
+            >
+              <Trash2 size={13} />
+              Full Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Confirmation state ──
+  const isFullReset = activeMode === 'full'
+
+  // Pre-defined class sets to avoid Tailwind purge issues with dynamic class names
+  const styles = isFullReset
+    ? {
+        banner: 'bg-rose-500/[0.06] border-rose-500/15',
+        icon: 'text-rose-400',
+        title: 'text-rose-300',
+        desc: 'text-rose-400/70',
+        keyword: 'text-rose-300',
+        inputFocus: 'focus:border-rose-500/50 focus:ring-rose-500/25',
+        confirmMatch: 'border-rose-500/50 focus:border-rose-500/50 focus:ring-rose-500/25',
+        button: 'bg-rose-500 hover:bg-rose-400 shadow-rose-500/20',
+      }
+    : {
+        banner: 'bg-amber-500/[0.06] border-amber-500/15',
+        icon: 'text-amber-400',
+        title: 'text-amber-300',
+        desc: 'text-amber-400/70',
+        keyword: 'text-amber-300',
+        inputFocus: 'focus:border-amber-500/50 focus:ring-amber-500/25',
+        confirmMatch: 'border-amber-500/50 focus:border-amber-500/50 focus:ring-amber-500/25',
+        button: 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20',
+      }
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className={`flex items-start gap-3 rounded-xl ${styles.banner} border px-4 py-3`}>
+        <AlertTriangle size={15} className={`${styles.icon} shrink-0 mt-0.5`} />
+        <div>
+          <p className={`text-xs font-semibold ${styles.title}`}>
+            {isFullReset ? 'Confirm Full Server Reset' : 'Confirm App Reset'}
+          </p>
+          <p className={`text-[10px] ${styles.desc} mt-0.5`}>
+            Enter your current password and type{' '}
+            <span className={`font-mono font-bold ${styles.keyword}`}>{confirmKeyword}</span> to confirm.
+            {isFullReset && (
+              <span className="block mt-1 text-rose-400/60">
+                This will wipe all server authentication and return to the Setup Wizard.
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[10px] font-medium text-slate-500 mb-1">Current Password</label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setResetError(null) }}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              className={`
+                w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg
+                text-xs text-slate-200 placeholder-slate-600
+                focus:outline-none ${styles.inputFocus}
+                transition-all
+              `}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-medium text-slate-500 mb-1">
+            Type {confirmKeyword} to confirm
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => { setConfirmText(e.target.value); setResetError(null) }}
+            placeholder={confirmKeyword}
+            autoComplete="off"
+            className={`
+              w-full px-3 py-2 bg-white/5 border rounded-lg
+              text-xs text-slate-200 placeholder-slate-600 font-mono
+              focus:outline-none focus:ring-1 transition-all
+              ${confirmText === confirmKeyword
+                ? styles.confirmMatch
+                : 'border-white/10 focus:border-white/20 focus:ring-white/10'
+              }
+            `}
+          />
+        </div>
+      </div>
+
+      {/* Compose reset toggle (full reset only) */}
+      {isFullReset && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+          <div>
+            <p className="text-[11px] font-medium text-slate-300">Reset Compose Files</p>
+            <p className="text-[10px] text-slate-500">Restore all docker-compose.yml to git defaults</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setResetCompose(!resetCompose)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${resetCompose ? 'bg-rose-500' : 'bg-slate-700'}`}
+          >
+            <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${resetCompose ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+      )}
+
+      {resetError && (
+        <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
+          <XCircle size={13} className="text-rose-400 shrink-0" />
+          <p className="text-[11px] text-rose-300">{resetError}</p>
+        </div>
+      )}
+
+      {serverResetResult && (
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+          <CheckCircle size={13} className="text-emerald-400 shrink-0" />
+          <p className="text-[11px] text-emerald-300">{serverResetResult}</p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={isFullReset ? handleFullReset : handleAppReset}
+          disabled={!canReset || resetting || (countdown !== null && countdown > 0)}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold
+            ${styles.button} text-white shadow-lg
+            transition-all duration-200 press
+            disabled:opacity-40 disabled:cursor-not-allowed
+          `}
+        >
+          {resetting ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : countdown !== null && countdown > 0 ? (
+            <RotateCcw size={14} />
+          ) : isFullReset ? (
+            <Trash2 size={14} />
+          ) : (
+            <RefreshCw size={14} />
+          )}
+          {resetting
+            ? 'Resetting...'
+            : countdown !== null && countdown > 0
+              ? `Confirm in ${countdown}s...`
+              : isFullReset
+                ? 'Confirm Full Reset'
+                : 'Confirm App Reset'
+          }
+        </button>
+        <button
+          onClick={cancelConfirm}
+          className="px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
 // Disconnected Hero
 // =============================================================================
 
@@ -1058,6 +1441,7 @@ export default function Diagnostics() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* ── Page header ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
@@ -1161,6 +1545,10 @@ export default function Diagnostics() {
               <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
                 <SectionHeader icon={<Power size={14} />} title="Server Control" />
                 <ServerControlCard />
+              </div>
+              <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/10 rounded-xl p-4 md:p-6">
+                <SectionHeader icon={<Trash2 size={14} />} title="Factory Reset" />
+                <FactoryResetCard />
               </div>
             </div>
           </div>

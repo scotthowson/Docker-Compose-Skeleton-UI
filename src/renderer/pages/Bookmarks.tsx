@@ -485,7 +485,7 @@ export default function Bookmarks() {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center flex-wrap gap-1">
           {(['all', 'pinned', 'page', 'stack', 'container', 'custom'] as const).map((f) => (
             <button
               key={f}

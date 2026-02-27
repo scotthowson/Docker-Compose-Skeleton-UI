@@ -49,8 +49,15 @@ export function StatusBar() {
   const lastConnected = useConnectionStore((s) => s.lastConnected)
   const healthReport = useHealthStore((s) => s.report)
 
+  const [appVersion, setAppVersion] = useState<string>('')
   const [now, setNow] = useState(formatTime(new Date()))
   const [lastRefreshAgo, setLastRefreshAgo] = useState('')
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.getVersion().then(setAppVersion)
+    }
+  }, [])
 
   const updateRefreshAgo = useCallback(() => {
     if (!lastConnected) { setLastRefreshAgo(''); return }
@@ -119,6 +126,7 @@ export function StatusBar() {
 
           <span className="text-white/[0.06]">|</span>
           <span className="text-slate-600">
+            {appVersion && <><span className="text-slate-500">v{appVersion}</span> · </>}
             API <span className="text-slate-500">v{apiVersion}</span>
           </span>
         </div>
@@ -221,7 +229,10 @@ export function StatusBar() {
                 <span className="text-slate-500">{lastRefreshAgo}</span>
               </span>
             )}
-            <span className="text-slate-600">v{apiVersion}</span>
+            <span className="text-slate-600">
+              {appVersion && <><span className="text-slate-500">v{appVersion}</span> · </>}
+              v{apiVersion}
+            </span>
           </div>
         </div>
       </div>

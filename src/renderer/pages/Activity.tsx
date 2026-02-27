@@ -12,6 +12,7 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { fetchEvents } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useLogStore } from '../stores/logStore'
 import type { EventEntry, EventsResponse } from '../../shared/types'
 
@@ -244,7 +245,7 @@ function StatsBar({ events }: { events: EventEntry[] }) {
   ]
 
   return (
-    <div className="grid grid-cols-5 gap-3 animate-fade-in">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 animate-fade-in">
       {stats.map((stat) => (
         <div
           key={stat.label}
@@ -478,6 +479,7 @@ export default function Activity() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>

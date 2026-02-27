@@ -3,6 +3,7 @@
 // =============================================================================
 
 import React, { useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface ModalProps {
@@ -41,13 +42,13 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
       className="
-        fixed inset-0 z-50
-        flex items-center justify-center
+        fixed inset-0 z-[9999]
+        flex items-center justify-center p-4
         bg-black/60 backdrop-blur-sm
         animate-fade-in
       "
@@ -55,7 +56,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
       <div
         className="
           relative
-          w-full max-w-lg mx-4
+          w-full max-w-lg
           bg-slate-900/90 backdrop-blur-2xl
           border border-white/10 rounded-2xl
           shadow-2xl shadow-black/50
@@ -100,6 +101,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

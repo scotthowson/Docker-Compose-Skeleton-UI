@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
 import type { MetricsTrendsResponse, AlertConfigResponse, AlertThresholds } from '../../shared/types'
 import {
@@ -373,6 +374,7 @@ export default function Trends() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* ----------------------------------------------------------------- */}
       {/* Page header                                                        */}
       {/* ----------------------------------------------------------------- */}

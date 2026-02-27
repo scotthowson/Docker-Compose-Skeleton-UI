@@ -20,6 +20,7 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   fetchSnapshots,
   createSnapshot,
@@ -520,6 +521,7 @@ export default function Snapshots() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">

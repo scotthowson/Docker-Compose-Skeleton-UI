@@ -2,17 +2,17 @@
 // Login / Initial Setup — Premium glassmorphic auth screen
 // =============================================================================
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Shield, User, Lock, Eye, EyeOff, ArrowRight, Globe,
   Layers, Loader2, AlertCircle, Sparkles, Clock, KeyRound, UserPlus,
+  Wifi, WifiOff,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
-import { authRegister, authLogin, authSetup, authVerify } from '../api/endpoints'
+import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
-import { isNative } from '../hooks/useMobile'
 
 export default function Login() {
   const {
@@ -21,9 +21,12 @@ export default function Login() {
   } = useAuthStore()
   const projectName = useSettingsStore((s) => s.projectName) || 'Docker Compose Skeleton'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Server Management Dashboard'
+  const lastUsername = useSettingsStore((s) => s.lastUsername)
+  const sessionDurationMinutes = useSettingsStore((s) => s.sessionDurationMinutes)
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const { setServerUrl } = useConnectionStore()
 
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(lastUsername || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
@@ -34,6 +37,47 @@ export default function Login() {
   const [registerError, setRegisterError] = useState<string | null>(null)
   const [serverUrl, setServerUrlLocal] = useState(apiClient.getBaseUrl())
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
+  const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+  const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Derive session label from settings
+  const sessionLabel = (() => {
+    if (sessionDurationMinutes <= 0) return 'Stay signed in'
+    if (sessionDurationMinutes < 60) return `Remember me for ${sessionDurationMinutes} min`
+    if (sessionDurationMinutes === 60) return 'Remember me for 1 hour'
+    if (sessionDurationMinutes < 1440) return `Remember me for ${sessionDurationMinutes / 60} hours`
+    if (sessionDurationMinutes === 1440) return 'Remember me for 1 day'
+    return `Remember me for ${Math.round(sessionDurationMinutes / 1440)} days`
+  })()
+
+  // Debounced connection test when serverUrl changes
+  const testConnection = useCallback(async (url: string) => {
+    setConnStatus('testing')
+    try {
+      const prev = apiClient.getBaseUrl()
+      apiClient.setBaseUrl(url)
+      try {
+        await apiClient.testConnection()
+        setConnStatus('ok')
+      } catch {
+        setConnStatus('fail')
+      } finally {
+        apiClient.setBaseUrl(prev)
+      }
+    } catch {
+      setConnStatus('fail')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (connTestTimer.current) clearTimeout(connTestTimer.current)
+    if (!serverUrl.trim()) {
+      setConnStatus('idle')
+      return
+    }
+    connTestTimer.current = setTimeout(() => testConnection(serverUrl), 800)
+    return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
+  }, [serverUrl, testConnection])
 
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
@@ -111,7 +155,7 @@ export default function Login() {
   /** Switch between login and register modes, resetting form state */
   const switchMode = (newMode: 'login' | 'register') => {
     setMode(newMode)
-    setUsername('')
+    setUsername(newMode === 'login' && lastUsername ? lastUsername : '')
     setPassword('')
     setConfirmPassword('')
     setInviteCode('')
@@ -157,22 +201,38 @@ export default function Login() {
         useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
       }
 
+      // Check if server is uninitialized — redirect to setup wizard
+      try {
+        const status = await fetchSetupStatus()
+        if (!status.initialized) {
+          setCurrentPage('setup')
+          setSubmitting(false)
+          return
+        }
+      } catch {
+        // Server unreachable — proceed with normal auth
+      }
+
       const res = await authRegister(username.trim(), password, inviteCode.trim())
       if (res.success && res.token) {
         // Store the API Bearer token
         setApiToken(res.token)
 
-        // Persist session the same way the auth store does after login/register
+        // Persist session — use dynamic duration from settings
+        const durationMs = sessionDurationMinutes <= 0 ? 0 : sessionDurationMinutes * 60 * 1000
         sessionStorage.setItem('currentUser', res.username)
         const session = {
           username: res.username,
-          expiresAt: Date.now() + 4 * 60 * 60 * 1000, // 4 hours
+          expiresAt: durationMs === 0 ? 0 : Date.now() + durationMs,
           token: res.token,
         }
         localStorage.setItem('auth-session', JSON.stringify(session))
 
         // Also create local account so app lock works offline
         await register(username.trim(), password)
+
+        // Remember username for next session
+        useSettingsStore.getState().updateSetting('lastUsername', username.trim())
 
         // Update zustand auth state to trigger route change
         useAuthStore.setState({
@@ -210,6 +270,18 @@ export default function Login() {
       useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
     }
 
+    // Check if server is uninitialized — redirect to setup wizard
+    try {
+      const status = await fetchSetupStatus()
+      if (!status.initialized) {
+        setCurrentPage('setup')
+        setSubmitting(false)
+        return
+      }
+    } catch {
+      // Server unreachable — proceed with normal auth
+    }
+
     let localSuccess = false
     if (isSetup) {
       localSuccess = await register(username, password)
@@ -220,6 +292,8 @@ export default function Login() {
     // If local auth succeeded, attempt server-side Bearer token auth
     if (localSuccess) {
       await attemptServerAuth(username, password, isSetup)
+      // Remember username for next session
+      useSettingsStore.getState().updateSetting('lastUsername', username.trim())
     }
 
     setSubmitting(false)
@@ -298,31 +372,40 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Server URL (shown on mobile/native) */}
-                {isNative && (
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                      <input
-                        type="url"
-                        value={serverUrl}
-                        onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
-                        placeholder="http://192.168.1.100:9876"
-                        autoComplete="url"
-                        className="
-                          w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                          text-sm text-slate-200 placeholder-slate-600
-                          focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
-                          transition-all duration-300
-                        "
-                      />
+                {/* Server URL */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <input
+                      type="url"
+                      value={serverUrl}
+                      onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
+                      placeholder="http://192.168.1.100:9876"
+                      autoComplete="url"
+                      className="
+                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
+                        text-sm text-slate-200 placeholder-slate-600
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        transition-all duration-300
+                      "
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
+                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
+                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
+                  </div>
+                  {connStatus === 'fail' ? (
+                    <p className="text-[10px] text-rose-400/80 mt-1">
+                      Server unreachable — check address and ensure API is running
+                    </p>
+                  ) : (
                     <p className="text-[10px] text-slate-600 mt-1">
                       IP address and port of your DCS API server
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Username */}
                 <div>
@@ -334,7 +417,7 @@ export default function Login() {
                       value={username}
                       onChange={(e) => { setUsername(e.target.value); clearError() }}
                       placeholder="Enter username"
-                      autoFocus={!isNative}
+                      autoFocus
                       autoComplete="username"
                       className="
                         w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
@@ -450,31 +533,40 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Server URL (shown on mobile/native) */}
-                {isNative && (
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                      <input
-                        type="url"
-                        value={serverUrl}
-                        onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
-                        placeholder="http://192.168.1.100:9876"
-                        autoComplete="url"
-                        className="
-                          w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                          text-sm text-slate-200 placeholder-slate-600
-                          focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
-                          transition-all duration-300
-                        "
-                      />
+                {/* Server URL */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <input
+                      type="url"
+                      value={serverUrl}
+                      onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
+                      placeholder="http://192.168.1.100:9876"
+                      autoComplete="url"
+                      className="
+                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
+                        text-sm text-slate-200 placeholder-slate-600
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        transition-all duration-300
+                      "
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
+                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
+                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
+                  </div>
+                  {connStatus === 'fail' ? (
+                    <p className="text-[10px] text-rose-400/80 mt-1">
+                      Server unreachable — check address and ensure API is running
+                    </p>
+                  ) : (
                     <p className="text-[10px] text-slate-600 mt-1">
                       IP address and port of your DCS API server
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Username */}
                 <div>
@@ -486,7 +578,7 @@ export default function Login() {
                       value={username}
                       onChange={(e) => { setUsername(e.target.value); clearError() }}
                       placeholder="Enter username"
-                      autoFocus={!isNative}
+                      autoFocus
                       autoComplete="username"
                       className="
                         w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
@@ -547,7 +639,7 @@ export default function Login() {
                   </button>
                   <div className="flex items-center gap-1.5">
                     <Clock size={11} className="text-slate-500" />
-                    <span className="text-xs text-slate-400">Remember me for 4 hours</span>
+                    <span className="text-xs text-slate-400">{sessionLabel}</span>
                   </div>
                 </div>
 
@@ -619,31 +711,40 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleInviteRegister} className="space-y-4">
-                {/* Server URL (shown on mobile/native) */}
-                {isNative && (
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                      <input
-                        type="url"
-                        value={serverUrl}
-                        onChange={(e) => { setServerUrlLocal(e.target.value); setRegisterError(null) }}
-                        placeholder="http://192.168.1.100:9876"
-                        autoComplete="url"
-                        className="
-                          w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                          text-sm text-slate-200 placeholder-slate-600
-                          focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
-                          transition-all duration-300
-                        "
-                      />
+                {/* Server URL */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <input
+                      type="url"
+                      value={serverUrl}
+                      onChange={(e) => { setServerUrlLocal(e.target.value); setRegisterError(null) }}
+                      placeholder="http://192.168.1.100:9876"
+                      autoComplete="url"
+                      className="
+                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
+                        text-sm text-slate-200 placeholder-slate-600
+                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
+                        transition-all duration-300
+                      "
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
+                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
+                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
+                  </div>
+                  {connStatus === 'fail' ? (
+                    <p className="text-[10px] text-rose-400/80 mt-1">
+                      Server unreachable — check address and ensure API is running
+                    </p>
+                  ) : (
                     <p className="text-[10px] text-slate-600 mt-1">
                       IP address and port of your DCS API server
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Invite Code */}
                 <div>

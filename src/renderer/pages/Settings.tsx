@@ -1216,6 +1216,8 @@ function SecuritySettings() {
 function AutoLockSettings() {
   const autoLockMinutes = useSettingsStore((s) => s.autoLockMinutes) ?? 0
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled) ?? true
+  const sessionDurationMinutes = useSettingsStore((s) => s.sessionDurationMinutes) ?? 240
+  const rememberUsername = useSettingsStore((s) => s.rememberUsername) ?? true
   const updateSetting = useSettingsStore((s) => s.updateSetting)
 
   const lockOptions = [
@@ -1225,6 +1227,16 @@ function AutoLockSettings() {
     { value: 30, label: '30 min' },
     { value: 60, label: '1 hour' },
     { value: 120, label: '2 hours' },
+  ]
+
+  const sessionOptions = [
+    { value: 60, label: '1h' },
+    { value: 240, label: '4h' },
+    { value: 720, label: '12h' },
+    { value: 1440, label: '1 day' },
+    { value: 10080, label: '7 days' },
+    { value: 43200, label: '30 days' },
+    { value: 0, label: 'Indefinite' },
   ]
 
   return (
@@ -1261,6 +1273,84 @@ function AutoLockSettings() {
             Screen will lock after {autoLockMinutes} minute{autoLockMinutes !== 1 ? 's' : ''} of inactivity
           </p>
         )}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-white/[0.04]" />
+
+      {/* Session Duration */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Clock size={14} className="text-emerald-400" />
+          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Session Duration</h4>
+        </div>
+        <p className="text-[11px] text-slate-500 mb-3">
+          How long your "Remember me" session stays active before requiring sign-in again.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {sessionOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => updateSetting('sessionDurationMinutes', opt.value)}
+              className={`
+                px-3 py-2 rounded-lg text-xs font-medium border transition-all
+                ${sessionDurationMinutes === opt.value
+                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 ring-1 ring-emerald-500/15'
+                  : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                }
+              `}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {sessionDurationMinutes > 0 ? (
+          <p className="text-[10px] text-emerald-400/60 mt-2 flex items-center gap-1.5">
+            <Clock size={10} />
+            Sessions expire after {sessionDurationMinutes >= 1440 ? `${Math.round(sessionDurationMinutes / 1440)} day${Math.round(sessionDurationMinutes / 1440) !== 1 ? 's' : ''}` : sessionDurationMinutes >= 60 ? `${sessionDurationMinutes / 60} hour${sessionDurationMinutes / 60 !== 1 ? 's' : ''}` : `${sessionDurationMinutes} minutes`}
+          </p>
+        ) : (
+          <p className="text-[10px] text-emerald-400/60 mt-2 flex items-center gap-1.5">
+            <Clock size={10} />
+            Sessions never expire — stay signed in indefinitely
+          </p>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-white/[0.04]" />
+
+      {/* Remember Username */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <User size={14} className={rememberUsername ? 'text-emerald-400' : 'text-slate-500'} />
+            <div>
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Remember Username</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Pre-fill your username on the login screen</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const next = !rememberUsername
+              updateSetting('rememberUsername', next)
+              if (!next) updateSetting('lastUsername', '')
+            }}
+            className={`
+              relative inline-flex h-6 w-11 items-center rounded-full
+              transition-colors duration-200 focus:outline-none
+              ${rememberUsername ? 'bg-emerald-500' : 'bg-slate-700'}
+            `}
+          >
+            <span
+              className={`
+                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
+                transition-transform duration-200
+                ${rememberUsername ? 'translate-x-6' : 'translate-x-1'}
+              `}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Divider */}
@@ -1331,6 +1421,8 @@ function ExportImportSettings() {
         backgroundImage: state.backgroundImage,
         autoLockMinutes: state.autoLockMinutes,
         notificationsEnabled: state.notificationsEnabled,
+        rememberUsername: state.rememberUsername,
+        sessionDurationMinutes: state.sessionDurationMinutes,
       },
       profile: (() => {
         try {
@@ -2042,6 +2134,163 @@ function AlertThresholdsEditor() {
 // Section Card helper
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Settings Export / Import
+// ---------------------------------------------------------------------------
+
+function SettingsExportImport() {
+  const [importing, setImporting] = useState(false)
+  const [importPreview, setImportPreview] = useState<{ settingsCount: number; hasProfile: boolean } | null>(null)
+  const [importData, setImportData] = useState<Record<string, unknown> | null>(null)
+  const [importSuccess, setImportSuccess] = useState(false)
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+
+  const handleExport = useCallback(() => {
+    const settings = useSettingsStore.getState()
+    const profile = localStorage.getItem('user-profile')
+    const exportPayload: Record<string, unknown> = {
+      _type: 'dcs-settings-export',
+      _version: 1,
+      _exported_at: new Date().toISOString(),
+      settings: { ...settings },
+      profile: profile ? JSON.parse(profile) : null,
+    }
+
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    a.href = url
+    a.download = `dcs-settings-${date}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportSuccess(false)
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string)
+        if (parsed._type !== 'dcs-settings-export') {
+          setImportPreview(null)
+          setImportData(null)
+          setImporting(false)
+          return
+        }
+        const settingsCount = parsed.settings ? Object.keys(parsed.settings).length : 0
+        const hasProfile = !!parsed.profile
+        setImportPreview({ settingsCount, hasProfile })
+        setImportData(parsed)
+      } catch {
+        setImportPreview(null)
+        setImportData(null)
+        setImporting(false)
+      }
+    }
+    reader.readAsText(file)
+  }, [])
+
+  const handleImport = useCallback(() => {
+    if (!importData) return
+    const settings = (importData as Record<string, unknown>).settings as Record<string, unknown> | undefined
+    const profile = (importData as Record<string, unknown>).profile as Record<string, unknown> | undefined
+
+    if (settings) {
+      const skipKeys = new Set(['currentPage', '_type', '_version', '_exported_at'])
+      for (const [key, value] of Object.entries(settings)) {
+        if (!skipKeys.has(key) && typeof key === 'string') {
+          updateSetting(key as keyof import('../../shared/types').AppSettings, value as never)
+        }
+      }
+    }
+
+    if (profile) {
+      localStorage.setItem('user-profile', JSON.stringify(profile))
+    }
+
+    setImportSuccess(true)
+    setImporting(false)
+    setImportPreview(null)
+    setImportData(null)
+    setTimeout(() => setImportSuccess(false), 3000)
+  }, [importData, updateSetting])
+
+  const cancelImport = useCallback(() => {
+    setImporting(false)
+    setImportPreview(null)
+    setImportData(null)
+  }, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all press"
+        >
+          <Download size={14} />
+          Export Settings
+        </button>
+
+        <label className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all press cursor-pointer">
+          <Upload size={14} />
+          Import Settings
+          <input
+            type="file"
+            accept=".json"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        </label>
+      </div>
+
+      {importPreview && (
+        <div className="rounded-lg bg-cyan-500/[0.06] border border-cyan-500/15 p-4 animate-fade-in">
+          <p className="text-xs font-semibold text-cyan-300 mb-2">Import Preview</p>
+          <div className="space-y-1 mb-3">
+            <p className="text-[10px] text-slate-400">{importPreview.settingsCount} settings found</p>
+            <p className="text-[10px] text-slate-400">Profile data: {importPreview.hasProfile ? 'Yes' : 'No'}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleImport}
+              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-cyan-500 hover:bg-cyan-400 transition-all press"
+            >
+              Apply Import
+            </button>
+            <button
+              onClick={cancelImport}
+              className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {importSuccess && (
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 animate-fade-in">
+          <Check size={13} className="text-emerald-400 shrink-0" />
+          <p className="text-[11px] text-emerald-300">Settings imported successfully</p>
+        </div>
+      )}
+
+      <p className="text-[10px] text-slate-600">
+        Export saves your preferences, polling intervals, disk labels, and profile. Import restores them on any device.
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SectionCard
+// ---------------------------------------------------------------------------
+
 function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCollapsed }: {
   icon: React.ReactNode
   title: string
@@ -2316,6 +2565,15 @@ export default function Settings() {
           accentColor="border-t-amber-500"
         >
           <AlertThresholdsEditor />
+        </SectionCard>
+
+        {/* Settings Export / Import */}
+        <SectionCard
+          icon={<Download size={16} className="text-emerald-400" />}
+          title="Export & Import"
+          accentColor="border-t-emerald-500"
+        >
+          <SettingsExportImport />
         </SectionCard>
 
         {/* Row 8: About + Security (side by side) */}

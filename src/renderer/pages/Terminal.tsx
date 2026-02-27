@@ -12,6 +12,7 @@ import { execTerminalCommandAuth, terminalAuthVerify, terminalLogout } from '../
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import TerminalAuthGate from '../components/terminal/TerminalAuthGate'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -324,6 +325,7 @@ export default function Terminal() {
   // Authenticated — show terminal
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)] gap-3">
+      <DisconnectedBanner />
       {/* Security banner with auth info */}
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
         <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/15 shrink-0">

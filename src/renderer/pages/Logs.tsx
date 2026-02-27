@@ -15,6 +15,7 @@ import { useLogStore } from '../stores/logStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import LiveLogViewer from '../components/logs/LiveLogViewer'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Log level config
@@ -268,6 +269,7 @@ export default function Logs() {
 
   return (
     <div className="space-y-4 flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -501,7 +503,7 @@ export default function Logs() {
       {activeTab === 'logs' && (
         <>
           {/* Controls bar */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center flex-wrap gap-3 shrink-0">
             {/* Search input */}
             <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />

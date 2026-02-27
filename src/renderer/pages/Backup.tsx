@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   fetchBackups,
   fetchBackupStatus,
@@ -193,6 +194,7 @@ export default function Backup() {
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+      <DisconnectedBanner />
       <div className="flex flex-col gap-5 animate-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
@@ -393,7 +395,7 @@ export default function Backup() {
 
             {/* Config summary */}
             {configData && isConfigured && (
-              <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                 <div className="glass-subtle rounded-lg p-3">
                   <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Destination</p>
                   <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.destination}>

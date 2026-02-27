@@ -26,6 +26,7 @@ import { usePolling } from '../hooks/usePolling'
 import { fetchConfig, updateConfig } from '../api/endpoints'
 import { useConfigStore } from '../stores/configStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ServerConfig } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -409,6 +410,7 @@ export default function Config() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

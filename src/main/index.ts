@@ -58,6 +58,13 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  // Toggle DevTools with Ctrl+Shift+I in any build
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      mainWindow?.webContents.toggleDevTools()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -84,16 +91,14 @@ ipcMain.handle('get-version', () => {
 app.whenReady().then(() => {
   // Allow renderer to fetch from the local API server without CORS issues
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ['http://127.0.0.1:*/*', 'http://localhost:*/*'] },
+    { urls: ['http://*/*'] },
     (details, callback) => {
       callback({ requestHeaders: { ...details.requestHeaders, Origin: '' } })
     },
   )
   // CORS proxy + CSP — merged into a single handler (Electron only allows one)
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const isApiRequest =
-      details.url.startsWith('http://127.0.0.1:') ||
-      details.url.startsWith('http://localhost:')
+    const isApiRequest = details.url.startsWith('http://')
     const headers = { ...details.responseHeaders }
 
     // Inject CORS headers for API requests
@@ -105,12 +110,18 @@ app.whenReady().then(() => {
 
     // Content Security Policy for all responses
     headers['Content-Security-Policy'] = [
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*; font-src 'self' data:; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://* ws://* https://* wss://*; font-src 'self' data:; frame-ancestors 'none'",
     ]
 
     callback({ responseHeaders: headers })
   })
   createWindow()
+})
+
+app.on('before-quit', () => {
+  if (mainWindow) {
+    mainWindow.removeAllListeners('close')
+  }
 })
 
 app.on('window-all-closed', () => {

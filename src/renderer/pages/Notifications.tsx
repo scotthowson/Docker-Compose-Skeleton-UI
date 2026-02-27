@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Bell, Plus, Trash2, Send, CheckCircle, XCircle,
   ToggleLeft, ToggleRight, Loader2, AlertTriangle,
@@ -11,6 +12,7 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   fetchNotificationRules,
   createNotificationRule,
@@ -261,6 +263,7 @@ export default function Notifications() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -563,8 +566,8 @@ export default function Notifications() {
       </div>
 
       {/* ── Add Rule Modal (inline overlay) ─────────────────────────────── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
           <div className="w-full max-w-md mx-4 bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden">
@@ -681,7 +684,8 @@ export default function Notifications() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

@@ -16,6 +16,7 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchImageUpdates, checkImageRegistry, updateImage } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo } from '../../shared/types'
 
@@ -260,6 +261,7 @@ export default function Updates() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* ---- Header ---- */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -413,7 +415,7 @@ export default function Updates() {
         ) : (
           /* Image table */
           <div className="overflow-x-auto -mx-4 md:-mx-6">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[480px]">
               <thead>
                 <tr className="border-b border-white/[0.06]">
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">

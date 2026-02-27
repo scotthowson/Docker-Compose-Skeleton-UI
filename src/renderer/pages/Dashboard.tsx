@@ -23,6 +23,7 @@ import QuickActions from '../components/dashboard/QuickActions'
 import ContainerOverview from '../components/dashboard/ContainerOverview'
 import ServerInfo from '../components/dashboard/ServerInfo'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useToast } from '../components/common/Toast'
 import type { ContainerInfo, DiskInfo, HealthReport } from '../../shared/types'
 import type { ContainerListResponse } from '../api/endpoints'
 
@@ -163,6 +164,15 @@ export default function Dashboard() {
 
   // Track previous health status for notification triggers
   const prevHealthStatusRef = useRef<HealthReport['status'] | null>(null)
+
+  // Welcome toast after first-time setup
+  const { addToast } = useToast()
+  useEffect(() => {
+    if (sessionStorage.getItem('dcs-just-setup')) {
+      sessionStorage.removeItem('dcs-just-setup')
+      addToast({ type: 'success', message: 'Welcome! Your server is configured and ready.', duration: 6000 })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll success/error callbacks for connection health monitoring
   const onPollSuccess = React.useCallback(() => {

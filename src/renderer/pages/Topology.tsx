@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchTopology } from '../api/endpoints'
 import type {
   TopologyResponse, TopologyNode, TopologyNetwork,
@@ -548,6 +549,7 @@ export default function Topology() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Detail panel */}
       {selectedNode && (
         <DetailPanel node={selectedNode} netNames={netNames} onClose={() => setSelectedNode(null)} />
@@ -577,7 +579,7 @@ export default function Topology() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 md:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
         {[
           { icon: Layers, label: 'Stacks', value: layout?.stacks.length ?? 0, color: 'text-violet-400' },
           { icon: Box, label: 'Containers', value: totalContainers, color: 'text-emerald-400' },

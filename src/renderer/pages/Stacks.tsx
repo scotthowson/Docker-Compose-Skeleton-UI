@@ -26,6 +26,7 @@ import {
   Loader2, Play, Square, RotateCcw, Download,
   CheckCircle2, XCircle, X, ListChecks, Trash2,
 } from 'lucide-react'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // -----------------------------------------------------------------------------
 // Stacks Page
@@ -231,19 +232,6 @@ export default function Stacks() {
     setEditingStackName(stackName)
   }, [])
 
-  // Not connected state
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full py-24">
-        <Loader2 className="w-8 h-8 text-slate-600 animate-spin mb-4" />
-        <p className="text-sm text-slate-500">Waiting for server connection...</p>
-        <p className="text-xs text-slate-600 mt-1">
-          Ensure the Docker Compose Skeleton API server is running
-        </p>
-      </div>
-    )
-  }
-
   // Batch action buttons config
   const batchButtons: {
     action: 'start' | 'stop' | 'restart' | 'update'
@@ -262,6 +250,7 @@ export default function Stacks() {
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+      <DisconnectedBanner />
       {selectedStackName && !batchMode ? (
         <StackDetail
           stackName={selectedStackName}
@@ -311,10 +300,10 @@ export default function Stacks() {
       {/* Floating Batch Action Bar                                         */}
       {/* ----------------------------------------------------------------- */}
       {batchMode && selectedStacks.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up w-[calc(100%-2rem)] max-w-fit">
           <div
             className="
-              flex items-center gap-3 px-5 py-3 rounded-2xl
+              flex items-center flex-wrap gap-2 sm:gap-3 px-3 sm:px-5 py-3 rounded-2xl
               bg-slate-900/80 backdrop-blur-xl border border-white/10
               shadow-2xl shadow-black/40
             "

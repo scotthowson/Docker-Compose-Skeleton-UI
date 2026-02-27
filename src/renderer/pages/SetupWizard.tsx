@@ -8,13 +8,13 @@ import {
   Server, CheckCircle2, User, Lock, Shield, Eye, EyeOff,
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
-  Check, AlertCircle, Wifi, WifiOff, Link,
+  Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
-  fetchSetupDefaults, setupConfigure, setupComplete,
+  fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
   authSetup,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
@@ -122,6 +122,35 @@ function StepIndicator({ current, total }: { current: Step; total: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// EnvToggle — inline toggle for boolean env vars
+// ---------------------------------------------------------------------------
+
+function EnvToggle({ label, helpText, envKey, envVars, setEnvVars }: {
+  label: string
+  helpText?: string
+  envKey: string
+  envVars: Record<string, string>
+  setEnvVars: (v: Record<string, string>) => void
+}) {
+  const isOn = envVars[envKey] === 'true'
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div>
+        <p className="text-xs text-slate-300">{label}</p>
+        {helpText && <p className="text-[10px] text-slate-500">{helpText}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={() => setEnvVars({ ...envVars, [envKey]: isOn ? 'false' : 'true' })}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ${isOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
+      >
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isOn ? 'translate-x-6' : 'translate-x-1'}`} />
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // SetupWizard
 // ---------------------------------------------------------------------------
 
@@ -161,9 +190,23 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [tzFilter, setTzFilter] = useState('')
   const [tzDropdownOpen, setTzDropdownOpen] = useState(false)
 
+  // Collapsible advanced sections (Step 3)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showStartup, setShowStartup] = useState(false)
+  const [showBackup, setShowBackup] = useState(false)
+
+  // Pre-flight validation
+  const [alreadyConfigured, setAlreadyConfigured] = useState(false)
+
   // Server URL from settings
   const { setServerUrl } = useConnectionStore()
-  const { register, setApiToken: setStoreApiToken } = useAuthStore()
+  const { register, login, setApiToken: setStoreApiToken } = useAuthStore()
+
+  // Override body overflow:hidden so the wizard page can scroll
+  useEffect(() => {
+    document.body.style.overflow = 'auto'
+    return () => { document.body.style.overflow = '' }
+  }, [])
 
   // Connect to server and fetch defaults
   const handleConnect = async () => {
@@ -214,7 +257,28 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         APP_DATA_DIR: data.defaults.APP_DATA_DIR || './App-Data',
         PUID: String(data.system.puid || data.defaults.PUID || '1000'),
         PGID: String(data.system.pgid || data.defaults.PGID || '1000'),
+        NTFY_URL: data.defaults.NTFY_URL || '',
+        LOG_LEVEL: data.defaults.LOG_LEVEL || 'INFO',
+        DOCKER_TIMEOUT: data.defaults.DOCKER_TIMEOUT || '300',
+        BACKUP_SOURCE_DIR: data.defaults.BACKUP_SOURCE_DIR || '',
+        BACKUP_DEST_DIR: data.defaults.BACKUP_DEST_DIR || '',
+        CONTINUE_ON_FAILURE: data.defaults.CONTINUE_ON_FAILURE || 'true',
+        SKIP_HEALTHCHECK_WAIT: data.defaults.SKIP_HEALTHCHECK_WAIT || 'false',
+        SERVICE_START_DELAY: data.defaults.SERVICE_START_DELAY || '5',
+        ENABLE_POST_STARTUP_HEALTH_CHECK: data.defaults.ENABLE_POST_STARTUP_HEALTH_CHECK || 'true',
+        API_PORT: data.defaults.API_PORT || '9876',
+        API_BIND: data.defaults.API_BIND || '127.0.0.1',
       })
+
+      // Check if server is already initialized
+      try {
+        const status = await fetchSetupStatus()
+        if (status.initialized) {
+          setAlreadyConfigured(true)
+        }
+      } catch {
+        // Setup status check is best-effort
+      }
 
       // Pre-populate stacks
       setStacks(data.stacks.map((name) => ({
@@ -257,14 +321,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // Navigation
   const canNext = useCallback(() => {
     switch (step) {
-      case 1: return connected && defaults !== null
+      case 1: return connected && defaults !== null && !alreadyConfigured
       case 2: return isStep2Valid()
       case 3: return isStep3Valid()
       case 4: return isStep4Valid()
       case 5: return true
       default: return false
     }
-  }, [step, connected, defaults, isStep2Valid, isStep3Valid, isStep4Valid])
+  }, [step, connected, defaults, alreadyConfigured, isStep2Valid, isStep3Valid, isStep4Valid])
 
   const handleNext = async () => {
     setError(null)
@@ -279,8 +343,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           apiClient.setAuthToken(res.token)
           setStoreApiToken(res.token)
 
-          // Also register locally so the app has a local account
-          await register(adminUsername.trim(), adminPassword)
+          // Register locally so the app has a local account session
+          const registered = await register(adminUsername.trim(), adminPassword)
+          if (!registered) {
+            // Account already exists locally (e.g. previous session) — log in instead
+            await login(adminUsername.trim(), adminPassword, true)
+          }
         } else {
           setError('Failed to create admin account')
           setLoading(false)
@@ -324,13 +392,24 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 2. Mark setup as complete
       await setupComplete()
 
-      // 3. Show success
-      setComplete(true)
+      // 3. Ensure authenticated before redirect (safety net)
+      const authState = useAuthStore.getState()
+      if (!authState.isAuthenticated && adminUsername && adminPassword) {
+        const ok = await login(adminUsername.trim(), adminPassword, true)
+        if (!ok) {
+          // Last resort: force auth state so we reach dashboard
+          useAuthStore.setState({ isAuthenticated: true, currentUser: adminUsername.trim(), hasAccount: true })
+        }
+      }
 
-      // 4. Redirect after delay
+      // 4. Show success + set session flag for welcome toast
+      setComplete(true)
+      sessionStorage.setItem('dcs-just-setup', 'true')
+
+      // 5. Redirect after delay
       setTimeout(() => {
         onComplete()
-      }, 2000)
+      }, 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed')
       setCompleting(false)
@@ -385,49 +464,59 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   if (complete) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-center animate-scale-in">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/30 mb-6">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+        <div className="text-center animate-scale-in max-w-sm">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/30 mb-6 shadow-lg shadow-emerald-500/10">
+            <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
           </div>
           <h2 className="text-2xl font-bold text-slate-100 mb-2">Setup Complete!</h2>
-          <p className="text-sm text-slate-500">Redirecting to login...</p>
+          <p className="text-sm text-slate-400 mb-4">
+            <span className="font-semibold text-slate-200">{envVars.SERVER_NAME || 'Your server'}</span> is configured and ready to manage
+          </p>
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+            <Loader2 size={12} className="animate-spin text-emerald-400" />
+            <span>Entering Dashboard...</span>
+          </div>
+          <p className="text-[10px] text-slate-600 mt-6">
+            Tip: Export your settings from Settings to back up this configuration
+          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden">
-      {/* Animated background */}
-      <div className="absolute inset-0 overflow-hidden">
+    <div className="min-h-screen bg-slate-950 relative">
+      {/* Animated background (fixed behind scroll) */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full rounded-full bg-emerald-500/[0.05] blur-3xl animate-float-slow" />
         <div className="absolute -bottom-1/2 -right-1/2 w-full h-full rounded-full bg-cyan-500/[0.05] blur-3xl animate-float-slow" style={{ animationDelay: '3s' }} />
         <div className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-violet-500/[0.04] blur-3xl animate-float-slow" style={{ animationDelay: '6s' }} />
       </div>
 
-      {/* Grid pattern */}
+      {/* Grid pattern (fixed behind scroll) */}
       <div
-        className="absolute inset-0 opacity-[0.015]"
+        className="fixed inset-0 opacity-[0.015] pointer-events-none"
         style={{
           backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px)',
           backgroundSize: '32px 32px',
         }}
       />
 
-      {/* Main card */}
-      <div className="relative z-10 w-full max-w-2xl mx-4">
-        {/* Logo */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 mb-3">
-            <Layers className="w-7 h-7 text-emerald-400" />
+      {/* Scrollable content area */}
+      <div className="relative z-10 min-h-screen flex items-start justify-center py-8 md:py-12 overflow-y-auto scrollbar-thin">
+        <div className="w-full max-w-2xl mx-4">
+          {/* Logo */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 mb-3">
+              <Layers className="w-7 h-7 text-emerald-400" />
+            </div>
           </div>
-        </div>
 
-        {/* Step indicator */}
-        <StepIndicator current={step} total={5} />
+          {/* Step indicator */}
+          <StepIndicator current={step} total={5} />
 
-        {/* Content card */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-6 md:p-8 shadow-2xl shadow-black/20">
+          {/* Content card */}
+          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-6 md:p-8 shadow-2xl shadow-black/20">
           {/* Error banner */}
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 mb-6 animate-fade-in">
@@ -496,6 +585,19 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </span>
                   </div>
 
+                  {/* Already configured warning */}
+                  {alreadyConfigured && (
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 mb-4 animate-fade-in">
+                      <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-300">Server Already Configured</p>
+                        <p className="text-[10px] text-amber-400/70 mt-0.5">
+                          This server is already initialized. Use the Login screen to sign in, or Factory Reset from Diagnostics to start fresh.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* System info card */}
                   <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-5 animate-fade-in">
                     <div className="flex items-center gap-2 mb-4">
@@ -510,10 +612,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         { label: 'Compose', value: defaults.system.compose_version },
                         { label: 'User ID', value: String(defaults.system.puid) },
                         { label: 'Group ID', value: String(defaults.system.pgid) },
+                        { label: 'Docker Status', value: defaults.system.docker_available ? 'Available' : 'Not Available', status: defaults.system.docker_available },
                       ].map((item) => (
-                        <div key={item.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.02]">
+                        <div key={item.label + (('status' in item) ? '-status' : '')} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.02]">
                           <span className="text-[11px] text-slate-500">{item.label}</span>
-                          <span className="text-[11px] font-mono text-slate-300">{item.value}</span>
+                          {'status' in item ? (
+                            <span className={`text-[11px] font-mono flex items-center gap-1 ${item.status ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${item.status ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                              {item.value}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-mono text-slate-300">{item.value}</span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -747,6 +857,165 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     />
                   </div>
                 </div>
+
+                {/* ── Advanced: Notifications ── */}
+                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Bell size={14} className="text-amber-400" />
+                      <span className="text-xs font-semibold text-slate-300">Notifications</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showNotifications ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showNotifications && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY URL</label>
+                        <input
+                          type="text"
+                          value={envVars.NTFY_URL || ''}
+                          onChange={(e) => setEnvVars({ ...envVars, NTFY_URL: e.target.value })}
+                          placeholder="https://ntfy.sh/your-topic"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                        <p className="text-[10px] text-slate-600 mt-1">Leave empty to disable push notifications</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Advanced: Startup & Health ── */}
+                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowStartup(!showStartup)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap size={14} className="text-cyan-400" />
+                      <span className="text-xs font-semibold text-slate-300">Startup & Health</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showStartup ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showStartup && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                      {/* Log Level */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Log Level</label>
+                        <select
+                          value={envVars.LOG_LEVEL || 'INFO'}
+                          onChange={(e) => setEnvVars({ ...envVars, LOG_LEVEL: e.target.value })}
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        >
+                          <option value="ERROR">ERROR</option>
+                          <option value="WARNING">WARNING</option>
+                          <option value="INFO">INFO</option>
+                          <option value="DEBUG">DEBUG</option>
+                        </select>
+                      </div>
+
+                      {/* Toggle: Continue on failure */}
+                      <EnvToggle
+                        label="Continue on Failure"
+                        helpText="Continue starting stacks if one fails"
+                        envKey="CONTINUE_ON_FAILURE"
+                        envVars={envVars}
+                        setEnvVars={setEnvVars}
+                      />
+
+                      {/* Toggle: Skip health check wait */}
+                      <EnvToggle
+                        label="Skip Health Check Wait"
+                        helpText="Skip waiting for health checks during startup"
+                        envKey="SKIP_HEALTHCHECK_WAIT"
+                        envVars={envVars}
+                        setEnvVars={setEnvVars}
+                      />
+
+                      {/* Toggle: Post-startup health check */}
+                      <EnvToggle
+                        label="Post-Startup Health Check"
+                        helpText="Run health check after all stacks start"
+                        envKey="ENABLE_POST_STARTUP_HEALTH_CHECK"
+                        envVars={envVars}
+                        setEnvVars={setEnvVars}
+                      />
+
+                      {/* Number: Service start delay */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Start Delay (seconds)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="60"
+                            value={envVars.SERVICE_START_DELAY || '5'}
+                            onChange={(e) => setEnvVars({ ...envVars, SERVICE_START_DELAY: e.target.value })}
+                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Docker Timeout (seconds)</label>
+                          <input
+                            type="number"
+                            min="30"
+                            max="900"
+                            value={envVars.DOCKER_TIMEOUT || '300'}
+                            onChange={(e) => setEnvVars({ ...envVars, DOCKER_TIMEOUT: e.target.value })}
+                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Advanced: Backup ── */}
+                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowBackup(!showBackup)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <HardDrive size={14} className="text-violet-400" />
+                      <span className="text-xs font-semibold text-slate-300">Backup</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showBackup ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showBackup && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Backup Source Directory</label>
+                        <input
+                          type="text"
+                          value={envVars.BACKUP_SOURCE_DIR || ''}
+                          onChange={(e) => setEnvVars({ ...envVars, BACKUP_SOURCE_DIR: e.target.value })}
+                          placeholder="/path/to/source"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Backup Destination Directory</label>
+                        <input
+                          type="text"
+                          value={envVars.BACKUP_DEST_DIR || ''}
+                          onChange={(e) => setEnvVars({ ...envVars, BACKUP_DEST_DIR: e.target.value })}
+                          placeholder="/path/to/destination"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-600">Configure after setup if unsure</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -902,21 +1171,88 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   </div>
                 </div>
 
-                {/* Server Config */}
+                {/* Server Config — grouped by category */}
                 <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Settings size={14} className="text-emerald-400" />
-                    <h3 className="text-xs font-semibold text-slate-300">Server Configuration</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">Server Identity</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(envVars).map(([key, val]) => (
+                    {['SERVER_NAME', 'TZ', 'PROXY_DOMAIN'].map((key) => (
                       <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
                         <span className="text-[10px] text-slate-500">{key}</span>
-                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{val}</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
                       </div>
                     ))}
                   </div>
                 </div>
+
+                <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FolderOpen size={14} className="text-emerald-400" />
+                    <h3 className="text-xs font-semibold text-slate-300">Storage & Permissions</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['APP_DATA_DIR', 'PUID', 'PGID'].map((key) => (
+                      <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <span className="text-[10px] text-slate-500">{key}</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Advanced sections — only show if values differ from defaults */}
+                {envVars.NTFY_URL && (
+                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bell size={14} className="text-amber-400" />
+                      <h3 className="text-xs font-semibold text-slate-300">Notifications</h3>
+                    </div>
+                    <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <span className="text-[10px] text-slate-500">NTFY_URL</span>
+                      <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[200px]">{envVars.NTFY_URL}</span>
+                    </div>
+                  </div>
+                )}
+
+                {(() => {
+                  const startupDefaults: Record<string, string> = { LOG_LEVEL: 'INFO', CONTINUE_ON_FAILURE: 'true', SKIP_HEALTHCHECK_WAIT: 'false', SERVICE_START_DELAY: '5', DOCKER_TIMEOUT: '300', ENABLE_POST_STARTUP_HEALTH_CHECK: 'true' }
+                  const changed = Object.entries(startupDefaults).filter(([k, v]) => envVars[k] && envVars[k] !== v)
+                  return changed.length > 0 ? (
+                    <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Zap size={14} className="text-cyan-400" />
+                        <h3 className="text-xs font-semibold text-slate-300">Startup & Health</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {changed.map(([key]) => (
+                          <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                            <span className="text-[10px] text-slate-500">{key}</span>
+                            <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[120px]">{envVars[key]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                {(envVars.BACKUP_SOURCE_DIR || envVars.BACKUP_DEST_DIR) && (
+                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <HardDrive size={14} className="text-violet-400" />
+                      <h3 className="text-xs font-semibold text-slate-300">Backup</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {['BACKUP_SOURCE_DIR', 'BACKUP_DEST_DIR'].filter((k) => envVars[k]).map((key) => (
+                        <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500">{key}</span>
+                          <span className="text-[10px] font-mono text-slate-300 truncate ml-2 max-w-[200px]">{envVars[key]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Stack Order */}
                 <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
@@ -997,6 +1333,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 )}
               </button>
             )}
+          </div>
           </div>
         </div>
       </div>

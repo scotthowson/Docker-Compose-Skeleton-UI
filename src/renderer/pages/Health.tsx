@@ -14,6 +14,7 @@ import { fetchHealthReport, fetchContainers, fetchSystemMetrics } from '../api/e
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse } from '../../shared/types'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -306,6 +307,7 @@ export default function Health() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

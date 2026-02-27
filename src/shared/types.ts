@@ -553,6 +553,12 @@ export interface AppSettings {
   connectionProfiles: ConnectionProfile[]
   /** User-defined custom CSS injected into the app */
   customCSS: string
+  /** Remember the last username across sessions */
+  rememberUsername: boolean
+  /** Last successfully authenticated username */
+  lastUsername: string
+  /** Session duration in minutes (0 = indefinite) */
+  sessionDurationMinutes: number
 }
 
 // ---------------------------------------------------------------------------
@@ -1330,7 +1336,15 @@ export interface SetupDefaultsResponse {
     pgid: number
     docker_version: string
     compose_version: string
+    docker_available: boolean
   }
+}
+
+// POST /auth/factory-reset
+export interface FactoryResetResponse {
+  success: boolean
+  files_removed: string[]
+  compose_reset: boolean
 }
 
 // POST /setup/configure

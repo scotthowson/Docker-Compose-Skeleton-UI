@@ -16,7 +16,7 @@ import { NotificationDrawer } from '../NotificationDrawer'
 import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
-const pageTitles: Record<PageId, string> = {
+export const pageTitles: Record<PageId, string> = {
   dashboard: 'Dashboard',
   stacks: 'Stack Manager',
   containers: 'Containers',
@@ -272,7 +272,7 @@ export function Header() {
         <button
           onClick={toggleDrawer}
           className="
-            relative flex items-center justify-center w-7 h-7 md:w-8 md:h-8
+            relative flex items-center justify-center w-9 h-9 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200
@@ -346,7 +346,7 @@ export function Header() {
         <button
           onClick={toggleTheme}
           className="
-            flex items-center justify-center w-7 h-7 md:w-8 md:h-8
+            flex items-center justify-center w-9 h-9 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200

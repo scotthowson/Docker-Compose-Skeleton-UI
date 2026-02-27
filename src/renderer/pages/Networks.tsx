@@ -21,6 +21,7 @@ import type {
   NetworkListResponse,
   NetworkInfo, NetworkDetail,
 } from '../../shared/types'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -605,6 +606,7 @@ export default function Networks() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Modals */}
       {showCreateModal && (
         <CreateNetworkModal
@@ -667,7 +669,7 @@ export default function Networks() {
       </div>
 
       {/* Stats row — 3 columns */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Network size={14} className="text-cyan-400" />

@@ -111,6 +111,7 @@ import type {
   SetupCompleteResponse,
   StackRenameResponse,
   StackReorderResponse,
+  FactoryResetResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -479,6 +480,11 @@ export function authLogoutAll(username: string): Promise<AuthLogoutResponse> {
 /** POST /auth/refresh — Refresh current session token */
 export function authRefresh(): Promise<AuthResponse> {
   return apiClient.post<AuthResponse>('/auth/refresh')
+}
+
+/** POST /auth/factory-reset — Wipe auth state and return to setup wizard */
+export function authFactoryReset(opts: { confirm: string; reset_compose?: boolean }): Promise<FactoryResetResponse> {
+  return apiClient.post<FactoryResetResponse>('/auth/factory-reset', opts)
 }
 
 // ---------------------------------------------------------------------------

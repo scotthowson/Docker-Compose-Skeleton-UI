@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
-import { Header } from './components/layout/Header'
+import { Header, pageTitles } from './components/layout/Header'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
 import { useSettingsStore } from './stores/settingsStore'
@@ -130,6 +132,12 @@ export default function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
+  // Sync document title with current page
+  useEffect(() => {
+    const title = pageTitles[currentPage] || 'Dashboard'
+    document.title = `${title} — DCS Manager`
+  }, [currentPage])
+
   // Custom CSS injection
   useEffect(() => {
     let styleEl = document.getElementById('custom-user-css') as HTMLStyleElement | null
@@ -243,7 +251,25 @@ export default function App() {
 
   // Show login screen if not authenticated
   if (authLoading) {
-    return <div className="h-screen bg-slate-950" />
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6 animate-fade-in">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-xl" />
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/20 flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-emerald-400 animate-spin" />
+            </div>
+          </div>
+          <div className="text-center">
+            <h1 className="text-lg font-semibold text-gradient">DCS Manager</h1>
+            <p className="text-xs text-slate-500 mt-1.5">Docker Compose Skeleton</p>
+          </div>
+          <div className="w-32 h-0.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="h-full w-1/3 rounded-full bg-emerald-500/40 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!isAuthenticated) {
@@ -284,7 +310,13 @@ export default function App() {
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto p-3 md:p-6 transition-all duration-300 scrollbar-thin">
             <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
-              <ActivePage />
+              <ErrorBoundary
+                key={transitionPage}
+                fallbackMessage="This page encountered an error"
+                onNavigateHome={() => setCurrentPage('dashboard')}
+              >
+                <ActivePage />
+              </ErrorBoundary>
             </div>
           </main>
         </div>

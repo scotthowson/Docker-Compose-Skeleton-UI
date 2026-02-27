@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   authListUsers, authListInvites, authCreateInvite, authRevokeUser,
 } from '../api/endpoints'
@@ -153,6 +154,7 @@ export default function Users() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

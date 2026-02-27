@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { AppSettings, PageId } from '../../shared/types'
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   serverUrl: 'http://127.0.0.1:9876',
   pollingInterval: 10000,
   containerPollingInterval: 5000,
@@ -20,6 +20,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   projectSubtitle: 'Docker Compose Skeleton',
   connectionProfiles: [],
   customCSS: '',
+  rememberUsername: true,
+  lastUsername: '',
+  sessionDurationMinutes: 240,
 }
 
 interface SettingsState extends AppSettings {

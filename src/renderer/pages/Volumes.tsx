@@ -27,6 +27,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { fetchVolumes, deleteVolume } from '../api/endpoints'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -497,6 +498,7 @@ export default function Volumes() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Delete confirmation modal */}
       {deleteTarget && (
         <DeleteConfirmModal

@@ -15,6 +15,7 @@ import { usePolling } from '../hooks/usePolling'
 import { fetchCrontab, fetchSystemCrontab, updateCrontab } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { CronEntry, CrontabResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -205,6 +206,7 @@ export default function CronJobs() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -251,7 +253,7 @@ export default function CronJobs() {
       </div>
 
       {/* Tab bar + search */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center flex-wrap gap-4">
         {/* Tabs */}
         <div className="flex rounded-lg bg-white/[0.03] border border-white/[0.06] p-0.5">
           {([
@@ -294,7 +296,7 @@ export default function CronJobs() {
             New Cron Entry
           </h3>
 
-          <div className="grid grid-cols-[auto_1fr] gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-3 mb-3">
             {/* Schedule input */}
             <div>
               <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Schedule</label>
@@ -475,7 +477,7 @@ export default function CronJobs() {
 
       {/* Raw Editor Overlay */}
       {showRawEditor && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">

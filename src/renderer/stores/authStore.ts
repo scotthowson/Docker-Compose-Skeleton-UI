@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import { apiClient } from '../api/client'
 import { authLogout } from '../api/endpoints'
+import { useSettingsStore } from './settingsStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +37,6 @@ interface LoginAttempt {
   lockedUntil: number
 }
 
-const SESSION_DURATION_MS = 4 * 60 * 60 * 1000 // 4 hours
 const SESSION_KEY = 'auth-session'
 const LOCKOUT_ATTEMPTS = 5
 const LOCKOUT_DURATION_MS = 60 * 1000 // 1 minute lockout after 5 failed attempts
@@ -109,6 +109,20 @@ async function verifyPassword(password: string, account: UserAccount): Promise<b
 }
 
 // ---------------------------------------------------------------------------
+// Dynamic session duration — reads from settingsStore at call time
+// ---------------------------------------------------------------------------
+
+function getSessionDurationMs(): number {
+  try {
+    const { sessionDurationMinutes } = useSettingsStore.getState()
+    if (sessionDurationMinutes <= 0) return 0 // indefinite
+    return sessionDurationMinutes * 60 * 1000
+  } catch {
+    return 4 * 60 * 60 * 1000 // fallback: 4 hours
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
 
@@ -142,7 +156,8 @@ function getPersistedSession(): SessionData | null {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) return null
     const session: SessionData = JSON.parse(raw)
-    if (Date.now() > session.expiresAt) {
+    // expiresAt === 0 means indefinite session — never expires
+    if (session.expiresAt !== 0 && Date.now() > session.expiresAt) {
       localStorage.removeItem(SESSION_KEY)
       return null
     }
@@ -153,9 +168,10 @@ function getPersistedSession(): SessionData | null {
 }
 
 function setPersistedSession(username: string): void {
+  const durationMs = getSessionDurationMs()
   const session: SessionData = {
     username,
-    expiresAt: Date.now() + SESSION_DURATION_MS,
+    expiresAt: durationMs === 0 ? 0 : Date.now() + durationMs,
     token: generateToken(),
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))

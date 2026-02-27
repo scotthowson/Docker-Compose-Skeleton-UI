@@ -13,6 +13,7 @@ import { fetchSystemInfo, runDockerPrune, runImagePrune } from '../api/endpoints
 import { useSystemStore } from '../stores/systemStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { SystemInfo, DockerDiskUsage } from '../../shared/types'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -262,6 +263,7 @@ export default function System() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

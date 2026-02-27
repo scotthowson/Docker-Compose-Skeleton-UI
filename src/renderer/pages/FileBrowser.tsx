@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import {
   fetchContainers,
@@ -316,6 +317,7 @@ export default function FileBrowser() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* ----------------------------------------------------------------- */}
       {/* Page header                                                        */}
       {/* ----------------------------------------------------------------- */}

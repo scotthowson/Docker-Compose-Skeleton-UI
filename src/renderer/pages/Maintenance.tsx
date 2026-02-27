@@ -19,6 +19,7 @@ import {
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { MaintenanceReport, OrphanReport, DiskAnalysis } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -167,6 +168,7 @@ export default function Maintenance() {
 
   return (
     <div className="space-y-3 md:space-y-6">
+      <DisconnectedBanner />
       {/* Deep Prune Confirmation Modal */}
       {showDeepPruneModal && (
         <div

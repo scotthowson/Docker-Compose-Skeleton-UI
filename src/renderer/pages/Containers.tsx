@@ -11,6 +11,7 @@ import { fetchContainers } from '../api/endpoints'
 import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 const CONTAINER_POLL_INTERVAL = 10_000
 
@@ -73,6 +74,7 @@ const Containers: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+      <DisconnectedBanner />
       {selectedName && selectedContainer ? (
         <ErrorBoundary key={selectedName} fallbackMessage="Failed to render container details">
           <ContainerDetail

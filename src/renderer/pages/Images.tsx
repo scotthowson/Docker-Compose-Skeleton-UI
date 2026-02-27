@@ -21,6 +21,7 @@ import {
   Loader2,
   ListChecks,
 } from 'lucide-react'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 const IMAGE_POLL_INTERVAL = 60_000
 
@@ -153,6 +154,7 @@ const Images: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+      <DisconnectedBanner />
       <div className="flex flex-col gap-5 animate-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
@@ -163,7 +165,7 @@ const Images: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-3">
           {/* Batch mode toggle */}
           <button
             onClick={handleToggleBatch}

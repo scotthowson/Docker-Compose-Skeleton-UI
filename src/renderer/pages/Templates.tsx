@@ -37,6 +37,7 @@ import {
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers } from '../api/endpoints'
@@ -214,14 +215,23 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
 
-  // Update variables when detail arrives and we have new variable definitions
+  // Update variables when detail arrives — merge template-defined + compose-parsed vars
   useEffect(() => {
-    if (!detail?.template.variables) return
-    const vars = detail.template.variables
+    if (!detail) return
+    const vars = detail.template.variables ?? []
+    const composeVars = detail.compose ? parseComposeVariables(detail.compose) : []
+    const definedNames = new Set(vars.map((v) => v.name))
+
     setVariables((prev) => {
       const merged: Record<string, string> = {}
       for (const v of vars) {
         merged[v.name] = prev[v.name] || v.default || ''
+      }
+      // Add compose-parsed vars not already defined
+      for (const cv of composeVars) {
+        if (!definedNames.has(cv.name)) {
+          merged[cv.name] = prev[cv.name] || cv.defaultValue || ''
+        }
       }
       return merged
     })
@@ -433,33 +443,83 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 )}
               </div>
 
-              {/* Template variables */}
-              {templateVars.length > 0 && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Variables
-                  </label>
-                  <div className="space-y-2.5">
-                    {templateVars.map((v) => (
-                      <div key={v.name}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs text-slate-400 font-medium">{v.label || v.name}</span>
-                          {v.required && (
-                            <span className="text-[9px] text-rose-400 font-semibold">Required</span>
-                          )}
-                        </div>
-                        <input
-                          type={v.type === 'password' ? 'password' : 'text'}
-                          value={variables[v.name] ?? ''}
-                          onChange={(e) => handleVariableChange(v.name, e.target.value)}
-                          placeholder={v.default || v.name}
-                          className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
-                        />
-                      </div>
-                    ))}
+              {/* Template variables + auto-detected compose env vars */}
+              {(() => {
+                // Merge template-defined vars with compose-parsed vars
+                const composeVars = detail?.compose ? parseComposeVariables(detail.compose) : []
+                const definedNames = new Set(templateVars.map((v) => v.name))
+                const extraVars = composeVars.filter((cv) => !definedNames.has(cv.name))
+
+                const allVars = [
+                  ...templateVars.map((v) => ({
+                    name: v.name,
+                    label: v.label || v.name,
+                    defaultValue: v.default || '',
+                    required: v.required || false,
+                    type: v.type || '',
+                    isBoolean: v.type === 'boolean' || v.default === 'true' || v.default === 'false',
+                  })),
+                  ...extraVars.map((v) => ({
+                    name: v.name,
+                    label: v.name,
+                    defaultValue: v.defaultValue,
+                    required: false,
+                    type: '',
+                    isBoolean: v.defaultValue === 'true' || v.defaultValue === 'false',
+                  })),
+                ]
+
+                return allVars.length > 0 ? (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Variables
+                    </label>
+                    <div className="space-y-2.5">
+                      {allVars.map((v) => {
+                        const value = variables[v.name] ?? v.defaultValue
+                        if (v.isBoolean) {
+                          const isOn = value === 'true'
+                          return (
+                            <div key={v.name} className="flex items-center justify-between py-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-300 font-medium">{v.label}</span>
+                                  {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
+                                </div>
+                                <p className="text-[10px] text-slate-600 font-mono mt-0.5">{v.name}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleVariableChange(v.name, isOn ? 'false' : 'true')}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${isOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                              >
+                                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isOn ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div key={v.name}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs text-slate-400 font-medium">{v.label}</span>
+                              {v.required && (
+                                <span className="text-[9px] text-rose-400 font-semibold">Required</span>
+                              )}
+                            </div>
+                            <input
+                              type={v.type === 'password' ? 'password' : 'text'}
+                              value={value}
+                              onChange={(e) => handleVariableChange(v.name, e.target.value)}
+                              placeholder={v.defaultValue || v.name}
+                              className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : null
+              })()}
 
               {/* Auto-start toggle */}
               <div className="flex items-center justify-between py-2">
@@ -468,18 +528,15 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   <p className="text-[11px] text-slate-500">Automatically start the stack after creation</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setAutoStart((prev) => !prev)}
-                  className={`relative w-10 h-[22px] rounded-full border transition-colors duration-200 ${
-                    autoStart
-                      ? 'bg-emerald-500/30 border-emerald-500/40'
-                      : 'bg-white/[0.06] border-white/[0.08]'
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
+                    autoStart ? 'bg-emerald-500' : 'bg-slate-700'
                   }`}
                 >
                   <span
-                    className={`absolute top-[2px] w-4 h-4 rounded-full transition-all duration-200 ${
-                      autoStart
-                        ? 'left-[22px] bg-emerald-400'
-                        : 'left-[2px] bg-slate-500'
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      autoStart ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
@@ -880,15 +937,21 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      {parsedVars.map((v) => (
-                        <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.02]">
-                          <code className="text-[11px] font-mono text-emerald-400 min-w-[160px]">{v.name}</code>
-                          <span className="text-[10px] text-slate-600">default:</span>
-                          <code className="text-[11px] font-mono text-slate-400 flex-1 truncate">
-                            {v.defaultValue || <span className="text-slate-600 italic">none</span>}
-                          </code>
-                        </div>
-                      ))}
+                      {parsedVars.map((v) => {
+                        const isBool = v.defaultValue === 'true' || v.defaultValue === 'false'
+                        return (
+                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.02]">
+                            <code className="text-[11px] font-mono text-emerald-400 min-w-[140px]">{v.name}</code>
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isBool ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'bg-slate-500/10 text-slate-500 border border-slate-500/15'}`}>
+                              {isBool ? 'toggle' : 'text'}
+                            </span>
+                            <span className="text-[10px] text-slate-600">default:</span>
+                            <code className="text-[11px] font-mono text-slate-400 flex-1 truncate">
+                              {v.defaultValue || <span className="text-slate-600 italic">none</span>}
+                            </code>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                   <p className="text-[10px] text-slate-600 mt-2">
@@ -1390,6 +1453,7 @@ export default function Templates() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
+      <DisconnectedBanner />
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">

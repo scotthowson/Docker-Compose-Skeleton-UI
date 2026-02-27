@@ -1,43 +1,75 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Background circle with dark slate -->
-  <rect width="512" height="512" rx="108" fill="#0f172a"/>
-
-  <!-- Subtle gradient overlay -->
   <defs>
-    <linearGradient id="glow" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.15"/>
+    <!-- Background gradient -->
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
     </linearGradient>
-    <linearGradient id="accent" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
-    </linearGradient>
-    <linearGradient id="accentLight" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
+    <!-- Ambient glow -->
+    <radialGradient id="glow" cx="256" cy="220" r="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#06b6d4" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Accent gradient (emerald → cyan) -->
+    <linearGradient id="accent" x1="140" y1="120" x2="372" y2="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#34d399"/>
       <stop offset="100%" stop-color="#22d3ee"/>
     </linearGradient>
+    <!-- Layer fill gradient -->
+    <linearGradient id="layerFill" x1="160" y1="140" x2="352" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <!-- Shadow filter -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <!-- Top glow filter -->
+    <filter id="topGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <rect width="512" height="512" rx="108" fill="url(#glow)"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
 
-  <!-- Inner rounded rect border -->
-  <rect x="24" y="24" width="464" height="464" rx="88" fill="none" stroke="url(#accent)" stroke-width="2" stroke-opacity="0.3"/>
+  <!-- Subtle border -->
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="url(#accent)" stroke-width="1.5" stroke-opacity="0.2"/>
 
-  <!-- Container/Stack icon — 3 stacked layers -->
-  <!-- Bottom layer -->
-  <path d="M256 368 L128 304 L256 240 L384 304 Z" fill="url(#accent)" fill-opacity="0.3" stroke="url(#accent)" stroke-width="3"/>
-  <!-- Middle layer -->
-  <path d="M256 316 L128 252 L256 188 L384 252 Z" fill="url(#accent)" fill-opacity="0.5" stroke="url(#accent)" stroke-width="3"/>
-  <!-- Top layer -->
-  <path d="M256 264 L128 200 L256 136 L384 200 Z" fill="url(#accent)" fill-opacity="0.85" stroke="url(#accentLight)" stroke-width="3"/>
+  <!-- Stacked compose layers (isometric) -->
+  <g filter="shadow">
+    <!-- Layer 3 (bottom) -->
+    <path d="M256 348 L144 284 L256 220 L368 284 Z"
+          fill="url(#layerFill)" fill-opacity="0.2"
+          stroke="url(#accent)" stroke-width="2" stroke-opacity="0.3"/>
 
-  <!-- Small diamond accents -->
-  <circle cx="256" cy="136" r="6" fill="#34d399"/>
-  <circle cx="128" cy="200" r="4" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="384" cy="200" r="4" fill="#06b6d4" opacity="0.7"/>
+    <!-- Layer 2 (middle) -->
+    <path d="M256 306 L144 242 L256 178 L368 242 Z"
+          fill="url(#layerFill)" fill-opacity="0.45"
+          stroke="url(#accent)" stroke-width="2" stroke-opacity="0.5"/>
 
-  <!-- Connection dots -->
-  <circle cx="256" cy="408" r="5" fill="#10b981" opacity="0.4"/>
-  <circle cx="220" cy="420" r="3" fill="#06b6d4" opacity="0.3"/>
-  <circle cx="292" cy="420" r="3" fill="#06b6d4" opacity="0.3"/>
+    <!-- Layer 1 (top) — prominent -->
+    <path d="M256 264 L144 200 L256 136 L368 200 Z"
+          fill="url(#layerFill)" fill-opacity="0.85"
+          stroke="url(#accent)" stroke-width="2.5" stroke-opacity="0.9"
+          filter="url(#topGlow)"/>
+  </g>
+
+  <!-- Vertex highlights -->
+  <circle cx="256" cy="136" r="5" fill="#34d399" opacity="0.9"/>
+  <circle cx="368" cy="200" r="3.5" fill="#22d3ee" opacity="0.7"/>
+  <circle cx="144" cy="200" r="3.5" fill="#22d3ee" opacity="0.7"/>
+  <circle cx="256" cy="264" r="3" fill="#34d399" opacity="0.5"/>
+
+  <!-- Bottom connection dots (orchestration feel) -->
+  <circle cx="256" cy="388" r="4" fill="#10b981" opacity="0.35"/>
+  <circle cx="228" cy="398" r="2.5" fill="#06b6d4" opacity="0.25"/>
+  <circle cx="284" cy="398" r="2.5" fill="#06b6d4" opacity="0.25"/>
+  <line x1="256" y1="348" x2="256" y2="384" stroke="url(#accent)" stroke-width="1" stroke-opacity="0.15"/>
 </svg>
