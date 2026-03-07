@@ -1,30 +1,14 @@
-import { app, BrowserWindow, ipcMain, shell, session, Menu, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, session, Menu } from 'electron'
 import path from 'path'
 import http from 'http'
-import { pathToFileURL } from 'url'
 import Store from 'electron-store'
 
-// Disable Chromium's Private Network Access preflight checks.
+// Disable Chromium's Private Network Access preflight checks so the renderer
+// can fetch() to local/private IPs without CORS preflight blocking.
 app.commandLine.appendSwitch(
   'disable-features',
   'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights',
 )
-
-// ---------------------------------------------------------------------------
-// Custom app:// protocol — MUST be registered before app.ready
-// ---------------------------------------------------------------------------
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'app',
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-      stream: true,
-    },
-  },
-])
 
 // ---------------------------------------------------------------------------
 // Plain Node.js HTTP GET — completely bypasses Chromium's networking stack.
@@ -98,7 +82,7 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadURL('app://renderer/index.html')
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
   mainWindow.on('resize', () => {
@@ -129,27 +113,44 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 ipcMain.handle('get-settings', () => store.store)
 ipcMain.handle('get-setting', (_event, key: string) => store.get(key))
-ipcMain.handle('set-setting', (_event, key: string, value: unknown) => { store.set(key, value); return true })
+ipcMain.handle('set-setting', (_event, key: string, value: unknown) => {
+  if (value === undefined || value === null) {
+    store.delete(key)
+  } else {
+    store.set(key, value)
+  }
+  return true
+})
 ipcMain.handle('get-version', () => app.getVersion())
 
 // Combined server check: tests connectivity AND setup status in one call.
 // Uses Node.js http module (NOT Chromium net.fetch) — zero browser security
 // policies apply.  Returns everything the renderer needs in a single IPC trip.
 ipcMain.handle('check-server', async (_event, serverUrl: string) => {
+  console.log('[check-server] called with URL:', serverUrl)
+
   // 1. Test basic connectivity
   const root = await httpGetJson(`${serverUrl}/`)
+  console.log('[check-server] root response:', JSON.stringify(root))
   if (!root.ok) {
-    return { reachable: false, initialized: true, error: root.error || 'unreachable' }
+    const result = { reachable: false, initialized: true, error: root.error || 'unreachable' }
+    console.log('[check-server] returning:', JSON.stringify(result))
+    return result
   }
 
   // 2. Check setup status
   const setup = await httpGetJson(`${serverUrl}/setup/status`)
+  console.log('[check-server] setup response:', JSON.stringify(setup))
   if (setup.ok && setup.data && typeof setup.data === 'object' && 'initialized' in (setup.data as Record<string, unknown>)) {
-    return { reachable: true, initialized: !!(setup.data as { initialized: boolean }).initialized }
+    const result = { reachable: true, initialized: !!(setup.data as { initialized: boolean }).initialized }
+    console.log('[check-server] returning:', JSON.stringify(result))
+    return result
   }
 
   // Setup endpoint missing or unexpected response — treat as initialized
-  return { reachable: true, initialized: true }
+  const result = { reachable: true, initialized: true }
+  console.log('[check-server] returning (fallback):', JSON.stringify(result))
+  return result
 })
 
 // Generic JSON fetch via Node.js http (for any other IPC callers)
@@ -161,13 +162,6 @@ ipcMain.handle('net-fetch-json', async (_event, url: string) => {
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
-  // app:// protocol handler
-  protocol.handle('app', (request) => {
-    const url = new URL(request.url)
-    const filePath = path.join(__dirname, '..', 'renderer', decodeURIComponent(url.pathname))
-    return net.fetch(pathToFileURL(filePath).toString())
-  })
-
   // CORS proxy for renderer-side fetch (ongoing API calls after login)
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['http://*/*'] },

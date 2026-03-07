@@ -7,10 +7,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Network, RefreshCw, Loader2, ZoomIn, ZoomOut, Maximize2,
-  Box, X, Layers,
+  Box, X, Layers, ExternalLink,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSystemStore } from '../stores/systemStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchTopology } from '../api/endpoints'
 import type {
@@ -243,6 +244,15 @@ function containerToNetworkPath(c: ContainerL, n: NetworkL): string {
 // Detail panel (portal)
 // ---------------------------------------------------------------------------
 
+function parsePortLink(portStr: string, hostname: string | undefined): { label: string; href: string } | null {
+  // Match "0.0.0.0:8080->80/tcp" or ":::8080->80/tcp"
+  const m = portStr.match(/(?:[\d.]+|:::?):(\d+)->/)
+  if (!m) return null
+  const hostPort = m[1]
+  const host = hostname || 'localhost'
+  return { label: `Open :${hostPort}`, href: `http://${host}:${hostPort}` }
+}
+
 function DetailPanel({
   node,
   netNames,
@@ -253,6 +263,7 @@ function DetailPanel({
   onClose: () => void
 }) {
   const stroke = healthColor(node.state, node.health)
+  const hostname = useSystemStore((s) => s.status?.hostname)
 
   return createPortal(
     <div
@@ -318,7 +329,50 @@ function DetailPanel({
           {node.ports && (
             <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ports</p>
-              <p className="text-xs text-slate-300 font-mono break-all">{node.ports}</p>
+              <div className="space-y-1.5">
+                {node.ports.split(' ').filter(Boolean).map((p, i) => {
+                  const link = parsePortLink(p, hostname)
+                  return (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className="text-xs text-slate-300 font-mono break-all">{p}</span>
+                      {link && (
+                        <a
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-md text-[10px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors shrink-0"
+                        >
+                          <ExternalLink size={10} />
+                          {link.label}
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {node.ip_addresses && node.ip_addresses.length > 0 && (
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
+                IP Addresses ({node.ip_addresses.length})
+              </p>
+              <div className="space-y-1">
+                {node.ip_addresses.map((entry) => {
+                  const c = netColor(entry.network, netNames)
+                  return (
+                    <div key={entry.network} className="flex items-center justify-between rounded-lg bg-white/[0.02] px-2.5 py-1.5">
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} />
+                        {entry.network}
+                      </span>
+                      <span className="text-xs text-cyan-400 font-mono">{entry.ip}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -993,16 +1047,19 @@ export default function Topology() {
                         {trunc(c.node.id, 19)}
                       </text>
 
-                      {/* Image subtitle */}
+                      {/* Subtitle: first IP or image name */}
                       <text
                         x={c.x - CONTAINER_W / 2 + 14}
                         y={c.y + CONTAINER_H / 2 + 9}
                         dominantBaseline="central"
-                        fill="#64748b"
+                        fill={c.node.ip_addresses?.length ? '#67e8f9' : '#64748b'}
                         fontSize={8}
-                        fontFamily="ui-sans-serif, system-ui, sans-serif"
+                        fontFamily={c.node.ip_addresses?.length ? 'ui-monospace, SFMono-Regular, monospace' : 'ui-sans-serif, system-ui, sans-serif'}
+                        fillOpacity={c.node.ip_addresses?.length ? 0.7 : 1}
                       >
-                        {trunc(c.node.image, 22)}
+                        {c.node.ip_addresses?.length
+                          ? c.node.ip_addresses[0].ip
+                          : trunc(c.node.image, 22)}
                       </text>
 
                       {/* Health dot with glow ring */}

@@ -40,6 +40,7 @@ export default function Login() {
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [connected, setConnected] = useState(false)
+  const [serverInitialized, setServerInitialized] = useState(false)
   const isFirstRender = useRef(true)
 
   // Derive session label from settings
@@ -52,29 +53,44 @@ export default function Login() {
     return `Remember me for ${Math.round(sessionDurationMinutes / 1440)} days`
   })()
 
+  // Normalize URL: ensure it has a protocol prefix
+  const normalizeUrl = (url: string): string => {
+    let u = url.trim()
+    if (!u) return u
+    if (!/^https?:\/\//i.test(u)) u = `http://${u}`
+    return u.replace(/\/+$/, '')
+  }
+
   // Combined connection test + setup detection in ONE call.
   // In Electron: uses checkServer IPC which runs Node.js http.get in the main
   // process — completely bypasses Chromium (no CORS, no CSP, no PNA, nothing).
   // In browser: falls back to sequential fetch() calls.
-  const checkServer = useCallback(async (url: string) => {
+  const checkServer = useCallback(async (rawUrl: string) => {
+    const url = normalizeUrl(rawUrl)
+    if (!url) { setConnStatus('idle'); return }
+
+    console.log('[Login] checkServer starting, url:', url, 'electronAPI:', !!window.electronAPI, 'checkServer:', !!window.electronAPI?.checkServer)
     setConnStatus('testing')
     setConnected(false)
+    setServerInitialized(false)
     try {
       if (window.electronAPI?.checkServer) {
         // ── Electron path: single IPC call, Node.js http in main process ──
+        console.log('[Login] calling IPC check-server…')
         const res = await window.electronAPI.checkServer(url)
+        console.log('[Login] IPC check-server result:', JSON.stringify(res))
         if (!res.reachable) {
           setConnStatus('fail')
           return
         }
         // Server is reachable — persist URL and decide next step
-        setConnStatus('ok')
         apiClient.setBaseUrl(url)
         setServerUrl(url)
         useSettingsStore.getState().updateSetting('serverUrl', url)
 
         if (!res.initialized) {
           // Server needs first-run setup — clear stale data + redirect
+          console.log('[Login] server not initialized, redirecting to setup wizard')
           if (window.electronAPI) {
             await window.electronAPI.setSetting('userAccounts', undefined)
           }
@@ -85,29 +101,35 @@ export default function Login() {
           useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
           setCurrentPage('setup')
         } else {
+          console.log('[Login] server initialized, showing login form')
+          setServerInitialized(true)
+          setConnStatus('ok')
           setConnected(true)
         }
       } else {
         // ── Browser fallback: two fetch() calls ──
+        console.log('[Login] no electronAPI, using browser fetch…')
         const prev = apiClient.getBaseUrl()
         apiClient.setBaseUrl(url)
         try {
           const ok = await apiClient.testConnection()
-          if (!ok) { setConnStatus('fail'); return }
-        } finally {
+          console.log('[Login] browser testConnection result:', ok)
+          if (!ok) { setConnStatus('fail'); apiClient.setBaseUrl(prev); return }
+        } catch {
+          setConnStatus('fail')
           apiClient.setBaseUrl(prev)
+          return
         }
-        setConnStatus('ok')
 
-        // Check setup status
+        // Check setup status before showing success
+        apiClient.setBaseUrl(url)
+        setServerUrl(url)
+        useSettingsStore.getState().updateSetting('serverUrl', url)
         try {
           const ctrl = new AbortController()
           const tid = setTimeout(() => ctrl.abort(), 5000)
           const resp = await fetch(`${url}/setup/status`, { method: 'GET', signal: ctrl.signal })
           clearTimeout(tid)
-          apiClient.setBaseUrl(url)
-          setServerUrl(url)
-          useSettingsStore.getState().updateSetting('serverUrl', url)
           if (resp.ok) {
             const data = await resp.json()
             if (!data.initialized) {
@@ -120,16 +142,18 @@ export default function Login() {
               return
             }
           }
+          setServerInitialized(true)
+          setConnStatus('ok')
           setConnected(true)
         } catch {
           // Setup check failed but connection was confirmed — show login
-          apiClient.setBaseUrl(url)
-          setServerUrl(url)
-          useSettingsStore.getState().updateSetting('serverUrl', url)
+          setServerInitialized(true)
+          setConnStatus('ok')
           setConnected(true)
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('[Login] checkServer error:', err)
       setConnStatus('fail')
     }
   }, [setServerUrl, setCurrentPage])
@@ -146,6 +170,7 @@ export default function Login() {
       checkServer(serverUrl)
     } else {
       setConnected(false)
+      setServerInitialized(false)
       connTestTimer.current = setTimeout(() => checkServer(serverUrl), 800)
     }
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
@@ -154,8 +179,10 @@ export default function Login() {
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
 
-  // Mode is determined by whether an account exists
-  const isSetup = !hasAccount
+  // Mode is determined by whether an account exists AND the server needs setup.
+  // If the server is already initialized (has admin), always show Sign In —
+  // even on a new device with no local accounts.
+  const isSetup = !hasAccount && !serverInitialized
 
   /** Attempt server-side Bearer token auth after local auth succeeds.
    *  Only network errors (server unreachable) allow offline fallback.
@@ -354,17 +381,32 @@ export default function Login() {
       // Server unreachable — proceed with normal auth
     }
 
-    let localSuccess = false
+    let success = false
     if (isSetup) {
-      localSuccess = await register(username, password)
+      // First-time setup — create local + server accounts
+      success = await register(username, password)
+      if (success) {
+        await attemptServerAuth(username, password, true)
+      }
     } else {
-      localSuccess = await login(username, password, rememberMe)
+      // Sign in — try local first, fall back to server-first if no local account
+      success = await login(username, password, rememberMe)
+      if (success) {
+        // Local login succeeded — get server token too
+        await attemptServerAuth(username, password, false)
+      } else if (serverInitialized) {
+        // No local account (new device) — try server auth, then create local
+        clearError()
+        const serverOk = await attemptServerAuth(username, password, false)
+        if (serverOk) {
+          // Server accepted credentials — create local account for offline use
+          clearError()
+          success = await register(username.trim(), password)
+        }
+      }
     }
 
-    // If local auth succeeded, attempt server-side Bearer token auth
-    if (localSuccess) {
-      await attemptServerAuth(username, password, isSetup)
-      // Remember username for next session
+    if (success) {
       useSettingsStore.getState().updateSetting('lastUsername', username.trim())
     }
 
@@ -481,7 +523,7 @@ export default function Login() {
                   </div>
                   {connStatus === 'ok' ? (
                     <p className="text-[10px] text-emerald-400/80 mt-1">
-                      Connected — verifying server…
+                      Connected
                     </p>
                   ) : connStatus === 'fail' ? (
                     <p className="text-[10px] text-rose-400/80 mt-1">
@@ -537,7 +579,7 @@ export default function Login() {
               Phase 2 — Authentication (server verified as initialized)
               ════════════════════════════════════════════════════════════════ */}
 
-          {/* ── Initial Setup (admin creation) — unchanged ── */}
+          {/* ── Initial Setup (admin creation) ── */}
           {isSetup && (
             <>
               {/* Setup banner */}
@@ -551,6 +593,21 @@ export default function Login() {
                 </div>
               </div>
 
+              {/* Connected server display */}
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Wifi size={12} className="text-emerald-400 shrink-0" />
+                  <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
+                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                >
+                  Change
+                </button>
+              </div>
+
               {/* Header */}
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-slate-100">Create Admin Account</h2>
@@ -560,41 +617,6 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Server URL */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                    <input
-                      type="url"
-                      value={serverUrl}
-                      onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
-                      placeholder="http://192.168.1.100:9876"
-                      autoComplete="url"
-                      className="
-                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
-                        transition-all duration-300
-                      "
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
-                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
-                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
-                    </div>
-                  </div>
-                  {connStatus === 'fail' ? (
-                    <p className="text-[10px] text-rose-400/80 mt-1">
-                      Server unreachable — check address and ensure API is running
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-slate-600 mt-1">
-                      IP address and port of your DCS API server
-                    </p>
-                  )}
-                </div>
-
                 {/* Username */}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
@@ -712,6 +734,21 @@ export default function Login() {
           {/* ── Sign In mode ── */}
           {!isSetup && mode === 'login' && (
             <div key="login-mode" className="animate-fade-in">
+              {/* Connected server display */}
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Wifi size={12} className="text-emerald-400 shrink-0" />
+                  <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
+                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                >
+                  Change
+                </button>
+              </div>
+
               {/* Header */}
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-slate-100">Welcome Back</h2>
@@ -721,41 +758,6 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Server URL */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                    <input
-                      type="url"
-                      value={serverUrl}
-                      onChange={(e) => { setServerUrlLocal(e.target.value); setServerAuthError(null) }}
-                      placeholder="http://192.168.1.100:9876"
-                      autoComplete="url"
-                      className="
-                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
-                        transition-all duration-300
-                      "
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
-                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
-                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
-                    </div>
-                  </div>
-                  {connStatus === 'fail' ? (
-                    <p className="text-[10px] text-rose-400/80 mt-1">
-                      Server unreachable — check address and ensure API is running
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-slate-600 mt-1">
-                      IP address and port of your DCS API server
-                    </p>
-                  )}
-                </div>
-
                 {/* Username */}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
@@ -879,6 +881,21 @@ export default function Login() {
           {/* ── Register with Invite Code mode ── */}
           {!isSetup && mode === 'register' && (
             <div key="register-mode" className="animate-fade-in">
+              {/* Connected server display */}
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Wifi size={12} className="text-emerald-400 shrink-0" />
+                  <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
+                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                >
+                  Change
+                </button>
+              </div>
+
               {/* Invite banner */}
               <div className="flex items-center gap-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-4 py-3 mb-6">
                 <KeyRound size={16} className="text-cyan-400 shrink-0" />
@@ -899,41 +916,6 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleInviteRegister} className="space-y-4">
-                {/* Server URL */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                    <input
-                      type="url"
-                      value={serverUrl}
-                      onChange={(e) => { setServerUrlLocal(e.target.value); setRegisterError(null) }}
-                      placeholder="http://192.168.1.100:9876"
-                      autoComplete="url"
-                      className="
-                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
-                        transition-all duration-300
-                      "
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
-                      {connStatus === 'ok' && <Wifi size={14} className="text-emerald-400" />}
-                      {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
-                    </div>
-                  </div>
-                  {connStatus === 'fail' ? (
-                    <p className="text-[10px] text-rose-400/80 mt-1">
-                      Server unreachable — check address and ensure API is running
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-slate-600 mt-1">
-                      IP address and port of your DCS API server
-                    </p>
-                  )}
-                </div>
-
                 {/* Invite Code */}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Invite Code</label>
@@ -1092,7 +1074,9 @@ export default function Login() {
               ? 'Secure connection to your DCS API server'
               : !isSetup && mode === 'register'
                 ? 'Secure registration via server-validated invite codes'
-                : 'PBKDF2 encrypted credentials stored locally on this device only'
+                : serverInitialized
+                  ? 'Authenticated via server API with local offline fallback'
+                  : 'PBKDF2 encrypted credentials stored locally on this device only'
             }
           </p>
         </div>

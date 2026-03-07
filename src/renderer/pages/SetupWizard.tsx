@@ -422,10 +422,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       setComplete(true)
       sessionStorage.setItem('dcs-just-setup', 'true')
 
-      // 6. Redirect after delay
+      // 6. Redirect after brief delay
       setTimeout(() => {
         onComplete()
-      }, 3000)
+      }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed')
       setCompleting(false)

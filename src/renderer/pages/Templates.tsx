@@ -1317,7 +1317,12 @@ export default function Templates() {
     try {
       const res = await undeployTemplate(templateName, { target_stack: targetStack, services, remove_containers: true })
       if (res.success) {
-        addToast({ type: 'success', message: `Undeployed ${res.services_removed.length} service(s) from ${targetStack}` })
+        addToast({
+          type: 'success',
+          message: res.stack_deleted
+            ? `Removed all services from ${targetStack} — stack is now empty`
+            : `Undeployed ${res.services_removed.length} service(s) from ${targetStack}`,
+        })
         refresh()
         refreshHistory()
         return true

@@ -1290,6 +1290,11 @@ export interface AutomationHistoryResponse {
 }
 
 // Network Topology
+export interface TopologyNodeIP {
+  network: string
+  ip: string
+}
+
 export interface TopologyNode {
   id: string
   state: string
@@ -1298,6 +1303,7 @@ export interface TopologyNode {
   stack: string
   networks: string[]
   ports: string
+  ip_addresses?: TopologyNodeIP[]
 }
 
 export interface TopologyEdge {
