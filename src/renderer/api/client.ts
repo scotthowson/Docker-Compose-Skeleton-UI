@@ -101,8 +101,13 @@ export class ApiClient {
       }
       // Handle 401 — token expired or invalid
       if (response.status === 401) {
+        const hadToken = !!this.authToken
         this.authToken = null
-        window.dispatchEvent(new CustomEvent('api-auth-expired'))
+        // Only fire session-expired if we actually sent a token that was rejected.
+        // A 401 with no token just means "not yet authenticated" — not "expired".
+        if (hadToken) {
+          window.dispatchEvent(new CustomEvent('api-auth-expired'))
+        }
         throw new ApiError(401, errorMessage)
       }
       throw new ApiError(response.status, errorMessage)

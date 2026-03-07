@@ -383,26 +383,29 @@ export default function Login() {
 
     let success = false
     if (isSetup) {
-      // First-time setup — create local + server accounts
-      success = await register(username, password)
-      if (success) {
-        await attemptServerAuth(username, password, true)
+      // First-time setup — acquire server token FIRST, then create local account.
+      // This prevents the race where register() sets isAuthenticated → polls fire
+      // → 401 (no token yet) → "Session expired".
+      const serverOk = await attemptServerAuth(username, password, true)
+      if (!serverOk) {
+        setSubmitting(false)
+        return
       }
+      success = await register(username, password)
     } else {
-      // Sign in — try local first, fall back to server-first if no local account
+      // Sign in — acquire server token BEFORE setting isAuthenticated.
+      // This prevents polls from firing before the token is on apiClient.
+      const serverOk = await attemptServerAuth(username, password, false)
+      if (!serverOk) {
+        setSubmitting(false)
+        return
+      }
       success = await login(username, password, rememberMe)
-      if (success) {
-        // Local login succeeded — get server token too
-        await attemptServerAuth(username, password, false)
-      } else if (serverInitialized) {
-        // No local account (new device) — try server auth, then create local
+      if (!success && serverInitialized) {
+        // No local account (new device) — server accepted credentials,
+        // create local account for offline use
         clearError()
-        const serverOk = await attemptServerAuth(username, password, false)
-        if (serverOk) {
-          // Server accepted credentials — create local account for offline use
-          clearError()
-          success = await register(username.trim(), password)
-        }
+        success = await register(username.trim(), password)
       }
     }
 
