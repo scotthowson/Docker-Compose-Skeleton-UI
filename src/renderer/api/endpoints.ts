@@ -923,7 +923,7 @@ export function fetchDeployHistory(): Promise<DeployHistoryResponse> {
 
 /** POST /templates/:name/undeploy — Remove deployed services from a stack */
 export function undeployTemplate(name: string, opts: {
-  target_stack: string; services: string[]; remove_containers?: boolean
+  target_stack: string; services: string[]; remove_containers?: boolean; remove_data?: boolean
 }): Promise<TemplateUndeployResponse> {
   return apiClient.post<TemplateUndeployResponse>(`/templates/${encodeURIComponent(name)}/undeploy`, opts)
 }

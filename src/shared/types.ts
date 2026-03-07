@@ -1169,6 +1169,7 @@ export interface TemplateInfo {
 export interface TemplateVariable {
   name: string
   label: string
+  description?: string
   default?: string
   required?: boolean
   type?: string
@@ -1238,6 +1239,7 @@ export interface TemplateUndeployResponse {
   containers_removed: string[]
   backup_file: string
   stack_deleted: boolean
+  data_removed: boolean
   message: string
 }
 

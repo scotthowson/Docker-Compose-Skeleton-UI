@@ -454,6 +454,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   ...templateVars.map((v) => ({
                     name: v.name,
                     label: v.label || v.name,
+                    description: v.description || '',
                     defaultValue: v.default || '',
                     required: v.required || false,
                     type: v.type || '',
@@ -462,6 +463,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   ...extraVars.map((v) => ({
                     name: v.name,
                     label: v.name,
+                    description: '',
                     defaultValue: v.defaultValue,
                     required: false,
                     type: '',
@@ -486,6 +488,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                   <span className="text-xs text-slate-300 font-medium">{v.label}</span>
                                   {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
                                 </div>
+                                {v.description && <p className="text-[10px] text-slate-500 mt-0.5">{v.description}</p>}
                                 <p className="text-[10px] text-slate-600 font-mono mt-0.5">{v.name}</p>
                               </div>
                               <button
@@ -500,12 +503,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         }
                         return (
                           <div key={v.name}>
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-0.5">
                               <span className="text-xs text-slate-400 font-medium">{v.label}</span>
                               {v.required && (
                                 <span className="text-[9px] text-rose-400 font-semibold">Required</span>
                               )}
                             </div>
+                            {v.description && <p className="text-[10px] text-slate-500 mb-1">{v.description}</p>}
                             <input
                               type={v.type === 'password' ? 'password' : 'text'}
                               value={value}
@@ -1315,14 +1319,20 @@ export default function Templates() {
   // F4: Undeploy handler
   const handleUndeploy = useCallback(async (templateName: string, targetStack: string, services: string[]): Promise<boolean> => {
     try {
-      const res = await undeployTemplate(templateName, { target_stack: targetStack, services, remove_containers: true })
+      const res = await undeployTemplate(templateName, {
+        target_stack: targetStack,
+        services,
+        remove_containers: true,
+        remove_data: true,
+      })
       if (res.success) {
-        addToast({
-          type: 'success',
-          message: res.stack_deleted
-            ? `Removed all services from ${targetStack} — stack is now empty`
+        const parts = [
+          res.stack_deleted
+            ? `Removed all services from ${targetStack}`
             : `Undeployed ${res.services_removed.length} service(s) from ${targetStack}`,
-        })
+        ]
+        if (res.data_removed) parts.push('configuration data cleaned up')
+        addToast({ type: 'success', message: parts.join(' — ') })
         refresh()
         refreshHistory()
         return true
