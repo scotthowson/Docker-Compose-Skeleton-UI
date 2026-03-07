@@ -8,6 +8,9 @@ import { usePolling } from '../hooks/usePolling'
 import {
   fetchServerStatus, fetchHealthReport, fetchEvents, fetchVersion,
   fetchContainers, fetchDisks, fetchSystemInfo,
+  fetchStacks, fetchImageUpdates, fetchBackupStatus,
+  fetchLogStats, fetchMaintenanceReport, fetchNotificationHistory,
+  fetchAutomations, fetchMetricsTrends,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -22,7 +25,17 @@ import DiskMonitor from '../components/dashboard/DiskMonitor'
 import QuickActions from '../components/dashboard/QuickActions'
 import ContainerOverview from '../components/dashboard/ContainerOverview'
 import ServerInfo from '../components/dashboard/ServerInfo'
+import StackStatusGrid from '../components/dashboard/StackStatusGrid'
+import ImageUpdateAlert from '../components/dashboard/ImageUpdateAlert'
+import BackupStatusCard from '../components/dashboard/BackupStatusCard'
+import TopResourceConsumers from '../components/dashboard/TopResourceConsumers'
+import LogHealthSummary from '../components/dashboard/LogHealthSummary'
+import MaintenanceSummary from '../components/dashboard/MaintenanceSummary'
+import NotificationStatus from '../components/dashboard/NotificationStatus'
+import ActiveAutomations from '../components/dashboard/ActiveAutomations'
+import PersistentTrends from '../components/dashboard/PersistentTrends'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useStackStore } from '../stores/stackStore'
 import { useToast } from '../components/common/Toast'
 import type { ContainerInfo, DiskInfo, HealthReport } from '../../shared/types'
 import type { ContainerListResponse } from '../api/endpoints'
@@ -158,6 +171,7 @@ export default function Dashboard() {
 
   const setEvents = useLogStore((s) => s.setEvents)
   const events = useLogStore((s) => s.events)
+  const setStacks = useStackStore((s) => s.setStacks)
 
   // Resource history for trending charts (cap at 60 data points)
   const resourceHistoryRef = useRef<ResourceHistoryPoint[]>([])
@@ -179,9 +193,14 @@ export default function Dashboard() {
     reportPollSuccess()
   }, [reportPollSuccess])
 
-  const onPollError = React.useCallback(() => {
+  const onPollError = React.useCallback((err: Error) => {
     reportPollFailure()
+    console.warn('[Dashboard] poll error:', err.message)
   }, [reportPollFailure])
+
+  // =========================================================================
+  // Existing polls
+  // =========================================================================
 
   // --- Poll /status every 5s ---
   const statusPoll = usePolling(fetchServerStatus, 5000, {
@@ -324,6 +343,66 @@ export default function Dashboard() {
 
   const disks: DiskInfo[] = disksPoll.data?.disks ?? []
 
+  // =========================================================================
+  // New widget polls
+  // =========================================================================
+
+  // --- Poll /stacks every 15s ---
+  const stacksPoll = usePolling(fetchStacks, 15000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // Sync stacks to store for CommandPalette access
+  React.useEffect(() => {
+    if (stacksPoll.data?.stacks) {
+      setStacks(stacksPoll.data.stacks)
+    }
+  }, [stacksPoll.data, setStacks])
+
+  // --- Poll /images/check-updates every 120s ---
+  const imageUpdatesPoll = usePolling(fetchImageUpdates, 120000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /backups/status every 30s ---
+  const backupStatusPoll = usePolling(fetchBackupStatus, 30000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /logs/stats every 30s ---
+  const logStatsPoll = usePolling(fetchLogStats, 30000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /maintenance/report every 60s ---
+  const maintenancePoll = usePolling(fetchMaintenanceReport, 60000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /notifications/history every 30s ---
+  const notifHistoryPoll = usePolling(fetchNotificationHistory, 30000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /automations every 60s ---
+  const automationsPoll = usePolling(fetchAutomations, 60000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
+  // --- Poll /metrics/trends every 60s ---
+  const fetchTrends1h = React.useCallback(() => fetchMetricsTrends('1h'), [])
+  const trendsPoll = usePolling(fetchTrends1h, 60000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
   // Show disconnected hero when not connected AND no cached data
   const hasNoData = !systemStatus && !healthReport && events.length === 0
   const showDisconnected = !isConnected && hasNoData
@@ -359,24 +438,45 @@ export default function Dashboard() {
           {/* Row 1: Overview Cards */}
           <OverviewCards />
 
-          {/* Row 2: Health + Resources */}
+          {/* Row 2: Stack Status Grid */}
+          <StackStatusGrid stacks={stacksPoll.data?.stacks ?? null} error={stacksPoll.error} onRetry={stacksPoll.refresh} />
+
+          {/* Row 3: Health + Resources */}
           <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
             <HealthSummary />
             <ResourceChart history={resourceHistoryRef.current} />
           </div>
 
-          {/* Row 3: Containers + Server Info + Disks */}
+          {/* Row 4: Containers + Server Info + Disks */}
           <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
             <ContainerOverview containers={containers} />
             <ServerInfo />
             <DiskMonitor disks={disks} />
           </div>
 
-          {/* Row 4: Events + Quick Actions */}
+          {/* Row 5: Persistent Trends + Top Resource Consumers */}
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
+            <PersistentTrends data={trendsPoll.data ?? null} error={trendsPoll.error} onRetry={trendsPoll.refresh} />
+            <TopResourceConsumers />
+          </div>
+
+          {/* Row 6: Image Updates + Backup Status */}
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
+            <ImageUpdateAlert data={imageUpdatesPoll.data ?? null} error={imageUpdatesPoll.error} onRetry={imageUpdatesPoll.refresh} />
+            <BackupStatusCard data={backupStatusPoll.data ?? null} error={backupStatusPoll.error} onRetry={backupStatusPoll.refresh} />
+          </div>
+
+          {/* Row 7: Log Health + Maintenance + Notifications */}
           <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <RecentEvents collapsible />
-            </div>
+            <LogHealthSummary data={logStatsPoll.data ?? null} error={logStatsPoll.error} onRetry={logStatsPoll.refresh} collapsible />
+            <MaintenanceSummary data={maintenancePoll.data ?? null} error={maintenancePoll.error} onRetry={maintenancePoll.refresh} collapsible />
+            <NotificationStatus data={notifHistoryPoll.data ?? null} error={notifHistoryPoll.error} onRetry={notifHistoryPoll.refresh} collapsible />
+          </div>
+
+          {/* Row 8: Automations + Events + Quick Actions */}
+          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
+            <ActiveAutomations data={automationsPoll.data ?? null} error={automationsPoll.error} onRetry={automationsPoll.refresh} collapsible />
+            <RecentEvents collapsible />
             <QuickActions collapsible />
           </div>
         </div>

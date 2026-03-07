@@ -22,6 +22,7 @@ import {
   startStack, stopStack, restartStack,
   runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
 } from '../api/endpoints'
+import { useStackStore } from '../stores/stackStore'
 import type { PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,7 @@ export function CommandPalette() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const { logout } = useAuthStore()
   const setHealthReport = useHealthStore((s) => s.setReport)
+  const stacks = useStackStore((s) => s.stacks)
   const { addToast } = useToast()
   const isConnected = connectionStatus === 'connected'
 
@@ -172,16 +174,81 @@ export function CommandPalette() {
   const commands = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = []
 
-    // Navigation commands
+    // Navigation commands with rich keyword descriptions
+    const pageDescriptions: Partial<Record<PageId, string>> = {
+      dashboard: 'Overview, monitoring, live stats, home',
+      stacks: 'Docker compose stacks, services, deploy',
+      containers: 'Running containers, processes, instances',
+      images: 'Docker images, layers, pull, registry',
+      health: 'Health checks, container health, diagnostics',
+      uptime: 'Uptime monitoring, availability, status',
+      networks: 'Docker networks, bridge, overlay, DNS',
+      volumes: 'Docker volumes, data persistence, mounts',
+      logs: 'Log viewer, output, stdout, stderr, debug',
+      system: 'System info, CPU, memory, disk, OS',
+      config: 'Server configuration, API settings',
+      settings: 'App settings, preferences, theme, profile',
+      bookmarks: 'Saved bookmarks, favorites, pinned',
+      activity: 'Activity feed, events, audit trail',
+      topology: 'Network topology, map, visualization',
+      'file-browser': 'Browse files, directory, filesystem',
+      templates: 'Compose templates, scaffolding, presets',
+      updates: 'Image updates, available upgrades',
+      trends: 'Resource trends, metrics, history, graphs',
+      terminal: 'Terminal, shell, command line, exec',
+      cronjobs: 'Cron jobs, scheduled tasks, timers',
+      'disk-analysis': 'Disk usage, storage analysis, space',
+      maintenance: 'Cleanup, dangling images, volumes, prune',
+      environment: 'Environment variables, .env files, secrets',
+      backup: 'Backup, restore, snapshots, recovery',
+      notifications: 'Alerts, notifications, webhooks',
+      automations: 'Automations, triggers, workflows, bots',
+      snapshots: 'Container snapshots, checkpoints',
+      diagnostics: 'Diagnostics, troubleshoot, debug, inspect',
+      users: 'User management, accounts, permissions',
+    }
+    const pageKeywords: Partial<Record<PageId, string[]>> = {
+      dashboard: ['home', 'overview', 'monitor', 'live', 'stats', 'status'],
+      stacks: ['compose', 'services', 'deploy', 'stack', 'docker-compose'],
+      containers: ['container', 'process', 'instance', 'running', 'ps'],
+      images: ['image', 'pull', 'registry', 'layer', 'tag', 'build'],
+      health: ['health', 'check', 'healthy', 'unhealthy', 'diagnose'],
+      uptime: ['uptime', 'availability', 'ping', 'monitor'],
+      networks: ['network', 'bridge', 'overlay', 'dns', 'subnet'],
+      volumes: ['volume', 'mount', 'data', 'persist', 'storage'],
+      logs: ['log', 'output', 'stdout', 'stderr', 'debug', 'tail', 'follow'],
+      system: ['system', 'cpu', 'memory', 'ram', 'os', 'kernel', 'info'],
+      config: ['config', 'configuration', 'api', 'server', 'port'],
+      settings: ['settings', 'preferences', 'theme', 'profile', 'options', 'customize'],
+      bookmarks: ['bookmark', 'favorite', 'pin', 'save'],
+      activity: ['activity', 'event', 'audit', 'history', 'recent'],
+      topology: ['topology', 'map', 'graph', 'visualize', 'network map'],
+      'file-browser': ['file', 'browse', 'directory', 'folder', 'filesystem', 'explore'],
+      templates: ['template', 'scaffold', 'preset', 'compose template'],
+      updates: ['update', 'upgrade', 'new version', 'outdated'],
+      trends: ['trend', 'metric', 'chart', 'graph', 'history', 'cpu usage', 'memory usage'],
+      terminal: ['terminal', 'shell', 'bash', 'exec', 'command', 'cli', 'ssh'],
+      cronjobs: ['cron', 'schedule', 'timer', 'periodic', 'job'],
+      'disk-analysis': ['disk', 'storage', 'space', 'size', 'usage', 'df'],
+      maintenance: ['maintenance', 'cleanup', 'dangling', 'prune', 'gc'],
+      environment: ['env', 'environment', 'variable', 'secret', '.env'],
+      backup: ['backup', 'restore', 'snapshot', 'recovery', 'archive'],
+      notifications: ['notification', 'alert', 'webhook', 'notify', 'bell'],
+      automations: ['automation', 'trigger', 'workflow', 'bot', 'rule'],
+      snapshots: ['snapshot', 'checkpoint', 'capture', 'freeze'],
+      diagnostics: ['diagnostic', 'troubleshoot', 'debug', 'inspect', 'doctor'],
+      users: ['user', 'account', 'permission', 'role', 'invite'],
+    }
+
     const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,
         label: `Go to ${pageLabels[page]}`,
-        description: 'Navigate',
+        description: pageDescriptions[page] ?? 'Navigate',
         icon: pageIcon[page],
         type: 'page',
-        keywords: [page, pageLabels[page].toLowerCase()],
+        keywords: pageKeywords[page] ?? [page, pageLabels[page].toLowerCase()],
         onSelect: () => {
           setCurrentPage(page)
           setOpen(false)
@@ -407,10 +474,62 @@ export function CommandPalette() {
           } catch { addToast({ type: 'error', message: 'Backup trigger failed' }) }
         },
       })
+
+      // Dynamic stack commands
+      for (const stack of stacks) {
+        if (stack.status === 'running') {
+          items.push({
+            id: `stack-stop-${stack.name}`,
+            label: `Stop Stack: ${stack.name}`,
+            description: `${stack.running_containers} container${stack.running_containers !== 1 ? 's' : ''} running`,
+            icon: <Square size={16} className="text-rose-400" />,
+            type: 'stack',
+            keywords: ['stop', 'stack', stack.name.toLowerCase(), 'down', 'halt'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await stopStack(stack.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Stopped ${stack.name}` : `Failed to stop ${stack.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to stop ${stack.name}` }) }
+            },
+          })
+          items.push({
+            id: `stack-restart-${stack.name}`,
+            label: `Restart Stack: ${stack.name}`,
+            description: `${stack.running_containers} container${stack.running_containers !== 1 ? 's' : ''} running`,
+            icon: <RotateCw size={16} className="text-amber-400" />,
+            type: 'stack',
+            keywords: ['restart', 'stack', stack.name.toLowerCase(), 'reload', 'reboot'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await restartStack(stack.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Restarted ${stack.name}` : `Failed to restart ${stack.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to restart ${stack.name}` }) }
+            },
+          })
+        } else {
+          items.push({
+            id: `stack-start-${stack.name}`,
+            label: `Start Stack: ${stack.name}`,
+            description: 'Currently stopped',
+            icon: <Play size={16} className="text-emerald-400" />,
+            type: 'stack',
+            keywords: ['start', 'stack', stack.name.toLowerCase(), 'up', 'launch'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await startStack(stack.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Started ${stack.name}` : `Failed to start ${stack.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to start ${stack.name}` }) }
+            },
+          })
+        }
+      }
     }
 
     return items
-  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport])
+  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks])
 
   // Filter commands
   const filtered = useMemo(() => {
@@ -497,39 +616,51 @@ export function CommandPalette() {
         <div ref={listRef} className="max-h-[360px] overflow-y-auto py-2 scrollbar-thin">
           {filtered.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-slate-500">
-              No results for "{query}"
+              No results for &ldquo;{query}&rdquo;
             </div>
           )}
           {filtered.map((cmd, idx) => {
             const isSelected = idx === selectedIndex
+            const prevType = idx > 0 ? filtered[idx - 1].type : null
+            const showGroupHeader = query.trim() === '' && cmd.type !== prevType
+            const groupLabel = cmd.type === 'page' ? 'Pages' : cmd.type === 'stack' ? 'Stacks' : 'Actions'
             return (
-              <button
-                key={cmd.id}
-                onClick={cmd.onSelect}
-                onMouseEnter={() => setSelectedIndex(idx)}
-                className={`
-                  flex items-center gap-3 w-full px-4 py-2.5 text-left
-                  transition-colors duration-100
-                  ${isSelected
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'text-slate-300 hover:bg-white/[0.04]'
-                  }
-                `}
-              >
-                <div className={`
-                  shrink-0 rounded-lg p-1.5
-                  ${isSelected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/[0.05] text-slate-400'}
-                `}>
-                  {cmd.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{cmd.label}</p>
-                  <p className="text-[11px] text-slate-500 truncate">{cmd.description}</p>
-                </div>
-                {isSelected && (
-                  <ArrowRight size={14} className="shrink-0 text-emerald-400/60" />
+              <React.Fragment key={cmd.id}>
+                {showGroupHeader && (
+                  <div className="px-4 pt-3 pb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">{groupLabel}</span>
+                  </div>
                 )}
-              </button>
+                <button
+                  onClick={cmd.onSelect}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  className={`
+                    flex items-center gap-3 w-full px-4 py-2.5 text-left
+                    transition-colors duration-100
+                    ${isSelected
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : 'text-slate-300 hover:bg-white/[0.04]'
+                    }
+                  `}
+                >
+                  <div className={`
+                    shrink-0 rounded-lg p-1.5
+                    ${isSelected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/[0.05] text-slate-400'}
+                  `}>
+                    {cmd.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{cmd.label}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{cmd.description}</p>
+                  </div>
+                  {cmd.type === 'stack' && (
+                    <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Stack</span>
+                  )}
+                  {isSelected && (
+                    <ArrowRight size={14} className="shrink-0 text-emerald-400/60" />
+                  )}
+                </button>
+              </React.Fragment>
             )
           })}
         </div>

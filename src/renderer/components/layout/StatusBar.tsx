@@ -7,6 +7,7 @@ import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, Wifi } from 'l
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useHealthStore } from '../../stores/healthStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 function formatUptime(seconds: number): string {
   if (seconds < 0) return '--'
@@ -48,6 +49,9 @@ export function StatusBar() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const lastConnected = useConnectionStore((s) => s.lastConnected)
   const healthReport = useHealthStore((s) => s.report)
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+
+  const nav = (page: Parameters<typeof setCurrentPage>[0]) => () => setCurrentPage(page)
 
   const [appVersion, setAppVersion] = useState<string>('')
   const [now, setNow] = useState(formatTime(new Date()))
@@ -103,7 +107,7 @@ export function StatusBar() {
           {healthStatus && (
             <>
               <span className="text-white/[0.06]">|</span>
-              <span className="flex items-center gap-1">
+              <button onClick={nav('health')} className="flex items-center gap-1 hover:brightness-125 transition-all cursor-pointer">
                 <Activity size={9} className={
                   healthStatus === 'healthy' ? 'text-emerald-400' :
                   healthStatus === 'degraded' ? 'text-amber-400' : 'text-rose-400'
@@ -114,15 +118,15 @@ export function StatusBar() {
                 }`}>
                   {healthStatus}
                 </span>
-              </span>
+              </button>
             </>
           )}
 
           <span className="text-white/[0.06]">|</span>
-          <span className="flex items-center gap-1 text-slate-600">
+          <button onClick={nav('uptime')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">
             <Clock size={9} />
             Uptime: <span className="text-slate-400">{uptime}</span>
-          </span>
+          </button>
 
           <span className="text-white/[0.06]">|</span>
           <span className="text-slate-600">
@@ -135,30 +139,30 @@ export function StatusBar() {
         <div className="flex items-center gap-2.5">
           {cpuCount > 0 && (
             <>
-              <span className="flex items-center gap-1 text-slate-600"><Cpu size={9} /> CPU</span>
-              <div className="flex items-center gap-1.5">
+              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"><Cpu size={9} /> CPU</button>
+              <button onClick={nav('trends')} className="flex items-center gap-1.5 cursor-pointer">
                 <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <div className={`h-full rounded-full progress-bar ${cpuPct > 80 ? 'bg-rose-400' : cpuPct > 60 ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${cpuPct}%` }} />
                 </div>
                 <span className="text-[10px] text-slate-500 tabular-nums">{cpuPct}%</span>
-              </div>
+              </button>
               <span className="text-white/[0.06]">|</span>
             </>
           )}
           {memTotal > 0 && (
             <>
-              <span className="flex items-center gap-1 text-slate-600"><MemoryStick size={9} /> RAM</span>
-              <MemoryBar used={memUsed} total={memTotal} />
+              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"><MemoryStick size={9} /> RAM</button>
+              <button onClick={nav('trends')} className="cursor-pointer"><MemoryBar used={memUsed} total={memTotal} /></button>
               <span className="text-white/[0.06]">|</span>
             </>
           )}
 
-          <span className="flex items-center gap-1 text-slate-600">
+          <button onClick={nav('containers')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">
             <Container size={9} />
             <span className="text-emerald-400/80">{containersRunning}</span>
             <span className="text-slate-700">/</span>
             <span className="text-slate-400">{containersTotal}</span>
-          </span>
+          </button>
 
           {lastRefreshAgo && (
             <>

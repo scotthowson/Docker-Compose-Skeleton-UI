@@ -147,7 +147,18 @@ export function Sidebar() {
     }
   }
 
+  if (systemStatus) {
+    badges.volumes = {
+      value: `${systemStatus.docker.volumes}`,
+      color: 'bg-cyan-500/20 text-cyan-400',
+    }
+  }
+
   if (unreadNotifications > 0) {
+    badges.notifications = {
+      value: `${unreadNotifications}`,
+      color: 'bg-rose-500/20 text-rose-400',
+    }
     badges.activity = {
       value: `${unreadNotifications}`,
       color: 'bg-amber-500/20 text-amber-400',

@@ -309,7 +309,7 @@ export function Header() {
           title="Search (Ctrl+K)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <span>Search</span>
+          <span>Jump to page or action...</span>
           <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1 py-0.5 font-mono text-[9px]">Ctrl+K</kbd>
         </button>
 

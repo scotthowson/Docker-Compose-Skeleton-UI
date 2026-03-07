@@ -4,14 +4,15 @@
 
 import React, { useState, useCallback } from 'react'
 import {
-  Play, Square, RotateCw, Trash2, RefreshCw, Layers,
+  Trash2, RefreshCw, Layers,
   HeartPulse, ScrollText, Monitor, Settings2, Loader2, Zap,
-  HardDrive, Network, Cog, ChevronDown, Archive,
+  ChevronDown, Archive,
+  TerminalSquare, Download, Wrench,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useToast } from '../common/Toast'
-import { runImagePrune, triggerLogRotate, fetchHealthReport } from '../../api/endpoints'
+import { runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup } from '../../api/endpoints'
 import { useHealthStore } from '../../stores/healthStore'
 import type { PageId } from '../../../shared/types'
 
@@ -74,6 +75,30 @@ const navActions: QuickAction[] = [
     bgColor: 'bg-blue-500/10 group-hover:bg-blue-500/15',
     navigateTo: 'containers',
   },
+  {
+    id: 'terminal',
+    label: 'Terminal',
+    icon: <TerminalSquare size={18} />,
+    color: 'text-slate-300',
+    bgColor: 'bg-slate-500/10 group-hover:bg-slate-500/15',
+    navigateTo: 'terminal',
+  },
+  {
+    id: 'maintenance',
+    label: 'Maintenance',
+    icon: <Wrench size={18} />,
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10 group-hover:bg-amber-500/15',
+    navigateTo: 'maintenance',
+  },
+  {
+    id: 'backup',
+    label: 'Backup',
+    icon: <Archive size={18} />,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10 group-hover:bg-teal-500/15',
+    navigateTo: 'backup',
+  },
 ]
 
 const apiActions: QuickAction[] = [
@@ -99,6 +124,14 @@ const apiActions: QuickAction[] = [
     icon: <HeartPulse size={18} />,
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/10 group-hover:bg-emerald-500/15',
+    apiAction: true,
+  },
+  {
+    id: 'run-backup',
+    label: 'Run Backup',
+    icon: <Download size={18} />,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10 group-hover:bg-cyan-500/15',
     apiAction: true,
   },
 ]
@@ -154,6 +187,14 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
           })
           break
         }
+        case 'run-backup': {
+          const result = await triggerBackup()
+          addToast({
+            type: result.success ? 'success' : 'error',
+            message: result.success ? `Backup started: ${result.filename}` : 'Backup failed',
+          })
+          break
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Action failed'
@@ -192,14 +233,14 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'}`}
       >
-        <div className={`grid grid-cols-2 md:grid-cols-3 gap-2.5 stagger-children ${collapsed ? '' : 'pt-0'}`}>
+        <div className={`grid grid-cols-3 md:grid-cols-4 gap-2 stagger-children ${collapsed ? '' : 'pt-0'}`}>
           {allActions.map((action) => {
             const isLoading = loadingAction === action.id
             return (
               <button
                 key={action.id}
                 onClick={() => handleClick(action)}
-                disabled={(!isConnected && action.id !== 'stacks') || isLoading}
+                disabled={(!isConnected && !!action.apiAction) || isLoading}
                 className="
                   group flex flex-col items-center gap-2.5 p-4
                   rounded-xl bg-slate-800/30 border border-white/[0.03]
