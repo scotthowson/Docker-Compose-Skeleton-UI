@@ -15,7 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup,
+  authSetup, authLogin,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import type { SetupDefaultsResponse } from '../../shared/types'
@@ -30,6 +30,7 @@ interface WizardProps {
 
 interface StackEntry {
   name: string
+  label: string
   isDefault: boolean
   isNew: boolean
   editing: boolean
@@ -77,9 +78,9 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
 // Step Indicator
 // ---------------------------------------------------------------------------
 
-function StepIndicator({ current, total }: { current: Step; total: number }) {
+function StepIndicator({ current, total, needsAdmin = true }: { current: Step; total: number; needsAdmin?: boolean }) {
   const steps = Array.from({ length: total }, (_, i) => i + 1)
-  const labels = ['Connect', 'Admin', 'Server', 'Stacks', 'Review']
+  const labels = ['Connect', needsAdmin ? 'Admin' : 'Sign In', 'Server', 'Stacks', 'Review']
 
   return (
     <div className="flex items-center justify-center gap-0 mb-8">
@@ -185,6 +186,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [newStackName, setNewStackName] = useState('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [labelEditIndex, setLabelEditIndex] = useState<number | null>(null)
+  const [labelEditValue, setLabelEditValue] = useState('')
 
   // Timezone filter
   const [tzFilter, setTzFilter] = useState('')
@@ -205,6 +208,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
   // Pre-flight validation
   const [alreadyConfigured, setAlreadyConfigured] = useState(false)
+  const [needsAdmin, setNeedsAdmin] = useState(true)
 
   // Server URL from settings
   const { setServerUrl } = useConnectionStore()
@@ -284,6 +288,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         if (status.initialized) {
           setAlreadyConfigured(true)
         }
+        // Track whether admin account still needs to be created
+        if (status.needs_admin === false) {
+          setNeedsAdmin(false)
+        }
       } catch {
         // Setup status check is best-effort
       }
@@ -291,6 +299,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // Pre-populate stacks
       setStacks(data.stacks.map((name) => ({
         name,
+        label: '',
         isDefault: true,
         isNew: false,
         editing: false,
@@ -312,11 +321,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const isStep2Valid = useCallback(() => {
     if (!adminUsername.trim() || adminUsername.length < 3) return false
     if (adminPassword.length < 8) return false
-    if (!/[A-Z]/.test(adminPassword)) return false
-    if (!/[0-9]/.test(adminPassword)) return false
-    if (adminPassword !== adminConfirm) return false
+    if (needsAdmin) {
+      // Creating new account — enforce strong password + confirmation
+      if (!/[A-Z]/.test(adminPassword)) return false
+      if (!/[0-9]/.test(adminPassword)) return false
+      if (adminPassword !== adminConfirm) return false
+    }
     return true
-  }, [adminUsername, adminPassword, adminConfirm])
+  }, [adminUsername, adminPassword, adminConfirm, needsAdmin])
 
   const isStep3Valid = useCallback(() => {
     return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim())
@@ -341,11 +353,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const handleNext = async () => {
     setError(null)
 
-    // Step 2: Create admin account on the server
+    // Step 2: Create admin account or sign in to existing one
     if (step === 2) {
       setLoading(true)
       try {
-        const res = await authSetup(adminUsername.trim(), adminPassword)
+        let res
+        if (needsAdmin) {
+          // First-time setup — create admin account
+          res = await authSetup(adminUsername.trim(), adminPassword)
+        } else {
+          // Users already exist (interrupted setup) — sign in
+          res = await authLogin(adminUsername.trim(), adminPassword)
+        }
         if (res.success && res.token) {
           setLocalApiToken(res.token)
           apiClient.setAuthToken(res.token)
@@ -358,7 +377,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             await login(adminUsername.trim(), adminPassword, true)
           }
         } else {
-          setError('Failed to create admin account')
+          setError(needsAdmin ? 'Failed to create admin account' : 'Invalid credentials')
           setLoading(false)
           return
         }
@@ -366,7 +385,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         if (err instanceof ApiNetworkError) {
           setError('Cannot reach the server. Check the connection.')
         } else {
-          setError(err instanceof Error ? err.message : 'Failed to create admin account')
+          setError(err instanceof Error ? err.message : (needsAdmin ? 'Failed to create admin account' : 'Sign in failed'))
         }
         setLoading(false)
         return
@@ -407,6 +426,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       settingsState.updateSetting('autoLockMinutes', prefAutoLock)
       settingsState.updateSetting('projectName', prefAppName)
       settingsState.updateSetting('projectSubtitle', prefAppSubtitle)
+
+      // 3b. Persist stack labels as annotations
+      const labelledStacks = stacks.filter((s) => s.label)
+      if (labelledStacks.length > 0) {
+        const annotations = { ...settingsState.stackAnnotations }
+        for (const s of labelledStacks) {
+          annotations[s.name] = { ...annotations[s.name], label: s.label }
+        }
+        settingsState.updateSetting('stackAnnotations', annotations)
+      }
 
       // 4. Ensure authenticated before redirect (safety net)
       const authState = useAuthStore.getState()
@@ -450,7 +479,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     const name = newStackName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
     if (!name || !/^[a-z0-9][a-z0-9_-]*$/.test(name)) return
     if (stacks.some((s) => s.name === name)) return
-    setStacks([...stacks, { name, isDefault: false, isNew: true, editing: false }])
+    setStacks([...stacks, { name, label: '', isDefault: false, isNew: true, editing: false }])
     setNewStackName('')
   }
 
@@ -468,6 +497,22 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     }
     setEditingIndex(null)
     setEditValue('')
+  }
+
+  const formatStackName = (name: string): string =>
+    name.split(/[-_]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+
+  const startLabelEdit = (index: number) => {
+    setLabelEditIndex(index)
+    setLabelEditValue(stacks[index].label)
+  }
+
+  const commitLabelEdit = (index: number) => {
+    const updated = [...stacks]
+    updated[index] = { ...updated[index], label: labelEditValue.trim() }
+    setStacks(updated)
+    setLabelEditIndex(null)
+    setLabelEditValue('')
   }
 
   const filteredTimezones = COMMON_TIMEZONES.filter((tz) =>
@@ -532,7 +577,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           </div>
 
           {/* Step indicator */}
-          <StepIndicator current={step} total={5} />
+          <StepIndicator current={step} total={5} needsAdmin={needsAdmin} />
 
           {/* Content card */}
           <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20">
@@ -659,16 +704,31 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             </div>
           )}
 
-          {/* ── Step 2: Create Admin Account ── */}
+          {/* ── Step 2: Create Admin Account / Sign In ── */}
           {step === 2 && (
             <div className="animate-fade-in">
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-1">
                   <Shield size={16} className="text-emerald-400" />
-                  <h2 className="text-lg font-semibold text-slate-100">Create Admin Account</h2>
+                  <h2 className="text-lg font-semibold text-slate-100">
+                    {needsAdmin ? 'Create Admin Account' : 'Sign In to Continue'}
+                  </h2>
                 </div>
-                <p className="text-xs text-slate-500">This account manages your DCS server</p>
+                <p className="text-xs text-slate-500">
+                  {needsAdmin
+                    ? 'This account manages your DCS server'
+                    : 'An admin account already exists — sign in to resume setup'}
+                </p>
               </div>
+
+              {!needsAdmin && (
+                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 mb-4">
+                  <AlertCircle size={14} className="text-cyan-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-cyan-400/80">
+                    A previous setup was interrupted. Sign in with your admin credentials to pick up where you left off.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {/* Username */}
@@ -698,7 +758,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       type={showPassword ? 'text' : 'password'}
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Min 8 chars, uppercase + number"
+                      placeholder={needsAdmin ? 'Min 8 chars, uppercase + number' : 'Enter your password'}
                       className="w-full pl-9 pr-10 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                     />
                     <button
@@ -709,8 +769,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
-                  {/* Strength indicator */}
-                  {adminPassword.length > 0 && (
+                  {/* Strength indicator — only for new account creation */}
+                  {needsAdmin && adminPassword.length > 0 && (
                     <div className="mt-2">
                       <div className="flex gap-1 mb-1">
                         {[1, 2, 3, 4, 5].map((level) => {
@@ -734,23 +794,25 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   )}
                 </div>
 
-                {/* Confirm Password */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
-                  <div className="relative">
-                    <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={adminConfirm}
-                      onChange={(e) => setAdminConfirm(e.target.value)}
-                      placeholder="Repeat password"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
-                    />
+                {/* Confirm Password — only for new account creation */}
+                {needsAdmin && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                    <div className="relative">
+                      <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={adminConfirm}
+                        onChange={(e) => setAdminConfirm(e.target.value)}
+                        placeholder="Repeat password"
+                        className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      />
+                    </div>
+                    {adminConfirm && adminPassword !== adminConfirm && (
+                      <p className="text-[10px] text-rose-400 mt-1">Passwords do not match</p>
+                    )}
                   </div>
-                  {adminConfirm && adminPassword !== adminConfirm && (
-                    <p className="text-[10px] text-rose-400 mt-1">Passwords do not match</p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -1127,7 +1189,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <Layers size={16} className="text-emerald-400" />
                   <h2 className="text-lg font-semibold text-slate-100">Stack Categories</h2>
                 </div>
-                <p className="text-xs text-slate-500">Define your stack categories and startup order</p>
+                <p className="text-xs text-slate-500">Define your stack categories, startup order, and display labels</p>
               </div>
 
               {/* Stack list */}
@@ -1135,83 +1197,138 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 {stacks.map((stack, index) => (
                   <div
                     key={`${stack.name}-${index}`}
-                    className="flex items-center gap-2 bg-slate-800/40 border border-white/[0.06] rounded-lg px-3 py-2 group"
+                    className="bg-slate-800/40 border border-white/[0.06] rounded-lg px-3 py-2 group"
                   >
-                    {/* Order number */}
-                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-white/[0.04] text-[10px] font-bold text-slate-500 shrink-0">
-                      {index + 1}
-                    </span>
-
-                    {/* Name (editable) */}
-                    {editingIndex === index ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') commitEdit(index)
-                          if (e.key === 'Escape') { setEditingIndex(null); setEditValue('') }
-                        }}
-                        onBlur={() => commitEdit(index)}
-                        autoFocus
-                        className="flex-1 px-2 py-1 bg-slate-700/50 border border-emerald-500/30 rounded text-xs font-mono text-slate-200 focus:outline-none"
-                      />
-                    ) : (
-                      <span className="flex-1 text-xs font-mono text-slate-300 truncate">
-                        {stack.name}
+                    <div className="flex items-center gap-2">
+                      {/* Order number */}
+                      <span className="flex items-center justify-center w-6 h-6 rounded-md bg-white/[0.04] text-[10px] font-bold text-slate-500 shrink-0">
+                        {index + 1}
                       </span>
-                    )}
 
-                    {/* Badges */}
-                    {stack.isNew && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-cyan-500/15 text-cyan-400">
-                        Custom
-                      </span>
-                    )}
-                    {stack.isDefault && !stack.isNew && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-500/15 text-slate-500">
-                        Default
-                      </span>
-                    )}
+                      {/* Name (editable) */}
+                      {editingIndex === index ? (
+                        <input
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit(index)
+                            if (e.key === 'Escape') { setEditingIndex(null); setEditValue('') }
+                          }}
+                          onBlur={() => commitEdit(index)}
+                          autoFocus
+                          className="flex-1 px-2 py-1 bg-slate-700/50 border border-emerald-500/30 rounded text-xs font-mono text-slate-200 focus:outline-none"
+                        />
+                      ) : (
+                        <span className="flex-1 text-xs font-mono text-slate-300 truncate">
+                          {stack.name}
+                        </span>
+                      )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(index)}
-                        className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300"
-                        title="Rename"
-                      >
-                        <Pencil size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveStack(index, 'up')}
-                        disabled={index === 0}
-                        className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
-                        title="Move up"
-                      >
-                        <ChevronUp size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveStack(index, 'down')}
-                        disabled={index === stacks.length - 1}
-                        className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
-                        title="Move down"
-                      >
-                        <ChevronDown size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteStack(index)}
-                        disabled={stacks.length <= 1}
-                        className="p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 disabled:opacity-20"
-                        title="Remove"
-                      >
-                        <Trash2 size={11} />
-                      </button>
+                      {/* Badges */}
+                      {stack.label && labelEditIndex !== index && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-violet-500/15 text-violet-400 shrink-0">
+                          {stack.label}
+                        </span>
+                      )}
+                      {stack.isNew && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-cyan-500/15 text-cyan-400 shrink-0">
+                          Custom
+                        </span>
+                      )}
+                      {stack.isDefault && !stack.isNew && !stack.label && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-500/15 text-slate-500 shrink-0">
+                          Default
+                        </span>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => labelEditIndex === index ? commitLabelEdit(index) : startLabelEdit(index)}
+                          className={`p-1 rounded hover:bg-white/[0.06] transition-colors ${labelEditIndex === index ? 'text-violet-400' : 'text-slate-500 hover:text-slate-300'}`}
+                          title={stack.label ? 'Edit label' : 'Add label'}
+                        >
+                          <Palette size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(index)}
+                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300"
+                          title="Rename"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveStack(index, 'up')}
+                          disabled={index === 0}
+                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
+                          title="Move up"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveStack(index, 'down')}
+                          disabled={index === stacks.length - 1}
+                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
+                          title="Move down"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteStack(index)}
+                          disabled={stacks.length <= 1}
+                          className="p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 disabled:opacity-20"
+                          title="Remove"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Inline label editor */}
+                    {labelEditIndex === index && (
+                      <div className="flex items-center gap-2 mt-2 ml-8">
+                        <input
+                          type="text"
+                          value={labelEditValue}
+                          onChange={(e) => setLabelEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitLabelEdit(index)
+                            if (e.key === 'Escape') { setLabelEditIndex(null); setLabelEditValue('') }
+                          }}
+                          autoFocus
+                          placeholder={formatStackName(stack.name)}
+                          className="flex-1 px-2 py-1 bg-slate-700/50 border border-violet-500/30 rounded text-xs text-slate-200 placeholder-slate-600 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => commitLabelEdit(index)}
+                          className="px-2 py-1 rounded text-[10px] font-medium bg-violet-600/20 border border-violet-500/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
+                        >
+                          Save
+                        </button>
+                        {stack.label && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...stacks]
+                              updated[index] = { ...updated[index], label: '' }
+                              setStacks(updated)
+                              setLabelEditIndex(null)
+                              setLabelEditValue('')
+                            }}
+                            className="px-2 py-1 rounded text-[10px] font-medium text-slate-500 hover:text-rose-400 transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1408,6 +1525,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           {i + 1}
                         </span>
                         <span className="text-xs font-mono text-slate-300">{stack.name}</span>
+                        {stack.label && (
+                          <span className="text-[8px] px-1 rounded bg-violet-500/15 text-violet-400">{stack.label}</span>
+                        )}
                         {stack.isNew && (
                           <span className="text-[8px] px-1 rounded bg-cyan-500/15 text-cyan-400">new</span>
                         )}

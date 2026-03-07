@@ -107,19 +107,15 @@ export default function App() {
       // In browser: falls back to raw fetch().
       let currentServerUrl = useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'
       if (!/^https?:\/\//i.test(currentServerUrl)) currentServerUrl = `http://${currentServerUrl}`
-      console.log('[App] checking setup status, url:', currentServerUrl, 'electronAPI:', !!window.electronAPI)
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           let initialized = true
           if (window.electronAPI?.checkServer) {
-            console.log('[App] using IPC check-server, attempt:', attempt)
             const res = await window.electronAPI.checkServer(currentServerUrl)
-            console.log('[App] IPC result:', JSON.stringify(res))
             if (res.reachable) {
               initialized = res.initialized
             }
           } else {
-            console.log('[App] using browser fetch, attempt:', attempt)
             const ctrl = new AbortController()
             const tid = setTimeout(() => ctrl.abort(), 5000)
             const resp = await fetch(`${currentServerUrl}/setup/status`, { method: 'GET', signal: ctrl.signal })
@@ -130,7 +126,6 @@ export default function App() {
             }
           }
           if (!initialized) {
-            console.log('[App] server not initialized, redirecting to setup wizard')
             if (window.electronAPI) {
               await window.electronAPI.setSetting('userAccounts', undefined)
             }
@@ -143,10 +138,8 @@ export default function App() {
             setSettingsReady(true)
             return
           }
-          console.log('[App] server initialized, proceeding to login')
           break
-        } catch (err) {
-          console.warn('[App] setup check attempt', attempt, 'failed:', err)
+        } catch {
           if (attempt < 2) await new Promise(r => setTimeout(r, 300))
         }
       }

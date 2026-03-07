@@ -58,10 +58,10 @@ export class ApiClient {
     return this.authToken
   }
 
-  private async requestOnce<T>(method: string, path: string, body?: string): Promise<T> {
+  private async requestOnce<T>(method: string, path: string, body?: string, timeoutOverride?: number): Promise<T> {
     const url = `${this.baseUrl}${path}`
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout)
+    const timeoutId = setTimeout(() => controller.abort(), timeoutOverride ?? this.timeout)
 
     const init: RequestInit = {
       method,
@@ -79,7 +79,7 @@ export class ApiClient {
       response = await fetch(url, init)
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new ApiTimeoutError(path, this.timeout)
+        throw new ApiTimeoutError(path, timeoutOverride ?? this.timeout)
       }
       const message = err instanceof Error ? err.message : String(err)
       throw new ApiNetworkError(path, message)
@@ -125,11 +125,16 @@ export class ApiClient {
     }
   }
 
-  private async request<T>(method: string, path: string, body?: string): Promise<T> {
+  private async request<T>(method: string, path: string, body?: string, timeoutOverride?: number): Promise<T> {
+    // Only retry idempotent GET requests on network errors — never POST/DELETE
+    // which may have already modified server state
+    if (method !== 'GET') {
+      return this.requestOnce<T>(method, path, body, timeoutOverride)
+    }
     let lastError: Error | null = null
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        return await this.requestOnce<T>(method, path, body)
+        return await this.requestOnce<T>(method, path, body, timeoutOverride)
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err))
         // Only retry on network errors, not API errors
@@ -147,8 +152,8 @@ export class ApiClient {
     return this.request<T>('GET', path)
   }
 
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, body ? JSON.stringify(body) : undefined)
+  async post<T>(path: string, body?: unknown, timeoutOverride?: number): Promise<T> {
+    return this.request<T>('POST', path, body ? JSON.stringify(body) : undefined, timeoutOverride)
   }
 
   async delete<T>(path: string): Promise<T> {

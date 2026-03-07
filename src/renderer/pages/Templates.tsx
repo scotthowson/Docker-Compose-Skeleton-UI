@@ -181,7 +181,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[]) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
 }
@@ -211,6 +211,18 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // F5: Dry-run state
   const [dryRunResult, setDryRunResult] = useState<TemplateDryRunResponse | null>(null)
   const [dryRunLoading, setDryRunLoading] = useState(false)
+  // F6: Replace conflicting services toggle
+  const [replaceServices, setReplaceServices] = useState(false)
+  // F7: Optional services — initially all enabled per template defaults
+  const optionalServices = detail?.template.optional_services ?? template.optional_services ?? []
+  const [excludedServices, setExcludedServices] = useState<Set<string>>(() => {
+    const disabled = new Set<string>()
+    const opts = template.optional_services ?? []
+    for (const o of opts) {
+      if (!o.default_enabled) disabled.add(o.service)
+    }
+    return disabled
+  })
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -259,11 +271,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       setConfirming(true)
       return
     }
-    const result = await onDeploy(targetStack, variables, autoStart)
+    const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
+    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude)
     if (result) {
       setDeployResult(result)
     }
-  }, [confirming, onDeploy, targetStack, variables, autoStart])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -281,18 +294,22 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   }, [deployResult, onUndeploy, template.name, onClose])
 
   // F5: Handle dry-run preview
+  const [dryRunError, setDryRunError] = useState<string | null>(null)
   const handleDryRun = useCallback(async () => {
     setDryRunLoading(true)
     setDryRunResult(null)
+    setDryRunError(null)
     try {
-      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables })
+      const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
+      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables, exclude_services: exclude })
       setDryRunResult(res)
     } catch (err) {
       setDryRunResult(null)
+      setDryRunError(err instanceof Error ? err.message : 'Preview failed')
     } finally {
       setDryRunLoading(false)
     }
-  }, [template.name, targetStack, variables])
+  }, [template.name, targetStack, variables, excludedServices])
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -546,6 +563,43 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 </button>
               </div>
 
+              {/* Optional services toggles */}
+              {optionalServices.length > 0 && (
+                <div className="space-y-2">
+                  {optionalServices.map((opt) => {
+                    const isExcluded = excludedServices.has(opt.service)
+                    return (
+                      <div key={opt.service} className="flex items-center justify-between py-2">
+                        <div>
+                          <p className="text-xs font-medium text-slate-300">{opt.label}</p>
+                          {opt.description && (
+                            <p className="text-[11px] text-slate-500">{opt.description}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExcludedServices((prev) => {
+                            const next = new Set(prev)
+                            if (isExcluded) next.delete(opt.service)
+                            else next.add(opt.service)
+                            return next
+                          })}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
+                            !isExcluded ? 'bg-emerald-500' : 'bg-slate-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                              !isExcluded ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
               {/* Compose preview (collapsible) */}
               <div>
                 <button
@@ -596,12 +650,23 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
                     {/* Service Conflicts */}
                     {dryRunResult.has_service_conflicts && (
-                      <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2">
-                        <p className="text-rose-400 font-semibold text-[11px]">
+                      <div className={`rounded-md p-2 ${replaceServices ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-rose-500/10 border border-rose-500/20'}`}>
+                        <p className={`font-semibold text-[11px] ${replaceServices ? 'text-amber-400' : 'text-rose-400'}`}>
                           <AlertTriangle size={11} className="inline mr-1" />
-                          Service Name Conflicts
+                          {replaceServices ? 'Services Will Be Replaced' : 'Service Name Conflicts'}
                         </p>
-                        <p className="text-rose-300/80 text-[10px] mt-0.5 font-mono">{dryRunResult.service_conflicts}</p>
+                        <p className={`text-[10px] mt-0.5 font-mono ${replaceServices ? 'text-amber-300/80' : 'text-rose-300/80'}`}>{dryRunResult.service_conflicts}</p>
+                        <label className="flex items-center gap-2 mt-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={replaceServices}
+                            onChange={(e) => setReplaceServices(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-white/20 bg-slate-800 text-amber-500 focus:ring-amber-500/30 cursor-pointer"
+                          />
+                          <span className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors">
+                            Replace existing services with template versions
+                          </span>
+                        </label>
                       </div>
                     )}
 
@@ -615,11 +680,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         {dryRunResult.port_conflicts_detail && dryRunResult.port_conflicts_detail.length > 0 ? (
                           <div className="space-y-1">
                             {dryRunResult.port_conflicts_detail.map((pc, idx) => (
-                              <div key={idx} className="flex items-center gap-2 text-[10px]">
+                              <div key={idx} className="flex items-center gap-2 text-[10px] flex-wrap">
                                 <span className="font-mono text-rose-300 font-bold">:{pc.port}</span>
                                 <span className="text-rose-400/70">in use by</span>
                                 <span className={`font-mono px-1.5 py-0.5 rounded ${pc.type === 'stack' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15'}`}>
-                                  {pc.type === 'stack' ? `stack: ${pc.owner}` : `container: ${pc.owner}`}
+                                  {pc.owner}
+                                </span>
+                                <span className="text-rose-400/50 text-[9px]">
+                                  ({pc.type})
                                 </span>
                               </div>
                             ))}
@@ -630,11 +698,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       </div>
                     )}
 
-                    {/* No conflicts */}
-                    {!dryRunResult.has_service_conflicts && !dryRunResult.has_port_conflicts && (
+                    {/* No conflicts (or all resolved via replace) */}
+                    {(!dryRunResult.has_service_conflicts || replaceServices) && !dryRunResult.has_port_conflicts && (
                       <p className="text-emerald-400/80">
                         <CheckCircle size={11} className="inline mr-1" />
-                        No conflicts detected — safe to deploy
+                        {replaceServices && dryRunResult.has_service_conflicts
+                          ? 'Service conflicts resolved — replacing existing services'
+                          : 'No conflicts detected — safe to deploy'}
                       </p>
                     )}
 
@@ -685,6 +755,16 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 </div>
               )}
 
+              {/* Dry-run error */}
+              {dryRunError && !dryRunResult && (
+                <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 animate-fade-in">
+                  <p className="text-[11px] text-rose-400">
+                    <AlertTriangle size={11} className="inline mr-1" />
+                    Preview failed: {dryRunError}
+                  </p>
+                </div>
+              )}
+
               {/* F1: Confirmation panel */}
               {confirming && (
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2 animate-fade-in">
@@ -702,8 +782,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       )}
                     </p>
                     <p>
-                      Services to add: <span className="font-mono text-slate-300">{templateServiceNames.join(', ')}</span>
+                      Services to {replaceServices ? 'deploy' : 'add'}: <span className="font-mono text-slate-300">{templateServiceNames.join(', ')}</span>
                     </p>
+                    {replaceServices && dryRunResult?.has_service_conflicts && (
+                      <p className="text-amber-400">
+                        Replacing existing: <span className="font-mono">{dryRunResult.service_conflicts}</span>
+                      </p>
+                    )}
                     <p className="text-amber-400/70 mt-1">
                       This will modify the compose file of <span className="font-mono">{targetStack}</span>. A backup will be created.
                     </p>
@@ -1265,7 +1350,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[]): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -1273,6 +1358,8 @@ export default function Templates() {
           target_stack: targetStack,
           variables,
           auto_start: autoStart,
+          replace_services: true,
+          exclude_services: excludeServices,
         })
         if (res.success) {
           refresh()
@@ -1290,7 +1377,7 @@ export default function Templates() {
             type: 'warning',
             message: message.toLowerCase().includes('port')
               ? `Port conflict — a host port is already in use. Change the port variable or choose a different target stack.`
-              : `Service name conflict — one or more services already exist in "${targetStack}". Choose a different stack or rename the conflicting service.`,
+              : `Service name conflict — these services are already deployed in "${targetStack}". Enable "Replace existing services" in Preview, or choose a different stack.`,
             duration: 8000,
           })
         } else if (message.includes('422') || message.toLowerCase().includes('invalid compose')) {

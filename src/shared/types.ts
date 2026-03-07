@@ -1155,6 +1155,13 @@ export interface ComposeRollbackResponse {
 }
 
 // Templates
+export interface TemplateOptionalService {
+  service: string
+  label: string
+  description?: string
+  default_enabled: boolean
+}
+
 export interface TemplateInfo {
   name: string
   title?: string
@@ -1164,6 +1171,7 @@ export interface TemplateInfo {
   tags: string[]
   icon?: string
   variables?: TemplateVariable[]
+  optional_services?: TemplateOptionalService[]
 }
 
 export interface TemplateVariable {
@@ -1253,7 +1261,7 @@ export interface TemplateDryRunResponse {
   has_service_conflicts: boolean
   port_conflicts: string
   has_port_conflicts: boolean
-  port_conflicts_detail?: { port: number; owner: string; type: 'stack' | 'container' }[]
+  port_conflicts_detail?: { port: number; owner: string; type: 'stack' | 'container'; service?: string }[]
   env_additions: { key: string; value: string }[]
   env_existing?: { key: string; current_value: string; new_value: string }[]
   lines_added: number

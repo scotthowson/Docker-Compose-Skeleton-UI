@@ -69,16 +69,13 @@ export default function Login() {
     const url = normalizeUrl(rawUrl)
     if (!url) { setConnStatus('idle'); return }
 
-    console.log('[Login] checkServer starting, url:', url, 'electronAPI:', !!window.electronAPI, 'checkServer:', !!window.electronAPI?.checkServer)
     setConnStatus('testing')
     setConnected(false)
     setServerInitialized(false)
     try {
       if (window.electronAPI?.checkServer) {
         // ── Electron path: single IPC call, Node.js http in main process ──
-        console.log('[Login] calling IPC check-server…')
         const res = await window.electronAPI.checkServer(url)
-        console.log('[Login] IPC check-server result:', JSON.stringify(res))
         if (!res.reachable) {
           setConnStatus('fail')
           return
@@ -90,7 +87,6 @@ export default function Login() {
 
         if (!res.initialized) {
           // Server needs first-run setup — clear stale data + redirect
-          console.log('[Login] server not initialized, redirecting to setup wizard')
           if (window.electronAPI) {
             await window.electronAPI.setSetting('userAccounts', undefined)
           }
@@ -101,19 +97,16 @@ export default function Login() {
           useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
           setCurrentPage('setup')
         } else {
-          console.log('[Login] server initialized, showing login form')
           setServerInitialized(true)
           setConnStatus('ok')
           setConnected(true)
         }
       } else {
         // ── Browser fallback: two fetch() calls ──
-        console.log('[Login] no electronAPI, using browser fetch…')
         const prev = apiClient.getBaseUrl()
         apiClient.setBaseUrl(url)
         try {
           const ok = await apiClient.testConnection()
-          console.log('[Login] browser testConnection result:', ok)
           if (!ok) { setConnStatus('fail'); apiClient.setBaseUrl(prev); return }
         } catch {
           setConnStatus('fail')
@@ -152,8 +145,7 @@ export default function Login() {
           setConnected(true)
         }
       }
-    } catch (err) {
-      console.error('[Login] checkServer error:', err)
+    } catch {
       setConnStatus('fail')
     }
   }, [setServerUrl, setCurrentPage])

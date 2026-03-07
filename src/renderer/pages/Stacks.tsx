@@ -36,7 +36,21 @@ export default function Stacks() {
   const { stacks, setStacks, actionLoading, setActionLoading } = useStackStore()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const [selectedStackName, setSelectedStackName] = useState<string | null>(null)
+  const navigationPayload = useSettingsStore((s) => s.navigationPayload)
   const { addToast } = useToast()
+
+  // React to navigation payloads (e.g. "View Stack" after deploy)
+  useEffect(() => {
+    if (!navigationPayload) return
+    const payload = useSettingsStore.getState().consumeNavigationPayload()
+    if (!payload) return
+
+    if (payload.highlight && typeof payload.highlight === 'string') {
+      setSelectedStackName(payload.highlight)
+    } else if (payload.resetView) {
+      setSelectedStackName(null)
+    }
+  }, [navigationPayload])
 
   // Overlay states
   const [showCreateOverlay, setShowCreateOverlay] = useState(false)
@@ -281,7 +295,7 @@ export default function Stacks() {
       {showCreateOverlay && (
         <CreateStackOverlay
           onClose={() => setShowCreateOverlay(false)}
-          onCreated={refresh}
+          onCreated={() => { refresh(); setTimeout(refresh, 500) }}
         />
       )}
 

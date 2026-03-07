@@ -127,30 +127,20 @@ ipcMain.handle('get-version', () => app.getVersion())
 // Uses Node.js http module (NOT Chromium net.fetch) — zero browser security
 // policies apply.  Returns everything the renderer needs in a single IPC trip.
 ipcMain.handle('check-server', async (_event, serverUrl: string) => {
-  console.log('[check-server] called with URL:', serverUrl)
-
   // 1. Test basic connectivity
   const root = await httpGetJson(`${serverUrl}/`)
-  console.log('[check-server] root response:', JSON.stringify(root))
   if (!root.ok) {
-    const result = { reachable: false, initialized: true, error: root.error || 'unreachable' }
-    console.log('[check-server] returning:', JSON.stringify(result))
-    return result
+    return { reachable: false, initialized: true, error: root.error || 'unreachable' }
   }
 
   // 2. Check setup status
   const setup = await httpGetJson(`${serverUrl}/setup/status`)
-  console.log('[check-server] setup response:', JSON.stringify(setup))
   if (setup.ok && setup.data && typeof setup.data === 'object' && 'initialized' in (setup.data as Record<string, unknown>)) {
-    const result = { reachable: true, initialized: !!(setup.data as { initialized: boolean }).initialized }
-    console.log('[check-server] returning:', JSON.stringify(result))
-    return result
+    return { reachable: true, initialized: !!(setup.data as { initialized: boolean }).initialized }
   }
 
   // Setup endpoint missing or unexpected response — treat as initialized
-  const result = { reachable: true, initialized: true }
-  console.log('[check-server] returning (fallback):', JSON.stringify(result))
-  return result
+  return { reachable: true, initialized: true }
 })
 
 // Generic JSON fetch via Node.js http (for any other IPC callers)

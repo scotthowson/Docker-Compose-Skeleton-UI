@@ -209,7 +209,7 @@ export function restartStack(name: string): Promise<StackActionResponse> {
 /** POST /stacks/:name/update — Pull and rolling-update a stack */
 export function updateStack(name: string): Promise<StackUpdateResponse> {
   return apiClient.post<StackUpdateResponse>(
-    `/stacks/${encodeURIComponent(name)}/update`,
+    `/stacks/${encodeURIComponent(name)}/update`, undefined, 120000,
   )
 }
 
@@ -484,7 +484,7 @@ export function authRefresh(): Promise<AuthResponse> {
 
 /** POST /auth/factory-reset — Wipe auth state and return to setup wizard */
 export function authFactoryReset(opts: { confirm: string; reset_compose?: boolean }): Promise<FactoryResetResponse> {
-  return apiClient.post<FactoryResetResponse>('/auth/factory-reset', opts)
+  return apiClient.post<FactoryResetResponse>('/auth/factory-reset', opts, 120000)
 }
 
 // ---------------------------------------------------------------------------
@@ -543,7 +543,7 @@ export function fetchMaintenanceDisk(): Promise<DiskAnalysis> {
 
 /** POST /maintenance/deep-prune — Aggressive docker prune */
 export function triggerDeepPrune(): Promise<MaintenanceResponse> {
-  return apiClient.post<MaintenanceResponse>('/maintenance/deep-prune', { confirm: 'CONFIRM' })
+  return apiClient.post<MaintenanceResponse>('/maintenance/deep-prune', { confirm: 'CONFIRM' }, 120000)
 }
 
 /** POST /maintenance/log-rotate — Rotate logs */
@@ -588,12 +588,12 @@ export function batchStackAction(
   action: 'start' | 'stop' | 'restart',
   stacks: string[] | 'all',
 ): Promise<BatchStackResponse> {
-  return apiClient.post<BatchStackResponse>('/batch/stacks', { action, stacks })
+  return apiClient.post<BatchStackResponse>('/batch/stacks', { action, stacks }, 120000)
 }
 
 /** POST /batch/update — Pull + rolling update multiple stacks */
 export function batchStackUpdate(stacks: string[] | 'all'): Promise<BatchStackResponse> {
-  return apiClient.post<BatchStackResponse>('/batch/update', { stacks })
+  return apiClient.post<BatchStackResponse>('/batch/update', { stacks }, 120000)
 }
 
 // ---------------------------------------------------------------------------
@@ -641,7 +641,7 @@ export function triggerBackup(stack?: string): Promise<BackupTriggerResponse> {
 
 /** POST /backups/restore — Restore from archive */
 export function restoreBackup(filename: string): Promise<BackupRestoreResponse> {
-  return apiClient.post<BackupRestoreResponse>('/backups/restore', { filename, confirm: 'RESTORE' })
+  return apiClient.post<BackupRestoreResponse>('/backups/restore', { filename, confirm: 'RESTORE' }, 120000)
 }
 
 // ---------------------------------------------------------------------------
@@ -660,7 +660,7 @@ export function fetchTerminalHistory(): Promise<TerminalHistoryResponse> {
 
 /** POST /images/:id/delete — Remove a Docker image */
 export function deleteImage(id: string): Promise<ImageDeleteResponse> {
-  return apiClient.post<ImageDeleteResponse>(`/images/${encodeURIComponent(id)}/delete`)
+  return apiClient.post<ImageDeleteResponse>(`/images/${encodeURIComponent(id)}/delete`, undefined, 120000)
 }
 
 /** POST /containers/:name/rename — Rename a container */
@@ -797,12 +797,12 @@ export function fetchImageUpdates(): Promise<ImageCheckResponse> {
 
 /** POST /images/check-updates — Registry check for updates (slow) */
 export function checkImageRegistry(): Promise<ImageRegistryCheckResponse> {
-  return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates')
+  return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates', undefined, 120000)
 }
 
 /** POST /images/:name/update — Pull image and restart containers */
 export function updateImage(name: string): Promise<ImageUpdateResponse> {
-  return apiClient.post<ImageUpdateResponse>(`/images/${encodeURIComponent(name)}/update`)
+  return apiClient.post<ImageUpdateResponse>(`/images/${encodeURIComponent(name)}/update`, undefined, 120000)
 }
 
 /** GET /notifications/rules — List notification rules */
@@ -847,7 +847,7 @@ export function createSnapshot(label?: string): Promise<SnapshotCreateResponse> 
 
 /** POST /snapshots/:id/restore — Restore from a snapshot */
 export function restoreSnapshot(id: string): Promise<SnapshotRestoreResponse> {
-  return apiClient.post<SnapshotRestoreResponse>(`/snapshots/${encodeURIComponent(id)}/restore`, { confirm: 'RESTORE' })
+  return apiClient.post<SnapshotRestoreResponse>(`/snapshots/${encodeURIComponent(id)}/restore`, { confirm: 'RESTORE' }, 120000)
 }
 
 /** DELETE /snapshots/:id — Delete a snapshot */
@@ -883,8 +883,10 @@ export function deployTemplate(name: string, opts: {
   target_stack: string
   variables?: Record<string, string>
   auto_start?: boolean
+  replace_services?: boolean
+  exclude_services?: string[]
 }): Promise<TemplateDeployResponse> {
-  return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts)
+  return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }
 
 /** POST /templates/import — Import a custom template */
@@ -925,12 +927,12 @@ export function fetchDeployHistory(): Promise<DeployHistoryResponse> {
 export function undeployTemplate(name: string, opts: {
   target_stack: string; services: string[]; remove_containers?: boolean; remove_data?: boolean
 }): Promise<TemplateUndeployResponse> {
-  return apiClient.post<TemplateUndeployResponse>(`/templates/${encodeURIComponent(name)}/undeploy`, opts)
+  return apiClient.post<TemplateUndeployResponse>(`/templates/${encodeURIComponent(name)}/undeploy`, opts, 120000)
 }
 
 /** POST /templates/:name/dry-run — Preview deployment without writing */
 export function dryRunTemplate(name: string, opts: {
-  target_stack: string; variables?: Record<string, string>
+  target_stack: string; variables?: Record<string, string>; exclude_services?: string[]
 }): Promise<TemplateDryRunResponse> {
   return apiClient.post<TemplateDryRunResponse>(`/templates/${encodeURIComponent(name)}/dry-run`, opts)
 }

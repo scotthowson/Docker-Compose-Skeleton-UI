@@ -70,7 +70,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   currentPage: 'dashboard',
   navigationPayload: null,
 
-  setCurrentPage: (page, payload) => set({ currentPage: page, navigationPayload: payload ?? null }),
+  setCurrentPage: (page, payload) => {
+    set({ currentPage: page, navigationPayload: payload ?? null })
+    // Persist last page so F5/refresh restores it (skip transient pages)
+    if (page !== 'setup' && page !== 'login') {
+      persistSetting('lastPage', page)
+    }
+  },
 
   consumeNavigationPayload: () => {
     const { navigationPayload } = useSettingsStore.getState()
@@ -92,6 +98,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   loadSettings: async () => {
     const stored = await loadPersistedSettings()
-    set({ ...DEFAULT_SETTINGS, ...stored })
+    const lastPage = (stored as Record<string, unknown>).lastPage as PageId | undefined
+    set({
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      // Restore last page if available (but not setup/login — those are transient)
+      ...(lastPage && lastPage !== 'setup' && lastPage !== 'login' ? { currentPage: lastPage } : {}),
+    })
   },
 }))

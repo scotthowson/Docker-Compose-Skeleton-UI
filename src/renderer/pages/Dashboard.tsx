@@ -195,7 +195,6 @@ export default function Dashboard() {
 
   const onPollError = React.useCallback((err: Error) => {
     reportPollFailure()
-    console.warn('[Dashboard] poll error:', err.message)
   }, [reportPollFailure])
 
   // =========================================================================

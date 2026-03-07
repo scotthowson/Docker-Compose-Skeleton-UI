@@ -36,6 +36,7 @@ export function usePolling<T>(
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
   const fetchingRef = useRef(false)
+  const refreshQueuedRef = useRef(false)
 
   // Keep refs in sync with latest props
   useEffect(() => {
@@ -48,8 +49,11 @@ export function usePolling<T>(
 
   // Core fetch logic
   const doFetch = useCallback(async () => {
-    // Prevent overlapping requests
-    if (fetchingRef.current) return
+    // Prevent overlapping requests — queue a retry if manually refreshing
+    if (fetchingRef.current) {
+      refreshQueuedRef.current = true
+      return
+    }
     fetchingRef.current = true
 
     try {
@@ -68,6 +72,11 @@ export function usePolling<T>(
       }
     } finally {
       fetchingRef.current = false
+      // If a manual refresh was requested while we were fetching, run it now
+      if (refreshQueuedRef.current && mountedRef.current) {
+        refreshQueuedRef.current = false
+        doFetch()
+      }
     }
   }, [])
 

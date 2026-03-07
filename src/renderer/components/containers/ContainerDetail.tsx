@@ -557,10 +557,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       }
 
       // Refresh stats and container list after action
+      onRefreshList?.()
       setTimeout(() => {
         fetchStats()
         onRefreshList?.()
-      }, 1000)
+      }, 500)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast({ type: 'error', message: `Failed to ${action} "${containerName}": ${msg}`, duration: 6000 })

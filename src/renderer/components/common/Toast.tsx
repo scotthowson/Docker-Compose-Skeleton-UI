@@ -237,7 +237,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
       {/* Toast container — fixed bottom-right, safe area aware */}
       <div
-        className="fixed right-5 z-[9998] flex flex-col gap-2.5 pointer-events-none"
+        className="fixed right-5 z-[10001] flex flex-col gap-2.5 pointer-events-none"
         style={{
           bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))',
           right: 'calc(1.25rem + env(safe-area-inset-right, 0px))',
