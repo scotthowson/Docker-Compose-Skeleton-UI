@@ -555,23 +555,18 @@ export default function Login() {
                       {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
                   </div>
-                  {connStatus === 'ok' ? (
-                    <p className="text-[10px] text-emerald-400/80 mt-1">
-                      Connected
-                    </p>
-                  ) : connStatus === 'fail' ? (
-                    <p className="text-[10px] text-rose-400/80 mt-1">
-                      Server unreachable — check address and ensure API is running
-                    </p>
-                  ) : connStatus === 'testing' ? (
-                    <p className="text-[10px] text-cyan-400/80 mt-1">
-                      Connecting…
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-slate-600 mt-1">
-                      IP address and port of your DCS API server
-                    </p>
-                  )}
+                  {/* Fixed-height status line to prevent layout shift on state changes */}
+                  <p className={`text-[10px] mt-1 h-4 transition-colors duration-200 ${
+                    connStatus === 'ok' ? 'text-emerald-400/80'
+                    : connStatus === 'fail' ? 'text-rose-400/80'
+                    : connStatus === 'testing' ? 'text-cyan-400/80'
+                    : 'text-slate-600'
+                  }`}>
+                    {connStatus === 'ok' ? 'Connected'
+                    : connStatus === 'fail' ? 'Server unreachable — check address and ensure API is running'
+                    : connStatus === 'testing' ? 'Connecting…'
+                    : 'IP address and port of your DCS API server'}
+                  </p>
                 </div>
 
                 {/* Test Connection button */}
@@ -579,7 +574,7 @@ export default function Login() {
                   type="submit"
                   disabled={connStatus === 'testing' || connStatus === 'ok' || !serverUrl.trim()}
                   className="
-                    w-full mt-4 py-2.5 rounded-lg text-sm font-medium
+                    w-full mt-4 h-11 rounded-lg text-sm font-medium
                     transition-all duration-300 press
                     bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
                     hover:bg-cyan-500/30 hover:border-cyan-500/50
