@@ -196,8 +196,6 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 export function NotificationDrawer() {
   const {
-    notifications,
-    unreadCount,
     drawerOpen,
     preferences,
     markAllRead,
@@ -205,7 +203,13 @@ export function NotificationDrawer() {
     setDrawerOpen,
     setPreference,
     requestDesktopPermission,
+    getServerNotifications,
+    getServerUnreadCount,
   } = useNotificationStore()
+
+  // Use server-filtered notifications — only show notifications for the active server
+  const notifications = getServerNotifications()
+  const unreadCount = getServerUnreadCount()
 
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const panelRef = useRef<HTMLDivElement>(null)

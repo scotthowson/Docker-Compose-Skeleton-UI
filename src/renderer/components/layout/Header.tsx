@@ -210,7 +210,7 @@ export function Header() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const serverStatus = useSystemStore((s) => s.status)
   const { currentUser } = useAuthStore()
-  const unreadCount = useNotificationStore((s) => s.unreadCount)
+  const unreadCount = useNotificationStore((s) => s.getServerUnreadCount())
   const toggleDrawer = useNotificationStore((s) => s.toggleDrawer)
 
   const [showProfileMenu, setShowProfileMenu] = useState(false)

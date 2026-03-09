@@ -6,6 +6,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Keyboard, X } from 'lucide-react'
 import { isNative } from '../hooks/useMobile'
+import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,10 +74,15 @@ function KeyBadge({ children }: { children: string }) {
 
 export function KeyboardShortcuts() {
   const [open, setOpen] = useState(false)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const currentPage = useSettingsStore((s) => s.currentPage)
 
   // Open on "?" (outside inputs) or Ctrl+/  —  close on Escape
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Disable during setup wizard and when not authenticated
+      if (!isAuthenticated || currentPage === 'setup') return
+
       // Close on Escape
       if (e.key === 'Escape' && open) {
         e.preventDefault()
@@ -103,7 +110,7 @@ export function KeyboardShortcuts() {
         }
       }
     },
-    [open],
+    [open, isAuthenticated, currentPage],
   )
 
   useEffect(() => {

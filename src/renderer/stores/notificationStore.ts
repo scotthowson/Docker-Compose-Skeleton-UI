@@ -15,6 +15,8 @@ export interface Notification {
   persist?: boolean
   icon?: string
   action?: { label: string; page: string }
+  /** Server ID this notification belongs to. Null/undefined = global (shown for all servers). */
+  serverId?: string | null
 }
 
 export interface NotificationPreferences {
@@ -89,6 +91,10 @@ interface NotificationState {
   preferences: NotificationPreferences
 
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void
+  /** Get notifications filtered to the active server (includes global + server-specific) */
+  getServerNotifications: () => Notification[]
+  /** Get unread count for the active server */
+  getServerUnreadCount: () => number
   markAsRead: (id: string) => void
   markAllRead: () => void
   removeNotification: (id: string) => void
@@ -108,13 +114,41 @@ export const useNotificationStore = create<NotificationState>((set, get) => {
     drawerOpen: false,
     preferences: loadPreferences(),
 
+    getServerNotifications: () => {
+      const { notifications } = get()
+      let activeServerId: string | null = null
+      try {
+        const raw = localStorage.getItem('dcs-servers')
+        if (raw) activeServerId = JSON.parse(raw).activeServerId || null
+      } catch { /* ignore */ }
+
+      // Show global notifications (no serverId) + notifications for the active server
+      return notifications.filter(n => !n.serverId || n.serverId === activeServerId)
+    },
+
+    getServerUnreadCount: () => {
+      return get().getServerNotifications().filter(n => !n.read).length
+    },
+
     addNotification: (notification) =>
       set((state) => {
+        // Auto-tag with active server ID if not explicitly set
+        let serverId = notification.serverId
+        if (serverId === undefined) {
+          try {
+            const raw = localStorage.getItem('dcs-servers')
+            if (raw) {
+              const data = JSON.parse(raw)
+              serverId = data.activeServerId || null
+            }
+          } catch { /* ignore */ }
+        }
         const newNotification: Notification = {
           ...notification,
           id: Date.now().toString(36) + Math.random().toString(36).slice(2),
           timestamp: Date.now(),
           read: false,
+          serverId: serverId ?? null,
         }
         const notifications = [newNotification, ...state.notifications].slice(0, MAX_NOTIFICATIONS)
 

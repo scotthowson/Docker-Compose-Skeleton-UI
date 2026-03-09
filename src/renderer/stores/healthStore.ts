@@ -4,7 +4,7 @@ import { HealthReport } from '../../shared/types'
 interface HealthState {
   report: HealthReport | null
   loading: boolean
-  setReport: (report: HealthReport) => void
+  setReport: (report: HealthReport | null) => void
   setLoading: (loading: boolean) => void
 }
 

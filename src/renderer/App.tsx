@@ -228,7 +228,7 @@ export default function App() {
 
   // Global keyboard shortcuts
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || currentPage === 'setup') return
     function handleKeyDown(e: KeyboardEvent) {
       if (!e.ctrlKey && !e.metaKey) return
       const digit = parseInt(e.key, 10)
@@ -279,7 +279,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setCurrentPage, isAuthenticated, toggleSidebar, updateSetting])
+  }, [setCurrentPage, isAuthenticated, currentPage, toggleSidebar, updateSetting])
 
   // Show setup wizard if server needs first-run setup
   if (currentPage === 'setup' && settingsReady) {

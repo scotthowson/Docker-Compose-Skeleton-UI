@@ -6,7 +6,7 @@ interface SystemState {
   system: SystemInfo | null
   version: APIVersion | null
   loading: boolean
-  setStatus: (status: ServerStatus) => void
+  setStatus: (status: ServerStatus | null) => void
   setSystem: (system: SystemInfo) => void
   setVersion: (version: APIVersion) => void
   setLoading: (loading: boolean) => void

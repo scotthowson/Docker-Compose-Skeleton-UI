@@ -7,6 +7,12 @@ import type { ServerProfile } from '../../shared/types'
 import { apiClient } from '../api/client'
 import { useConnectionStore } from './connectionStore'
 import { useSettingsStore } from './settingsStore'
+import { useContainerStore } from './containerStore'
+import { useStackStore } from './stackStore'
+import { useHealthStore } from './healthStore'
+import { useSystemStore } from './systemStore'
+import { useImageStore } from './imageStore'
+import { useLogStore } from './logStore'
 
 const STORAGE_KEY = 'dcs-servers'
 
@@ -89,6 +95,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
     if (!server) return false
 
     set({ loading: true, activeServerId: id })
+
+    // Disconnect from current server first
+    useConnectionStore.getState().disconnect()
+
+    // Clear all data stores so stale data from previous server doesn't display
+    useContainerStore.getState().setContainers([])
+    useStackStore.getState().setStacks([])
+    useHealthStore.getState().setReport(null)
+    useSystemStore.getState().setStatus(null)
+    useImageStore.getState().setImages([])
+    useLogStore.getState().setEvents([])
 
     apiClient.setBaseUrl(server.url)
     if (server.apiToken) {

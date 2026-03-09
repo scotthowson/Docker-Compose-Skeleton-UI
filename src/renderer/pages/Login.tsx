@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useServerStore } from '../stores/serverStore'
 import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 
@@ -35,13 +36,16 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [registerError, setRegisterError] = useState<string | null>(null)
-  const [serverUrl, setServerUrlLocal] = useState(apiClient.getBaseUrl())
+  // Read the current URL from settings (always fresh) rather than apiClient (may be stale)
+  const settingsServerUrl = useSettingsStore((s) => s.serverUrl)
+  const [serverUrl, setServerUrlLocal] = useState(settingsServerUrl || apiClient.getBaseUrl())
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [connected, setConnected] = useState(false)
   const [serverInitialized, setServerInitialized] = useState(false)
   const isFirstRender = useRef(true)
+  const [initialChecking, setInitialChecking] = useState(true) // suppress Phase 1 flash
 
   // Derive session label from settings
   const sessionLabel = (() => {
@@ -65,9 +69,20 @@ export default function Login() {
   // In Electron: uses checkServer IPC which runs Node.js http.get in the main
   // process — completely bypasses Chromium (no CORS, no CSP, no PNA, nothing).
   // In browser: falls back to sequential fetch() calls.
-  const checkServer = useCallback(async (rawUrl: string) => {
+  /** Sync URL change to the active server profile in serverStore */
+  const syncUrlToServerStore = useCallback((url: string) => {
+    const { servers, activeServerId, updateServer } = useServerStore.getState()
+    if (activeServerId) {
+      const active = servers.find(s => s.id === activeServerId)
+      if (active && active.url !== url) {
+        updateServer(activeServerId, { url })
+      }
+    }
+  }, [])
+
+  const checkServer = useCallback(async (rawUrl: string, isInitial = false) => {
     const url = normalizeUrl(rawUrl)
-    if (!url) { setConnStatus('idle'); return }
+    if (!url) { setConnStatus('idle'); setInitialChecking(false); return }
 
     setConnStatus('testing')
     setConnected(false)
@@ -78,12 +93,14 @@ export default function Login() {
         const res = await window.electronAPI.checkServer(url)
         if (!res.reachable) {
           setConnStatus('fail')
+          setInitialChecking(false)
           return
         }
         // Server is reachable — persist URL and decide next step
         apiClient.setBaseUrl(url)
         setServerUrl(url)
         useSettingsStore.getState().updateSetting('serverUrl', url)
+        syncUrlToServerStore(url)
 
         if (!res.initialized) {
           // Server needs first-run setup — clear stale data + redirect
@@ -107,10 +124,11 @@ export default function Login() {
         apiClient.setBaseUrl(url)
         try {
           const ok = await apiClient.testConnection()
-          if (!ok) { setConnStatus('fail'); apiClient.setBaseUrl(prev); return }
+          if (!ok) { setConnStatus('fail'); apiClient.setBaseUrl(prev); setInitialChecking(false); return }
         } catch {
           setConnStatus('fail')
           apiClient.setBaseUrl(prev)
+          setInitialChecking(false)
           return
         }
 
@@ -118,6 +136,7 @@ export default function Login() {
         apiClient.setBaseUrl(url)
         setServerUrl(url)
         useSettingsStore.getState().updateSetting('serverUrl', url)
+        syncUrlToServerStore(url)
         try {
           const ctrl = new AbortController()
           const tid = setTimeout(() => ctrl.abort(), 5000)
@@ -132,6 +151,7 @@ export default function Login() {
               apiClient.setAuthToken(null)
               useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
               setCurrentPage('setup')
+              setInitialChecking(false)
               return
             }
           }
@@ -148,25 +168,35 @@ export default function Login() {
     } catch {
       setConnStatus('fail')
     }
-  }, [setServerUrl, setCurrentPage])
+    setInitialChecking(false)
+  }, [setServerUrl, setCurrentPage, syncUrlToServerStore])
 
   // Fire check immediately on first render, debounce subsequent URL changes
   useEffect(() => {
     if (connTestTimer.current) clearTimeout(connTestTimer.current)
     if (!serverUrl.trim()) {
       setConnStatus('idle')
+      setInitialChecking(false)
       return
     }
     if (isFirstRender.current) {
       isFirstRender.current = false
-      checkServer(serverUrl)
+      checkServer(serverUrl, true)
     } else {
+      setInitialChecking(false)
       setConnected(false)
       setServerInitialized(false)
       connTestTimer.current = setTimeout(() => checkServer(serverUrl), 800)
     }
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
   }, [serverUrl, checkServer])
+
+  // Sync local serverUrl state when settings change externally (e.g., server switch)
+  useEffect(() => {
+    if (settingsServerUrl && settingsServerUrl !== serverUrl && !connected) {
+      setServerUrlLocal(settingsServerUrl)
+    }
+  }, [settingsServerUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // checkAccountExists is already called by App.tsx — do NOT call it here
   // or it creates an infinite mount/unmount loop (loading→unmount Login→remount→repeat)
@@ -290,6 +320,7 @@ export default function Login() {
         apiClient.setBaseUrl(serverUrl)
         setServerUrl(serverUrl)
         useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+        syncUrlToServerStore(serverUrl)
       }
 
       // Check if server is uninitialized — redirect to setup wizard
@@ -359,6 +390,7 @@ export default function Login() {
       apiClient.setBaseUrl(serverUrl)
       setServerUrl(serverUrl)
       useSettingsStore.getState().updateSetting('serverUrl', serverUrl)
+      syncUrlToServerStore(serverUrl)
     }
 
     // Check if server is uninitialized — redirect to setup wizard
@@ -408,7 +440,7 @@ export default function Login() {
     setSubmitting(false)
   }
 
-  if (loading) {
+  if (loading || initialChecking) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-950">
         <div className="flex flex-col items-center gap-4">

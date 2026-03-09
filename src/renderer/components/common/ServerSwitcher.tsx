@@ -1,92 +1,299 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { Server, Plus, ChevronDown, Check, Trash2, Wifi, WifiOff, Globe, X, Loader2 } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Server, Plus, ChevronDown, Check, Trash2, Globe, Loader2, Pencil, AlertCircle, WifiOff } from 'lucide-react'
 import { useServerStore } from '../../stores/serverStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 
 export function ServerSwitcher() {
-  const { servers, activeServerId, loading, loadServers, addServer, removeServer, switchServer } = useServerStore()
-  const { status } = useConnectionStore()
+  const { servers, activeServerId, loading, loadServers, addServer, removeServer, updateServer, switchServer } = useServerStore()
+  const { status, lastError, reconnectAttempts } = useConnectionStore()
   const [open, setOpen] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newUrl, setNewUrl] = useState('')
+  const [addError, setAddError] = useState('')
+  const [switching, setSwitching] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadServers() }, [loadServers])
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false)
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setEditingId(null)
+        setShowAddForm(false)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const active = servers.find(s => s.id === activeServerId)
-  const statusDot = status === 'connected' ? 'bg-emerald-400' : status === 'error' ? 'bg-rose-400' : 'bg-slate-500'
+  // Focus edit input when editing
+  useEffect(() => {
+    if (editingId && editInputRef.current) editInputRef.current.focus()
+  }, [editingId])
 
-  const handleAdd = async () => {
-    if (!newName || !newUrl) return
-    const s = addServer({ name: newName, url: newUrl })
-    await switchServer(s.id)
-    setShowAdd(false); setNewName(''); setNewUrl('')
-  }
+  // Focus name input when add form opens
+  useEffect(() => {
+    if (showAddForm && nameInputRef.current) nameInputRef.current.focus()
+  }, [showAddForm])
+
+  const active = servers.find(s => s.id === activeServerId)
+  const isError = status === 'error' || status === 'disconnected'
+  const isConnecting = status === 'connecting'
+  const statusDot = status === 'connected' ? 'bg-emerald-400'
+    : isConnecting ? 'bg-amber-400 animate-pulse'
+    : isError ? 'bg-rose-400'
+    : 'bg-slate-500'
+
+  const handleSwitch = useCallback(async (id: string) => {
+    if (id === activeServerId && status === 'connected') {
+      setOpen(false)
+      return
+    }
+    setSwitching(id)
+    setSwitchError(null)
+    const ok = await switchServer(id)
+    setSwitching(null)
+    if (ok) {
+      setSwitchError(null)
+      setOpen(false)
+    } else {
+      setSwitchError(id)
+    }
+  }, [activeServerId, status, switchServer])
+
+  const handleAdd = useCallback(async () => {
+    if (!newName.trim() || !newUrl.trim()) return
+    setAddError('')
+
+    let url = newUrl.trim()
+    if (!/^https?:\/\//i.test(url)) url = `http://${url}`
+
+    const s = addServer({ name: newName.trim(), url })
+    setSwitching(s.id)
+    setSwitchError(null)
+    const ok = await switchServer(s.id)
+    setSwitching(null)
+
+    if (ok) {
+      setShowAddForm(false)
+      setNewName('')
+      setNewUrl('')
+      setAddError('')
+      setSwitchError(null)
+      setOpen(false)
+    } else {
+      setAddError('Could not connect — check the URL and ensure the server is running')
+      setSwitchError(s.id)
+    }
+  }, [newName, newUrl, addServer, switchServer])
+
+  const handleStartEdit = useCallback((id: string, currentName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingId(id)
+    setEditName(currentName)
+  }, [])
+
+  const handleSaveEdit = useCallback((id: string) => {
+    if (editName.trim()) {
+      updateServer(id, { name: editName.trim() })
+    }
+    setEditingId(null)
+  }, [editName, updateServer])
+
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent, id: string) => {
+    if (e.key === 'Enter') handleSaveEdit(id)
+    if (e.key === 'Escape') setEditingId(null)
+  }, [handleSaveEdit])
+
+  const resetAddForm = useCallback(() => {
+    setShowAddForm(false)
+    setNewName('')
+    setNewUrl('')
+    setAddError('')
+  }, [])
 
   return (
     <div ref={dropdownRef} className="relative">
-      {/* Trigger */}
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors group">
+      {/* Trigger button */}
+      <button onClick={() => { setOpen(!open); if (open) { setEditingId(null); resetAddForm() } }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors group">
         <div className="relative">
           <Server className="w-4 h-4 text-slate-400" />
           <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900`} />
         </div>
-        <span className="text-sm text-slate-300 truncate flex-1 text-left">{active?.name || 'No server'}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <div className="flex-1 min-w-0 text-left">
+          <span className="text-sm text-slate-300 truncate block">{active?.name || 'No server'}</span>
+          {isError && active && (
+            <span className="text-[10px] text-rose-400 truncate block">Connection failed</span>
+          )}
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 glass rounded-xl border border-white/10 shadow-2xl z-50 overflow-hidden animate-scale-in origin-top">
-          <div className="p-1 max-h-64 overflow-y-auto">
-            {servers.map(s => (
-              <div key={s.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer group ${s.id === activeServerId ? 'bg-white/5' : 'hover:bg-white/5'}`}>
-                <button onClick={() => { switchServer(s.id); setOpen(false) }} className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="relative shrink-0">
-                    <Globe className="w-4 h-4 text-slate-500" />
-                    {s.id === activeServerId && <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900`} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white truncate">{s.name}</div>
-                    <div className="text-xs text-slate-500 truncate">{s.url}</div>
-                  </div>
-                  {s.id === activeServerId && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-                </button>
-                {servers.length > 1 && s.id !== activeServerId && (
-                  <button onClick={(e) => { e.stopPropagation(); removeServer(s.id) }} className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-all">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
+        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900/95 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl z-50 overflow-hidden animate-scale-in origin-top">
+          {/* Connection error banner */}
+          {isError && active && (
+            <div className="px-3 py-2.5 bg-rose-500/[0.08] border-b border-rose-500/15 flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] text-rose-400 font-medium">
+                  {isConnecting ? 'Connecting...' : reconnectAttempts > 0 ? `Reconnecting (attempt ${reconnectAttempts})...` : 'Unable to connect'}
+                </p>
+                <p className="text-[10px] text-rose-400/60 truncate mt-0.5">
+                  {lastError || active.url}
+                </p>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Server list */}
+          <div className="p-1 max-h-64 overflow-y-auto scrollbar-thin">
+            {servers.map(s => {
+              const isActive = s.id === activeServerId
+              const isSwitching = switching === s.id
+              const hasSwitchError = switchError === s.id && !isSwitching
+              const isEditing = editingId === s.id
+
+              return (
+                <div key={s.id} className={`rounded-lg ${isActive ? 'bg-white/5' : 'hover:bg-white/[0.03]'} transition-colors`}>
+                  <div className="flex items-center gap-2 px-3 py-2 group">
+                    {/* Server info / switch button */}
+                    <button
+                      onClick={() => handleSwitch(s.id)}
+                      disabled={isSwitching}
+                      className="flex items-center gap-2 flex-1 min-w-0"
+                    >
+                      <div className="relative shrink-0">
+                        {isSwitching ? (
+                          <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                        ) : (
+                          <>
+                            <Globe className="w-4 h-4 text-slate-500" />
+                            {isActive && <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900`} />}
+                          </>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 text-left">
+                        {isEditing ? (
+                          <input
+                            ref={editInputRef}
+                            value={editName}
+                            onChange={e => setEditName(e.target.value)}
+                            onKeyDown={e => handleEditKeyDown(e, s.id)}
+                            onBlur={() => handleSaveEdit(s.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full px-1.5 py-0.5 -ml-1.5 rounded bg-black/40 text-sm text-white border border-cyan-500/30 focus:outline-none"
+                          />
+                        ) : (
+                          <div className="text-sm text-white truncate">{s.name}</div>
+                        )}
+                        <div className="text-[11px] text-slate-500 truncate font-mono">{s.url}</div>
+                      </div>
+                      {isActive && !isSwitching && status === 'connected' && (
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      )}
+                      {isActive && isError && !isSwitching && (
+                        <WifiOff className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                    </button>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {!isEditing && (
+                        <button
+                          onClick={(e) => handleStartEdit(s.id, s.name, e)}
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-cyan-400 transition-colors"
+                          title="Rename"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                      {servers.length > 1 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeServer(s.id) }}
+                          className="p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Per-server switch error */}
+                  {hasSwitchError && (
+                    <div className="px-3 pb-2 flex items-center gap-1.5 animate-fade-in">
+                      <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
+                      <span className="text-[10px] text-rose-400">Failed to connect — check URL and server status</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
-          {/* Add Server */}
-          <div className="border-t border-white/5 p-1">
-            {showAdd ? (
-              <div className="p-2 space-y-2">
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Server name" className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:outline-none" />
-                <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="http://192.168.1.100:9876" className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:outline-none" />
+          {/* Add Server section */}
+          <div className="border-t border-white/[0.06]">
+            {showAddForm ? (
+              <div className="p-2.5 space-y-2 animate-fade-in">
+                <input
+                  ref={nameInputRef}
+                  value={newName}
+                  onChange={e => { setNewName(e.target.value); setAddError('') }}
+                  placeholder="Server name"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white placeholder-slate-500 border border-white/[0.06] focus:border-cyan-500/30 focus:outline-none transition-colors"
+                  onKeyDown={e => { if (e.key === 'Enter' && newName.trim() && newUrl.trim()) handleAdd(); if (e.key === 'Escape') resetAddForm() }}
+                />
+                <input
+                  value={newUrl}
+                  onChange={e => { setNewUrl(e.target.value); setAddError('') }}
+                  placeholder="http://192.168.1.100:9876"
+                  className={`w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white font-mono placeholder-slate-500 border focus:outline-none transition-colors ${
+                    addError ? 'border-rose-500/30 focus:border-rose-500/40' : 'border-white/[0.06] focus:border-cyan-500/30'
+                  }`}
+                  onKeyDown={e => { if (e.key === 'Enter' && newName.trim() && newUrl.trim()) handleAdd(); if (e.key === 'Escape') resetAddForm() }}
+                />
+                {addError && (
+                  <div className="flex items-start gap-1.5 animate-fade-in">
+                    <AlertCircle className="w-3 h-3 text-rose-400 mt-0.5 shrink-0" />
+                    <span className="text-[10px] text-rose-400 leading-tight">{addError}</span>
+                  </div>
+                )}
                 <div className="flex gap-2">
-                  <button onClick={() => setShowAdd(false)} className="flex-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:bg-white/5">Cancel</button>
-                  <button onClick={handleAdd} disabled={loading || !newName || !newUrl} className="flex-1 px-2 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 text-xs hover:bg-cyan-500/30 disabled:opacity-50 flex items-center justify-center gap-1">
-                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Add
+                  <button
+                    onClick={resetAddForm}
+                    className="flex-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:bg-white/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAdd}
+                    disabled={loading || !newName.trim() || !newUrl.trim() || !!switching}
+                    className="flex-1 px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 disabled:opacity-40 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {switching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                    Add & Connect
                   </button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-cyan-400 hover:bg-white/5 transition-colors">
-                <Plus className="w-4 h-4" /> Add Server
-              </button>
+              <div className="p-1">
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-emerald-400 hover:bg-white/[0.04] transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Server
+                </button>
+              </div>
             )}
           </div>
         </div>

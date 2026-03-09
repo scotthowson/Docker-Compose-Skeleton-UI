@@ -107,7 +107,7 @@ export function Sidebar() {
   const systemStatus = useSystemStore((s) => s.status)
   const healthReport = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
-  const unreadNotifications = useNotificationStore((s) => s.unreadCount)
+  const unreadNotifications = useNotificationStore((s) => s.getServerUnreadCount())
 
   const updateSetting = useSettingsStore((s) => s.updateSetting)
 

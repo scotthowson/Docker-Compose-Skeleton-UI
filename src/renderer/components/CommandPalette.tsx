@@ -140,7 +140,8 @@ export function CommandPalette() {
   const status = useSystemStore((s) => s.status)
   const health = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
-  const { logout } = useAuthStore()
+  const { isAuthenticated, logout } = useAuthStore()
+  const currentPage = useSettingsStore((s) => s.currentPage)
   const setHealthReport = useHealthStore((s) => s.setReport)
   const stacks = useStackStore((s) => s.stacks)
   const containers = useContainerStore((s) => s.containers)
@@ -150,6 +151,7 @@ export function CommandPalette() {
   // Global keyboard shortcut: Ctrl+K / Cmd+K
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (!isAuthenticated || currentPage === 'setup') return
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setOpen((prev) => !prev)
@@ -161,7 +163,7 @@ export function CommandPalette() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open])
+  }, [open, isAuthenticated, currentPage])
 
   // Ctrl+Shift+P alternative trigger via custom event from App.tsx
   useEffect(() => {
