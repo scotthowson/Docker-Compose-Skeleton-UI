@@ -47,6 +47,9 @@ export const pageTitles: Record<PageId, string> = {
   topology: 'Network Topology',
   'file-browser': 'File Browser',
   'disk-analysis': 'Disk Analysis',
+  secrets: 'Secrets Manager',
+  schedules: 'Scheduled Tasks',
+  plugins: 'Plugins',
   setup: 'Setup Wizard',
 }
 

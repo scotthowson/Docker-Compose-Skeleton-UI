@@ -10,10 +10,10 @@ import {
   HardDrive, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchHealthReport, fetchContainers, fetchSystemMetrics } from '../api/endpoints'
+import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore } from '../api/endpoints'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
-import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse } from '../../shared/types'
+import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 // ---------------------------------------------------------------------------
@@ -188,6 +188,78 @@ function ResourceGauge({ label, value, icon: Icon, color, detail }: {
 }
 
 // ---------------------------------------------------------------------------
+// Health Score — grade colors + gauge (consistent with Dashboard HealthSummary)
+// ---------------------------------------------------------------------------
+
+const gradeColors: Record<string, string> = {
+  A: 'text-emerald-400', B: 'text-cyan-400', C: 'text-amber-400', D: 'text-orange-400', F: 'text-rose-400',
+}
+const gradeStroke: Record<string, string> = {
+  A: '#10b981', B: '#06b6d4', C: '#f59e0b', D: '#f97316', F: '#f43f5e',
+}
+const gradeBg: Record<string, string> = {
+  A: 'bg-emerald-500/10 border-emerald-500/20', B: 'bg-cyan-500/10 border-cyan-500/20',
+  C: 'bg-amber-500/10 border-amber-500/20', D: 'bg-orange-500/10 border-orange-500/20',
+  F: 'bg-rose-500/10 border-rose-500/20',
+}
+
+function getGrade(score: number): string {
+  if (score >= 90) return 'A'
+  if (score >= 75) return 'B'
+  if (score >= 60) return 'C'
+  if (score >= 40) return 'D'
+  return 'F'
+}
+
+function ScoreGauge({ score, grade, loading, size = 140 }: { score: number; grade: string; loading: boolean; size?: number }) {
+  const strokeWidth = 9
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (score / 100) * circumference
+  const stroke = gradeStroke[grade] || '#64748b'
+
+  return (
+    <div className="relative shrink-0">
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={strokeWidth} />
+        {!loading && (
+          <circle
+            cx={size / 2} cy={size / 2} r={radius} fill="none"
+            stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={offset}
+            className="transition-all duration-1000 ease-out"
+          />
+        )}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        {loading ? (
+          <div className="w-8 h-8 rounded-full skeleton" />
+        ) : (
+          <>
+            <span className="text-3xl font-bold text-white leading-none">{score}</span>
+            <span className={`text-sm font-semibold mt-0.5 ${gradeColors[grade] || 'text-slate-400'}`}>{grade}</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ScoreFactorBar({ label, value, detail }: { label: string; value: number; detail?: string }) {
+  const color = value >= 80 ? 'bg-emerald-500' : value >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="text-xs text-slate-500 w-[60px] shrink-0">{label}</span>
+      <div className="flex-1 h-2 rounded-full bg-white/[0.04] overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all duration-700`} style={{ width: `${value}%` }} />
+      </div>
+      <span className="text-xs text-slate-400 w-7 text-right tabular-nums font-medium">{value}</span>
+      {detail && <span className="text-[10px] text-slate-600 w-16 text-right truncate">{detail}</span>}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -208,6 +280,11 @@ export default function Health() {
 
   // Poll system metrics for resource overview
   const { data: metrics } = usePolling<SystemMetricsResponse>(fetchSystemMetrics, 10000, {
+    enabled: isConnected,
+  })
+
+  // Poll health score for scoring + factor breakdown
+  const { data: healthScoreData, loading: scoreLoading } = usePolling<HealthScoreResponse>(fetchHealthScore, 15000, {
     enabled: isConnected,
   })
 
@@ -285,6 +362,11 @@ export default function Health() {
   const stoppedPct = (summary.stopped / total) * 100
   const totalRestarts = enrichedContainers.reduce((sum, c) => sum + (c.restart_count ?? 0), 0)
   const restartingCount = enrichedContainers.filter((c) => c.state.toLowerCase() === 'restarting').length
+
+  // Health score data
+  const score = healthScoreData?.score ?? 0
+  const grade = healthScoreData?.grade ?? getGrade(score)
+  const factors = healthScoreData?.factors
 
   // Export health report as JSON file
   const exportHealthReport = () => {
@@ -398,6 +480,75 @@ export default function Health() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Health Score — gauge + factor breakdown */}
+      <div className="glass-subtle rounded-xl p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <HeartPulse size={16} className="text-emerald-400" />
+            <h3 className="text-sm font-semibold text-slate-200">Health Score</h3>
+          </div>
+          {!scoreLoading && healthScoreData && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${gradeBg[grade] || 'bg-slate-500/10 border-slate-500/20'} ${gradeColors[grade] || 'text-slate-400'}`}>
+              Grade {grade}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-start gap-6 md:gap-8">
+          {/* Score gauge */}
+          <div className="flex flex-col items-center gap-2">
+            <ScoreGauge score={score} grade={grade} loading={scoreLoading && !healthScoreData} />
+          </div>
+
+          {/* Factor breakdown */}
+          <div className="flex-1 min-w-0 pt-2">
+            {scoreLoading && !healthScoreData ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-4 skeleton rounded" />)}
+              </div>
+            ) : factors ? (
+              <div className="space-y-3">
+                <ScoreFactorBar label="Stacks" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total}`} />
+                <ScoreFactorBar label="Resources" value={factors.resources.score} detail={`${factors.resources.cpu_pct}% cpu`} />
+                <ScoreFactorBar label="Images" value={factors.images.score} detail={factors.images.stale > 0 ? `${factors.images.stale} stale` : 'fresh'} />
+                <ScoreFactorBar label="Uptime" value={factors.uptime.score} detail={formatUptime(factors.uptime.seconds)} />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Health scoring data unavailable</p>
+            )}
+          </div>
+        </div>
+
+        {/* Per-stack scores */}
+        {healthScoreData?.stacks && healthScoreData.stacks.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-white/[0.04]">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Stack Scores</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {healthScoreData.stacks.map((stack) => {
+                const sg = stack.grade || getGrade(stack.score)
+                return (
+                  <div key={stack.stack} className="rounded-lg bg-slate-800/40 px-3 py-2 border border-white/[0.03]">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-slate-300 font-mono truncate">{stack.stack}</span>
+                      <span className={`text-[10px] font-semibold ${gradeColors[sg] || 'text-slate-400'}`}>{sg}</span>
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full bg-white/[0.04] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${
+                          stack.score >= 80 ? 'bg-emerald-500' : stack.score >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                        }`}
+                        style={{ width: `${stack.score}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 tabular-nums">{stack.score}/100</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Resource overview — CPU / Memory / Disk from system metrics */}

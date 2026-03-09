@@ -5,8 +5,9 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
-import { fetchImages, runImagePrune, deleteImage } from '../api/endpoints'
+import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage } from '../api/endpoints'
 import { useToast } from '../components/common/Toast'
+import { useConnectionStore } from '../stores/connectionStore'
 import ImageList from '../components/images/ImageList'
 import ImageCard from '../components/images/ImageCard'
 import {
@@ -20,8 +21,15 @@ import {
   Trash2,
   Loader2,
   ListChecks,
+  Download,
+  Star,
+  BadgeCheck,
+  X,
+  Globe,
+  RefreshCw,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import type { ImageSearchResult } from '../../shared/types'
 
 const IMAGE_POLL_INTERVAL = 60_000
 
@@ -39,6 +47,15 @@ const Images: React.FC = () => {
   const [batchLoading, setBatchLoading] = useState(false)
   const [batchResults, setBatchResults] = useState<Array<{ id: string; success: boolean; message: string }> | null>(null)
   const { addToast } = useToast()
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+
+  // Docker Hub search state
+  const [activeTab, setActiveTab] = useState<'library' | 'search'>('library')
+  const [hubSearchQuery, setHubSearchQuery] = useState('')
+  const [hubSearchResults, setHubSearchResults] = useState<ImageSearchResult[]>([])
+  const [hubSearchLoading, setHubSearchLoading] = useState(false)
+  const [hubSearched, setHubSearched] = useState(false)
+  const [pullingImages, setPullingImages] = useState<Set<string>>(new Set())
 
   // Fetch images via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
@@ -49,7 +66,48 @@ const Images: React.FC = () => {
     return result
   }, [setImages, setLoading])
 
-  useApi(handleFetch, IMAGE_POLL_INTERVAL)
+  const { refresh } = useApi(handleFetch, IMAGE_POLL_INTERVAL, { enabled: isConnected })
+
+  // Docker Hub search handler
+  const handleHubSearch = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!hubSearchQuery.trim() || hubSearchLoading) return
+    setHubSearchLoading(true)
+    setHubSearched(true)
+    try {
+      const res = await searchImages(hubSearchQuery.trim(), 25)
+      setHubSearchResults(res.results)
+    } catch {
+      addToast({ type: 'error', message: 'Failed to search Docker Hub' })
+      setHubSearchResults([])
+    } finally {
+      setHubSearchLoading(false)
+    }
+  }, [hubSearchQuery, hubSearchLoading, addToast])
+
+  // Pull image handler
+  const handlePullImage = useCallback(async (imageName: string) => {
+    if (pullingImages.has(imageName)) return
+    setPullingImages((prev) => new Set(prev).add(imageName))
+    try {
+      const res = await pullImage(imageName)
+      if (res.success) {
+        addToast({ type: 'success', message: `Pulling ${imageName} started` })
+        // Refresh image list after a delay
+        setTimeout(() => handleFetch(), 3000)
+      } else {
+        addToast({ type: 'error', message: res.message || `Failed to pull ${imageName}` })
+      }
+    } catch {
+      addToast({ type: 'error', message: `Failed to pull ${imageName}` })
+    } finally {
+      setPullingImages((prev) => {
+        const next = new Set(prev)
+        next.delete(imageName)
+        return next
+      })
+    }
+  }, [pullingImages, addToast, handleFetch])
 
   // Prune dangling images
   const handlePrune = useCallback(async () => {
@@ -166,6 +224,16 @@ const Images: React.FC = () => {
           </div>
 
           <div className="flex items-center flex-wrap gap-2 sm:gap-3">
+          {/* Refresh */}
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           {/* Batch mode toggle */}
           <button
             onClick={handleToggleBatch}
@@ -237,6 +305,34 @@ const Images: React.FC = () => {
           </div>
         </div>
 
+        {/* ---- Tab Toggle (Library / Docker Hub Search) ---- */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/[0.06] self-start">
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              activeTab === 'library'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-white/[0.04] border border-transparent'
+            }`}
+          >
+            <HardDrive size={13} />
+            Image Library
+          </button>
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              activeTab === 'search'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 shadow-sm'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-white/[0.04] border border-transparent'
+            }`}
+          >
+            <Globe size={13} />
+            Docker Hub Search
+          </button>
+        </div>
+
+        {activeTab === 'library' && (
+          <>
         {/* ---- Search bar ---- */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
@@ -335,6 +431,128 @@ const Images: React.FC = () => {
               filteredImages.map((image, idx) => (
                 <ImageCard key={`${image.id}-${idx}`} image={image} />
               ))
+            )}
+          </div>
+        )}
+          </>
+        )}
+
+        {/* ---- Docker Hub Search Tab ---- */}
+        {activeTab === 'search' && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Search form */}
+            <form onSubmit={handleHubSearch} className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={hubSearchQuery}
+                  onChange={(e) => setHubSearchQuery(e.target.value)}
+                  placeholder="Search Docker Hub for images (e.g. nginx, postgres, redis)..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/[0.04] border border-white/[0.08] text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/30 transition-all duration-200"
+                />
+                {hubSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => { setHubSearchQuery(''); setHubSearchResults([]); setHubSearched(false) }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={hubSearchLoading || !hubSearchQuery.trim() || !isConnected}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 disabled:opacity-50 press"
+              >
+                {hubSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                Search
+              </button>
+            </form>
+
+            {/* Loading */}
+            {hubSearchLoading && (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 size={24} className="animate-spin text-slate-600" />
+              </div>
+            )}
+
+            {/* No results */}
+            {!hubSearchLoading && hubSearched && hubSearchResults.length === 0 && (
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-12 flex flex-col items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                  <Search size={22} className="text-slate-600" />
+                </div>
+                <p className="text-sm text-slate-500">No images found for &quot;{hubSearchQuery}&quot;</p>
+              </div>
+            )}
+
+            {/* Initial state */}
+            {!hubSearchLoading && !hubSearched && (
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-12 flex flex-col items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                  <Globe size={22} className="text-cyan-500/60" />
+                </div>
+                <p className="text-sm text-slate-400">Search Docker Hub for container images</p>
+                <p className="text-xs text-slate-600">Find official and community images to pull</p>
+              </div>
+            )}
+
+            {/* Results */}
+            {!hubSearchLoading && hubSearchResults.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-slate-500 mb-2">
+                  {hubSearchResults.length} result{hubSearchResults.length !== 1 ? 's' : ''} for &quot;{hubSearchQuery}&quot;
+                </div>
+                {hubSearchResults.map((result, idx) => (
+                  <div
+                    key={`${result.name}-${idx}`}
+                    className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 hover:border-white/[0.1] hover:bg-slate-900/80 transition-all duration-200 animate-fade-in"
+                    style={{ animationDelay: `${Math.min(idx * 40, 400)}ms` }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-sm font-semibold text-slate-200 truncate">{result.name}</span>
+                          {result.official === '[OK]' && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                              <BadgeCheck size={10} />
+                              Official
+                            </span>
+                          )}
+                          {result.automated === '[OK]' && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/20">
+                              Auto
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
+                          {result.description || 'No description available'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-400">
+                            <Star size={10} />
+                            {result.stars.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handlePullImage(result.name)}
+                        disabled={pullingImages.has(result.name) || !isConnected}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+                      >
+                        {pullingImages.has(result.name) ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Download size={13} />
+                        )}
+                        Pull
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

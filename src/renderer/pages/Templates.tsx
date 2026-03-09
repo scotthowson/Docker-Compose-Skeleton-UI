@@ -33,6 +33,11 @@ import {
   Undo2,
   Scan,
   Circle,
+  Link,
+  ExternalLink,
+  Globe2,
+  Store,
+  Sparkles,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -40,7 +45,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers } from '../api/endpoints'
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery } from '../api/endpoints'
 import type {
   TemplateInfo,
   TemplateDetailResponse,
@@ -51,6 +56,7 @@ import type {
   DeployHistoryResponse,
   TemplateDryRunResponse,
   ContainerInfo,
+  GalleryTemplate,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -1073,6 +1079,446 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 }
 
 // ---------------------------------------------------------------------------
+// URL Import Modal
+// ---------------------------------------------------------------------------
+
+function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const { addToast } = useToast()
+  const [url, setUrl] = useState('')
+  const [name, setName] = useState('')
+  const [nameManual, setNameManual] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [fetching, setFetching] = useState(false)
+  const [compose, setCompose] = useState('')
+  const [fetchedUrl, setFetchedUrl] = useState('')
+  const [activeTab, setActiveTab] = useState<'compose' | 'env'>('compose')
+
+  // Detected env variables from compose content
+  const detectedVars = useMemo(() => {
+    if (!compose) return []
+    return parseComposeVariables(compose)
+  }, [compose])
+
+  // Auto-detect name from URL
+  useEffect(() => {
+    if (!url || nameManual) return
+    try {
+      const urlObj = new URL(url)
+      const parts = urlObj.pathname.split('/').filter(Boolean)
+      const yamlIndex = parts.findIndex(p => /\.(ya?ml)$/i.test(p))
+      const suggested = yamlIndex > 0 ? parts[yamlIndex - 1] : parts[parts.length - 1]?.replace(/\.(ya?ml)$/i, '') || ''
+      if (suggested && suggested !== 'blob' && suggested !== 'master' && suggested !== 'main' && suggested !== 'refs' && suggested !== 'heads') {
+        setName(suggested.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, ''))
+      }
+    } catch { /* ignore */ }
+  }, [url, nameManual])
+
+  // Fetch compose content from URL
+  const handleFetch = async () => {
+    if (!url) return
+    setFetching(true)
+    try {
+      const res = await fetchTemplateUrl(url)
+      setCompose(res.content)
+      setFetchedUrl(res.url)
+      setActiveTab('compose')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast({ type: 'error', message: `Failed to fetch: ${msg}`, duration: 6000 })
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  // Import with the (possibly edited) compose content
+  const handleImport = async () => {
+    if (!compose) return
+    setImporting(true)
+    try {
+      const safeName = (name || 'imported-template').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 64)
+      const res = await importTemplate({
+        name: safeName,
+        compose,
+        metadata: {
+          description: `Imported from ${fetchedUrl || url}`,
+          category: 'other',
+          tags: ['imported', 'url'],
+          source_url: fetchedUrl || url,
+        },
+      })
+      if (res.success) {
+        addToast({ type: 'success', message: `Template "${res.name}" imported successfully` })
+        onSuccess()
+        onClose()
+      } else {
+        addToast({ type: 'error', message: res.message || 'Import failed' })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast({ type: 'error', message: `Import failed: ${msg}`, duration: 6000 })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const isGitHub = url.includes('github.com') || url.includes('raw.githubusercontent.com')
+  const hasFetched = compose.length > 0
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center">
+              <Link size={16} className="text-violet-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-100">Import from URL</h3>
+              <p className="text-[10px] text-slate-500">
+                {hasFetched ? 'Review and edit before importing' : 'Paste a link to any docker-compose YAML file'}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 scrollbar-thin">
+          {/* URL + Name row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
+                Compose File URL
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => { setUrl(e.target.value); if (compose) { setCompose(''); setFetchedUrl('') } }}
+                  placeholder="https://github.com/user/repo/blob/main/compose.yaml"
+                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors font-mono"
+                  autoFocus
+                />
+                <button
+                  onClick={handleFetch}
+                  disabled={!url || fetching}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed press shrink-0"
+                >
+                  {fetching ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                  {fetching ? 'Fetching...' : 'Preview'}
+                </button>
+              </div>
+              {isGitHub && !hasFetched && (
+                <p className="text-[10px] text-emerald-500/70 mt-1 flex items-center gap-1">
+                  <CheckCircle size={10} />
+                  GitHub URL detected — will auto-convert to raw content
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
+                Template Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setNameManual(true) }}
+                placeholder="auto-detected"
+                className="w-full px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Preview / Edit area — only shows after fetch */}
+          {hasFetched && (
+            <>
+              {/* Tab bar */}
+              <div className="flex items-center gap-1 border-b border-white/[0.06] -mb-1">
+                <button
+                  onClick={() => setActiveTab('compose')}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                    activeTab === 'compose'
+                      ? 'text-violet-400 border-violet-400'
+                      : 'text-slate-500 border-transparent hover:text-slate-300'
+                  }`}
+                >
+                  Compose YAML
+                </button>
+                <button
+                  onClick={() => setActiveTab('env')}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'env'
+                      ? 'text-violet-400 border-violet-400'
+                      : 'text-slate-500 border-transparent hover:text-slate-300'
+                  }`}
+                >
+                  Variables
+                  {detectedVars.length > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[9px] font-bold bg-violet-500/20 text-violet-400">
+                      {detectedVars.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Compose editor */}
+              {activeTab === 'compose' && (
+                <div className="relative">
+                  <textarea
+                    value={compose}
+                    onChange={(e) => setCompose(e.target.value)}
+                    spellCheck={false}
+                    className="w-full h-64 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-violet-500/20 resize-none scrollbar-thin"
+                    placeholder={'services:\n  app:\n    image: example:latest'}
+                  />
+                  <div className="absolute top-2 right-2 flex items-center gap-1">
+                    <span className="text-[9px] text-slate-600 bg-slate-800/80 px-1.5 py-0.5 rounded">
+                      {compose.split('\n').length} lines
+                    </span>
+                    {fetchedUrl && (
+                      <span className="text-[9px] text-emerald-500/60 bg-slate-800/80 px-1.5 py-0.5 rounded">
+                        editable
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Variables panel */}
+              {activeTab === 'env' && (
+                <div className="rounded-lg bg-slate-950/60 border border-white/[0.06] p-4 space-y-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                    Detected Variables ({detectedVars.length})
+                  </p>
+                  {detectedVars.length === 0 ? (
+                    <div className="text-xs text-slate-600 py-6 text-center">
+                      <p>No custom variables detected in this compose file.</p>
+                      <p className="mt-1 text-[10px]">
+                        Standard variables (<code className="text-slate-500">TZ</code>, <code className="text-slate-500">PUID</code>, <code className="text-slate-500">PGID</code>, <code className="text-slate-500">APP_DATA_DIR</code>) are inherited from root .env and excluded.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {detectedVars.map((v) => {
+                        const isBool = v.defaultValue === 'true' || v.defaultValue === 'false'
+                        return (
+                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.02]">
+                            <code className="text-[11px] font-mono text-violet-400 min-w-[140px]">{v.name}</code>
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isBool ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'bg-slate-500/10 text-slate-500 border border-slate-500/15'}`}>
+                              {isBool ? 'toggle' : 'text'}
+                            </span>
+                            <span className="text-[10px] text-slate-600 shrink-0">default:</span>
+                            <code className="text-[11px] font-mono text-slate-400 flex-1 truncate">
+                              {v.defaultValue || <span className="text-slate-600 italic">none</span>}
+                            </code>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-600 mt-2">
+                    These variables will be configurable when deploying this template. Values shown above are defaults from the compose file.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Supported sources hint — only when no preview */}
+          {!hasFetched && (
+            <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+              <p className="text-[10px] text-slate-500 font-semibold mb-1.5">Supported Sources</p>
+              <div className="space-y-1 text-[10px] text-slate-600">
+                <p>• GitHub blob or raw URLs (auto-converted)</p>
+                <p>• GitLab raw file URLs</p>
+                <p>• Any direct link to a docker-compose YAML file</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06] shrink-0">
+          <div className="text-[10px] text-slate-600">
+            {hasFetched && fetchedUrl && (
+              <span className="flex items-center gap-1">
+                <ExternalLink size={10} />
+                <span className="font-mono truncate max-w-[300px]">{fetchedUrl}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={!compose || importing || !name}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/20 hover:bg-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+            >
+              {importing ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              Import Template
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Gallery View
+// ---------------------------------------------------------------------------
+
+function GalleryView({ onImport }: { onImport: (url: string, name: string) => Promise<void> }) {
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const [gallery, setGallery] = useState<GalleryTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('all')
+  const [importing, setImporting] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isConnected) return
+    setLoading(true)
+    fetchTemplateGallery()
+      .then((res) => setGallery(res.templates))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [isConnected])
+
+  const categories = useMemo(() => {
+    const cats = new Set(gallery.map((t) => t.category))
+    return ['all', ...Array.from(cats).sort()]
+  }, [gallery])
+
+  const filtered = useMemo(() => {
+    return gallery.filter((t) => {
+      if (category !== 'all' && t.category !== category) return false
+      if (search) {
+        const q = search.toLowerCase()
+        return t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
+      }
+      return true
+    })
+  }, [gallery, category, search])
+
+  const handleImport = async (t: GalleryTemplate) => {
+    setImporting(t.name)
+    try {
+      await onImport(t.url, t.name)
+    } finally {
+      setImporting(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={24} className="animate-spin text-slate-600" />
+      </div>
+    )
+  }
+
+  if (gallery.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <Store size={24} className="text-slate-600" />
+        <p className="text-sm text-slate-500">No gallery templates available</p>
+        <p className="text-xs text-slate-600">Add templates to .config/template-gallery.json</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 capitalize ${
+                category === cat
+                  ? 'bg-violet-500/15 text-violet-400 border-violet-500/30'
+                  : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.06]'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-0 md:max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search gallery..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Gallery grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {filtered.map((t) => {
+          const colors = getCategoryColors(t.category)
+          const CatIcon = getCategoryIcon(t.category)
+          const isImporting = importing === t.name
+
+          return (
+            <div
+              key={t.name}
+              className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 flex flex-col gap-2.5 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-200 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${colors.badge}`}>
+                  <CatIcon size={9} />
+                  {t.category}
+                </span>
+                {t.services.length > 0 && (
+                  <span className="text-[9px] text-slate-600">{t.services.length} service{t.services.length > 1 ? 's' : ''}</span>
+                )}
+              </div>
+              <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{t.name}</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2 flex-1">{t.description}</p>
+              {t.services.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {t.services.slice(0, 4).map((svc) => (
+                    <span key={svc} className="px-1.5 py-0.5 rounded text-[9px] bg-white/[0.04] text-slate-500">{svc}</span>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => handleImport(t)}
+                disabled={isImporting}
+                className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all duration-200 disabled:opacity-50 press"
+              >
+                {isImporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                {isImporting ? 'Importing...' : 'Import'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-sm text-slate-500">No templates match your search</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Template Card
 // ---------------------------------------------------------------------------
 
@@ -1206,6 +1652,11 @@ export default function Templates() {
   const [createEditMode, setCreateEditMode] = useState<'create' | 'edit' | null>(null)
   const [editInitial, setEditInitial] = useState<{ name: string; compose: string; env: string; metadata: Record<string, unknown> } | undefined>(undefined)
   const [saving, setSaving] = useState(false)
+
+  // URL import modal state
+  const [showUrlImport, setShowUrlImport] = useState(false)
+  // Gallery/My Templates tab
+  const [activeTab, setActiveTab] = useState<'templates' | 'gallery'>('templates')
 
   // F3: Deploy history state
   const [showHistory, setShowHistory] = useState(false)
@@ -1544,6 +1995,21 @@ export default function Templates() {
     input.click()
   }, [addToast, refresh])
 
+  // Import from gallery
+  const handleGalleryImport = useCallback(async (url: string, name: string) => {
+    try {
+      const res = await importTemplateFromUrl(url, name)
+      if (res.success) {
+        addToast({ type: 'success', message: `Template "${res.name}" imported from gallery` })
+        refresh()
+      } else {
+        addToast({ type: 'error', message: res.message || 'Import failed' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: `Import failed: ${err instanceof Error ? err.message : String(err)}` })
+    }
+  }, [addToast, refresh])
+
   // Delete template
   const handleDeleteTemplate = useCallback(async (template: TemplateInfo) => {
     if (!confirm(`Delete template "${template.name}"? This cannot be undone.`)) return
@@ -1598,12 +2064,44 @@ export default function Templates() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Tab switcher */}
+          <div className="flex items-center rounded-lg border border-white/[0.06] overflow-hidden mr-1">
+            <button
+              onClick={() => setActiveTab('templates')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'templates'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+              }`}
+            >
+              My Templates
+            </button>
+            <button
+              onClick={() => setActiveTab('gallery')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                activeTab === 'gallery'
+                  ? 'bg-violet-500/15 text-violet-400'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+              }`}
+            >
+              <Store size={12} />
+              Gallery
+            </button>
+          </div>
           <button
             onClick={handleOpenCreate}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:border-emerald-500/30 transition-all duration-200 press"
           >
             <Plus size={13} />
-            Create Template
+            Create
+          </button>
+          <button
+            onClick={() => setShowUrlImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
+            title="Import template from URL"
+          >
+            <Link size={13} />
+            URL Import
           </button>
           <button
             onClick={handleImportTemplate}
@@ -1611,7 +2109,7 @@ export default function Templates() {
             title="Import template from JSON file"
           >
             <Upload size={13} />
-            Import
+            File
           </button>
           <button
             onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
@@ -1630,7 +2128,6 @@ export default function Templates() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            Refresh
           </button>
         </div>
       </div>
@@ -1712,126 +2209,132 @@ export default function Templates() {
         </div>
       )}
 
-      {/* Category filter bar + search */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-        {/* Category pills — horizontal scrollable on mobile */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-          {CATEGORIES.map((cat) => {
-            const CatIcon = cat.icon
-            const isActive = activeCategory === cat.id
-            return (
+      {activeTab === 'gallery' ? (
+        <GalleryView onImport={handleGalleryImport} />
+      ) : (
+        <>
+          {/* Category filter bar + search */}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            {/* Category pills — horizontal scrollable on mobile */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+              {CATEGORIES.map((cat) => {
+                const CatIcon = cat.icon
+                const isActive = activeCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 ${
+                      isActive
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-300'
+                    }`}
+                  >
+                    <CatIcon size={13} />
+                    {cat.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Search bar */}
+            <div className="relative flex-1 min-w-0 md:max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search templates..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Loading */}
+          {loading && !data && (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={24} className="animate-spin text-slate-600" />
+            </div>
+          )}
+
+          {/* Empty state */}
+          {data && templates.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                <Package size={22} className="text-slate-600" />
+              </div>
+              <p className="text-sm text-slate-500 text-center max-w-md">
+                No templates available. Import templates or create them in the{' '}
+                <code className="font-mono bg-white/[0.06] px-1.5 py-0.5 rounded text-slate-400 text-xs">
+                  .templates/
+                </code>{' '}
+                directory.
+              </p>
+            </div>
+          )}
+
+          {/* Filtered empty state */}
+          {data && templates.length > 0 && filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                <Search size={22} className="text-slate-600" />
+              </div>
+              <p className="text-sm text-slate-500">No templates match your filter</p>
               <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 ${
-                  isActive
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-300'
-                }`}
+                onClick={() => {
+                  setSearch('')
+                  setActiveCategory('all')
+                }}
+                className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
               >
-                <CatIcon size={13} />
-                {cat.label}
+                Clear filters
               </button>
-            )
-          })}
-        </div>
+            </div>
+          )}
 
-        {/* Search bar */}
-        <div className="relative flex-1 min-w-0 md:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search templates..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
-          />
-        </div>
-      </div>
+          {/* Template card grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((template) => (
+              <TemplateCard
+                key={template.name}
+                template={template}
+                onDeploy={handleOpenDeploy}
+                onEdit={handleOpenEdit}
+                onDelete={handleDeleteTemplate}
+                onExport={handleExportTemplate}
+                deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+              />
+            ))}
 
-      {/* Loading */}
-      {loading && !data && (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={24} className="animate-spin text-slate-600" />
-        </div>
-      )}
-
-      {/* Empty state */}
-      {data && templates.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-            <Package size={22} className="text-slate-600" />
+            {/* Create Template Card */}
+            <button
+              onClick={handleOpenCreate}
+              className="
+                group relative flex flex-col items-center justify-center
+                min-h-[200px] rounded-xl border-2 border-dashed
+                border-white/[0.12] hover:border-emerald-500/40
+                bg-slate-800/40 hover:bg-emerald-500/[0.06]
+                transition-all duration-300 cursor-pointer
+              "
+            >
+              <div className="
+                flex items-center justify-center w-14 h-14 rounded-2xl
+                bg-slate-700/30 group-hover:bg-emerald-500/15
+                ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
+                transition-all duration-300 mb-3
+              ">
+                <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
+              </div>
+              <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
+                Create Template
+              </span>
+              <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+                Build a custom service template
+              </span>
+            </button>
           </div>
-          <p className="text-sm text-slate-500 text-center max-w-md">
-            No templates available. Import templates or create them in the{' '}
-            <code className="font-mono bg-white/[0.06] px-1.5 py-0.5 rounded text-slate-400 text-xs">
-              .templates/
-            </code>{' '}
-            directory.
-          </p>
-        </div>
+        </>
       )}
-
-      {/* Filtered empty state */}
-      {data && templates.length > 0 && filtered.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-            <Search size={22} className="text-slate-600" />
-          </div>
-          <p className="text-sm text-slate-500">No templates match your filter</p>
-          <button
-            onClick={() => {
-              setSearch('')
-              setActiveCategory('all')
-            }}
-            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {/* Template card grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((template) => (
-          <TemplateCard
-            key={template.name}
-            template={template}
-            onDeploy={handleOpenDeploy}
-            onEdit={handleOpenEdit}
-            onDelete={handleDeleteTemplate}
-            onExport={handleExportTemplate}
-            deployStatus={deployStatusMap[template.name] || { state: 'none' }}
-          />
-        ))}
-
-        {/* Create Template Card */}
-        <button
-          onClick={handleOpenCreate}
-          className="
-            group relative flex flex-col items-center justify-center
-            min-h-[200px] rounded-xl border-2 border-dashed
-            border-white/[0.12] hover:border-emerald-500/40
-            bg-slate-800/40 hover:bg-emerald-500/[0.06]
-            transition-all duration-300 cursor-pointer
-          "
-        >
-          <div className="
-            flex items-center justify-center w-14 h-14 rounded-2xl
-            bg-slate-700/30 group-hover:bg-emerald-500/15
-            ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
-            transition-all duration-300 mb-3
-          ">
-            <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
-          </div>
-          <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
-            Create Template
-          </span>
-          <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-            Build a custom service template
-          </span>
-        </button>
-      </div>
 
       {/* Deploy modal */}
       {deployTarget && (
@@ -1856,6 +2359,14 @@ export default function Templates() {
           onClose={() => { if (!saving) setCreateEditMode(null) }}
           onSave={handleSaveTemplate}
           saving={saving}
+        />
+      )}
+
+      {/* URL Import modal */}
+      {showUrlImport && (
+        <UrlImportModal
+          onClose={() => setShowUrlImport(false)}
+          onSuccess={refresh}
         />
       )}
     </div>

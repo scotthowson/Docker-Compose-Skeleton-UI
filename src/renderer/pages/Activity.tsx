@@ -2,19 +2,22 @@
 // Activity — Gorgeous vertical timeline of Docker events with filtering
 // =============================================================================
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   Play, Square, Plus, Trash2, RefreshCw, Download,
   Box, Network, HardDrive, Database,
   Clock, Filter, Search, Activity as ActivityIcon,
   Zap, WifiOff, Server, Loader2, X,
+  ChevronDown, FileText, Shield, Rocket, Power,
+  HeartPulse, Archive, ListFilter,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchEvents } from '../api/endpoints'
+import { fetchEvents, fetchAuditLog } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useLogStore } from '../stores/logStore'
-import type { EventEntry, EventsResponse } from '../../shared/types'
+import { useToast } from '../components/common/Toast'
+import type { EventEntry, EventsResponse, AuditEntry } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Constants & helpers
@@ -473,6 +476,58 @@ export default function Activity() {
     return groups
   }, [filteredEvents])
 
+  // ---- Audit log state ----
+  const { addToast } = useToast()
+  const [auditExpanded, setAuditExpanded] = useState(false)
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditFilter, setAuditFilter] = useState('')
+  const [auditActionFilter, setAuditActionFilter] = useState<string>('all')
+
+  // Fetch audit log when expanded
+  useEffect(() => {
+    if (!auditExpanded || !isConnected) return
+    let cancelled = false
+    const load = async () => {
+      setAuditLoading(true)
+      try {
+        const res = await fetchAuditLog({ limit: 200 })
+        if (!cancelled) setAuditEntries(res.entries)
+      } catch {
+        if (!cancelled) addToast({ type: 'error', message: 'Failed to load audit log' })
+      } finally {
+        if (!cancelled) setAuditLoading(false)
+      }
+    }
+    load()
+    const interval = setInterval(load, 15000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [auditExpanded, isConnected, addToast])
+
+  // Audit action types for filter
+  const auditActions = useMemo(() => {
+    const actions = new Set(auditEntries.map((e) => e.action))
+    return ['all', ...Array.from(actions).sort()]
+  }, [auditEntries])
+
+  // Filtered audit entries
+  const filteredAuditEntries = useMemo(() => {
+    let result = [...auditEntries]
+    if (auditActionFilter !== 'all') {
+      result = result.filter((e) => e.action === auditActionFilter)
+    }
+    if (auditFilter.trim()) {
+      const q = auditFilter.toLowerCase()
+      result = result.filter(
+        (e) =>
+          e.action.toLowerCase().includes(q) ||
+          e.detail.toLowerCase().includes(q) ||
+          e.timestamp.toLowerCase().includes(q),
+      )
+    }
+    return result
+  }, [auditEntries, auditActionFilter, auditFilter])
+
   // Determine UI state
   const hasNoData = events.length === 0
   const showDisconnected = !isConnected && hasNoData
@@ -620,8 +675,207 @@ export default function Activity() {
               <div className="h-8 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
             </div>
           )}
+
+          {/* ── Audit Log Section (Collapsible) ──────────────────────────── */}
+          <div className="animate-fade-in">
+            <button
+              onClick={() => setAuditExpanded(!auditExpanded)}
+              className="flex items-center gap-2 w-full text-left text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors mb-3"
+            >
+              <FileText size={13} />
+              Server Audit Log
+              {auditEntries.length > 0 && (
+                <span className="text-[10px] font-normal normal-case text-slate-600">
+                  ({auditEntries.length} {auditEntries.length === 1 ? 'entry' : 'entries'})
+                </span>
+              )}
+              <ChevronDown
+                size={14}
+                className={`ml-auto transition-transform duration-200 ${auditExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {auditExpanded && (
+              <div className="space-y-3 animate-fade-in">
+                {/* Filter row */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Action type filter */}
+                  <div className="flex items-center gap-1.5">
+                    <ListFilter size={13} className="text-slate-500" />
+                    <select
+                      value={auditActionFilter}
+                      onChange={(e) => setAuditActionFilter(e.target.value)}
+                      className="rounded-lg px-2.5 py-1.5 text-xs bg-slate-900/60 border border-white/[0.08] text-slate-300 focus:outline-none focus:border-emerald-500/40 transition-colors appearance-none cursor-pointer"
+                    >
+                      {auditActions.map((a) => (
+                        <option key={a} value={a} className="bg-slate-900 text-slate-200">
+                          {a === 'all' ? 'All Actions' : a}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Search */}
+                  <div className="relative flex-1 max-w-xs">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search audit log..."
+                      value={auditFilter}
+                      onChange={(e) => setAuditFilter(e.target.value)}
+                      className="w-full rounded-lg pl-8 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-600 bg-slate-900/60 border border-white/[0.08] focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-200"
+                    />
+                    {auditFilter && (
+                      <button
+                        onClick={() => setAuditFilter('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Result count */}
+                  <span className="text-[10px] text-slate-600 ml-auto">
+                    {filteredAuditEntries.length} of {auditEntries.length}
+                  </span>
+                </div>
+
+                {/* Loading */}
+                {auditLoading && auditEntries.length === 0 && (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={20} className="animate-spin text-slate-600" />
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!auditLoading && auditEntries.length === 0 && (
+                  <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                      <FileText size={18} className="text-slate-600" />
+                    </div>
+                    <p className="text-sm text-slate-500">No audit entries found</p>
+                  </div>
+                )}
+
+                {/* Audit timeline */}
+                {filteredAuditEntries.length > 0 && (
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div
+                      className="absolute left-[11px] top-0 bottom-0 w-px"
+                      style={{ background: 'linear-gradient(to bottom, rgba(139,92,246,0.3), rgba(34,211,238,0.15), transparent)' }}
+                    />
+
+                    <div className="relative space-y-0">
+                      {filteredAuditEntries.map((entry, idx) => {
+                        const colors = auditActionStyle(entry.action)
+                        return (
+                          <div
+                            key={`${entry.timestamp}-${idx}`}
+                            className="relative pl-10 pb-4 group animate-fade-in"
+                            style={{ animationDelay: `${Math.min(idx * 30, 400)}ms` }}
+                          >
+                            {/* Connector line */}
+                            <div className="absolute left-[11px] top-5 bottom-0 w-px bg-gradient-to-b from-white/[0.06] to-transparent group-last:hidden" />
+
+                            {/* Dot */}
+                            <div className="absolute left-0 top-1 z-10">
+                              <div className={`w-[23px] h-[23px] rounded-full border-2 border-slate-900 flex items-center justify-center ${colors.bg} transition-all duration-300 group-hover:scale-110`}>
+                                <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
+                              </div>
+                            </div>
+
+                            {/* Card */}
+                            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3.5 hover:border-white/[0.1] hover:bg-slate-900/80 transition-all duration-300 group-hover:translate-x-0.5">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg ${colors.bg} border ${colors.border} flex items-center justify-center ${colors.text}`}>
+                                    {auditActionIcon(entry.action)}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${colors.bg} ${colors.border} ${colors.text}`}>
+                                        {entry.action}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 leading-relaxed break-words">
+                                      {entry.detail}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex-shrink-0 text-right">
+                                  <div className="text-[10px] text-slate-500 tabular-nums whitespace-nowrap">
+                                    {formatAuditTimestamp(entry.timestamp)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Bottom fade */}
+                    <div className="h-6 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Audit log helpers
+// ---------------------------------------------------------------------------
+
+function auditActionIcon(action: string): React.ReactNode {
+  switch (action) {
+    case 'deploy': return <Rocket size={12} />
+    case 'undeploy': return <Trash2 size={12} />
+    case 'stack_start': return <Play size={12} />
+    case 'stack_stop': return <Power size={12} />
+    case 'health_change': return <HeartPulse size={12} />
+    case 'backup_complete': return <Archive size={12} />
+    case 'config_update': return <RefreshCw size={12} />
+    default: return <Shield size={12} />
+  }
+}
+
+function auditActionStyle(action: string): { dot: string; bg: string; border: string; text: string } {
+  switch (action) {
+    case 'deploy':
+    case 'stack_start':
+      return { dot: 'bg-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' }
+    case 'undeploy':
+    case 'stack_stop':
+      return { dot: 'bg-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', text: 'text-rose-400' }
+    case 'health_change':
+      return { dot: 'bg-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' }
+    case 'backup_complete':
+      return { dot: 'bg-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400' }
+    case 'config_update':
+      return { dot: 'bg-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400' }
+    default:
+      return { dot: 'bg-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20', text: 'text-slate-400' }
+  }
+}
+
+function formatAuditTimestamp(ts: string): string {
+  try {
+    const d = new Date(ts)
+    return d.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch {
+    return ts
+  }
 }

@@ -42,6 +42,8 @@ import {
   Share2,
   FolderOpen,
   PieChart,
+  KeyRound,
+  Puzzle,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -49,6 +51,7 @@ import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { isMobile } from '../../hooks/useMobile'
+import { ServerSwitcher } from '../common/ServerSwitcher'
 import type { PageId } from '../../../shared/types'
 
 interface NavItem {
@@ -74,6 +77,9 @@ const navItems: NavItem[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate, section: 'main' },
   { id: 'updates', label: 'Updates', icon: ArrowUpCircle, section: 'main' },
   { id: 'trends', label: 'Trends', icon: TrendingUp, section: 'main' },
+  { id: 'secrets', label: 'Secrets', icon: KeyRound, section: 'main' },
+  { id: 'schedules', label: 'Schedules', icon: CalendarClock, section: 'main' },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle, section: 'main' },
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
   { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock, section: 'system' },
   { id: 'disk-analysis', label: 'Disk Analysis', icon: PieChart, section: 'system' },
@@ -220,6 +226,13 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Server Switcher */}
+      {!sidebarCollapsed && (
+        <div className="px-2 py-2 border-b border-white/[0.06]">
+          <ServerSwitcher />
+        </div>
+      )}
 
       {/* Navigation items */}
       <nav className="flex-1 overflow-y-auto scrollbar-none py-3 px-2">

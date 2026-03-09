@@ -5,6 +5,7 @@ import { Header, pageTitles } from './components/layout/Header'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import OnboardingOverlay from './components/common/OnboardingOverlay'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
 import { useSettingsStore } from './stores/settingsStore'
@@ -41,6 +42,9 @@ import Automations from './pages/Automations'
 import Topology from './pages/Topology'
 import FileBrowser from './pages/FileBrowser'
 import DiskAnalysis from './pages/DiskAnalysis'
+import Secrets from './pages/Secrets'
+import Schedules from './pages/Schedules'
+import Plugins from './pages/Plugins'
 import SetupWizard from './pages/SetupWizard'
 import { apiClient } from './api/client'
 import type { PageId } from '../shared/types'
@@ -76,6 +80,9 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   topology: Topology,
   'file-browser': FileBrowser,
   'disk-analysis': DiskAnalysis,
+  secrets: Secrets,
+  schedules: Schedules,
+  plugins: Plugins,
   setup: SetupWizard as unknown as React.ComponentType,
 }
 
@@ -323,6 +330,9 @@ export default function App() {
         {backgroundImage && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm z-0" />
         )}
+
+        {/* Onboarding overlay (self-managing visibility via localStorage) */}
+        <OnboardingOverlay />
 
         {/* Command Palette + Keyboard Shortcuts */}
         <CommandPalette />

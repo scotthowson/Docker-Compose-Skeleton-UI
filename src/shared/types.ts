@@ -834,6 +834,9 @@ export type PageId =
   | 'topology'
   | 'file-browser'
   | 'disk-analysis'
+  | 'secrets'
+  | 'schedules'
+  | 'plugins'
   | 'setup'
 
 // ---------------------------------------------------------------------------
@@ -1409,4 +1412,341 @@ export interface StackReorderRequest {
 export interface StackReorderResponse {
   success: boolean
   order: string[]
+}
+
+// ---------------------------------------------------------------------------
+// v4.0: SSE, Metrics History, Rollback, Secrets, Scheduler, Health Scoring, Plugins, Multi-Server
+// ---------------------------------------------------------------------------
+
+export interface SSEMetricsEvent {
+  cpu_percent: number
+  memory_percent: number
+  memory_used_mb: number
+  memory_total_mb: number
+  load_average: [number, number, number]
+  disk_percent: number
+  container_count: number
+  container_running: number
+}
+
+export interface MetricsHistoryResponse {
+  range: string
+  count: number
+  metrics: MetricsDataPoint[]
+}
+
+export interface MetricsDataPoint {
+  ts: string
+  cpu_percent: number
+  memory_percent: number
+  memory_used_mb: number
+  memory_total_mb: number
+  load_1m: number
+  load_5m: number
+  load_15m: number
+  disk_percent: number
+  disk_used_gb: number
+  disk_total_gb: number
+  containers_total: number
+  containers_running: number
+  containers_stopped: number
+  images_count: number
+  networks_count: number
+  volumes_count: number
+}
+
+export interface MetricsSummaryResponse {
+  range: string
+  cpu: { min: number; max: number; avg: number }
+  memory: { min: number; max: number; avg: number }
+  disk: { min: number; max: number; avg: number }
+}
+
+export interface RollbackSnapshotsResponse {
+  stack: string
+  snapshots: RollbackSnapshot[]
+}
+
+export interface RollbackSnapshot {
+  id: string
+  timestamp: string
+  operation: string
+  images_count: number
+}
+
+export interface RollbackSnapshotDetail extends RollbackSnapshot {
+  compose_file: string
+  env_file: string | null
+  images: { name: string; digest: string }[]
+  metadata: { user: string; stack_status: string; created_at: string }
+}
+
+export interface RollbackRestoreResponse {
+  success: boolean
+  stack: string
+  snapshot_id: string
+  output: string
+}
+
+export interface RollbackDiffResponse {
+  stack: string
+  snapshot_id: string
+  compose_diff: string
+  env_diff: string
+  image_changes: { image: string; from: string; to: string }[]
+}
+
+export interface SecretsListResponse {
+  secrets: string[]
+  total: number
+}
+
+export interface SecretSetResponse {
+  success: boolean
+  key: string
+}
+
+export interface SecretDeleteResponse {
+  success: boolean
+  key: string
+}
+
+export interface SecretExistsResponse {
+  key: string
+  exists: boolean
+}
+
+export interface ScheduleListResponse {
+  schedules: Schedule[]
+  total: number
+}
+
+export interface Schedule {
+  id: string
+  name: string
+  schedule: string
+  action: string
+  target: string
+  enabled: boolean
+  created_at: string
+  last_run: string | null
+  next_run: string
+  run_count: number
+}
+
+export interface ScheduleCreateResponse {
+  success: boolean
+  schedule: Schedule
+}
+
+export interface ScheduleHistoryResponse {
+  schedule_id: string
+  history: ScheduleExecution[]
+}
+
+export interface ScheduleExecution {
+  timestamp: string
+  schedule_id: string
+  action: string
+  target: string
+  success: boolean
+  duration_ms: number
+  output: string
+}
+
+export interface HealthScoreResponse {
+  score: number
+  grade: string
+  factors: {
+    stacks: { score: number; weight: number; healthy: number; unhealthy: number; total: number }
+    resources: { score: number; weight: number; cpu_pct: number; mem_pct: number }
+    images: { score: number; weight: number; total: number; stale: number }
+    uptime: { score: number; weight: number; seconds: number }
+  }
+  stacks: StackHealthScore[]
+}
+
+export interface StackHealthScore {
+  stack: string
+  score: number
+  grade: string
+  container_count: number
+  healthy_count: number
+  container_scores: ContainerHealthScore[]
+}
+
+export interface ContainerHealthScore {
+  container: string
+  score: number
+  grade: string
+  factors: { health: number; uptime: number; restarts: number; resources: number; image_age: number }
+}
+
+export interface HealthScoreHistoryResponse {
+  range: string
+  history: { ts: string; score: number }[]
+}
+
+export interface PluginListResponse {
+  plugins: Plugin[]
+  total: number
+}
+
+export interface Plugin {
+  name: string
+  version: string
+  description: string
+  author?: string
+  templates: string[]
+  hooks: string[]
+  enabled: boolean
+}
+
+export interface PluginInstallResponse {
+  success: boolean
+  plugin: Plugin
+  message: string
+}
+
+export interface PluginDeleteResponse {
+  success: boolean
+  name: string
+}
+
+export interface ConfigSchemaResponse {
+  sections: Record<string, {
+    title: string
+    properties: Record<string, {
+      type: string
+      default: unknown
+      description: string
+      enum?: string[]
+      minimum?: number
+      maximum?: number
+      pattern?: string
+    }>
+  }>
+}
+
+export interface DependencyGraphResponse {
+  nodes: { id: string; status: string }[]
+  edges: { from: string; to: string }[]
+}
+
+export interface ServerProfile {
+  id: string
+  name: string
+  url: string
+  apiToken?: string
+  lastConnected?: number
+  color?: string
+  isDefault?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// v4.1: URL Import, Gallery, Stack Clone, Image Search, Compose Validate,
+//       Export, Audit Log, Webhooks
+// ---------------------------------------------------------------------------
+
+export interface TemplateImportUrlResponse {
+  success: boolean
+  name: string
+  source_url: string
+  message: string
+}
+
+export interface GalleryTemplate {
+  name: string
+  description: string
+  category: string
+  url: string
+  services: string[]
+  icon?: string
+}
+
+export interface TemplateGalleryResponse {
+  templates: GalleryTemplate[]
+  total: number
+}
+
+export interface StackCloneResponse {
+  success: boolean
+  source: string
+  name: string
+  message: string
+}
+
+export interface ImageSearchResult {
+  name: string
+  description: string
+  stars: number
+  official: string
+  automated: string
+}
+
+export interface ImageSearchResponse {
+  results: ImageSearchResult[]
+  total: number
+  query: string
+}
+
+export interface ComposeValidateFullResponse {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  services: string[]
+  output: string
+}
+
+export interface ExportResponse {
+  type: string
+  data: Record<string, unknown>
+}
+
+export interface AuditEntry {
+  timestamp: string
+  action: string
+  detail: string
+}
+
+export interface AuditLogResponse {
+  entries: AuditEntry[]
+  total: number
+}
+
+export interface Webhook {
+  id: string
+  url: string
+  events: string[]
+  enabled: boolean
+  created_at: string
+}
+
+export interface WebhookListResponse {
+  webhooks: Webhook[]
+  total: number
+}
+
+export interface WebhookCreateResponse {
+  success: boolean
+  webhook: Webhook
+}
+
+export interface WebhookDeleteResponse {
+  success: boolean
+  deleted: string
+}
+
+export interface WebhookTestResponse {
+  success: boolean
+  status_code: number
+  url: string
+  timestamp: string
+}
+
+// POST /images/pull
+export interface ImagePullResponse {
+  success: boolean
+  image: string
+  message: string
 }

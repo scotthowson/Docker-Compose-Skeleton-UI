@@ -8,6 +8,8 @@ import {
   Bell, Plus, Trash2, Send, CheckCircle, XCircle,
   ToggleLeft, ToggleRight, Loader2, AlertTriangle,
   Clock, Shield, Cpu, HardDrive, Box, Layers, Package,
+  Webhook, ExternalLink, Zap, ChevronDown, Play, Power,
+  HeartPulse, Archive,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -20,8 +22,12 @@ import {
   fetchNotificationHistory,
   sendTestNotification,
   fetchConfig,
+  fetchWebhooks,
+  createWebhook,
+  deleteWebhook,
+  testWebhook,
 } from '../api/endpoints'
-import type { NotificationRule, NotificationHistoryEntry } from '../../shared/types'
+import type { NotificationRule, NotificationHistoryEntry, Webhook as WebhookType } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Constants & Helpers
@@ -143,6 +149,16 @@ export default function Notifications() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
+  // Webhook state
+  const [webhooksExpanded, setWebhooksExpanded] = useState(true)
+  const [showAddWebhook, setShowAddWebhook] = useState(false)
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookEvents, setWebhookEvents] = useState<Set<string>>(new Set(['deploy', 'health_change']))
+  const [creatingWebhook, setCreatingWebhook] = useState(false)
+  const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
+  const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null)
+  const [confirmDeleteWebhookId, setConfirmDeleteWebhookId] = useState<string | null>(null)
+
   // Add-rule form state
   const [newName, setNewName] = useState('')
   const [newTrigger, setNewTrigger] = useState<TriggerType>('container_unhealthy')
@@ -161,8 +177,14 @@ export default function Notifications() {
     fetchConfig, 30000, { enabled: isConnected },
   )
 
+  // Webhook polling
+  const { data: webhooksData, refresh: refreshWebhooks } = usePolling(
+    fetchWebhooks, 15000, { enabled: isConnected },
+  )
+
   const rules: NotificationRule[] = useMemo(() => rulesData?.rules ?? [], [rulesData])
   const history: NotificationHistoryEntry[] = useMemo(() => historyData?.history ?? [], [historyData])
+  const webhooks: WebhookType[] = useMemo(() => webhooksData?.webhooks ?? [], [webhooksData])
   const ntfyConfigured = configData?.ntfy_configured ?? false
   const ntfyUrl = configData?.ntfy_url ?? ''
 
@@ -241,6 +263,67 @@ export default function Notifications() {
       setCreating(false)
     }
   }, [newName, newTrigger, newTarget, newPriority, newTags, addToast, refreshRules])
+
+  // Webhook handlers
+  const handleCreateWebhook = useCallback(async () => {
+    if (!webhookUrl.trim() || creatingWebhook) return
+    setCreatingWebhook(true)
+    try {
+      await createWebhook({
+        url: webhookUrl.trim(),
+        events: Array.from(webhookEvents),
+        enabled: true,
+      })
+      addToast({ type: 'success', message: 'Webhook created' })
+      setShowAddWebhook(false)
+      setWebhookUrl('')
+      setWebhookEvents(new Set(['deploy', 'health_change']))
+      refreshWebhooks()
+    } catch {
+      addToast({ type: 'error', message: 'Failed to create webhook' })
+    } finally {
+      setCreatingWebhook(false)
+    }
+  }, [webhookUrl, webhookEvents, creatingWebhook, addToast, refreshWebhooks])
+
+  const handleDeleteWebhook = useCallback(async (id: string) => {
+    setDeletingWebhookId(id)
+    try {
+      await deleteWebhook(id)
+      addToast({ type: 'success', message: 'Webhook deleted' })
+      setConfirmDeleteWebhookId(null)
+      refreshWebhooks()
+    } catch {
+      addToast({ type: 'error', message: 'Failed to delete webhook' })
+    } finally {
+      setDeletingWebhookId(null)
+    }
+  }, [addToast, refreshWebhooks])
+
+  const handleTestWebhook = useCallback(async (id: string) => {
+    setTestingWebhookId(id)
+    try {
+      const res = await testWebhook(id)
+      if (res.success) {
+        addToast({ type: 'success', message: `Webhook test sent (${res.status_code})` })
+      } else {
+        addToast({ type: 'error', message: `Webhook test failed (${res.status_code})` })
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Failed to test webhook' })
+    } finally {
+      setTestingWebhookId(null)
+    }
+  }, [addToast])
+
+  const toggleWebhookEvent = useCallback((event: string) => {
+    setWebhookEvents((prev) => {
+      const next = new Set(prev)
+      if (next.has(event)) next.delete(event)
+      else next.add(event)
+      return next
+    })
+  }, [])
 
   // ---------------------------------------------------------------------------
   // Disconnected
@@ -565,6 +648,197 @@ export default function Notifications() {
         )}
       </div>
 
+      {/* ── Webhooks Section ──────────────────────────────────────────── */}
+      <div>
+        <button
+          onClick={() => setWebhooksExpanded(!webhooksExpanded)}
+          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors mb-3"
+        >
+          <Webhook size={13} />
+          Webhooks
+          <span className="text-[10px] font-normal normal-case text-slate-600">
+            ({webhooks.length} {webhooks.length === 1 ? 'webhook' : 'webhooks'})
+          </span>
+          <ChevronDown
+            size={14}
+            className={`ml-1 transition-transform ${webhooksExpanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {webhooksExpanded && (
+          <div className="space-y-3 animate-fade-in">
+            {/* Add webhook button */}
+            <div className="flex items-center justify-end">
+              <button
+                onClick={() => setShowAddWebhook(!showAddWebhook)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 press"
+              >
+                <Plus size={13} />
+                Add Webhook
+              </button>
+            </div>
+
+            {/* Inline add webhook form */}
+            {showAddWebhook && (
+              <div className="bg-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-xl p-4 md:p-5 space-y-4 animate-fade-in">
+                <div className="flex items-center gap-2 mb-1">
+                  <Webhook size={14} className="text-cyan-400" />
+                  <h4 className="text-xs font-semibold text-slate-300">New Webhook</h4>
+                </div>
+
+                {/* URL input */}
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Webhook URL</label>
+                  <input
+                    type="url"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="https://example.com/webhook"
+                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors"
+                  />
+                </div>
+
+                {/* Event checkboxes */}
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 block">Events</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {WEBHOOK_EVENT_TYPES.map((evt) => (
+                      <button
+                        key={evt.value}
+                        onClick={() => toggleWebhookEvent(evt.value)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
+                          webhookEvents.has(evt.value)
+                            ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
+                            : 'bg-white/[0.02] text-slate-500 border-white/[0.06] hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {webhookEventIcon(evt.value)}
+                        {evt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => setShowAddWebhook(false)}
+                    className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateWebhook}
+                    disabled={creatingWebhook || !webhookUrl.trim()}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all disabled:opacity-50 press"
+                  >
+                    {creatingWebhook ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                    Create Webhook
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {webhooks.length === 0 && (
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+                  <Webhook size={18} className="text-slate-600" />
+                </div>
+                <p className="text-sm text-slate-500">No webhooks configured</p>
+                <p className="text-xs text-slate-600">Add a webhook to receive event notifications via HTTP</p>
+              </div>
+            )}
+
+            {/* Webhook list */}
+            {webhooks.length > 0 && (
+              <div className="space-y-2">
+                {webhooks.map((wh) => (
+                  <div
+                    key={wh.id}
+                    className={`bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-5 transition-all ${
+                      !wh.enabled ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      {/* Left: URL + events */}
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <ExternalLink size={12} className="text-cyan-400 flex-shrink-0" />
+                          <code className="text-xs font-mono text-slate-300 truncate">{wh.url}</code>
+                          {wh.enabled ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-500/15 text-slate-500 border border-slate-500/20">
+                              Disabled
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {wh.events.map((evt) => (
+                            <span
+                              key={evt}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-white/[0.04] text-slate-500 border border-white/[0.06]"
+                            >
+                              {webhookEventIcon(evt)}
+                              {evt}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right: actions */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Test */}
+                        <button
+                          onClick={() => handleTestWebhook(wh.id)}
+                          disabled={testingWebhookId === wh.id}
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-medium text-cyan-400 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+                          title="Send test payload"
+                        >
+                          {testingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                          Test
+                        </button>
+
+                        {/* Delete */}
+                        {confirmDeleteWebhookId === wh.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDeleteWebhook(wh.id)}
+                              disabled={deletingWebhookId === wh.id}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
+                            >
+                              {deletingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteWebhookId(null)}
+                              className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteWebhookId(wh.id)}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                            title="Delete webhook"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── Add Rule Modal (inline overlay) ─────────────────────────────── */}
       {showAddModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
@@ -689,4 +963,29 @@ export default function Notifications() {
       )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Webhook constants & helpers
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_EVENT_TYPES = [
+  { value: 'deploy', label: 'Deploy' },
+  { value: 'undeploy', label: 'Undeploy' },
+  { value: 'health_change', label: 'Health Change' },
+  { value: 'backup_complete', label: 'Backup Complete' },
+  { value: 'stack_start', label: 'Stack Start' },
+  { value: 'stack_stop', label: 'Stack Stop' },
+]
+
+function webhookEventIcon(event: string) {
+  switch (event) {
+    case 'deploy': return <Zap size={9} />
+    case 'undeploy': return <Trash2 size={9} />
+    case 'health_change': return <HeartPulse size={9} />
+    case 'backup_complete': return <Archive size={9} />
+    case 'stack_start': return <Play size={9} />
+    case 'stack_stop': return <Power size={9} />
+    default: return <Bell size={9} />
+  }
 }

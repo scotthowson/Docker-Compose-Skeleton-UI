@@ -14,7 +14,7 @@ import { usePolling } from '../hooks/usePolling'
 import {
   fetchServerStatus, fetchHealthReport, fetchContainers,
   fetchImages, fetchNetworks, fetchEvents, fetchSystemInfo,
-  batchStackAction, authFactoryReset,
+  fetchHealthScore, batchStackAction, authFactoryReset,
 } from '../api/endpoints'
 import { apiClient } from '../api/client'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -23,7 +23,7 @@ import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import type {
   ServerStatus, HealthReport, ContainerInfo, ImageInfo,
-  NetworkInfo, EventEntry, SystemInfo,
+  NetworkInfo, EventEntry, SystemInfo, HealthScoreResponse,
 } from '../../shared/types'
 
 // =============================================================================
@@ -1339,6 +1339,11 @@ export default function Diagnostics() {
   })
   React.useEffect(() => { if (systemInfoPoll.data) onPollSuccess() }, [systemInfoPoll.data, onPollSuccess])
 
+  const healthScorePoll = usePolling<HealthScoreResponse>(fetchHealthScore, 15000, {
+    enabled: isConnected, onError: onPollError,
+  })
+  React.useEffect(() => { if (healthScorePoll.data) onPollSuccess() }, [healthScorePoll.data, onPollSuccess])
+
   // --- Extracted data ---
 
   const status = statusPoll.data
@@ -1348,6 +1353,7 @@ export default function Diagnostics() {
   const networks: NetworkInfo[] = networksPoll.data?.networks ?? []
   const events: EventEntry[] = eventsPoll.data?.events ?? []
   const systemInfo = systemInfoPoll.data
+  const healthScoreData = healthScorePoll.data
   const cpuCount = systemInfo?.cpu_count ?? 1
 
   // --- Computed gauges ---
@@ -1378,7 +1384,7 @@ export default function Diagnostics() {
 
   // --- Health score computation ---
 
-  const healthScore = useMemo(() => {
+  const localHealthScore = useMemo(() => {
     let score = 100
     let factors = 0
 
@@ -1422,6 +1428,9 @@ export default function Diagnostics() {
     return factors > 0 ? Math.max(0, Math.round(score)) : 0
   }, [health, images, status, memoryUsedPct, cpuCount])
 
+  // Use API score when available, fall back to local
+  const healthScore = healthScoreData?.score ?? localHealthScore
+
   // --- Refresh all ---
   const refreshAll = useCallback(() => {
     statusPoll.refresh()
@@ -1431,7 +1440,8 @@ export default function Diagnostics() {
     networksPoll.refresh()
     eventsPoll.refresh()
     systemInfoPoll.refresh()
-  }, [statusPoll, healthPoll, containersPoll, imagesPoll, networksPoll, eventsPoll, systemInfoPoll])
+    healthScorePoll.refresh()
+  }, [statusPoll, healthPoll, containersPoll, imagesPoll, networksPoll, eventsPoll, systemInfoPoll, healthScorePoll])
 
   const isLoading = statusPoll.loading && !status
 
@@ -1509,6 +1519,25 @@ export default function Diagnostics() {
                 </div>
                 <SectionHeader icon={<Shield size={14} />} title="System Health Score" />
                 <HealthScoreRing score={healthScore} />
+                {healthScoreData?.grade && (
+                  <div className="flex items-center gap-3 mt-3">
+                    {healthScoreData.factors && (
+                      <div className="flex items-center gap-2">
+                        {(['stacks', 'resources', 'images', 'uptime'] as const).map((key) => {
+                          const f = healthScoreData.factors[key]
+                          if (!f) return null
+                          const color = f.score >= 80 ? 'text-emerald-400' : f.score >= 60 ? 'text-amber-400' : 'text-rose-400'
+                          return (
+                            <div key={key} className="text-center">
+                              <p className={`text-xs font-bold tabular-nums ${color}`}>{f.score}</p>
+                              <p className="text-[8px] text-slate-600 uppercase tracking-wider">{key}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <p className="text-[11px] text-slate-600 mt-4 text-center max-w-[200px]">
                   Calculated from container health, image freshness, memory, and CPU load
                 </p>

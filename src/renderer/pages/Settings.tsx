@@ -2599,6 +2599,20 @@ export default function Settings() {
               </div>
             ))}
           </div>
+
+          {/* Show Onboarding button */}
+          <div className="pt-3 mt-3 border-t border-white/[0.04]">
+            <button
+              onClick={() => {
+                localStorage.removeItem('onboarding_complete')
+                window.dispatchEvent(new Event('show-onboarding'))
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-all"
+            >
+              <Info size={14} />
+              Show Onboarding Guide
+            </button>
+          </div>
         </SectionCard>
 
         <SectionCard

@@ -112,6 +112,41 @@ import type {
   StackRenameResponse,
   StackReorderResponse,
   FactoryResetResponse,
+  MetricsHistoryResponse,
+  MetricsSummaryResponse,
+  RollbackSnapshotsResponse,
+  RollbackSnapshotDetail,
+  RollbackRestoreResponse,
+  RollbackDiffResponse,
+  SecretsListResponse,
+  SecretSetResponse,
+  SecretDeleteResponse,
+  SecretExistsResponse,
+  ScheduleListResponse,
+  ScheduleCreateResponse,
+  Schedule,
+  ScheduleHistoryResponse,
+  HealthScoreResponse,
+  StackHealthScore,
+  HealthScoreHistoryResponse,
+  PluginListResponse,
+  PluginInstallResponse,
+  PluginDeleteResponse,
+  Plugin,
+  ConfigSchemaResponse,
+  DependencyGraphResponse,
+  TemplateImportUrlResponse,
+  TemplateGalleryResponse,
+  StackCloneResponse,
+  ImageSearchResponse,
+  ComposeValidateFullResponse,
+  ExportResponse,
+  AuditLogResponse,
+  WebhookListResponse,
+  WebhookCreateResponse,
+  WebhookDeleteResponse,
+  WebhookTestResponse,
+  ImagePullResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -1006,4 +1041,208 @@ export function renameStack(oldName: string, newName: string): Promise<StackRena
 /** POST /stacks/reorder — Set stack startup order (admin only) */
 export function reorderStacks(stacks: string[]): Promise<StackReorderResponse> {
   return apiClient.post<StackReorderResponse>('/stacks/reorder', { stacks })
+}
+
+// ---------------------------------------------------------------------------
+// Metrics History
+// ---------------------------------------------------------------------------
+
+export function fetchMetricsHistory(range: string = '24h'): Promise<MetricsHistoryResponse> {
+  return apiClient.get<MetricsHistoryResponse>(`/metrics/history?range=${encodeURIComponent(range)}`)
+}
+
+export function fetchMetricsSummary(range: string = '24h'): Promise<MetricsSummaryResponse> {
+  return apiClient.get<MetricsSummaryResponse>(`/metrics/summary?range=${encodeURIComponent(range)}`)
+}
+
+// ---------------------------------------------------------------------------
+// Rollback
+// ---------------------------------------------------------------------------
+
+export function fetchRollbackSnapshots(stack: string): Promise<RollbackSnapshotsResponse> {
+  return apiClient.get<RollbackSnapshotsResponse>(`/rollback/${encodeURIComponent(stack)}/snapshots`)
+}
+
+export function fetchRollbackSnapshot(stack: string, id: string): Promise<RollbackSnapshotDetail> {
+  return apiClient.get<RollbackSnapshotDetail>(`/rollback/${encodeURIComponent(stack)}/snapshots/${encodeURIComponent(id)}`)
+}
+
+export function restoreRollbackSnapshot(stack: string, snapshotId: string): Promise<RollbackRestoreResponse> {
+  return apiClient.post<RollbackRestoreResponse>(`/rollback/${encodeURIComponent(stack)}/restore`, { snapshot_id: snapshotId }, 120000)
+}
+
+export function fetchRollbackDiff(stack: string, id: string): Promise<RollbackDiffResponse> {
+  return apiClient.get<RollbackDiffResponse>(`/rollback/${encodeURIComponent(stack)}/diff/${encodeURIComponent(id)}`)
+}
+
+// ---------------------------------------------------------------------------
+// Secrets
+// ---------------------------------------------------------------------------
+
+export function fetchSecrets(): Promise<SecretsListResponse> {
+  return apiClient.get<SecretsListResponse>('/secrets')
+}
+
+export function setSecret(key: string, value: string): Promise<SecretSetResponse> {
+  return apiClient.post<SecretSetResponse>(`/secrets/${encodeURIComponent(key)}`, { value })
+}
+
+export function deleteSecret(key: string): Promise<SecretDeleteResponse> {
+  return apiClient.delete<SecretDeleteResponse>(`/secrets/${encodeURIComponent(key)}`)
+}
+
+export function checkSecretExists(key: string): Promise<SecretExistsResponse> {
+  return apiClient.get<SecretExistsResponse>(`/secrets/${encodeURIComponent(key)}/exists`)
+}
+
+// ---------------------------------------------------------------------------
+// Schedules
+// ---------------------------------------------------------------------------
+
+export function fetchSchedules(): Promise<ScheduleListResponse> {
+  return apiClient.get<ScheduleListResponse>('/schedules')
+}
+
+export function createSchedule(schedule: { name: string; schedule: string; action: string; target?: string }): Promise<ScheduleCreateResponse> {
+  return apiClient.post<ScheduleCreateResponse>('/schedules', schedule)
+}
+
+export function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule> {
+  return apiClient.post<Schedule>(`/schedules/${encodeURIComponent(id)}/update`, updates)
+}
+
+export function deleteSchedule(id: string): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(`/schedules/${encodeURIComponent(id)}`)
+}
+
+export function toggleSchedule(id: string): Promise<Schedule> {
+  return apiClient.post<Schedule>(`/schedules/${encodeURIComponent(id)}/toggle`)
+}
+
+export function fetchScheduleHistory(id: string): Promise<ScheduleHistoryResponse> {
+  return apiClient.get<ScheduleHistoryResponse>(`/schedules/${encodeURIComponent(id)}/history`)
+}
+
+// ---------------------------------------------------------------------------
+// Health Score
+// ---------------------------------------------------------------------------
+
+export function fetchHealthScore(): Promise<HealthScoreResponse> {
+  return apiClient.get<HealthScoreResponse>('/health/score')
+}
+
+export function fetchStackHealthScore(stack: string): Promise<StackHealthScore> {
+  return apiClient.get<StackHealthScore>(`/health/score/${encodeURIComponent(stack)}`)
+}
+
+export function fetchHealthScoreHistory(range: string = '24h'): Promise<HealthScoreHistoryResponse> {
+  return apiClient.get<HealthScoreHistoryResponse>(`/health/score/history?range=${encodeURIComponent(range)}`)
+}
+
+// ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+export function fetchPlugins(): Promise<PluginListResponse> {
+  return apiClient.get<PluginListResponse>('/plugins')
+}
+
+export function installPlugin(source: string): Promise<PluginInstallResponse> {
+  return apiClient.post<PluginInstallResponse>('/plugins/install', { source })
+}
+
+export function removePlugin(name: string): Promise<PluginDeleteResponse> {
+  return apiClient.delete<PluginDeleteResponse>(`/plugins/${encodeURIComponent(name)}`)
+}
+
+export function togglePlugin(name: string): Promise<Plugin> {
+  return apiClient.post<Plugin>(`/plugins/${encodeURIComponent(name)}/toggle`)
+}
+
+// ---------------------------------------------------------------------------
+// Config Schema & Dependency Graph
+// ---------------------------------------------------------------------------
+
+export function fetchConfigSchema(): Promise<ConfigSchemaResponse> {
+  return apiClient.get<ConfigSchemaResponse>('/config/schema')
+}
+
+export function fetchDependencyGraph(): Promise<DependencyGraphResponse> {
+  return apiClient.get<DependencyGraphResponse>('/stacks/dependency-graph')
+}
+
+// ---------------------------------------------------------------------------
+// v4.1: URL Import, Gallery, Clone, Image Search, Validation, Export, Audit, Webhooks
+// ---------------------------------------------------------------------------
+
+/** POST /templates/fetch-url — Fetch compose content from URL without saving */
+export function fetchTemplateUrl(url: string): Promise<{ content: string; url: string }> {
+  return apiClient.post<{ content: string; url: string }>('/templates/fetch-url', { url })
+}
+
+/** POST /templates/import-url — Import a template from a URL */
+export function importTemplateFromUrl(url: string, name?: string): Promise<TemplateImportUrlResponse> {
+  return apiClient.post<TemplateImportUrlResponse>('/templates/import-url', { url, name })
+}
+
+/** GET /templates/gallery — Browse curated template catalog */
+export function fetchTemplateGallery(category?: string): Promise<TemplateGalleryResponse> {
+  const params = category ? `?category=${encodeURIComponent(category)}` : ''
+  return apiClient.get<TemplateGalleryResponse>(`/templates/gallery${params}`)
+}
+
+/** POST /stacks/:name/clone — Clone a stack */
+export function cloneStack(name: string, newName: string): Promise<StackCloneResponse> {
+  return apiClient.post<StackCloneResponse>(`/stacks/${encodeURIComponent(name)}/clone`, { new_name: newName })
+}
+
+/** GET /images/search — Search Docker Hub */
+export function searchImages(query: string, limit?: number): Promise<ImageSearchResponse> {
+  const params = new URLSearchParams({ q: query })
+  if (limit) params.set('limit', String(limit))
+  return apiClient.get<ImageSearchResponse>(`/images/search?${params}`)
+}
+
+/** POST /compose/validate — Validate compose YAML */
+export function validateCompose(opts: { content?: string; stack?: string }): Promise<ComposeValidateFullResponse> {
+  return apiClient.post<ComposeValidateFullResponse>('/compose/validate', opts)
+}
+
+/** GET /export/:type — Export system data */
+export function exportData(type: 'health' | 'system' | 'config'): Promise<ExportResponse> {
+  return apiClient.get<ExportResponse>(`/export/${type}`)
+}
+
+/** GET /audit — Fetch audit log */
+export function fetchAuditLog(opts?: { limit?: number; action?: string }): Promise<AuditLogResponse> {
+  const params = new URLSearchParams()
+  if (opts?.limit) params.set('limit', String(opts.limit))
+  if (opts?.action) params.set('action', opts.action)
+  const qs = params.toString()
+  return apiClient.get<AuditLogResponse>(`/audit${qs ? `?${qs}` : ''}`)
+}
+
+/** GET /webhooks — List configured webhooks */
+export function fetchWebhooks(): Promise<WebhookListResponse> {
+  return apiClient.get<WebhookListResponse>('/webhooks')
+}
+
+/** POST /webhooks — Create a webhook */
+export function createWebhook(config: { url: string; events?: string[]; enabled?: boolean }): Promise<WebhookCreateResponse> {
+  return apiClient.post<WebhookCreateResponse>('/webhooks', config)
+}
+
+/** DELETE /webhooks/:id — Delete a webhook */
+export function deleteWebhook(id: string): Promise<WebhookDeleteResponse> {
+  return apiClient.delete<WebhookDeleteResponse>(`/webhooks/${encodeURIComponent(id)}`)
+}
+
+/** POST /webhooks/:id/test — Test a webhook */
+export function testWebhook(id: string): Promise<WebhookTestResponse> {
+  return apiClient.post<WebhookTestResponse>(`/webhooks/${encodeURIComponent(id)}/test`, {})
+}
+
+/** POST /images/pull — Pull an image from Docker Hub */
+export function pullImage(image: string): Promise<ImagePullResponse> {
+  return apiClient.post<ImagePullResponse>('/images/pull', { image })
 }

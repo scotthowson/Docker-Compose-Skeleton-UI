@@ -10,7 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles,
+  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -20,16 +20,18 @@ import { useAuthStore } from '../stores/authStore'
 import { useToast } from './common/Toast'
 import {
   startStack, stopStack, restartStack,
+  startContainer, stopContainer, restartContainer,
   runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
 } from '../api/endpoints'
 import { useStackStore } from '../stores/stackStore'
+import { useContainerStore } from '../stores/containerStore'
 import type { PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type CommandType = 'page' | 'action' | 'stack'
+type CommandType = 'page' | 'action' | 'stack' | 'container'
 
 interface CommandItem {
   id: string
@@ -76,6 +78,9 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   topology: <Share2 size={16} />,
   'file-browser': <FolderOpen size={16} />,
   'disk-analysis': <PieChart size={16} />,
+  secrets: <KeyRound size={16} />,
+  schedules: <CalendarClock size={16} />,
+  plugins: <Puzzle size={16} />,
   setup: <Sparkles size={16} />,
 }
 
@@ -110,6 +115,9 @@ const pageLabels: Record<PageId, string> = {
   topology: 'Network Topology',
   'file-browser': 'File Browser',
   'disk-analysis': 'Disk Analysis',
+  secrets: 'Secrets Manager',
+  schedules: 'Scheduled Tasks',
+  plugins: 'Plugins',
   setup: 'Setup Wizard',
 }
 
@@ -135,6 +143,7 @@ export function CommandPalette() {
   const { logout } = useAuthStore()
   const setHealthReport = useHealthStore((s) => s.setReport)
   const stacks = useStackStore((s) => s.stacks)
+  const containers = useContainerStore((s) => s.containers)
   const { addToast } = useToast()
   const isConnected = connectionStatus === 'connected'
 
@@ -240,7 +249,7 @@ export function CommandPalette() {
       users: ['user', 'account', 'permission', 'role', 'invite'],
     }
 
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,
@@ -525,11 +534,93 @@ export function CommandPalette() {
             },
           })
         }
+
+        // View logs for every stack
+        items.push({
+          id: `stack-logs-${stack.name}`,
+          label: `View Logs: ${stack.name}`,
+          description: `Open log viewer for ${stack.name}`,
+          icon: <ScrollText size={16} className="text-cyan-400" />,
+          type: 'stack',
+          keywords: ['logs', 'log', 'view', 'stack', stack.name.toLowerCase(), 'output', 'tail'],
+          onSelect: () => {
+            setCurrentPage('logs')
+            setOpen(false)
+          },
+        })
+      }
+
+      // Dynamic container commands
+      for (const container of containers) {
+        const isRunning = container.state === 'running'
+
+        if (isRunning) {
+          items.push({
+            id: `container-stop-${container.name}`,
+            label: `Stop Container: ${container.name}`,
+            description: `Image: ${container.image}`,
+            icon: <Square size={16} className="text-rose-400" />,
+            type: 'container',
+            keywords: ['stop', 'container', container.name.toLowerCase(), 'down', 'halt'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await stopContainer(container.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Stopped ${container.name}` : `Failed to stop ${container.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to stop ${container.name}` }) }
+            },
+          })
+          items.push({
+            id: `container-restart-${container.name}`,
+            label: `Restart Container: ${container.name}`,
+            description: `Image: ${container.image}`,
+            icon: <RotateCw size={16} className="text-amber-400" />,
+            type: 'container',
+            keywords: ['restart', 'container', container.name.toLowerCase(), 'reload', 'reboot'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await restartContainer(container.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Restarted ${container.name}` : `Failed to restart ${container.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to restart ${container.name}` }) }
+            },
+          })
+        } else {
+          items.push({
+            id: `container-start-${container.name}`,
+            label: `Start Container: ${container.name}`,
+            description: `Currently ${container.state}`,
+            icon: <Play size={16} className="text-emerald-400" />,
+            type: 'container',
+            keywords: ['start', 'container', container.name.toLowerCase(), 'up', 'launch'],
+            onSelect: async () => {
+              setOpen(false)
+              try {
+                const r = await startContainer(container.name)
+                addToast({ type: r.success ? 'success' : 'error', message: r.success ? `Started ${container.name}` : `Failed to start ${container.name}` })
+              } catch { addToast({ type: 'error', message: `Failed to start ${container.name}` }) }
+            },
+          })
+        }
+
+        // View logs for every container
+        items.push({
+          id: `container-logs-${container.name}`,
+          label: `View Logs: ${container.name}`,
+          description: `Open log viewer for ${container.name}`,
+          icon: <ScrollText size={16} className="text-cyan-400" />,
+          type: 'container',
+          keywords: ['logs', 'log', 'view', 'container', container.name.toLowerCase(), 'output', 'tail'],
+          onSelect: () => {
+            setCurrentPage('logs')
+            setOpen(false)
+          },
+        })
       }
     }
 
     return items
-  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks])
+  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks, containers])
 
   // Filter commands
   const filtered = useMemo(() => {
@@ -623,7 +714,10 @@ export function CommandPalette() {
             const isSelected = idx === selectedIndex
             const prevType = idx > 0 ? filtered[idx - 1].type : null
             const showGroupHeader = query.trim() === '' && cmd.type !== prevType
-            const groupLabel = cmd.type === 'page' ? 'Pages' : cmd.type === 'stack' ? 'Stacks' : 'Actions'
+            const groupLabel = cmd.type === 'page' ? 'Pages'
+              : cmd.type === 'stack' ? 'Stack Actions'
+              : cmd.type === 'container' ? 'Container Actions'
+              : 'Quick Actions'
             return (
               <React.Fragment key={cmd.id}>
                 {showGroupHeader && (
@@ -655,6 +749,9 @@ export function CommandPalette() {
                   </div>
                   {cmd.type === 'stack' && (
                     <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Stack</span>
+                  )}
+                  {cmd.type === 'container' && (
+                    <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Container</span>
                   )}
                   {isSelected && (
                     <ArrowRight size={14} className="shrink-0 text-emerald-400/60" />
