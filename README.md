@@ -9,7 +9,7 @@
 
 # Docker Compose Skeleton UI
 
-A premium desktop and mobile application for managing [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) servers. Dark glassmorphism design, 30+ pages, real-time monitoring, and full server administration — built with Electron, React, and Tailwind CSS.
+A premium desktop and mobile application for managing [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) servers. Dark glassmorphism design, 35+ pages, real-time monitoring, and full server administration — built with Electron, React, and Tailwind CSS.
 
 > **Platforms:** Linux (AppImage, .deb, .rpm) &bull; macOS (.dmg) &bull; Windows (NSIS) &bull; Android (APK via Capacitor)
 
@@ -38,6 +38,16 @@ npm run build
 
 ## Feature Highlights
 
+### Multi-Server Management
+
+Connect to and switch between multiple DCS servers from a single app.
+
+- **Server profiles** — add, rename, and remove servers with inline editing
+- **One-click switching** — seamless connection with automatic data clearing between servers
+- **Connection status** — real-time indicators (connected/connecting/error) per server
+- **Server-specific notifications** — alerts are scoped to their originating server
+- **Persistent profiles** — server list stored locally, survives app restarts
+
 ### Setup Wizard
 
 5-step guided first-run configuration that activates automatically on uninitialized servers.
@@ -60,6 +70,7 @@ npm run build
 Live overview with configurable polling intervals.
 
 - **Overview cards** — container counts, stack status, health summary
+- **Health score gauge** — weighted 0–100 scoring with A–F grades (stacks, resources, images, uptime factors)
 - **Resource charts** — real-time memory and load visualization (Recharts)
 - **Disk monitor** — mounted filesystems with custom labels, usage bars, and custom locations
 - **Container overview** — top containers by status, uptime, restart count
@@ -71,6 +82,7 @@ Live overview with configurable polling intervals.
 ### Stack Management
 
 - Start, stop, restart, update stacks with confirmation modals
+- **Clone stacks** — duplicate a stack with a new name for quick iteration
 - **Annotations** — custom labels, priority levels (critical/high/normal/low), notes per stack
 - **Create & delete** stacks with full-screen glass overlays (React portals, escape key, backdrop blur)
 - **Batch operations** — multi-select with floating action bar for Start/Stop/Restart/Update Selected
@@ -86,9 +98,11 @@ Live overview with configurable polling intervals.
 - **Syntax highlighting** — YAML-aware color coding
 - **In-file search** — find text within the compose file
 
-### Template Gallery
+### Template System
 
 - Browse, deploy, create, and edit templates with a polished modal workflow
+- **URL import** — paste a GitHub URL (raw or blob) to import any compose file as a template
+- **Template gallery** — curated catalog of 50+ popular compose templates from docker/awesome-compose
 - **Boolean env var toggles** — detected automatically from defaults, rendered as toggle switches
 - **Text inputs** for non-boolean variables with labels, required badges, and placeholders
 - **Dry-run preview** — preview services, port conflicts, environment additions before deploying
@@ -104,9 +118,16 @@ Live overview with configurable polling intervals.
 - Start/stop/restart individual containers
 - **Batch operations** — multi-select with floating action bar and per-container result cards
 
+### Health Monitoring
+
+- **Aggregate health score** — weighted 0–100 scoring with A–F letter grades
+- **Score factors** — stacks, resources, images, and uptime sub-scores with visual bars
+- **Per-stack breakdown** — individual stack health scores, container counts, grade badges
+- **Container health table** — per-container status with color-coded badges
+- **Resource gauges** — CPU, memory, disk with animated SVG arcs
+
 ### Diagnostics & Factory Reset
 
-- Container health table and status breakdown
 - **Server Control** — Start All, Stop All, Restart All stacks, Maintenance Mode toggle
 - **Resource gauges** — CPU, memory, disk with animated SVG arcs
 - **Factory Reset** — dedicated `/auth/factory-reset` endpoint with:
@@ -120,10 +141,9 @@ Live overview with configurable polling intervals.
 
 | Page | Capabilities |
 |------|-------------|
-| **Health** | Aggregate status, per-container breakdown, color-coded badges |
 | **Networks** | List, detail, create/delete, subnet/gateway/container IPs |
 | **Volumes** | Search, sort, size analysis, delete with confirmation |
-| **Images** | Repository/tag/size/age, staleness indicators, batch prune |
+| **Images** | Repository/tag/size/age, staleness indicators, Docker Hub search, batch prune |
 | **Updates** | Image freshness checker with current vs latest tag comparison |
 | **Uptime** | Uptime monitoring and availability tracking |
 | **Trends** | Resource usage history with interactive charts |
@@ -142,15 +162,21 @@ Live overview with configurable polling intervals.
 | **Terminal** | Remote terminal access with authentication |
 | **Cron Jobs** | View user and system crontabs, add/remove entries, raw editor |
 | **File Browser** | Navigate server filesystem, view files |
+| **Secrets** | Encrypted secrets management for stacks |
+| **Schedules** | Scheduled task management and execution |
+| **Plugins** | Plugin management and configuration |
+| **Snapshots** | Container state snapshots |
 
 ### Users & Security
 
 - **PBKDF2 key derivation** — 100k iterations, random 128-bit salt, Web Crypto API
+- **Server-side Bearer token auth** — API tokens with login/setup/verify flow
 - **Admin setup** — first-run account creation via Setup Wizard
-- **Login** — remember-me, 4-hour sessions, rate limiting (5 attempts)
+- **Login** — two-phase flow: server connection test, then authentication
 - **Invite system** — generate invite codes, track usage, revoke
 - **Auto-lock** — configurable inactivity timer (5/15/30/60/120 min)
 - **User management** — admin panel for all registered users
+- **Offline fallback** — local-only auth when server is unreachable
 
 ### Settings & Personalization
 
@@ -161,7 +187,7 @@ Live overview with configurable polling intervals.
 - **Disk labels** — rename detected drives, add custom mount locations
 - **Export/Import** — backup all settings + profile to JSON, restore on any device
 - **Auto-lock** — inactivity timer
-- **Notifications** — desktop notification toggle
+- **Notifications** — desktop notification toggle, server-scoped notification history
 - **Session info** — status, expiry countdown, token preview
 - **Security** — change password, delete account
 - **Custom CSS** — inject your own styles
@@ -169,10 +195,12 @@ Live overview with configurable polling intervals.
 
 ### Notifications
 
+- **Server-scoped** — notifications are tagged per server, filtered to the active connection
 - **NTFY integration** — create notification rules for system events
 - **Rule management** — add, toggle, delete rules with event type filtering
 - **Test notifications** — send test pushes to verify configuration
-- **History** — view past notifications with timestamps
+- **Notification drawer** — slide-out panel with unread count, mark all read, clear all
+- **Desktop notifications** — Web Notification API with permission management
 
 ### Automations
 
@@ -186,13 +214,24 @@ Live overview with configurable polling intervals.
 - 8 color options, search, filter by type or pinned status
 - Click to navigate directly
 
+### Onboarding
+
+- **First-run overlay** — step-by-step guide: Welcome, Connect, Deploy, Explore
+- **Spotlight highlights** — draws attention to key UI elements
+- **Skip / Don't show again** — respects user preference via localStorage
+- **Re-accessible** — trigger from Settings page at any time
+
 ---
 
 ## Navigation
 
 ### Command Palette
 
-`Ctrl+K` / `Cmd+K` — global spotlight search across all pages, stacks, and actions.
+`Ctrl+K` / `Cmd+K` — global spotlight search across all pages, stacks, containers, and dynamic actions.
+
+- **Dynamic entries** — live stack/container actions (restart, stop, view logs)
+- **Section grouping** — Pages, Stack Actions, Container Actions, Quick Actions
+- **Fuzzy search** — filters as you type
 
 ### Keyboard Shortcuts
 
@@ -204,6 +243,8 @@ Live overview with configurable polling intervals.
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+D` | Toggle dark/light theme |
 | `Ctrl+R` | Refresh all data |
+| `Ctrl+T` | Terminal |
+| `Ctrl+Shift+P` | Command palette (alternative) |
 | `Ctrl+/` or `?` | Keyboard shortcuts overlay |
 
 ---
@@ -256,26 +297,26 @@ src/
     hooks/                 #   usePolling, useConnection, useApi
     stores/                #   14 Zustand stores (auth, settings, connection, stacks, ...)
     components/
-      common/              #   Modal, Toast, ErrorBoundary, DisconnectedBanner
-      dashboard/           #   OverviewCards, ResourceChart, DiskMonitor, ...
+      common/              #   Modal, Toast, ErrorBoundary, DisconnectedBanner, ServerSwitcher, OnboardingOverlay
+      dashboard/           #   OverviewCards, ResourceChart, DiskMonitor, HealthSummary, ...
       containers/          #   ContainerRow, ContainerDetail
       stacks/              #   StackCard, ComposeViewer, CreateStack, EditStack
       images/              #   ImageCard
       layout/              #   Sidebar, Header, StatusBar
       settings/            #   ConnectionForm, AppSettings, ProfileCustomization
-      CommandPalette.tsx   #   Ctrl+K spotlight search
+      CommandPalette.tsx   #   Ctrl+K spotlight search with dynamic actions
       KeyboardShortcuts.tsx#   Ctrl+/ overlay
-      NotificationDrawer.tsx
-    pages/                 #   30+ page components
+      NotificationDrawer.tsx#  Server-scoped notification panel
+    pages/                 #   35+ page components
       SetupWizard.tsx      #     5-step first-run wizard with collapsible advanced config
-      Dashboard.tsx        #     Live overview, charts, quick actions
+      Dashboard.tsx        #     Live overview, health score, charts, quick actions
       Stacks.tsx           #     Stack management with batch operations
       Containers.tsx       #     Container management with batch operations
-      Templates.tsx        #     Template gallery with boolean toggles & dry-run preview
-      Images.tsx           #     Image tracking with staleness indicators
+      Templates.tsx        #     Template gallery with URL import, boolean toggles & dry-run preview
+      Images.tsx           #     Image tracking with staleness indicators and Docker Hub search
       Networks.tsx         #     Network management
       Volumes.tsx          #     Volume management with search & sort
-      Health.tsx           #     Health monitoring
+      Health.tsx           #     Health scoring with weighted grades and per-stack breakdown
       Diagnostics.tsx      #     Resource gauges, server control, factory reset
       Logs.tsx             #     Log viewer with filtering & statistics
       Config.tsx           #     Server configuration editor
@@ -283,7 +324,7 @@ src/
       Backup.tsx           #     Backup/restore with archive browser
       Maintenance.tsx      #     System report, orphan detection, prune actions
       Settings.tsx         #     Profile, appearance, export/import, security
-      Login.tsx            #     Authentication with invite registration
+      Login.tsx            #     Two-phase auth: server connection + login/register
       Users.tsx            #     User management and invite codes
       Notifications.tsx    #     NTFY notification center
       Automations.tsx      #     Automation rules
@@ -298,6 +339,9 @@ src/
       Snapshots.tsx        #     Container snapshots
       Bookmarks.tsx        #     Pinned navigation
       Activity.tsx         #     Activity feed
+      Secrets.tsx          #     Encrypted secrets management
+      Schedules.tsx        #     Scheduled task management
+      Plugins.tsx          #     Plugin management
       System.tsx           #     System information
   shared/
     types.ts               #   TypeScript interfaces for all API responses
@@ -314,6 +358,7 @@ Connects to the Docker Compose Skeleton REST API (default `http://127.0.0.1:9876
 /networks /volumes   /logs       /events      /config       /system
 /version  /disks     /env        /maintenance  /backup      /auth
 /terminal /batch     /templates  /cron        /files        /notifications
+/secrets  /schedules /plugins    /export      /webhooks
 ```
 
 Server-side filtering via query parameters. Background operations (backup, restore) use status polling. Factory reset uses a dedicated admin-only endpoint.

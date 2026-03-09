@@ -92,7 +92,8 @@ export default function Login() {
         // ── Electron path: single IPC call, Node.js http in main process ──
         const res = await window.electronAPI.checkServer(url)
         if (!res.reachable) {
-          setConnStatus('fail')
+          // On initial auto-check failure, show form cleanly without error flash
+          setConnStatus(isInitial ? 'idle' : 'fail')
           setInitialChecking(false)
           return
         }
@@ -124,9 +125,14 @@ export default function Login() {
         apiClient.setBaseUrl(url)
         try {
           const ok = await apiClient.testConnection()
-          if (!ok) { setConnStatus('fail'); apiClient.setBaseUrl(prev); setInitialChecking(false); return }
+          if (!ok) {
+            setConnStatus(isInitial ? 'idle' : 'fail')
+            apiClient.setBaseUrl(prev)
+            setInitialChecking(false)
+            return
+          }
         } catch {
-          setConnStatus('fail')
+          setConnStatus(isInitial ? 'idle' : 'fail')
           apiClient.setBaseUrl(prev)
           setInitialChecking(false)
           return
@@ -166,7 +172,8 @@ export default function Login() {
         }
       }
     } catch {
-      setConnStatus('fail')
+      // On initial auto-check failure, show form cleanly without error flash
+      setConnStatus(isInitial ? 'idle' : 'fail')
     }
     setInitialChecking(false)
   }, [setServerUrl, setCurrentPage, syncUrlToServerStore])
