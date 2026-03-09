@@ -85,14 +85,16 @@ const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string;
 // ---------------------------------------------------------------------------
 
 function UserProfileDropdown({ onClose }: { onClose: () => void }) {
-  const { currentUser, logout } = useAuthStore()
+  const { currentUser, userRole, logout } = useAuthStore()
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Get profile data from localStorage
+  // Get profile data from per-user localStorage key
   const profileData = (() => {
     try {
-      const raw = localStorage.getItem('user-profile')
+      const key = currentUser ? `user-profile-${currentUser}` : 'user-profile'
+      let raw = localStorage.getItem(key)
+      if (!raw && key !== 'user-profile') raw = localStorage.getItem('user-profile')
       return raw ? JSON.parse(raw) : {}
     } catch { return {} }
   })()
@@ -156,7 +158,7 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
                 {profileEmail}
               </p>
             ) : (
-              <p className="text-[10px] text-slate-600">Administrator</p>
+              <p className="text-[10px] text-slate-600 capitalize">{userRole ?? 'User'}</p>
             )}
           </div>
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[9px] font-semibold text-emerald-400">
@@ -233,7 +235,9 @@ export function Header() {
   const profileIcon = (() => {
     void profileVersion // dependency trigger
     try {
-      const raw = localStorage.getItem('user-profile')
+      const key = currentUser ? `user-profile-${currentUser}` : 'user-profile'
+      let raw = localStorage.getItem(key)
+      if (!raw && key !== 'user-profile') raw = localStorage.getItem('user-profile')
       return raw ? JSON.parse(raw).icon ?? '' : ''
     } catch { return '' }
   })()
@@ -279,7 +283,7 @@ export function Header() {
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200
-            transition-all duration-200
+            transition-all duration-200 press
           "
           title="Notifications"
         >
@@ -290,8 +294,9 @@ export function Header() {
               flex items-center justify-center
               min-w-[16px] h-4 px-1 rounded-full
               bg-rose-500 text-white
-              text-[9px] font-bold leading-none
+              text-[9px] font-bold leading-none tabular-nums
               ring-2 ring-slate-900
+              animate-scale-in
             ">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
@@ -307,7 +312,7 @@ export function Header() {
             text-[11px] text-slate-500
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.06] hover:text-slate-400
-            transition-all duration-200
+            transition-all duration-200 press
           "
           title="Search (Ctrl+K)"
         >
@@ -325,7 +330,7 @@ export function Header() {
                 flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1 md:py-1.5 rounded-lg
                 bg-white/[0.03] border border-white/[0.06]
                 hover:bg-white/[0.06] hover:border-white/[0.1]
-                transition-all duration-200
+                transition-all duration-200 press
               "
             >
               {profileIcon ? (
@@ -353,7 +358,7 @@ export function Header() {
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/[0.06]
             hover:bg-white/[0.08] hover:text-slate-200
-            transition-all duration-200
+            transition-all duration-200 press
           "
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
@@ -380,9 +385,9 @@ export function Header() {
                 style={{ animationDuration: '2s' }}
               />
             )}
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${color} ring-2 ${ringColor}`} />
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${color} ring-2 ${ringColor} transition-colors duration-500`} />
           </span>
-          <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">{label}</span>
+          <span className="hidden sm:inline text-[11px] text-slate-400 font-medium min-w-[72px]">{label}</span>
         </div>
       </div>
     </header>

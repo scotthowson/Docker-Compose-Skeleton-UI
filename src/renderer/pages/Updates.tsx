@@ -17,6 +17,7 @@ import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useAuthStore } from '../stores/authStore'
 import { fetchImageUpdates, checkImageRegistry, updateImage } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo } from '../../shared/types'
 
@@ -118,6 +119,8 @@ function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
 
 export default function Updates() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
 
   // ---- State ----
@@ -278,7 +281,7 @@ export default function Updates() {
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Update All Stale */}
-          {staleImages.length > 0 && (
+          {isAdmin && staleImages.length > 0 && (
             <button
               onClick={handleUpdateAllStale}
               disabled={bulkUpdating}
@@ -490,33 +493,43 @@ export default function Updates() {
 
                       {/* Update button */}
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleUpdateImage(img.image)}
-                          disabled={isUpdating || img.staleness === 'current'}
-                          className={`
-                            inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
-                            transition-all duration-200
-                            ${img.staleness === 'current'
-                              ? 'bg-white/[0.03] text-slate-600 border border-white/[0.04] cursor-default'
-                              : isUpdating
-                                ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
-                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
-                            }
-                          `}
-                        >
-                          {isUpdating ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : img.staleness === 'current' ? (
-                            <CheckCircle className="h-3 w-3" />
-                          ) : (
-                            <Download className="h-3 w-3" />
-                          )}
-                          {isUpdating
-                            ? 'Updating...'
-                            : img.staleness === 'current'
-                              ? 'Up to date'
-                              : 'Update'}
-                        </button>
+                        {isAdmin ? (
+                          <button
+                            onClick={() => handleUpdateImage(img.image)}
+                            disabled={isUpdating || img.staleness === 'current'}
+                            className={`
+                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
+                              transition-all duration-200
+                              ${img.staleness === 'current'
+                                ? 'bg-white/[0.03] text-slate-600 border border-white/[0.04] cursor-default'
+                                : isUpdating
+                                  ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
+                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
+                              }
+                            `}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : img.staleness === 'current' ? (
+                              <CheckCircle className="h-3 w-3" />
+                            ) : (
+                              <Download className="h-3 w-3" />
+                            )}
+                            {isUpdating
+                              ? 'Updating...'
+                              : img.staleness === 'current'
+                                ? 'Up to date'
+                                : 'Update'}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                            {img.staleness === 'current' ? (
+                              <><CheckCircle className="h-3 w-3" /> Up to date</>
+                            ) : (
+                              <StalenessBadge staleness={img.staleness} />
+                            )}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )

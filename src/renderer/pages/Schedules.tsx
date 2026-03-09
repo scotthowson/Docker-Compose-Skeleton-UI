@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { CalendarClock, Plus, Trash2, Play, Pause, Clock, History, RefreshCw, Archive, Wrench, HeartPulse, RotateCcw, X, Loader2, ChevronDown, ChevronRight, CheckCircle, XCircle } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
 const actionIcons: Record<string, React.ElementType> = { backup: Archive, update: RefreshCw, prune: Wrench, 'health-check': HeartPulse, restart: RotateCcw, custom: Play }
@@ -15,6 +16,7 @@ export default function Schedules() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', schedule: '@daily', action: 'backup', target: '' })
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
   useEffect(() => { if (isConnected) fetchSchedules() }, [fetchSchedules, isConnected])
 
@@ -40,7 +42,7 @@ export default function Schedules() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => fetchSchedules()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 transition-colors"><Plus className="w-4 h-4" /> Create Schedule</button>
+          {isAdmin && <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 transition-colors"><Plus className="w-4 h-4" /> Create Schedule</button>}
         </div>
       </div>
 
@@ -84,7 +86,7 @@ export default function Schedules() {
                     <button onClick={() => handleExpand(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
                       {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                     </button>
-                    <button onClick={() => setDeleteTarget(s.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    {isAdmin && <button onClick={() => setDeleteTarget(s.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
                 {isExpanded && (

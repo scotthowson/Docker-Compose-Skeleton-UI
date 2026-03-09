@@ -1298,6 +1298,8 @@ export default function Diagnostics() {
   const isConnected = connectionStatus === 'connected'
   const reportPollSuccess = useConnectionStore((s) => s.reportPollSuccess)
   const reportPollFailure = useConnectionStore((s) => s.reportPollFailure)
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
 
   const onPollSuccess = useCallback(() => { reportPollSuccess() }, [reportPollSuccess])
   const onPollError = useCallback(() => { reportPollFailure() }, [reportPollFailure])
@@ -1571,14 +1573,18 @@ export default function Diagnostics() {
                   />
                 </div>
               </div>
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
-                <SectionHeader icon={<Power size={14} />} title="Server Control" />
-                <ServerControlCard />
-              </div>
-              <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/10 rounded-xl p-4 md:p-6">
-                <SectionHeader icon={<Trash2 size={14} />} title="Factory Reset" />
-                <FactoryResetCard />
-              </div>
+              {isAdmin && (
+                <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+                  <SectionHeader icon={<Power size={14} />} title="Server Control" />
+                  <ServerControlCard />
+                </div>
+              )}
+              {isAdmin && (
+                <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/10 rounded-xl p-4 md:p-6">
+                  <SectionHeader icon={<Trash2 size={14} />} title="Factory Reset" />
+                  <FactoryResetCard />
+                </div>
+              )}
             </div>
           </div>
 

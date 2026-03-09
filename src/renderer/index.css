@@ -8,6 +8,16 @@
     --color-accent-secondary: 34 211 238;
   }
 
+  /* ── Accent Color System ──────────────────────────────────────── */
+  [data-accent="emerald"] { --color-accent: 52 211 153; --color-accent-secondary: 34 211 238; }
+  [data-accent="cyan"] { --color-accent: 34 211 238; --color-accent-secondary: 139 92 246; }
+  [data-accent="violet"] { --color-accent: 139 92 246; --color-accent-secondary: 217 70 239; }
+  [data-accent="rose"] { --color-accent: 251 113 133; --color-accent-secondary: 244 63 94; }
+  [data-accent="amber"] { --color-accent: 251 191 36; --color-accent-secondary: 245 158 11; }
+  [data-accent="blue"] { --color-accent: 96 165 250; --color-accent-secondary: 59 130 246; }
+  [data-accent="fuchsia"] { --color-accent: 232 121 249; --color-accent-secondary: 217 70 239; }
+  [data-accent="lime"] { --color-accent: 163 230 53; --color-accent-secondary: 132 204 22; }
+
   body {
     @apply bg-slate-950 text-slate-100 overflow-hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -120,7 +130,7 @@
     -webkit-background-clip: text !important;
     background-clip: text !important;
     color: transparent !important;
-    background-image: linear-gradient(to right, #059669, #0891b2) !important;
+    background-image: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary))) !important;
   }
 
   .light .text-gradient-warm {
@@ -582,7 +592,10 @@
 
   /* ── Gradient text ─────────────────────────────────────────────── */
   .text-gradient {
-    @apply bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent;
+    background: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   .text-gradient-warm {
@@ -965,6 +978,15 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  /* ── Accent Color Utilities ───────────────────────────────────── */
+  .accent-text { color: rgb(var(--color-accent)); }
+  .accent-bg { background-color: rgb(var(--color-accent)); }
+  .accent-bg-subtle { background-color: rgb(var(--color-accent) / 0.12); }
+  .accent-border { border-color: rgb(var(--color-accent) / 0.3); }
+  .accent-glow { filter: drop-shadow(0 0 6px rgb(var(--color-accent) / 0.5)); }
+  .accent-ring { box-shadow: 0 0 0 2px rgb(var(--color-accent) / 0.2); }
+  .accent-indicator { background-color: rgb(var(--color-accent)); box-shadow: 0 0 8px rgb(var(--color-accent) / 0.6); }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -33,6 +33,7 @@ interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
   isActionLoading: boolean
   onContainerClick?: (containerName: string) => void
+  isAdmin?: boolean
 }
 
 /** Format seconds into human-readable uptime */
@@ -77,7 +78,7 @@ function stateBadge(state: string) {
   return 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
 }
 
-export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick }: Props) {
+export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick, isAdmin = false }: Props) {
   const [detail, setDetail] = useState<StackDetailType | null>(null)
   const [logs, setLogs] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -373,27 +374,29 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               Restart
             </button>
 
-            {/* Update */}
-            <button
-              onClick={() => setConfirmAction('update')}
-              disabled={isActionLoading}
-              className={`
-                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${
-                  isActionLoading
-                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
-                    : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30'
-                }
-              `}
-            >
-              {isActionLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5" />
-              )}
-              Update
-            </button>
+            {/* Update — admin only (pulls images + redeploys) */}
+            {isAdmin && (
+              <button
+                onClick={() => setConfirmAction('update')}
+                disabled={isActionLoading}
+                className={`
+                  inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
+                  border transition-all duration-200
+                  ${
+                    isActionLoading
+                      ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30'
+                  }
+                `}
+              >
+                {isActionLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                Update
+              </button>
+            )}
 
             {/* View Compose */}
             <button

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { fetchVolumes, deleteVolume } from '../api/endpoints'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
@@ -310,6 +311,8 @@ function BatchDeleteConfirmModal({
 
 export default function Volumes() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -530,20 +533,22 @@ export default function Volumes() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={toggleBatchMode}
-            className={`
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium transition-all duration-200 border
-              ${batchMode
-                ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
-                : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
-              }
-            `}
-          >
-            <ListChecks size={15} />
-            {batchMode ? 'Exit Batch' : 'Batch Select'}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={toggleBatchMode}
+              className={`
+                flex items-center gap-2 rounded-lg px-3.5 py-2
+                text-sm font-medium transition-all duration-200 border
+                ${batchMode
+                  ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
+                  : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
+                }
+              `}
+            >
+              <ListChecks size={15} />
+              {batchMode ? 'Exit Batch' : 'Batch Select'}
+            </button>
+          )}
           <button
             onClick={refresh}
             disabled={loading}
@@ -993,7 +998,7 @@ export default function Volumes() {
 
                       {/* Actions */}
                       <td className="px-5 py-3.5 text-right">
-                        {!batchMode && (
+                        {!batchMode && isAdmin && (
                           <button
                             onClick={() => setDeleteTarget(vol.name)}
                             className="

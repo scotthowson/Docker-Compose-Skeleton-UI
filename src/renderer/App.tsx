@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Header, pageTitles } from './components/layout/Header'
@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary'
 import OnboardingOverlay from './components/common/OnboardingOverlay'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
+import { GlobalPoller } from './components/GlobalPoller'
 import { useSettingsStore } from './stores/settingsStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useAuthStore } from './stores/authStore'
@@ -90,13 +91,28 @@ const pageComponents: Record<PageId, React.ComponentType> = {
 const pageOrder: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'logs', 'system', 'diagnostics', 'terminal']
 
 export default function App() {
-  const { currentPage, loadSettings, setCurrentPage, theme, backgroundImage, toggleSidebar, updateSetting, autoLockMinutes, customCSS } = useSettingsStore()
+  const { currentPage, loadSettings, setCurrentPage, theme, toggleSidebar, updateSetting, autoLockMinutes, customCSS } = useSettingsStore()
   const { connect, setServerUrl } = useConnectionStore()
   const { isAuthenticated, loading: authLoading, checkAccountExists, logout } = useAuthStore()
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [transitionPage, setTransitionPage] = useState(currentPage)
   const [transitioning, setTransitioning] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
+
+  // Smooth logout transition: brief fade-to-dark before Login mounts.
+  // useLayoutEffect fires synchronously BEFORE the browser paints, so
+  // the user never sees Login flash before the dark screen appears.
+  const [logoutFading, setLogoutFading] = useState(false)
+  const prevAuthRef = useRef(isAuthenticated)
+  useLayoutEffect(() => {
+    if (prevAuthRef.current && !isAuthenticated) {
+      setLogoutFading(true)
+      const timer = setTimeout(() => setLogoutFading(false), 300)
+      prevAuthRef.current = false
+      return () => clearTimeout(timer)
+    }
+    prevAuthRef.current = isAuthenticated
+  }, [isAuthenticated])
 
   // Load settings first, then sync server URL to the connection layer
   useEffect(() => {
@@ -151,6 +167,28 @@ export default function App() {
         }
       }
 
+      // If user has a valid session, ensure role is resolved
+      const { currentUser, apiToken, setUserRole, userRole } = useAuthStore.getState()
+      if (currentUser && !userRole) {
+        // Try server first (if we have a token)
+        if (apiToken) {
+          try {
+            const { authVerify } = await import('./api/endpoints')
+            const res = await authVerify()
+            if (res.role) {
+              setUserRole(res.role as 'admin' | 'user', currentUser)
+            }
+          } catch {
+            // Server unreachable — fall through to checkAccountExists migration
+          }
+        }
+        // checkAccountExists() already handles the default-role fallback,
+        // but if it ran before accounts were loaded (race), re-trigger it
+        if (!useAuthStore.getState().userRole) {
+          await useAuthStore.getState().checkAccountExists()
+        }
+      }
+
       setSettingsReady(true)
     }
     init()
@@ -168,6 +206,36 @@ export default function App() {
     document.documentElement.classList.toggle('light', theme === 'light')
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  // Apply per-user appearance (accent color + background image)
+  const [accentColor, setAccentColor] = useState('emerald')
+  const [backgroundImage, setBackgroundImage] = useState('')
+  const currentUser = useAuthStore((s) => s.currentUser)
+  useEffect(() => {
+    const readProfile = () => {
+      try {
+        const key = currentUser ? `user-profile-${currentUser}` : 'user-profile'
+        let raw = localStorage.getItem(key)
+        // Fallback to legacy global key for migration
+        if (!raw && key !== 'user-profile') raw = localStorage.getItem('user-profile')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          setAccentColor(parsed.accentColor || 'emerald')
+          setBackgroundImage(parsed.backgroundImage || '')
+          return
+        }
+      } catch {}
+      setAccentColor('emerald')
+      setBackgroundImage('')
+    }
+    readProfile()
+    window.addEventListener('profile-updated', readProfile)
+    return () => window.removeEventListener('profile-updated', readProfile)
+  }, [currentUser])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-accent', accentColor)
+  }, [accentColor])
 
   // Sync document title with current page
   useEffect(() => {
@@ -310,6 +378,11 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
+    // During logout fade, show a brief dark screen so the layout doesn't
+    // abruptly snap from the full dashboard to the login form.
+    if (logoutFading) {
+      return <div className="h-screen bg-slate-950" />
+    }
     return <Login />
   }
 
@@ -333,6 +406,9 @@ export default function App() {
 
         {/* Onboarding overlay (self-managing visibility via localStorage) */}
         <OnboardingOverlay />
+
+        {/* Global data polling (sidebar badges, status bar) */}
+        <GlobalPoller />
 
         {/* Command Palette + Keyboard Shortcuts */}
         <CommandPalette />

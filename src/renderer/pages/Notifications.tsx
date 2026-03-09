@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
@@ -138,6 +139,7 @@ function formatTimestamp(ts: string): string {
 
 export default function Notifications() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
 
   // UI state
@@ -371,13 +373,15 @@ export default function Notifications() {
             {sendingTest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             Send Test
           </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-          >
-            <Plus size={13} />
-            Add Rule
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
+            >
+              <Plus size={13} />
+              Add Rule
+            </button>
+          )}
         </div>
       </div>
 
@@ -490,7 +494,8 @@ export default function Notifications() {
                     </div>
                   </div>
 
-                  {/* Right: toggle + delete */}
+                  {/* Right: toggle + delete (admin only) */}
+                  {isAdmin && (
                   <div className="flex items-center gap-2 shrink-0">
                     {/* Toggle */}
                     <button
@@ -536,6 +541,7 @@ export default function Notifications() {
                       </button>
                     )}
                   </div>
+                  )}
                 </div>
 
                 {/* Tags row */}
@@ -667,16 +673,18 @@ export default function Notifications() {
 
         {webhooksExpanded && (
           <div className="space-y-3 animate-fade-in">
-            {/* Add webhook button */}
-            <div className="flex items-center justify-end">
-              <button
-                onClick={() => setShowAddWebhook(!showAddWebhook)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 press"
-              >
-                <Plus size={13} />
-                Add Webhook
-              </button>
-            </div>
+            {/* Add webhook button — admin only */}
+            {isAdmin && (
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={() => setShowAddWebhook(!showAddWebhook)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 press"
+                >
+                  <Plus size={13} />
+                  Add Webhook
+                </button>
+              </div>
+            )}
 
             {/* Inline add webhook form */}
             {showAddWebhook && (
@@ -802,32 +810,34 @@ export default function Notifications() {
                           Test
                         </button>
 
-                        {/* Delete */}
-                        {confirmDeleteWebhookId === wh.id ? (
-                          <div className="flex items-center gap-1">
+                        {/* Delete — admin only */}
+                        {isAdmin && (
+                          confirmDeleteWebhookId === wh.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleDeleteWebhook(wh.id)}
+                                disabled={deletingWebhookId === wh.id}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
+                              >
+                                {deletingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteWebhookId(null)}
+                                className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
                             <button
-                              onClick={() => handleDeleteWebhook(wh.id)}
-                              disabled={deletingWebhookId === wh.id}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
+                              onClick={() => setConfirmDeleteWebhookId(wh.id)}
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                              title="Delete webhook"
                             >
-                              {deletingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                              Confirm
+                              <Trash2 size={13} />
                             </button>
-                            <button
-                              onClick={() => setConfirmDeleteWebhookId(null)}
-                              className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmDeleteWebhookId(wh.id)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
-                            title="Delete webhook"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          )
                         )}
                       </div>
                     </div>

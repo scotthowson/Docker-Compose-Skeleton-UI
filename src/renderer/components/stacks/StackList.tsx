@@ -23,6 +23,7 @@ interface Props {
   selectedStacks?: Set<string>
   onToggleSelect?: (name: string) => void
   onToggleBatchMode?: () => void
+  isAdmin?: boolean
 }
 
 type StatusFilter = 'all' | 'running' | 'stopped'
@@ -35,7 +36,7 @@ const priorityOrder: Record<string, number> = {
   low: 3,
 }
 
-export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode }: Props) {
+export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin }: Props) {
   const { stacks, actionLoading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const [search, setSearch] = useState('')
@@ -218,7 +219,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           )}
 
           {/* Batch mode toggle */}
-          {onToggleBatchMode && (
+          {isAdmin && onToggleBatchMode && (
             <button
               onClick={onToggleBatchMode}
               className={`
@@ -234,17 +235,19 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             </button>
           )}
 
-          <button
-            onClick={onCreateStack}
-            className="
-              flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
-              bg-emerald-500 text-white hover:bg-emerald-400
-              shadow-lg shadow-emerald-500/20 transition-all duration-200
-            "
-          >
-            <Plus size={15} />
-            New Stack
-          </button>
+          {isAdmin && (
+            <button
+              onClick={onCreateStack}
+              className="
+                flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
+                bg-emerald-500 text-white hover:bg-emerald-400
+                shadow-lg shadow-emerald-500/20 transition-all duration-200
+              "
+            >
+              <Plus size={15} />
+              New Stack
+            </button>
+          )}
         </div>
       </div>
 
@@ -347,16 +350,17 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               isActionLoading={actionLoading === stack.name}
               onAction={onAction}
               onSelect={onSelect}
-              onEdit={onEdit}
-              onDelete={(name) => setShowDeleteModal(name)}
+              onEdit={isAdmin ? onEdit : undefined}
+              onDelete={isAdmin ? (name) => setShowDeleteModal(name) : undefined}
               batchMode={batchMode}
               isSelected={selectedStacks?.has(stack.name)}
               onToggleSelect={onToggleSelect}
+              isAdmin={isAdmin}
             />
           ))}
 
-          {/* Create Stack Card — always at the end (hidden in batch mode) */}
-          {!batchMode && (
+          {/* Create Stack Card — always at the end (hidden in batch mode and for non-admins) */}
+          {isAdmin && !batchMode && (
             <button
               onClick={onCreateStack}
               className="

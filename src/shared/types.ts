@@ -839,6 +839,26 @@ export type PageId =
   | 'plugins'
   | 'setup'
 
+/**
+ * Pages restricted to admin users only.
+ * Used by Sidebar (hide nav items), CommandPalette (hide commands),
+ * and settingsStore (navigation guard).
+ */
+export const ADMIN_ONLY_PAGES: ReadonlySet<PageId> = new Set([
+  'secrets',
+  'file-browser',
+  'plugins',
+  'terminal',
+  'environment',
+  'config',
+  'maintenance',
+  'backup',
+  'cronjobs',
+  'users',
+  'automations',
+  'snapshots',
+])
+
 // ---------------------------------------------------------------------------
 // v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
 // ---------------------------------------------------------------------------

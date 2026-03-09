@@ -11,10 +11,12 @@ import {
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useAuthStore } from '../../stores/authStore'
 import { useToast } from '../common/Toast'
 import { runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup } from '../../api/endpoints'
 import { useHealthStore } from '../../stores/healthStore'
 import type { PageId } from '../../../shared/types'
+import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 
 interface QuickAction {
   id: string
@@ -136,11 +138,15 @@ const apiActions: QuickAction[] = [
   },
 ]
 
+const destructiveActionIds = new Set(['prune-images', 'rotate-logs', 'run-backup'])
+
 const allActions = [...navActions, ...apiActions]
 
 export default function QuickActions({ collapsible = false }: { collapsible?: boolean }) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
   const setHealthReport = useHealthStore((s) => s.setReport)
   const { addToast } = useToast()
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -234,7 +240,11 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
         className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'}`}
       >
         <div className={`grid grid-cols-3 md:grid-cols-4 gap-2 stagger-children ${collapsed ? '' : 'pt-0'}`}>
-          {allActions.map((action) => {
+          {allActions.filter((a) => {
+            if (destructiveActionIds.has(a.id) && !isAdmin) return false
+            if (a.navigateTo && ADMIN_ONLY_PAGES.has(a.navigateTo) && !isAdmin) return false
+            return true
+          }).map((action) => {
             const isLoading = loadingAction === action.id
             return (
               <button

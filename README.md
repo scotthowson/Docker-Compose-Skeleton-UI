@@ -177,6 +177,42 @@ Live overview with configurable polling intervals.
 - **Auto-lock** — configurable inactivity timer (5/15/30/60/120 min)
 - **User management** — admin panel for all registered users
 - **Offline fallback** — local-only auth when server is unreachable
+- **Smooth logout** — `useLayoutEffect` fade-to-dark transition prevents login screen flash
+
+### Role-Based Access Control
+
+Defense-in-depth permission model with admin and user roles enforced across every layer.
+
+| Layer | Mechanism |
+|-------|-----------|
+| **Navigation guard** | `setCurrentPage()` blocks non-admins from admin-only pages |
+| **Sidebar filter** | Admin-only pages hidden from navigation |
+| **Command Palette** | Admin pages and destructive actions filtered |
+| **Page restore** | Won't restore admin-only pages for non-admin sessions |
+| **Logout reset** | Forces page to dashboard on sign-out |
+
+**Admin-only pages:** Terminal, Secrets, File Browser, Plugins, Environment, Config, Maintenance, Backup, Cron Jobs, Users, Automations, Snapshots
+
+**Admin-only operations** (gated per-page on all accessible pages):
+
+| Category | Gated Actions |
+|----------|--------------|
+| **Stacks** | Create, delete, edit compose, update (pull + redeploy), batch update |
+| **Containers** | Remove (force delete), batch mode |
+| **Images** | Prune, delete, pull from Docker Hub, batch mode |
+| **Volumes** | Delete, batch mode |
+| **Networks** | Create, delete, disconnect |
+| **Templates** | Deploy, undeploy, URL import, gallery import |
+| **Updates** | Update individual/all stale images |
+| **System** | Maintenance panel (system prune, image prune) |
+| **Disk Analysis** | Deep prune |
+| **Trends** | Capture metrics snapshot, configure alert thresholds |
+| **Notifications** | Create/toggle/delete rules, create/delete webhooks |
+| **Schedules** | Create, delete scheduled tasks |
+| **Diagnostics** | Server control, factory reset |
+| **Dashboard** | Destructive quick actions (prune, log rotate, backup) |
+
+**Non-admin users can:** View all data, start/stop/restart containers and stacks, search Docker Hub, browse logs, view health/uptime/trends, manage bookmarks, use the command palette for navigation.
 
 ### Settings & Personalization
 

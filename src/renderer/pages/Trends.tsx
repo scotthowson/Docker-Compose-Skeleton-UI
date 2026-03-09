@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
@@ -268,6 +269,7 @@ function ChartCard({
 
 export default function Trends() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
 
   const [range, setRange] = useState<TimeRange>('1h')
@@ -395,20 +397,22 @@ export default function Trends() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
-          {/* Capture Snapshot */}
-          <button
-            onClick={handleCaptureSnapshot}
-            disabled={capturing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
-          >
-            {capturing ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Camera size={13} />
-            )}
-            <span className="hidden sm:inline">Capture Snapshot</span>
-            <span className="sm:hidden">Capture</span>
-          </button>
+          {/* Capture Snapshot — admin only */}
+          {isAdmin && (
+            <button
+              onClick={handleCaptureSnapshot}
+              disabled={capturing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+            >
+              {capturing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Camera size={13} />
+              )}
+              <span className="hidden sm:inline">Capture Snapshot</span>
+              <span className="sm:hidden">Capture</span>
+            </button>
+          )}
 
           {/* Auto-refresh toggle */}
           <button
@@ -458,15 +462,17 @@ export default function Trends() {
           ))}
         </div>
 
-        {/* Configure Alerts gear button */}
-        <button
-          onClick={openAlertConfig}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 transition-all duration-200 press"
-          title="Configure alert thresholds"
-        >
-          <Settings2 size={13} />
-          <span className="hidden sm:inline">Alerts</span>
-        </button>
+        {/* Configure Alerts gear button — admin only */}
+        {isAdmin && (
+          <button
+            onClick={openAlertConfig}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 transition-all duration-200 press"
+            title="Configure alert thresholds"
+          >
+            <Settings2 size={13} />
+            <span className="hidden sm:inline">Alerts</span>
+          </button>
+        )}
 
         {/* Subtle connection indicator */}
         {autoRefresh && (
@@ -557,18 +563,20 @@ export default function Trends() {
           <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
             Metrics are collected every minute via cron. Data will appear here once the first snapshots are recorded. You can also manually capture a snapshot above.
           </p>
-          <button
-            onClick={handleCaptureSnapshot}
-            disabled={capturing}
-            className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
-          >
-            {capturing ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Camera size={13} />
-            )}
-            Capture First Snapshot
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleCaptureSnapshot}
+              disabled={capturing}
+              className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+            >
+              {capturing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Camera size={13} />
+              )}
+              Capture First Snapshot
+            </button>
+          )}
         </div>
       )}
 

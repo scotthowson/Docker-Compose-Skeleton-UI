@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import { AppSettings, PageId } from '../../shared/types'
+import { AppSettings, PageId, ADMIN_ONLY_PAGES } from '../../shared/types'
+// Circular import with authStore is safe — both stores only reference each other
+// inside function bodies (never at module evaluation time).
+import { useAuthStore } from './authStore'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   serverUrl: 'http://127.0.0.1:9876',
@@ -71,6 +74,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   navigationPayload: null,
 
   setCurrentPage: (page, payload) => {
+    // Navigation guard: block non-admin users from admin-only pages
+    if (ADMIN_ONLY_PAGES.has(page)) {
+      const role = useAuthStore.getState().userRole
+      if (role !== 'admin') {
+        set({ currentPage: 'dashboard', navigationPayload: null })
+        return
+      }
+    }
     set({ currentPage: page, navigationPayload: payload ?? null })
     // Persist last page so F5/refresh restores it (skip transient pages)
     if (page !== 'setup' && page !== 'login') {
@@ -99,11 +110,24 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loadSettings: async () => {
     const stored = await loadPersistedSettings()
     const lastPage = (stored as Record<string, unknown>).lastPage as PageId | undefined
+    // Don't restore admin-only pages for non-admin users
+    let restoredPage: PageId | undefined
+    if (lastPage && lastPage !== 'setup' && lastPage !== 'login') {
+      if (ADMIN_ONLY_PAGES.has(lastPage)) {
+        try {
+          const role = useAuthStore.getState().userRole
+          restoredPage = role === 'admin' ? lastPage : undefined
+        } catch {
+          restoredPage = undefined
+        }
+      } else {
+        restoredPage = lastPage
+      }
+    }
     set({
       ...DEFAULT_SETTINGS,
       ...stored,
-      // Restore last page if available (but not setup/login — those are transient)
-      ...(lastPage && lastPage !== 'setup' && lastPage !== 'login' ? { currentPage: lastPage } : {}),
+      ...(restoredPage ? { currentPage: restoredPage } : {}),
     })
   },
 }))

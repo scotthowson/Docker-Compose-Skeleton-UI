@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMaintenanceDisk, triggerDeepPrune } from '../api/endpoints'
@@ -158,6 +159,7 @@ function DeepPruneModal({ onConfirm, onCancel }: PruneModalProps) {
 
 export default function DiskAnalysis() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
 
   // ---- Polling ----
@@ -359,20 +361,22 @@ export default function DiskAnalysis() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
-          {/* Deep Prune */}
-          <button
-            onClick={() => setShowPruneModal(true)}
-            disabled={deepPruning}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all duration-200 disabled:opacity-50 press"
-          >
-            {deepPruning ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Trash2 size={13} />
-            )}
-            <span className="hidden sm:inline">Deep Prune</span>
-            <span className="sm:hidden">Prune</span>
-          </button>
+          {/* Deep Prune — admin only */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowPruneModal(true)}
+              disabled={deepPruning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all duration-200 disabled:opacity-50 press"
+            >
+              {deepPruning ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Trash2 size={13} />
+              )}
+              <span className="hidden sm:inline">Deep Prune</span>
+              <span className="sm:hidden">Prune</span>
+            </button>
+          )}
 
           {/* Refresh */}
           <button

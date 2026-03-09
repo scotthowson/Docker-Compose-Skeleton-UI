@@ -2,11 +2,11 @@
 // Dashboard — Advanced overview page with live data, disk mounts, quick actions
 // =============================================================================
 
-import React, { useRef, useEffect } from 'react'
-import { WifiOff, Wifi, Loader2, Server, RefreshCw } from 'lucide-react'
+import React, { useRef, useEffect, useState } from 'react'
+import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
-  fetchServerStatus, fetchHealthReport, fetchEvents, fetchVersion,
+  fetchEvents, fetchVersion,
   fetchContainers, fetchDisks, fetchSystemInfo,
   fetchStacks, fetchImageUpdates, fetchBackupStatus,
   fetchLogStats, fetchMaintenanceReport, fetchNotificationHistory,
@@ -160,13 +160,11 @@ export default function Dashboard() {
   const reportPollSuccess = useConnectionStore((s) => s.reportPollSuccess)
   const reportPollFailure = useConnectionStore((s) => s.reportPollFailure)
 
-  const setSystemStatus = useSystemStore((s) => s.setStatus)
   const setSystemVersion = useSystemStore((s) => s.setVersion)
   const setSystemInfo = useSystemStore((s) => s.setSystem)
   const systemStatus = useSystemStore((s) => s.status)
   const systemInfo = useSystemStore((s) => s.system)
 
-  const setHealthReport = useHealthStore((s) => s.setReport)
   const healthReport = useHealthStore((s) => s.report)
 
   const setEvents = useLogStore((s) => s.setEvents)
@@ -198,66 +196,42 @@ export default function Dashboard() {
   }, [reportPollFailure])
 
   // =========================================================================
-  // Existing polls
+  // Data from stores (populated by GlobalPoller)
   // =========================================================================
 
-  // --- Poll /status every 5s ---
-  const statusPoll = usePolling(fetchServerStatus, 5000, {
-    enabled: isConnected,
-    onError: onPollError,
-  })
-
+  // Build resource history from systemStatus changes (fed by GlobalPoller)
   React.useEffect(() => {
-    if (statusPoll.data) {
-      setSystemStatus(statusPoll.data)
-      onPollSuccess()
+    if (!systemStatus) return
 
-      // Compute CPU% and Memory% and push to history
-      const status = statusPoll.data
-      const cpuCount = systemInfo?.cpu_count ?? 1
-      const loadAvg1 = status.system.load_average[0] ?? 0
-      const cpuPercent = Math.min(100, Math.round((loadAvg1 / cpuCount) * 100))
+    const cpuCount = systemInfo?.cpu_count ?? 1
+    const loadAvg1 = systemStatus.system.load_average[0] ?? 0
+    const cpuPercent = Math.min(100, Math.round((loadAvg1 / cpuCount) * 100))
 
-      const memTotal = status.system.memory_mb.total
-      const memAvailable = status.system.memory_mb.available
-      const memUsed = Math.max(0, memTotal - memAvailable)
-      const memPercent = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
+    const memTotal = systemStatus.system.memory_mb.total
+    const memAvailable = systemStatus.system.memory_mb.available
+    const memUsed = Math.max(0, memTotal - memAvailable)
+    const memPercent = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
 
-      const now = new Date()
-      const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+    const now = new Date()
+    const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
 
-      const point: ResourceHistoryPoint = {
-        time: timeLabel,
-        cpu: cpuPercent,
-        mem: memPercent,
-      }
-
-      const history = resourceHistoryRef.current
-      history.push(point)
-      // Cap at 60 data points
-      if (history.length > 60) {
-        history.splice(0, history.length - 60)
-      }
+    const point: ResourceHistoryPoint = {
+      time: timeLabel,
+      cpu: cpuPercent,
+      mem: memPercent,
     }
-  }, [statusPoll.data, setSystemStatus, onPollSuccess, systemInfo])
 
-  // --- Poll /health every 5s ---
-  const healthPoll = usePolling(fetchHealthReport, 5000, {
-    enabled: isConnected,
-    onError: onPollError,
-  })
-
-  React.useEffect(() => {
-    if (healthPoll.data) {
-      setHealthReport(healthPoll.data)
-      onPollSuccess()
+    const history = resourceHistoryRef.current
+    history.push(point)
+    if (history.length > 60) {
+      history.splice(0, history.length - 60)
     }
-  }, [healthPoll.data, setHealthReport, onPollSuccess])
+  }, [systemStatus, systemInfo])
 
-  // --- Health state change notifications ---
+  // Health state change notifications (fed by GlobalPoller)
   useEffect(() => {
-    if (!healthPoll.data) return
-    const current = healthPoll.data.status
+    if (!healthReport) return
+    const current = healthReport.status
     const prev = prevHealthStatusRef.current
 
     // Only fire on transitions (not on first load)
@@ -268,7 +242,7 @@ export default function Dashboard() {
           addNotification({
             type: current === 'critical' ? 'error' : 'warning',
             title: current === 'critical' ? 'System Health Critical' : 'System Health Degraded',
-            message: `${healthPoll.data.summary.unhealthy} of ${healthPoll.data.summary.total} containers unhealthy`,
+            message: `${healthReport.summary.unhealthy} of ${healthReport.summary.total} containers unhealthy`,
             persist: true,
             action: { label: 'View Health', page: 'health' },
           })
@@ -276,7 +250,7 @@ export default function Dashboard() {
           addNotification({
             type: 'success',
             title: 'System Health Restored',
-            message: `All ${healthPoll.data.summary.total} containers are healthy`,
+            message: `All ${healthReport.summary.total} containers are healthy`,
             persist: true,
             action: { label: 'View Health', page: 'health' },
           })
@@ -285,7 +259,7 @@ export default function Dashboard() {
     }
 
     prevHealthStatusRef.current = current
-  }, [healthPoll.data])
+  }, [healthReport])
 
   // --- Poll /events every 3s ---
   const eventsPoll = usePolling(fetchEvents, 3000, {
@@ -433,53 +407,109 @@ export default function Dashboard() {
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
-        <div className="space-y-3 md:space-y-6">
-          {/* Row 1: Overview Cards */}
+        <div className="space-y-3 md:space-y-5">
+          {/* Overview Cards — always visible */}
           <OverviewCards />
 
-          {/* Row 2: Stack Status Grid */}
-          <StackStatusGrid stacks={stacksPoll.data?.stacks ?? null} error={stacksPoll.error} onRetry={stacksPoll.refresh} />
+          {/* Stacks */}
+          <DashboardSection label="Stacks" storageKey="stacks">
+            <StackStatusGrid stacks={stacksPoll.data?.stacks ?? null} error={stacksPoll.error} onRetry={stacksPoll.refresh} />
+          </DashboardSection>
 
-          {/* Row 3: Health + Resources */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-            <HealthSummary />
-            <ResourceChart history={resourceHistoryRef.current} />
-          </div>
+          {/* Health & Resources */}
+          <DashboardSection label="Health & Resources" storageKey="health-resources">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
+              <HealthSummary />
+              <ResourceChart history={resourceHistoryRef.current} />
+            </div>
+          </DashboardSection>
 
-          {/* Row 4: Containers + Server Info + Disks */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-            <ContainerOverview containers={containers} />
-            <ServerInfo />
-            <DiskMonitor disks={disks} />
-          </div>
+          {/* Infrastructure */}
+          <DashboardSection label="Infrastructure" storageKey="infrastructure">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
+              <ContainerOverview containers={containers} />
+              <ServerInfo />
+              <DiskMonitor disks={disks} />
+            </div>
+          </DashboardSection>
 
-          {/* Row 5: Persistent Trends + Top Resource Consumers */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-            <PersistentTrends data={trendsPoll.data ?? null} error={trendsPoll.error} onRetry={trendsPoll.refresh} />
-            <TopResourceConsumers />
-          </div>
+          {/* Trends & Consumers */}
+          <DashboardSection label="Trends" storageKey="trends">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
+              <PersistentTrends data={trendsPoll.data ?? null} error={trendsPoll.error} onRetry={trendsPoll.refresh} />
+              <TopResourceConsumers />
+            </div>
+          </DashboardSection>
 
-          {/* Row 6: Image Updates + Backup Status */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-            <ImageUpdateAlert data={imageUpdatesPoll.data ?? null} error={imageUpdatesPoll.error} onRetry={imageUpdatesPoll.refresh} />
-            <BackupStatusCard data={backupStatusPoll.data ?? null} error={backupStatusPoll.error} onRetry={backupStatusPoll.refresh} />
-          </div>
+          {/* Updates & Backup */}
+          <DashboardSection label="Updates & Backup" storageKey="updates-backup">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
+              <ImageUpdateAlert data={imageUpdatesPoll.data ?? null} error={imageUpdatesPoll.error} onRetry={imageUpdatesPoll.refresh} />
+              <BackupStatusCard data={backupStatusPoll.data ?? null} error={backupStatusPoll.error} onRetry={backupStatusPoll.refresh} />
+            </div>
+          </DashboardSection>
 
-          {/* Row 7: Log Health + Maintenance + Notifications */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-            <LogHealthSummary data={logStatsPoll.data ?? null} error={logStatsPoll.error} onRetry={logStatsPoll.refresh} collapsible />
-            <MaintenanceSummary data={maintenancePoll.data ?? null} error={maintenancePoll.error} onRetry={maintenancePoll.refresh} collapsible />
-            <NotificationStatus data={notifHistoryPoll.data ?? null} error={notifHistoryPoll.error} onRetry={notifHistoryPoll.refresh} collapsible />
-          </div>
+          {/* Monitoring */}
+          <DashboardSection label="Monitoring" storageKey="monitoring">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
+              <LogHealthSummary data={logStatsPoll.data ?? null} error={logStatsPoll.error} onRetry={logStatsPoll.refresh} />
+              <MaintenanceSummary data={maintenancePoll.data ?? null} error={maintenancePoll.error} onRetry={maintenancePoll.refresh} />
+              <NotificationStatus data={notifHistoryPoll.data ?? null} error={notifHistoryPoll.error} onRetry={notifHistoryPoll.refresh} />
+            </div>
+          </DashboardSection>
 
-          {/* Row 8: Automations + Events + Quick Actions */}
-          <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-            <ActiveAutomations data={automationsPoll.data ?? null} error={automationsPoll.error} onRetry={automationsPoll.refresh} collapsible />
-            <RecentEvents collapsible />
-            <QuickActions collapsible />
-          </div>
+          {/* Automation & Actions */}
+          <DashboardSection label="Automation & Actions" storageKey="automation-actions">
+            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
+              <ActiveAutomations data={automationsPoll.data ?? null} error={automationsPoll.error} onRetry={automationsPoll.refresh} />
+              <RecentEvents />
+              <QuickActions />
+            </div>
+          </DashboardSection>
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// DashboardSection — collapsible row group
+// ---------------------------------------------------------------------------
+
+function DashboardSection({ label, storageKey, children }: {
+  label: string
+  storageKey: string
+  children: React.ReactNode
+}) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(`dash-section-${storageKey}`) === 'true' } catch { return false }
+  })
+
+  const toggle = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    try { localStorage.setItem(`dash-section-${storageKey}`, String(next)) } catch {}
+  }
+
+  return (
+    <div>
+      <button
+        onClick={toggle}
+        className="flex items-center gap-2 mb-3 group cursor-pointer select-none press"
+      >
+        <ChevronDown
+          size={14}
+          className={`text-slate-600 group-hover:text-slate-400 transition-all duration-200 ${collapsed ? '-rotate-90' : ''}`}
+        />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 group-hover:text-slate-400 transition-colors">
+          {label}
+        </span>
+      </button>
+      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+        collapsed ? 'max-h-0 opacity-0' : 'max-h-[3000px] opacity-100'
+      }`}>
+        {children}
+      </div>
     </div>
   )
 }

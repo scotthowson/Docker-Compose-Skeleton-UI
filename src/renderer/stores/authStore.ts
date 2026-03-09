@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import { apiClient } from '../api/client'
 import { authLogout } from '../api/endpoints'
 import { useSettingsStore } from './settingsStore'
+import { useConnectionStore } from './connectionStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -238,6 +239,40 @@ function isLockedOut(): { locked: boolean; remainingMs: number } {
 // Auth state
 // ---------------------------------------------------------------------------
 
+const USER_ROLE_KEY_PREFIX = 'user-role-'
+
+/** Persist user role to localStorage (per-user, survives app restarts) */
+function persistUserRole(username: string | null, role: 'admin' | 'user' | null): void {
+  if (!username) return
+  const key = `${USER_ROLE_KEY_PREFIX}${username}`
+  if (role) {
+    localStorage.setItem(key, role)
+  } else {
+    localStorage.removeItem(key)
+  }
+}
+
+/** Restore user role from localStorage */
+function getPersistedUserRole(username: string | null): 'admin' | 'user' | null {
+  if (!username) return null
+  try {
+    const r = localStorage.getItem(`${USER_ROLE_KEY_PREFIX}${username}`)
+    return r === 'admin' || r === 'user' ? r : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Determine the default role for a user based on account creation order.
+ * First account = admin (the setup/initial user), all others = user.
+ * This is the final fallback when no server-provided or persisted role exists.
+ */
+function determineDefaultRole(username: string, accounts: UserAccount[]): 'admin' | 'user' {
+  if (accounts.length === 0) return 'admin'
+  return accounts[0].username.toLowerCase() === username.toLowerCase() ? 'admin' : 'user'
+}
+
 const API_TOKEN_KEY = 'api-auth-token'
 
 /** Persist API token to localStorage */
@@ -261,6 +296,8 @@ function getPersistedApiToken(): string | null {
 interface AuthState {
   isAuthenticated: boolean
   currentUser: string | null
+  /** User role from server auth: 'admin' or 'user' */
+  userRole: 'admin' | 'user' | null
   hasAccount: boolean
   loading: boolean
   initialized: boolean
@@ -275,6 +312,9 @@ interface AuthState {
   clearError: () => void
   /** Set the API Bearer token (from server auth) */
   setApiToken: (token: string | null) => void
+  /** Set the user role (from server auth response). Pass username explicitly
+   *  when calling before login/register has set currentUser in the store. */
+  setUserRole: (role: 'admin' | 'user' | null, forUsername?: string) => void
   /** Change password for the current user */
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
   /** Delete account */
@@ -290,6 +330,7 @@ if (_initialApiToken) {
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: !!getActiveSession(),
   currentUser: getActiveSession(),
+  userRole: getPersistedUserRole(getActiveSession()),
   hasAccount: false,
   loading: true,
   initialized: false,
@@ -302,10 +343,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     const accounts = await getAccounts()
     const session = getActiveSession()
+
+    // Resolve role: persisted > default by account order.
+    // Automatically persists the result so this migration runs only once.
+    let role = getPersistedUserRole(session)
+    if (session && !role) {
+      role = determineDefaultRole(session, accounts)
+      persistUserRole(session, role)
+    }
+
     set({
       hasAccount: accounts.length > 0,
       isAuthenticated: !!session,
       currentUser: session,
+      userRole: role,
       loading: false,
       initialized: true,
     })
@@ -349,6 +400,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       lastLoginAt: new Date().toISOString(),
     }
 
+    const isFirstAccount = accounts.length === 0
     accounts.push(newAccount)
     await saveAccounts(accounts)
 
@@ -356,10 +408,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     sessionStorage.setItem('currentUser', newAccount.username)
     setPersistedSession(newAccount.username)
 
+    // Default role if server auth hasn't set one yet:
+    // First account ever = admin, subsequent accounts = user
+    const currentRole = get().userRole
+    const effectiveRole = currentRole || (isFirstAccount ? 'admin' : 'user')
+    persistUserRole(newAccount.username, effectiveRole)
+
     set({
       isAuthenticated: true,
       currentUser: newAccount.username,
       hasAccount: true,
+      userRole: effectiveRole,
     })
     return true
   },
@@ -426,9 +485,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sessionStorage.setItem('currentUser', account.username)
     }
 
+    // Restore role: server-provided > persisted > default by account order.
+    // Persist the resolved role so it survives logout/restart cycles.
+    const serverRole = get().userRole
+    const persistedRole = getPersistedUserRole(account.username)
+    const effectiveRole = serverRole || persistedRole || determineDefaultRole(account.username, accounts)
+    if (!persistedRole || (serverRole && serverRole !== persistedRole)) {
+      persistUserRole(account.username, effectiveRole)
+    }
+
     set({
       isAuthenticated: true,
       currentUser: account.username,
+      userRole: effectiveRole,
     })
     return true
   },
@@ -439,21 +508,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ apiToken: token })
   },
 
+  setUserRole: (role: 'admin' | 'user' | null, forUsername?: string) => {
+    persistUserRole(forUsername || get().currentUser, role)
+    set({ userRole: role })
+  },
+
   logout: async () => {
-    // Attempt server-side token invalidation (best-effort)
-    try {
-      await authLogout()
-    } catch {
-      // Network error or server unreachable — proceed with local logout
-    }
-    clearPersistedSession()
-    apiClient.setAuthToken(null)
-    persistApiToken(null)
+    // ── SYNCHRONOUS cleanup first — prevents api-auth-expired race ──
+    // Setting isAuthenticated=false immediately ensures that any 401
+    // responses from in-flight requests won't trigger a second logout.
     set({
       isAuthenticated: false,
       currentUser: null,
+      userRole: null,
       apiToken: null,
+      error: null,
     })
+    clearPersistedSession()
+    persistApiToken(null)
+
+    // Reset navigation to dashboard so the next user doesn't land
+    // on an admin-only or context-specific page
+    useSettingsStore.getState().setCurrentPage('dashboard')
+
+    // Stop heartbeat, reconnect timers, and all polling
+    useConnectionStore.getState().disconnect()
+
+    // ── ASYNC: best-effort server-side token invalidation ──
+    // apiClient still has the token briefly for this call
+    try {
+      await authLogout()
+    } catch {
+      // Network error or server unreachable — local logout already done
+    }
+    apiClient.setAuthToken(null)
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
@@ -522,8 +610,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     accounts.splice(accountIdx, 1)
     await saveAccounts(accounts)
 
-    // Clean up profile and session
-    localStorage.removeItem('user-profile')
+    // Clean up per-user profile, role, and session
+    const deletedUser = get().currentUser
+    if (deletedUser) {
+      localStorage.removeItem(`user-profile-${deletedUser}`)
+      localStorage.removeItem(`${USER_ROLE_KEY_PREFIX}${deletedUser}`)
+    }
+    localStorage.removeItem('user-profile') // legacy key
     clearPersistedSession()
 
     set({
@@ -538,11 +631,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 }))
 
 // Listen for API auth expiry (dispatched by ApiClient on 401)
+// Guard: only act if the user is still authenticated — prevents duplicate
+// logouts from stale in-flight requests during manual sign-out.
 window.addEventListener('api-auth-expired', () => {
-  const { isAuthenticated, logout } = useAuthStore.getState()
+  const { isAuthenticated } = useAuthStore.getState()
   if (isAuthenticated) {
-    logout()
-    // Set error message so Login page shows expiry notice
+    // This is a genuine server-side token expiry (not a manual logout)
+    useAuthStore.getState().logout()
+    // Show expiry notice AFTER logout sets isAuthenticated=false,
+    // so subsequent api-auth-expired events are no-ops.
     useAuthStore.setState({ error: 'Session expired — please sign in again' })
   }
 })

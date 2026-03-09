@@ -15,10 +15,25 @@ import { useServerStore } from '../stores/serverStore'
 import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  let score = 0
+  if (pw.length >= 8) score++
+  if (pw.length >= 12) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+
+  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-rose-500' }
+  if (score <= 2) return { score: 2, label: 'Fair', color: 'bg-amber-500' }
+  if (score <= 3) return { score: 3, label: 'Good', color: 'bg-yellow-500' }
+  if (score <= 4) return { score: 4, label: 'Strong', color: 'bg-emerald-500' }
+  return { score: 5, label: 'Excellent', color: 'bg-emerald-400' }
+}
+
 export default function Login() {
   const {
     hasAccount, loading, error,
-    register, login, clearError, setApiToken,
+    register, login, clearError, setApiToken, setUserRole,
   } = useAuthStore()
   const projectName = useSettingsStore((s) => s.projectName) || 'Docker Compose Skeleton'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Server Management Dashboard'
@@ -42,10 +57,13 @@ export default function Login() {
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [connected, setConnected] = useState(false)
-  const [serverInitialized, setServerInitialized] = useState(false)
-  const isFirstRender = useRef(true)
-  const [initialChecking, setInitialChecking] = useState(true) // suppress Phase 1 flash
+  // When we already have a configured server URL (e.g. returning from logout),
+  // start optimistically: skip the loading spinner and show the login form
+  // immediately while verifying the server in the background.
+  const hasKnownServer = !!settingsServerUrl
+  const [connected, setConnected] = useState(hasKnownServer)
+  const [serverInitialized, setServerInitialized] = useState(hasKnownServer)
+  const [initialChecking, setInitialChecking] = useState(!hasKnownServer)
 
   // Derive session label from settings
   const sessionLabel = (() => {
@@ -82,17 +100,27 @@ export default function Login() {
 
   const checkServer = useCallback(async (rawUrl: string, isInitial = false) => {
     const url = normalizeUrl(rawUrl)
-    if (!url) { setConnStatus('idle'); setInitialChecking(false); return }
+    if (!url) { setConnStatus('idle'); setConnected(false); setServerInitialized(false); setInitialChecking(false); return }
 
-    setConnStatus('testing')
-    setConnected(false)
-    setServerInitialized(false)
+    // Only reset state on explicit URL changes — not during
+    // background re-checks after logout (prevents login form flash)
+    if (!isInitial) {
+      setConnStatus('testing')
+      setConnected(false)
+      setServerInitialized(false)
+    }
     try {
       if (window.electronAPI?.checkServer) {
         // ── Electron path: single IPC call, Node.js http in main process ──
         const res = await window.electronAPI.checkServer(url)
         if (!res.reachable) {
-          // On initial auto-check failure, show form cleanly without error flash
+          // Server unreachable — only disrupt the UI on user-initiated checks.
+          // During background initial checks, keep the optimistic state so the
+          // login form doesn't flash back to the connection form.
+          if (!isInitial) {
+            setConnected(false)
+            setServerInitialized(false)
+          }
           setConnStatus(isInitial ? 'idle' : 'fail')
           setInitialChecking(false)
           return
@@ -126,12 +154,20 @@ export default function Login() {
         try {
           const ok = await apiClient.testConnection()
           if (!ok) {
+            if (!isInitial) {
+              setConnected(false)
+              setServerInitialized(false)
+            }
             setConnStatus(isInitial ? 'idle' : 'fail')
             apiClient.setBaseUrl(prev)
             setInitialChecking(false)
             return
           }
         } catch {
+          if (!isInitial) {
+            setConnected(false)
+            setServerInitialized(false)
+          }
           setConnStatus(isInitial ? 'idle' : 'fail')
           apiClient.setBaseUrl(prev)
           setInitialChecking(false)
@@ -172,13 +208,23 @@ export default function Login() {
         }
       }
     } catch {
-      // On initial auto-check failure, show form cleanly without error flash
+      // On initial auto-check failure, keep optimistic state to prevent flash
+      if (!isInitial) {
+        setConnected(false)
+        setServerInitialized(false)
+      }
       setConnStatus(isInitial ? 'idle' : 'fail')
     }
     setInitialChecking(false)
   }, [setServerUrl, setCurrentPage, syncUrlToServerStore])
 
-  // Fire check immediately on first render, debounce subsequent URL changes
+  // Track the initial URL so we can distinguish user-initiated URL changes
+  // from the initial mount (which should NOT reset optimistic state).
+  const mountUrlRef = useRef(serverUrl)
+
+  // Fire check on URL changes — but skip the initial mount when we have
+  // a known server (returning from logout). This prevents the
+  // Phase 2 → Phase 1 → Phase 2 flash.
   useEffect(() => {
     if (connTestTimer.current) clearTimeout(connTestTimer.current)
     if (!serverUrl.trim()) {
@@ -186,17 +232,28 @@ export default function Login() {
       setInitialChecking(false)
       return
     }
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      checkServer(serverUrl, true)
-    } else {
+
+    // If the URL hasn't changed from mount-time AND we have a known server,
+    // skip the background check entirely. The user was just authenticated —
+    // setup detection will happen at form submission time.
+    if (serverUrl === mountUrlRef.current && hasKnownServer) {
+      setInitialChecking(false)
+      return
+    }
+
+    // URL changed from what we mounted with — this is a user-initiated change.
+    // Reset connection state and debounce the server check.
+    if (serverUrl !== mountUrlRef.current) {
       setInitialChecking(false)
       setConnected(false)
       setServerInitialized(false)
       connTestTimer.current = setTimeout(() => checkServer(serverUrl), 800)
+    } else {
+      // No known server (first-time setup) — check immediately
+      checkServer(serverUrl, true)
     }
     return () => { if (connTestTimer.current) clearTimeout(connTestTimer.current) }
-  }, [serverUrl, checkServer])
+  }, [serverUrl, checkServer, hasKnownServer])
 
   // Sync local serverUrl state when settings change externally (e.g., server switch)
   useEffect(() => {
@@ -221,8 +278,9 @@ export default function Login() {
     try {
       // First check if server requires auth
       try {
-        await authVerify()
-        // If verify succeeds, server has no auth required (localhost) — skip
+        const verifyRes = await authVerify()
+        // If verify succeeds, token is valid — use the role from the response
+        if (verifyRes.role) setUserRole(verifyRes.role as 'admin' | 'user', user)
         return true
       } catch (err) {
         if (err instanceof ApiNetworkError) {
@@ -238,6 +296,7 @@ export default function Login() {
               const setupRes = await authSetup(user, pass)
               if (setupRes.success && setupRes.token) {
                 setApiToken(setupRes.token)
+                if (setupRes.role) setUserRole(setupRes.role, user)
                 return true
               }
             } catch (setupErr) {
@@ -261,6 +320,7 @@ export default function Login() {
           : await authLogin(user, pass)
         if (loginRes.success && loginRes.token) {
           setApiToken(loginRes.token)
+          if (loginRes.role) setUserRole(loginRes.role, user)
           return true
         }
         setServerAuthError('Server authentication failed')
@@ -344,8 +404,9 @@ export default function Login() {
 
       const res = await authRegister(username.trim(), password, inviteCode.trim())
       if (res.success && res.token) {
-        // Store the API Bearer token
+        // Store the API Bearer token and role
         setApiToken(res.token)
+        if (res.role) setUserRole(res.role, username.trim())
 
         // Persist session — use dynamic duration from settings
         const durationMs = sessionDurationMinutes <= 0 ? 0 : sessionDurationMinutes * 60 * 1000
@@ -1019,6 +1080,30 @@ export default function Login() {
                   </p>
                 </div>
 
+                {/* Password strength */}
+                {password && (
+                  <div className="space-y-1 animate-fade-in">
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((level) => {
+                        const strength = getPasswordStrength(password)
+                        return (
+                          <div
+                            key={level}
+                            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                              level <= strength.score ? strength.color : 'bg-slate-800'
+                            }`}
+                          />
+                        )
+                      })}
+                    </div>
+                    <p className={`text-[10px] ${
+                      getPasswordStrength(password).score <= 2 ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      {getPasswordStrength(password).label}
+                    </p>
+                  </div>
+                )}
+
                 {/* Confirm Password */}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
@@ -1059,7 +1144,7 @@ export default function Login() {
                   type="submit"
                   disabled={submitting || !inviteCode.trim() || !username.trim() || !password.trim() || password !== confirmPassword}
                   className="
-                    flex items-center justify-center gap-2 w-full py-3 rounded-lg
+                    press flex items-center justify-center gap-2 w-full py-3 rounded-lg
                     text-sm font-semibold
                     bg-cyan-500 text-white
                     hover:bg-cyan-400

@@ -35,30 +35,33 @@ interface ProfileData {
   statusText: string
   timezone: string
   accentColor: string
+  backgroundImage: string
+}
+
+/** Get the per-user localStorage key for profile data */
+function getProfileKey(): string {
+  const user = useAuthStore.getState().currentUser
+  return user ? `user-profile-${user}` : 'user-profile'
 }
 
 function getProfileData(): ProfileData {
+  const defaults: ProfileData = { displayName: '', email: '', icon: '', bio: '', statusEmoji: '', statusText: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, accentColor: 'emerald', backgroundImage: '' }
   try {
-    const raw = localStorage.getItem('user-profile')
+    // Try per-user key first, then fallback to legacy global key (migration)
+    const key = getProfileKey()
+    let raw = localStorage.getItem(key)
+    if (!raw && key !== 'user-profile') raw = localStorage.getItem('user-profile')
     const parsed = raw ? JSON.parse(raw) : {}
-    return {
-      displayName: parsed.displayName ?? '',
-      email: parsed.email ?? '',
-      icon: parsed.icon ?? '',
-      bio: parsed.bio ?? '',
-      statusEmoji: parsed.statusEmoji ?? '',
-      statusText: parsed.statusText ?? '',
-      timezone: parsed.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-      accentColor: parsed.accentColor ?? 'emerald',
-    }
+    return { ...defaults, ...parsed }
   } catch {
-    return { displayName: '', email: '', icon: '', bio: '', statusEmoji: '', statusText: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, accentColor: 'emerald' }
+    return defaults
   }
 }
 
 function saveProfileData(data: ProfileData) {
-  localStorage.setItem('user-profile', JSON.stringify(data))
-  // Dispatch event so Header re-reads the data
+  const key = getProfileKey()
+  localStorage.setItem(key, JSON.stringify(data))
+  // Dispatch event so Header and App re-read the data
   window.dispatchEvent(new Event('profile-updated'))
 }
 
@@ -555,7 +558,7 @@ function DiskLabelManager() {
           {!showAddForm && (
             <button
               onClick={() => { setShowAddForm(true); setAddError('') }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/30 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/30 transition-all press"
             >
               <Plus size={12} />
               Add Location
@@ -733,22 +736,29 @@ function DiskLabelManager() {
 
 function AppearanceSettings() {
   const theme = useSettingsStore((s) => s.theme)
-  const backgroundImage = useSettingsStore((s) => s.backgroundImage) ?? ''
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Docker Compose Skeleton'
   const updateSetting = useSettingsStore((s) => s.updateSetting)
 
-  const [bgInput, setBgInput] = useState(backgroundImage)
+  // Background image is per-user (stored in profile, not settingsStore)
+  const profileBg = getProfileData().backgroundImage
+  const [bgInput, setBgInput] = useState(profileBg)
+  const [backgroundImage, setBackgroundImage] = useState(profileBg)
   const [nameInput, setNameInput] = useState(projectName)
   const [subtitleInput, setSubtitleInput] = useState(projectSubtitle)
 
   const handleBgSave = () => {
-    updateSetting('backgroundImage', bgInput.trim())
+    const val = bgInput.trim()
+    const profile = getProfileData()
+    saveProfileData({ ...profile, backgroundImage: val })
+    setBackgroundImage(val)
   }
 
   const handleBgClear = () => {
     setBgInput('')
-    updateSetting('backgroundImage', '')
+    const profile = getProfileData()
+    saveProfileData({ ...profile, backgroundImage: '' })
+    setBackgroundImage('')
   }
 
   const presetBackgrounds = [
@@ -873,14 +883,14 @@ function AppearanceSettings() {
           />
           <button
             onClick={handleBgSave}
-            className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-xs font-medium hover:bg-emerald-500/25 transition-all"
+            className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-xs font-medium hover:bg-emerald-500/25 transition-all press"
           >
             Apply
           </button>
           {backgroundImage && (
             <button
               onClick={handleBgClear}
-              className="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/25 text-xs font-medium hover:bg-rose-500/25 transition-all"
+              className="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/25 text-xs font-medium hover:bg-rose-500/25 transition-all press"
             >
               Clear
             </button>
@@ -892,7 +902,7 @@ function AppearanceSettings() {
           {presetBackgrounds.map((p) => (
             <button
               key={p.label}
-              onClick={() => { setBgInput(p.value); updateSetting('backgroundImage', p.value) }}
+              onClick={() => { setBgInput(p.value); const prof = getProfileData(); saveProfileData({ ...prof, backgroundImage: p.value }); setBackgroundImage(p.value) }}
               className={`
                 px-2.5 py-1.5 rounded-md text-[10px] font-medium border transition-all
                 ${backgroundImage === p.value
@@ -1074,14 +1084,14 @@ function SecuritySettings() {
           <div className="flex items-center gap-2 pt-2">
             <button
               onClick={() => { clearError(); setSection('password') }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
             >
               <Key size={12} />
               Change Password
             </button>
             <button
               onClick={() => { clearError(); setSection('delete') }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/5 border border-rose-500/15 text-rose-400 hover:bg-rose-500/10 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/5 border border-rose-500/15 text-rose-400 hover:bg-rose-500/10 transition-all press"
             >
               <Trash2 size={12} />
               Delete Account
@@ -1142,7 +1152,7 @@ function SecuritySettings() {
             <button
               onClick={handleChangePassword}
               disabled={pwLoading || !currentPw || !newPw || newPw !== confirmPw}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20 press"
             >
               {pwLoading ? <Save size={12} className="animate-spin" /> : <Check size={12} />}
               Update Password
@@ -1191,7 +1201,7 @@ function SecuritySettings() {
             <button
               onClick={handleDeleteAccount}
               disabled={!deletePw}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-50 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-50 transition-all press"
             >
               <Trash2 size={12} />
               Delete My Account
@@ -1489,14 +1499,14 @@ function ExportImportSettings() {
       <div className="flex items-center gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/15 hover:border-cyan-500/30 transition-all"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/15 hover:border-cyan-500/30 transition-all press"
         >
           <Download size={13} />
           Export Settings
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
         >
           <Upload size={13} />
           Import Settings
@@ -1644,7 +1654,7 @@ function ConnectionProfiles() {
                 ) : (
                   <button
                     onClick={() => handleSwitch(profile)}
-                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/[0.06] hover:text-slate-200 transition-all shrink-0"
+                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/[0.06] hover:text-slate-200 transition-all shrink-0 press"
                   >
                     Connect
                   </button>
@@ -1706,7 +1716,7 @@ function ConnectionProfiles() {
             <button
               onClick={handleAdd}
               disabled={!newName.trim() || !newUrl.trim()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20 press"
             >
               <Plus size={12} />
               Save Profile
@@ -1722,7 +1732,7 @@ function ConnectionProfiles() {
       ) : (
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
         >
           <Plus size={12} />
           Add Server Profile
@@ -2120,7 +2130,7 @@ function AlertThresholdsEditor() {
         <button
           onClick={handleSave}
           disabled={saving || !isConnected}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40 transition-all"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40 transition-all press"
         >
           {saving ? <Timer size={12} className="animate-spin" /> : <Save size={12} />}
           Save Thresholds
@@ -2352,6 +2362,9 @@ export default function Settings() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const serverUrl = useConnectionStore((s) => s.serverUrl)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
+  const userRole = useAuthStore((s) => s.userRole)
+  // Strict: only 'admin' gets full access (principle of least privilege)
+  const isAdmin = userRole === 'admin'
   const customCSS = useSettingsStore((s) => s.customCSS) || ''
   const [customCSSLocal, setCustomCSSLocal] = useState(customCSS)
   useEffect(() => { setCustomCSSLocal(customCSS) }, [customCSS])
@@ -2392,7 +2405,7 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {/* Row 1: User Profile + Connection (side by side) */}
+        {/* Row 1: User Profile + Server Connection (side by side) */}
         <SectionCard
           icon={<UserCircle size={16} className="text-emerald-400" />}
           title="User Profile"
@@ -2401,42 +2414,18 @@ export default function Settings() {
           <ProfileSettings />
         </SectionCard>
 
-        <SectionCard
-          icon={<Cog size={16} className="text-emerald-400" />}
-          title="Connection"
-          accentColor="border-t-emerald-500"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <span
-              className={`
-                inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
-                ${
-                  connectionStatus === 'connected'
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : connectionStatus === 'connecting'
-                      ? 'bg-amber-500/15 text-amber-400'
-                      : connectionStatus === 'error'
-                        ? 'bg-rose-500/15 text-rose-400'
-                        : 'bg-slate-500/15 text-slate-400'
-                }
-              `}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  connectionStatus === 'connected'
-                    ? 'bg-emerald-400'
-                    : connectionStatus === 'connecting'
-                      ? 'bg-amber-400 animate-pulse'
-                      : connectionStatus === 'error'
-                        ? 'bg-rose-400'
-                        : 'bg-slate-400'
-                }`}
-              />
-              {connectionStatus}
-            </span>
-          </div>
-          <ConnectionForm />
-        </SectionCard>
+        {isAdmin && (
+          <SectionCard
+            icon={<Server size={16} className="text-emerald-400" />}
+            title="Server Connection"
+            accentColor="border-t-emerald-500"
+          >
+            <ConnectionForm />
+            <div className="border-t border-white/[0.04] mt-4 pt-4">
+              <ConnectionProfiles />
+            </div>
+          </SectionCard>
+        )}
 
         {/* Row 2: Appearance (full-width) */}
         <SectionCard
@@ -2469,23 +2458,17 @@ export default function Settings() {
           </SectionCard>
         )}
 
-        <SectionCard
-          icon={<HardDrive size={16} className="text-cyan-400" />}
-          title="Disk Configuration"
-          accentColor="border-t-cyan-500"
-        >
-          <DiskLabelManager />
-        </SectionCard>
+        {isAdmin && (
+          <SectionCard
+            icon={<HardDrive size={16} className="text-cyan-400" />}
+            title="Disk Configuration"
+            accentColor="border-t-cyan-500"
+          >
+            <DiskLabelManager />
+          </SectionCard>
+        )}
 
-        {/* Row 5: Connection Profiles + Notification Preferences */}
-        <SectionCard
-          icon={<Server size={16} className="text-emerald-400" />}
-          title="Server Profiles"
-          accentColor="border-t-emerald-500"
-        >
-          <ConnectionProfiles />
-        </SectionCard>
-
+        {/* Row 5: Notification Preferences + Alert Thresholds */}
         <SectionCard
           icon={<Bell size={16} className="text-cyan-400" />}
           title="Notification Preferences"
@@ -2494,25 +2477,40 @@ export default function Settings() {
           <NotificationPreferencesSection />
         </SectionCard>
 
-        {/* Row 6: Auto-Lock & Notifications + Export/Import (side by side) */}
+        {isAdmin && (
+          <SectionCard
+            icon={<Bell size={16} className="text-amber-400" />}
+            title="Alert Thresholds"
+            accentColor="border-t-amber-500"
+          >
+            <AlertThresholdsEditor />
+          </SectionCard>
+        )}
+
+        {/* Row 6: Lock + Backup (side by side) */}
         <SectionCard
           icon={<LockKeyhole size={16} className="text-amber-400" />}
-          title="Lock & Notifications"
+          title="Lock & Session"
           accentColor="border-t-amber-500"
         >
           <AutoLockSettings />
         </SectionCard>
 
-        <SectionCard
-          icon={<Download size={16} className="text-cyan-400" />}
-          title="Backup & Restore"
-          accentColor="border-t-cyan-500"
-        >
-          <ExportImportSettings />
-        </SectionCard>
+        {isAdmin && (
+          <SectionCard
+            icon={<Download size={16} className="text-cyan-400" />}
+            title="Backup & Restore"
+            accentColor="border-t-cyan-500"
+          >
+            <ExportImportSettings />
+            <div className="border-t border-white/[0.04] mt-4 pt-4">
+              <SettingsExportImport />
+            </div>
+          </SectionCard>
+        )}
 
-        {/* Custom CSS */}
-        <SectionCard
+        {/* Custom CSS — admin only */}
+        {isAdmin && <SectionCard
           icon={<Palette size={16} className="text-violet-400" />}
           title="Custom CSS"
           accentColor="border-t-violet-500"
@@ -2540,13 +2538,13 @@ export default function Settings() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setCustomCSSLocal(''); updateSetting('customCSS', '') }}
-                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
                 >
                   Reset
                 </button>
                 <button
                   onClick={() => updateSetting('customCSS', customCSSLocal)}
-                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-400 shadow-lg shadow-violet-500/20 transition-all"
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-400 shadow-lg shadow-violet-500/20 transition-all press"
                 >
                   Apply
                 </button>
@@ -2556,27 +2554,9 @@ export default function Settings() {
               Changes apply instantly when you click Apply. Use browser dev tools to inspect element classes.
             </p>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        {/* Row 7: Alert Thresholds */}
-        <SectionCard
-          icon={<Bell size={16} className="text-amber-400" />}
-          title="Alert Thresholds"
-          accentColor="border-t-amber-500"
-        >
-          <AlertThresholdsEditor />
-        </SectionCard>
-
-        {/* Settings Export / Import */}
-        <SectionCard
-          icon={<Download size={16} className="text-emerald-400" />}
-          title="Export & Import"
-          accentColor="border-t-emerald-500"
-        >
-          <SettingsExportImport />
-        </SectionCard>
-
-        {/* Row 8: About + Security (side by side) */}
+        {/* Row 7: About + Security (side by side) */}
         <SectionCard
           icon={<Info size={16} className="text-cyan-400" />}
           title="About"
@@ -2607,7 +2587,7 @@ export default function Settings() {
                 localStorage.removeItem('onboarding_complete')
                 window.dispatchEvent(new Event('show-onboarding'))
               }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-all"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-all press"
             >
               <Info size={14} />
               Show Onboarding Guide

@@ -26,6 +26,7 @@ import {
 import { useStackStore } from '../stores/stackStore'
 import { useContainerStore } from '../stores/containerStore'
 import type { PageId } from '../../shared/types'
+import { ADMIN_ONLY_PAGES } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,7 +141,8 @@ export function CommandPalette() {
   const status = useSystemStore((s) => s.status)
   const health = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
-  const { isAuthenticated, logout } = useAuthStore()
+  const { isAuthenticated, logout, userRole } = useAuthStore()
+  const isAdmin = userRole === 'admin'
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setHealthReport = useHealthStore((s) => s.setReport)
   const stacks = useStackStore((s) => s.stacks)
@@ -251,7 +253,9 @@ export function CommandPalette() {
       users: ['user', 'account', 'permission', 'role', 'invite'],
     }
 
-    const pages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    // Filter out admin-only pages for non-admin users
+    const pages = allPages.filter((p) => !ADMIN_ONLY_PAGES.has(p) || isAdmin)
     for (const page of pages) {
       items.push({
         id: `nav-${page}`,
@@ -408,8 +412,8 @@ export function CommandPalette() {
       },
     })
 
-    // --- Server action commands (require connection) ---
-    if (isConnected) {
+    // --- Admin-only server actions (require connection + admin) ---
+    if (isConnected && isAdmin) {
       items.push({
         id: 'action-prune',
         label: 'Prune Docker Images',
@@ -448,6 +452,28 @@ export function CommandPalette() {
       })
 
       items.push({
+        id: 'action-backup',
+        label: 'Run Backup Now',
+        description: 'Trigger a full server backup',
+        icon: <Download size={16} className="text-cyan-400" />,
+        type: 'action',
+        keywords: ['backup', 'snapshot', 'save', 'export', 'archive'],
+        onSelect: async () => {
+          setOpen(false)
+          try {
+            const r = await triggerBackup()
+            addToast({
+              type: r.success ? 'success' : 'error',
+              message: r.success ? `Backup started: ${r.filename}` : 'Backup failed',
+            })
+          } catch { addToast({ type: 'error', message: 'Backup trigger failed' }) }
+        },
+      })
+    }
+
+    // --- Server actions available to all authenticated users ---
+    if (isConnected) {
+      items.push({
         id: 'action-check-health',
         label: 'Run Health Check',
         description: 'Fetch a fresh health report from the server',
@@ -464,25 +490,6 @@ export function CommandPalette() {
               message: `Health: ${report.status} — ${report.summary.healthy}/${report.summary.total} healthy`,
             })
           } catch { addToast({ type: 'error', message: 'Health check failed' }) }
-        },
-      })
-
-      items.push({
-        id: 'action-backup',
-        label: 'Run Backup Now',
-        description: 'Trigger a full server backup',
-        icon: <Download size={16} className="text-cyan-400" />,
-        type: 'action',
-        keywords: ['backup', 'snapshot', 'save', 'export', 'archive'],
-        onSelect: async () => {
-          setOpen(false)
-          try {
-            const r = await triggerBackup()
-            addToast({
-              type: r.success ? 'success' : 'error',
-              message: r.success ? `Backup started: ${r.filename}` : 'Backup failed',
-            })
-          } catch { addToast({ type: 'error', message: 'Backup trigger failed' }) }
         },
       })
 
@@ -622,7 +629,7 @@ export function CommandPalette() {
     }
 
     return items
-  }, [setCurrentPage, status, health, isConnected, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks, containers])
+  }, [setCurrentPage, status, health, isConnected, isAdmin, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks, containers])
 
   // Filter commands
   const filtered = useMemo(() => {

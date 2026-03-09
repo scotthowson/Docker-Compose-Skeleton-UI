@@ -44,6 +44,7 @@ import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery } from '../api/endpoints'
 import type {
@@ -190,9 +191,10 @@ interface DeployModalProps {
   onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[]) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
+  isAdmin?: boolean
 }
 
-function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy }: DeployModalProps) {
+function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy, isAdmin = true }: DeployModalProps) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const defaultStack = template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
   const [targetStack, setTargetStack] = useState(defaultStack)
@@ -386,7 +388,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               >
                 Done
               </button>
-              {onUndeploy && (
+              {isAdmin && onUndeploy && (
                 <button
                   onClick={handleUndoDeploy}
                   disabled={undeploying}
@@ -821,24 +823,26 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   Preview
                 </button>
               )}
-              <button
-                onClick={handleDeployClick}
-                disabled={!canDeploy}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
-                  confirming
-                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'
-                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25'
-                }`}
-              >
-                {deploying ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : confirming ? (
-                  <AlertTriangle size={13} />
-                ) : (
-                  <Rocket size={13} />
-                )}
-                {confirming ? 'Confirm & Deploy' : 'Deploy Stack'}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={handleDeployClick}
+                  disabled={!canDeploy}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
+                    confirming
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'
+                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25'
+                  }`}
+                >
+                  {deploying ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : confirming ? (
+                    <AlertTriangle size={13} />
+                  ) : (
+                    <Rocket size={13} />
+                  )}
+                  {confirming ? 'Confirm & Deploy' : 'Deploy Stack'}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1375,7 +1379,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
 // Gallery View
 // ---------------------------------------------------------------------------
 
-function GalleryView({ onImport }: { onImport: (url: string, name: string) => Promise<void> }) {
+function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, name: string) => Promise<void>; isAdmin?: boolean }) {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const [gallery, setGallery] = useState<GalleryTemplate[]>([])
   const [loading, setLoading] = useState(true)
@@ -1496,14 +1500,16 @@ function GalleryView({ onImport }: { onImport: (url: string, name: string) => Pr
                   ))}
                 </div>
               )}
-              <button
-                onClick={() => handleImport(t)}
-                disabled={isImporting}
-                className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all duration-200 disabled:opacity-50 press"
-              >
-                {isImporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                {isImporting ? 'Importing...' : 'Import'}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleImport(t)}
+                  disabled={isImporting}
+                  className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all duration-200 disabled:opacity-50 press"
+                >
+                  {isImporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                  {isImporting ? 'Importing...' : 'Import'}
+                </button>
+              )}
             </div>
           )
         })}
@@ -1638,6 +1644,8 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
 
 export default function Templates() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
 
   // State
@@ -2095,22 +2103,26 @@ export default function Templates() {
             <Plus size={13} />
             Create
           </button>
-          <button
-            onClick={() => setShowUrlImport(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
-            title="Import template from URL"
-          >
-            <Link size={13} />
-            URL Import
-          </button>
-          <button
-            onClick={handleImportTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 press"
-            title="Import template from JSON file"
-          >
-            <Upload size={13} />
-            File
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowUrlImport(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
+              title="Import template from URL"
+            >
+              <Link size={13} />
+              URL Import
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={handleImportTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 press"
+              title="Import template from JSON file"
+            >
+              <Upload size={13} />
+              File
+            </button>
+          )}
           <button
             onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
@@ -2189,7 +2201,7 @@ export default function Templates() {
                         </div>
                       </td>
                       <td className="py-2 px-2 text-right">
-                        {entry.action === 'deploy' && !alreadyUndeployed.has(`${entry.template}__${entry.target_stack}`) && (
+                        {isAdmin && entry.action === 'deploy' && !alreadyUndeployed.has(`${entry.template}__${entry.target_stack}`) && (
                           <button
                             onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
@@ -2210,7 +2222,7 @@ export default function Templates() {
       )}
 
       {activeTab === 'gallery' ? (
-        <GalleryView onImport={handleGalleryImport} />
+        <GalleryView onImport={handleGalleryImport} isAdmin={isAdmin} />
       ) : (
         <>
           {/* Category filter bar + search */}
@@ -2347,6 +2359,7 @@ export default function Templates() {
           onDeploy={handleDeploy}
           deploying={deploying}
           onUndeploy={handleUndeploy}
+          isAdmin={isAdmin}
         />
       )}
 

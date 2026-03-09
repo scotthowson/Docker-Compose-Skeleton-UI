@@ -7,6 +7,7 @@ import { useApi } from '../hooks/useApi'
 import { useStackStore } from '../stores/stackStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import {
   fetchStacks,
@@ -35,6 +36,8 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 export default function Stacks() {
   const { stacks, setStacks, actionLoading, setActionLoading } = useStackStore()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
   const [selectedStackName, setSelectedStackName] = useState<string | null>(null)
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
   const { addToast } = useToast()
@@ -253,11 +256,12 @@ export default function Stacks() {
     label: string
     bg: string
     hoverBg: string
+    adminOnly?: boolean
   }[] = [
     { action: 'start', icon: Play, label: 'Start Selected', bg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25', hoverBg: 'hover:bg-emerald-500/25' },
     { action: 'stop', icon: Square, label: 'Stop Selected', bg: 'bg-rose-500/15 text-rose-400 border-rose-500/25', hoverBg: 'hover:bg-rose-500/25' },
     { action: 'restart', icon: RotateCcw, label: 'Restart Selected', bg: 'bg-amber-500/15 text-amber-400 border-amber-500/25', hoverBg: 'hover:bg-amber-500/25' },
-    { action: 'update', icon: Download, label: 'Update Selected', bg: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25', hoverBg: 'hover:bg-cyan-500/25' },
+    { action: 'update', icon: Download, label: 'Update Selected', bg: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25', hoverBg: 'hover:bg-cyan-500/25', adminOnly: true },
   ]
 
   const isComplete = batchResults !== null && !batchLoading
@@ -274,6 +278,7 @@ export default function Stacks() {
           onContainerClick={(containerName) => {
             useSettingsStore.getState().setCurrentPage('containers', { focusContainer: containerName })
           }}
+          isAdmin={isAdmin}
         />
       ) : (
         <StackList
@@ -286,6 +291,7 @@ export default function Stacks() {
           selectedStacks={selectedStacks}
           onToggleSelect={handleToggleSelect}
           onToggleBatchMode={handleToggleBatchMode}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -331,7 +337,7 @@ export default function Stacks() {
             </div>
 
             {/* Action buttons */}
-            {batchButtons.map(({ action, icon: Icon, label, bg, hoverBg }) => (
+            {batchButtons.filter((b) => !b.adminOnly || isAdmin).map(({ action, icon: Icon, label, bg, hoverBg }) => (
               <button
                 key={action}
                 onClick={() => handleBatchAction(action)}

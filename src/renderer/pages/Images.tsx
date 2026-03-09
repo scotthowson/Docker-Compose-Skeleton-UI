@@ -8,6 +8,7 @@ import { useApi } from '../hooks/useApi'
 import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage } from '../api/endpoints'
 import { useToast } from '../components/common/Toast'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import ImageList from '../components/images/ImageList'
 import ImageCard from '../components/images/ImageCard'
 import {
@@ -48,6 +49,8 @@ const Images: React.FC = () => {
   const [batchResults, setBatchResults] = useState<Array<{ id: string; success: boolean; message: string }> | null>(null)
   const { addToast } = useToast()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
 
   // Docker Hub search state
   const [activeTab, setActiveTab] = useState<'library' | 'search'>('library')
@@ -115,12 +118,18 @@ const Images: React.FC = () => {
     setPruneLoading(true)
     try {
       const result = await runImagePrune()
-      addToast({
-        type: 'success',
-        message: result.message || 'Dangling images pruned successfully',
-      })
-      // Refresh image list after prune
-      await handleFetch()
+      if (result.success) {
+        addToast({
+          type: 'success',
+          message: result.output || 'Dangling images pruned successfully',
+        })
+        await handleFetch()
+      } else {
+        addToast({
+          type: 'error',
+          message: result.output || 'Image prune failed',
+        })
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Failed to prune dangling images'
@@ -234,20 +243,23 @@ const Images: React.FC = () => {
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
-          {/* Batch mode toggle */}
-          <button
-            onClick={handleToggleBatch}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
-              batchMode
-                ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.08]'
-            }`}
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-            {batchMode ? 'Exit Batch' : 'Batch Mode'}
-          </button>
+          {/* Batch mode toggle — admin only (batch delete is destructive) */}
+          {isAdmin && (
+            <button
+              onClick={handleToggleBatch}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
+                batchMode
+                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
+                  : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.08]'
+              }`}
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              {batchMode ? 'Exit Batch' : 'Batch Mode'}
+            </button>
+          )}
 
           {/* Prune dangling images */}
+          {isAdmin && (
           <button
             onClick={handlePrune}
             disabled={pruneLoading}
@@ -268,6 +280,7 @@ const Images: React.FC = () => {
             )}
             Prune All Dangling
           </button>
+          )}
 
           {/* View toggle */}
           <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-1">
@@ -369,6 +382,7 @@ const Images: React.FC = () => {
               <button onClick={handleClearSelection} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all">
                 Clear
               </button>
+              {isAdmin && (
               <button
                 onClick={handleDeleteSelected}
                 disabled={selectedImages.size === 0 || batchLoading}
@@ -377,6 +391,7 @@ const Images: React.FC = () => {
                 {batchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 Delete Selected
               </button>
+              )}
             </div>
           </div>
         )}
@@ -537,6 +552,7 @@ const Images: React.FC = () => {
                           </span>
                         </div>
                       </div>
+                      {isAdmin && (
                       <button
                         onClick={() => handlePullImage(result.name)}
                         disabled={pullingImages.has(result.name) || !isConnected}
@@ -549,6 +565,7 @@ const Images: React.FC = () => {
                         )}
                         Pull
                       </button>
+                      )}
                     </div>
                   </div>
                 ))}

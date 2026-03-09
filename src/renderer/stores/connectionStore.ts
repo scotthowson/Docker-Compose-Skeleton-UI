@@ -86,7 +86,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     }
 
     const wasError = status === 'error'
-    set({ status: 'connecting', lastError: null })
+    // Only show 'connecting' on first attempt or user-initiated retry.
+    // During automatic reconnect retries, stay in 'error' to avoid UI flashing.
+    if (prevAttempts === 0) {
+      set({ status: 'connecting', lastError: null })
+    }
 
     try {
       const ok = await apiClient.testConnection()

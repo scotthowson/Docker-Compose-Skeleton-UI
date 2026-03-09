@@ -17,6 +17,7 @@ import {
 } from '../api/endpoints'
 import { useNetworkStore } from '../stores/networkStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import type {
   NetworkListResponse,
   NetworkInfo, NetworkDetail,
@@ -209,10 +210,11 @@ function CreateNetworkModal({ onClose, onCreated }: {
 // Network Detail Panel
 // ---------------------------------------------------------------------------
 
-function NetworkDetailPanel({ network, onClose, onRefresh }: {
+function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
   network: NetworkInfo
   onClose: () => void
   onRefresh: () => void
+  isAdmin: boolean
 }) {
   const [detail, setDetail] = useState<NetworkDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -349,7 +351,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh }: {
                           <p className="text-[10px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</p>
                         </div>
                       </div>
-                      {!isBuiltIn && (
+                      {!isBuiltIn && isAdmin && (
                         <button
                           onClick={() => handleDisconnect(c.name)}
                           disabled={disconnecting === c.name}
@@ -449,10 +451,11 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
 // Network Card
 // ---------------------------------------------------------------------------
 
-function NetworkCard({ net, onInspect, onDelete }: {
+function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
   net: NetworkInfo
   onInspect: () => void
   onDelete: () => void
+  isAdmin: boolean
 }) {
   const isBuiltIn = BUILTIN_NETWORKS.includes(net.name)
   const containerCount = net.containers.length
@@ -487,7 +490,7 @@ function NetworkCard({ net, onInspect, onDelete }: {
             <p className="text-[10px] text-slate-600 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {!isBuiltIn && (
+            {!isBuiltIn && isAdmin && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete() }}
                 className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
@@ -565,6 +568,9 @@ export default function Networks() {
   const [sortBy, setSortBy] = useState<'name' | 'driver' | 'containers'>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
+  const userRole = useAuthStore((s) => s.userRole)
+  const isAdmin = userRole === 'admin'
+
   const setNetworksStore = useNetworkStore((s) => s.setNetworks)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
@@ -619,6 +625,7 @@ export default function Networks() {
           network={inspectNetwork}
           onClose={() => setInspectNetwork(null)}
           onRefresh={refreshNetworks}
+          isAdmin={isAdmin}
         />
       )}
       {deleteTarget && (
@@ -638,19 +645,21 @@ export default function Networks() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium text-emerald-400
-              bg-emerald-500/10 border border-emerald-500/20
-              hover:bg-emerald-500/20 hover:border-emerald-500/30
-              transition-all duration-200
-            "
-          >
-            <Plus size={15} />
-            New Network
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="
+                flex items-center gap-2 rounded-lg px-3.5 py-2
+                text-sm font-medium text-emerald-400
+                bg-emerald-500/10 border border-emerald-500/20
+                hover:bg-emerald-500/20 hover:border-emerald-500/30
+                transition-all duration-200
+              "
+            >
+              <Plus size={15} />
+              New Network
+            </button>
+          )}
           <button
             onClick={refreshNetworks}
             disabled={networksLoading}
@@ -748,6 +757,7 @@ export default function Networks() {
               net={net}
               onInspect={() => setInspectNetwork(net)}
               onDelete={() => setDeleteTarget(net.name)}
+              isAdmin={isAdmin}
             />
           ))}
         </div>

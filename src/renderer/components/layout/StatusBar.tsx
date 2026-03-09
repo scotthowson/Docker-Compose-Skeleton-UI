@@ -98,7 +98,7 @@ export function StatusBar() {
         {/* Left */}
         <div className="flex items-center gap-2.5">
           <span className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
             <span className={isConnected ? 'text-slate-400' : 'text-slate-600'}>
               {isConnected ? 'Connected' : connectionStatus}
             </span>
@@ -185,7 +185,7 @@ export function StatusBar() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
               <span className={isConnected ? 'text-slate-400' : 'text-slate-600'}>
                 {isConnected ? 'Connected' : connectionStatus}
               </span>

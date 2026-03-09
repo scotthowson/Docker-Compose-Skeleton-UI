@@ -6,6 +6,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useContainerStore } from '../stores/containerStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import { useApi } from '../hooks/useApi'
 import { fetchContainers } from '../api/endpoints'
 import ContainerList from '../components/containers/ContainerList'
@@ -20,6 +21,7 @@ const Containers: React.FC = () => {
   const setLoading = useContainerStore((s) => s.setLoading)
   const containers = useContainerStore((s) => s.containers)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
@@ -82,12 +84,14 @@ const Containers: React.FC = () => {
             containerInfo={selectedContainer}
             onBack={handleBack}
             onRefreshList={refresh}
+            isAdmin={isAdmin}
           />
         </ErrorBoundary>
       ) : (
         <ContainerList
           selectedName={selectedName}
           onSelect={handleSelect}
+          isAdmin={isAdmin}
         />
       )}
     </div>

@@ -19,6 +19,7 @@ interface Props {
   batchMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (name: string) => void
+  isAdmin?: boolean
 }
 
 /** Pretty-print stack category names: "core-infrastructure" -> "Core Infrastructure" */
@@ -36,7 +37,7 @@ const priorityConfig = {
   low: { label: 'Low', color: 'text-slate-500', bg: 'bg-slate-500/10 border-slate-500/20', icon: Tag },
 }
 
-export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect }: Props) {
+export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect, isAdmin = false }: Props) {
   const isRunning = stack.status === 'running'
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const annotation = stackAnnotations[stack.name] ?? {}
@@ -244,7 +245,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/[0.06]"
             onClick={(e) => e.stopPropagation()}
           >
-            {actionButtons.map(({ action, icon: Icon, label, color, hoverColor, disabled }) => {
+            {actionButtons.filter((b) => b.action !== 'update' || isAdmin).map(({ action, icon: Icon, label, color, hoverColor, disabled }) => {
               const isDisabled = disabled || isActionLoading
 
               return (

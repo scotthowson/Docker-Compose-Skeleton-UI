@@ -125,7 +125,7 @@ export function ServerSwitcher() {
       <button onClick={() => { setOpen(!open); if (open) { setEditingId(null); resetAddForm() } }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors group">
         <div className="relative">
           <Server className="w-4 h-4 text-slate-400" />
-          <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900`} />
+          <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900 transition-colors duration-500`} />
         </div>
         <div className="flex-1 min-w-0 text-left">
           <span className="text-sm text-slate-300 truncate block">{active?.name || 'No server'}</span>
@@ -177,7 +177,7 @@ export function ServerSwitcher() {
                         ) : (
                           <>
                             <Globe className="w-4 h-4 text-slate-500" />
-                            {isActive && <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900`} />}
+                            {isActive && <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900 transition-colors duration-500`} />}
                           </>
                         )}
                       </div>
@@ -277,7 +277,7 @@ export function ServerSwitcher() {
                   <button
                     onClick={handleAdd}
                     disabled={loading || !newName.trim() || !newUrl.trim() || !!switching}
-                    className="flex-1 px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 disabled:opacity-40 flex items-center justify-center gap-1.5 transition-colors"
+                    className="flex-1 px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 disabled:opacity-40 flex items-center justify-center gap-1.5 transition-colors press"
                   >
                     {switching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                     Add & Connect

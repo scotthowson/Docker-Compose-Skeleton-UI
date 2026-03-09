@@ -12,6 +12,7 @@ import { usePolling } from '../hooks/usePolling'
 import { fetchSystemInfo, runDockerPrune, runImagePrune } from '../api/endpoints'
 import { useSystemStore } from '../stores/systemStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import type { SystemInfo, DockerDiskUsage } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 
@@ -93,10 +94,14 @@ function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 
 function MaintenancePanel() {
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const [pruning, setPruning] = useState(false)
   const [imagePruning, setImagePruning] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [confirmAction, setConfirmAction] = useState<'prune' | 'image-prune' | null>(null)
+
+  // Hide entire panel for non-admin users
+  if (!isAdmin) return null
 
   const handlePrune = async () => {
     setConfirmAction(null)

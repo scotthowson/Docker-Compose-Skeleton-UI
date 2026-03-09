@@ -73,9 +73,10 @@ const COLUMNS: ColumnDef[] = [
 interface ContainerListProps {
   selectedName: string | null
   onSelect: (name: string) => void
+  isAdmin?: boolean
 }
 
-const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect }) => {
+const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, isAdmin = false }) => {
   const containers = useContainerStore((s) => s.containers)
   const loading = useContainerStore((s) => s.loading)
   const favorites = useContainerStore((s) => s.favorites)
@@ -213,20 +214,22 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect })
             Manage and monitor all Docker containers
           </p>
         </div>
-        <button
-          onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
-          className={`
-            flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
-            border transition-all duration-200
-            ${batchMode
-              ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
-              : 'bg-white/[0.04] border-white/[0.06] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200'
-            }
-          `}
-        >
-          <CheckSquare size={14} />
-          <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
+            className={`
+              flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
+              border transition-all duration-200
+              ${batchMode
+                ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
+                : 'bg-white/[0.04] border-white/[0.06] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200'
+              }
+            `}
+          >
+            <CheckSquare size={14} />
+            <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
+          </button>
+        )}
       </div>
 
       {/* ---- Batch Action Bar ---- */}

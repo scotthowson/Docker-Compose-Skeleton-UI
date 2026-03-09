@@ -412,6 +412,8 @@ interface ContainerDetailProps {
   onBack: () => void
   /** Trigger immediate refresh of the containers list after actions. */
   onRefreshList?: () => void
+  /** Whether the current user has admin privileges. */
+  isAdmin?: boolean
 }
 
 const ContainerDetail: React.FC<ContainerDetailProps> = ({
@@ -419,6 +421,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   containerInfo,
   onBack,
   onRefreshList,
+  isAdmin = false,
 }) => {
   const setStats = useContainerStore((s) => s.setStats)
   const pushStatsHistory = useContainerStore((s) => s.pushStatsHistory)
@@ -839,14 +842,16 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
             Logs
           </button>
-          <button
-            onClick={() => handleAction('remove')}
-            disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all disabled:opacity-50"
-          >
-            {actionLoading === 'remove' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            Remove
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => handleAction('remove')}
+              disabled={!!actionLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+            >
+              {actionLoading === 'remove' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Remove
+            </button>
+          )}
           {isRunning && (
             <button
               onClick={handleToggleProcesses}
