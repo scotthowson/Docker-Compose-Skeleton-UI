@@ -13,6 +13,7 @@ import { useSystemStore } from '../../stores/systemStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { NotificationDrawer } from '../NotificationDrawer'
+import Breadcrumbs from '../common/Breadcrumbs'
 import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
@@ -50,6 +51,8 @@ export const pageTitles: Record<PageId, string> = {
   secrets: 'Secrets Manager',
   schedules: 'Scheduled Tasks',
   plugins: 'Plugins',
+  'event-feed': 'Live Events',
+  export: 'Export Center',
   setup: 'Setup Wizard',
 }
 
@@ -258,11 +261,16 @@ export function Header() {
         shrink-0
       "
     >
-      {/* Left: Page title */}
+      {/* Left: Page title + breadcrumbs */}
       <div className="no-drag flex items-center gap-3">
-        <h1 className="text-sm font-semibold text-slate-200 select-none tracking-wide">
-          {title}
-        </h1>
+        <div className="flex flex-col">
+          <h1 className="text-sm font-semibold text-slate-200 select-none tracking-wide">
+            {title}
+          </h1>
+          <div className="hidden md:block">
+            <Breadcrumbs />
+          </div>
+        </div>
         {hostname && (
           <span className="hidden md:contents">
             <span className="text-white/[0.08]">/</span>

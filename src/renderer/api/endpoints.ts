@@ -1148,7 +1148,18 @@ export function fetchPlugins(): Promise<PluginListResponse> {
 }
 
 export function installPlugin(source: string): Promise<PluginInstallResponse> {
-  return apiClient.post<PluginInstallResponse>('/plugins/install', { source })
+  return apiClient.post<PluginInstallResponse>('/plugins/install', { url: source })
+}
+
+export function scaffoldPlugin(definition: {
+  name: string
+  description?: string
+  version?: string
+  author?: string
+  manifest?: Record<string, unknown>
+  hooks?: Record<string, string>
+}): Promise<PluginInstallResponse> {
+  return apiClient.post<PluginInstallResponse>('/plugins/scaffold', definition)
 }
 
 export function removePlugin(name: string): Promise<PluginDeleteResponse> {

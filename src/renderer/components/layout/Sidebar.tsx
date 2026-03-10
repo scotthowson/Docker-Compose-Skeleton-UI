@@ -44,6 +44,8 @@ import {
   PieChart,
   KeyRound,
   Puzzle,
+  Radio,
+  Download,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -78,6 +80,7 @@ const navItems: NavItem[] = [
   { id: 'topology', label: 'Topology', icon: Share2, section: 'main' },
   { id: 'updates', label: 'Updates', icon: ArrowUpCircle, section: 'main' },
   { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
+  { id: 'event-feed', label: 'Live Events', icon: Radio, section: 'main' },
   // ── Management ──
   { id: 'templates', label: 'Templates', icon: LayoutTemplate, section: 'main' },
   { id: 'secrets', label: 'Secrets', icon: KeyRound, section: 'main' },
@@ -100,6 +103,7 @@ const navItems: NavItem[] = [
   { id: 'notifications', label: 'Notifications', icon: Bell, section: 'system' },
   { id: 'automations', label: 'Automations', icon: Bot, section: 'system' },
   { id: 'snapshots', label: 'Snapshots', icon: Camera, section: 'system' },
+  { id: 'export', label: 'Export', icon: Download, section: 'system' },
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]
 

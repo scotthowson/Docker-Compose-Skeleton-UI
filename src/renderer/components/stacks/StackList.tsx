@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Search, Layers, Filter, Plus, Play, Square, Download,
   ArrowUpDown, X, Loader2, AlertTriangle, Check, Sparkles,
@@ -111,8 +112,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   return (
     <div className="space-y-6">
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      {showDeleteModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass p-6 max-w-sm w-full mx-4 space-y-4 animate-scale-in">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
@@ -159,7 +160,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Header with stats + actions */}

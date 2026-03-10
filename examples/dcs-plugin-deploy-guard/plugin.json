@@ -1,0 +1,7 @@
+{
+  "name": "deploy-guard",
+  "version": "1.0.0",
+  "description": "Deployment lifecycle protection — validates health checks after deploy, logs deployment results, and creates pre-update safety checkpoints.",
+  "author": "DCS Community",
+  "enabled": true
+}

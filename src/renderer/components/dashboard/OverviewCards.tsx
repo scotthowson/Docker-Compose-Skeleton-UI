@@ -88,6 +88,37 @@ function AnimatedCounter({ value, duration = 800, className = '' }: AnimatedCoun
 }
 
 // ---------------------------------------------------------------------------
+// Sparkline — tiny inline SVG chart for metric history
+// ---------------------------------------------------------------------------
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) return null
+  const w = 80
+  const h = 20
+  const max = Math.max(...data, 1)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w
+    const y = h - ((v - min) / range) * (h - 2) - 1
+    return `${x},${y}`
+  }).join(' ')
+
+  return (
+    <svg width={w} height={h} className="opacity-60">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
 
 interface CardProps {
   icon: React.ReactNode
@@ -100,6 +131,7 @@ interface CardProps {
   index?: number
   onClick?: () => void
   pulse?: boolean
+  sparkData?: number[]
 }
 
 const accentBorderMap: Record<CardProps['accentColor'], string> = {
@@ -122,7 +154,14 @@ const trendIcons: Record<NonNullable<CardProps['trend']>, { symbol: string; colo
   stable: { symbol: '\u2192', color: 'text-slate-400' },
 }
 
-function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse }: CardProps) {
+const sparkColorMap: Record<CardProps['accentColor'], string> = {
+  emerald: '#10b981',
+  cyan: '#06b6d4',
+  amber: '#f59e0b',
+  rose: '#f43f5e',
+}
+
+function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse, sparkData }: CardProps) {
   return (
     <div
       onClick={onClick}
@@ -173,6 +212,11 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
             {subtitle && (
               <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
             )}
+            {sparkData && sparkData.length >= 2 && (
+              <div className="mt-2">
+                <Sparkline data={sparkData} color={sparkColorMap[accentColor]} />
+              </div>
+            )}
           </div>
         </>
       )}
@@ -192,6 +236,7 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
 export default function OverviewCards() {
   // Read store data directly — no loading flags, just check if data is null
   const status = useSystemStore((s) => s.status)
+  const metricHistory = useSystemStore((s) => s.metricHistory)
   const report = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
@@ -272,6 +317,7 @@ export default function OverviewCards() {
         loading={statusLoading}
         index={0}
         onClick={() => setCurrentPage('stacks')}
+        sparkData={metricHistory.stacks}
       />
       <StatCard
         icon={<Box className="h-5 w-5" />}
@@ -283,6 +329,7 @@ export default function OverviewCards() {
         loading={statusLoading}
         index={1}
         onClick={() => setCurrentPage('containers')}
+        sparkData={metricHistory.containers}
       />
       <StatCard
         icon={<HardDrive className="h-5 w-5" />}
@@ -295,6 +342,7 @@ export default function OverviewCards() {
         index={2}
         onClick={() => setCurrentPage('images')}
         pulse={diskWarning}
+        sparkData={metricHistory.cpu}
       />
       <StatCard
         icon={<HeartPulse className="h-5 w-5" />}
@@ -312,6 +360,7 @@ export default function OverviewCards() {
         loading={healthLoading}
         index={3}
         onClick={() => setCurrentPage('health')}
+        sparkData={metricHistory.health}
       />
     </div>
   )

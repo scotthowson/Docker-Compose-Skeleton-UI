@@ -164,6 +164,7 @@ export default function Dashboard() {
   const setSystemInfo = useSystemStore((s) => s.setSystem)
   const systemStatus = useSystemStore((s) => s.status)
   const systemInfo = useSystemStore((s) => s.system)
+  const pushMetrics = useSystemStore((s) => s.pushMetrics)
 
   const healthReport = useHealthStore((s) => s.report)
 
@@ -198,6 +199,31 @@ export default function Dashboard() {
   // =========================================================================
   // Data from stores (populated by GlobalPoller)
   // =========================================================================
+
+  // Push metric snapshots for sparklines in OverviewCards
+  React.useEffect(() => {
+    if (!systemStatus) return
+    const cpuCount = systemInfo?.cpu_count ?? 1
+    const loadAvg1 = systemStatus.system.load_average[0] ?? 0
+    const cpuPct = Math.min(100, Math.round((loadAvg1 / cpuCount) * 100))
+    const memT = systemStatus.system.memory_mb.total
+    const memA = systemStatus.system.memory_mb.available
+    const memPct = memT > 0 ? Math.round(((memT - memA) / memT) * 100) : 0
+    pushMetrics({
+      stacks: systemStatus.stacks.running,
+      containers: systemStatus.docker.containers.running,
+      cpu: cpuPct,
+      mem: memPct,
+    })
+  }, [systemStatus, systemInfo, pushMetrics])
+
+  // Push health metric separately
+  React.useEffect(() => {
+    if (!healthReport) return
+    const total = healthReport.summary.total || 1
+    const healthPct = Math.round((healthReport.summary.healthy / total) * 100)
+    pushMetrics({ health: healthPct })
+  }, [healthReport, pushMetrics])
 
   // Build resource history from systemStatus changes (fed by GlobalPoller)
   React.useEffect(() => {

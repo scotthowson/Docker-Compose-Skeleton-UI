@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   Copy,
@@ -886,12 +887,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     )
   }
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
       className="
-        fixed inset-0 z-50
+        fixed inset-0 z-[9999]
         flex items-center justify-center
         bg-black/60 backdrop-blur-sm
         animate-fade-in
@@ -1327,6 +1328,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

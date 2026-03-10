@@ -837,6 +837,8 @@ export type PageId =
   | 'secrets'
   | 'schedules'
   | 'plugins'
+  | 'event-feed'
+  | 'export'
   | 'setup'
 
 /**
@@ -857,6 +859,7 @@ export const ADMIN_ONLY_PAGES: ReadonlySet<PageId> = new Set([
   'users',
   'automations',
   'snapshots',
+  'export',
 ])
 
 // ---------------------------------------------------------------------------

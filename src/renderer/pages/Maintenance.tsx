@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Wrench, RefreshCw, Loader2, Trash2, RotateCcw, AlertTriangle,
   CheckCircle2, Box, Image, HardDrive, Network, FileText, Scissors,
@@ -170,9 +171,9 @@ export default function Maintenance() {
     <div className="space-y-3 md:space-y-6">
       <DisconnectedBanner />
       {/* Deep Prune Confirmation Modal */}
-      {showDeepPruneModal && (
+      {showDeepPruneModal && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => setShowDeepPruneModal(false)}
         >
           <div
@@ -219,7 +220,8 @@ export default function Maintenance() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Page header */}
