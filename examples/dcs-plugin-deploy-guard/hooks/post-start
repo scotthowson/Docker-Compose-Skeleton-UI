@@ -1,0 +1,52 @@
+#!/bin/bash
+# =============================================================================
+# post-start — Validates all stacks started successfully
+# =============================================================================
+#
+# After stacks are started, this hook:
+#   1. Waits for containers to initialize
+#   2. Checks for any containers in restart loops
+#   3. Reports overall system health
+#
+# Context (received as JSON via stdin):
+#   { "stacks": ["stack1", "stack2", ...], "success": true/false }
+# =============================================================================
+
+set -euo pipefail
+
+CONTEXT=$(cat)
+SUCCESS=$(echo "$CONTEXT" | jq -r '.success // false')
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "$LOG_DIR"
+
+if [ "$SUCCESS" != "true" ]; then
+    echo "[$TIMESTAMP] FAIL  system start reported failure" >> "${LOG_DIR}/deployments.log"
+    echo "✗ System start reported failure"
+    exit 0
+fi
+
+# Brief wait for initialization
+sleep 5
+
+# Check for containers in restart loops (restarting state)
+RESTARTING=$(docker ps --filter "status=restarting" --format '{{.Names}}' 2>/dev/null)
+TOTAL_RUNNING=$(docker ps --format '{{.Names}}' 2>/dev/null | wc -l)
+TOTAL_UNHEALTHY=$(docker ps --filter "health=unhealthy" --format '{{.Names}}' 2>/dev/null | wc -l)
+
+if [ -n "$RESTARTING" ]; then
+    echo "[$TIMESTAMP] WARN  system start — restart loops detected: $RESTARTING" >> "${LOG_DIR}/deployments.log"
+    echo "⚠ Containers in restart loop: $RESTARTING"
+    exit 0
+fi
+
+if [ "$TOTAL_UNHEALTHY" -gt 0 ]; then
+    echo "[$TIMESTAMP] WARN  system start — $TOTAL_RUNNING running, $TOTAL_UNHEALTHY unhealthy" >> "${LOG_DIR}/deployments.log"
+    echo "⚠ System started with $TOTAL_UNHEALTHY unhealthy containers"
+    exit 0
+fi
+
+echo "[$TIMESTAMP] OK    system start — $TOTAL_RUNNING containers running, all healthy" >> "${LOG_DIR}/deployments.log"
+echo "✓ System start verified — $TOTAL_RUNNING containers running, all healthy"

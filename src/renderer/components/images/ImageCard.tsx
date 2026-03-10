@@ -61,6 +61,7 @@ function truncate(str: string, maxLen: number): string {
 
 /** Compute the age bar percentage (cap at 100% / 365 days). */
 function agePercent(ageDays: number): number {
+  if (ageDays < 0) return 0
   return Math.min(100, Math.round((ageDays / 365) * 100))
 }
 
@@ -114,7 +115,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-slate-500 uppercase tracking-wide">Age</span>
           <span className="text-[10px] text-slate-400">
-            {image.age_days}d
+            {image.age_days >= 0 ? `${image.age_days}d` : 'N/A'}
           </span>
         </div>
         <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden">

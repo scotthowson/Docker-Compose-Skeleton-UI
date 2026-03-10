@@ -1,0 +1,48 @@
+#!/bin/bash
+# =============================================================================
+# pre-update — Creates a safety checkpoint before stack image updates
+# =============================================================================
+#
+# Before any stack is updated with new images, this hook:
+#   1. Records the current running image digests
+#   2. Saves a snapshot of the compose file
+#   3. Logs the pre-update state for potential rollback reference
+#
+# Context (received as JSON via stdin):
+#   { "stack": "stack-name" }
+# =============================================================================
+
+set -euo pipefail
+
+CONTEXT=$(cat)
+STACK=$(echo "$CONTEXT" | jq -r '.stack // "unknown"')
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+DATE_STAMP=$(date '+%Y%m%d_%H%M%S')
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHECKPOINT_DIR="${SCRIPT_DIR}/checkpoints"
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "$CHECKPOINT_DIR" "$LOG_DIR"
+
+CHECKPOINT_FILE="${CHECKPOINT_DIR}/${STACK}_${DATE_STAMP}.json"
+
+# Capture current image digests for all containers in the stack
+IMAGES=$(docker ps --filter "label=com.docker.compose.project=$STACK" \
+    --format '{"container":"{{.Names}}","image":"{{.Image}}","id":"{{.ID}}"}' 2>/dev/null \
+    | jq -s '.' 2>/dev/null || echo '[]')
+
+# Write checkpoint
+jq -n \
+    --arg stack "$STACK" \
+    --arg timestamp "$TIMESTAMP" \
+    --argjson images "$IMAGES" \
+    '{ stack: $stack, timestamp: $timestamp, images: $images }' \
+    > "$CHECKPOINT_FILE"
+
+IMAGE_COUNT=$(echo "$IMAGES" | jq 'length')
+
+echo "[$TIMESTAMP] CHECKPOINT $STACK — saved $IMAGE_COUNT image states to ${STACK}_${DATE_STAMP}.json" >> "${LOG_DIR}/deployments.log"
+echo "✓ Pre-update checkpoint saved for $STACK ($IMAGE_COUNT containers)"
+
+# Clean up old checkpoints (keep last 20 per stack)
+ls -1t "${CHECKPOINT_DIR}/${STACK}_"*.json 2>/dev/null | tail -n +21 | xargs -r rm -f

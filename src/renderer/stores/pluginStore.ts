@@ -9,6 +9,7 @@ interface PluginState {
   error: string | null
   fetchPlugins: () => Promise<void>
   installPlugin: (source: string) => Promise<boolean>
+  scaffoldPlugin: (def: Parameters<typeof api.scaffoldPlugin>[0]) => Promise<boolean>
   removePlugin: (name: string) => Promise<boolean>
   togglePlugin: (name: string) => Promise<boolean>
 }
@@ -38,6 +39,19 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return true
     } catch (err) {
       set({ installing: false, error: err instanceof Error ? err.message : 'Failed to install plugin' })
+      return false
+    }
+  },
+
+  scaffoldPlugin: async (def) => {
+    set({ installing: true, error: null })
+    try {
+      await api.scaffoldPlugin(def)
+      set({ installing: false })
+      get().fetchPlugins()
+      return true
+    } catch (err) {
+      set({ installing: false, error: err instanceof Error ? err.message : 'Failed to scaffold plugin' })
       return false
     }
   },

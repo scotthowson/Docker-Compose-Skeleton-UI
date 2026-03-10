@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   HardDrive,
   Search,
@@ -128,9 +129,9 @@ function DeleteConfirmModal({
     }
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -205,7 +206,8 @@ function DeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -225,9 +227,9 @@ function BatchDeleteConfirmModal({
   const [confirmText, setConfirmText] = useState('')
   const expected = String(count)
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -301,7 +303,8 @@ function BatchDeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

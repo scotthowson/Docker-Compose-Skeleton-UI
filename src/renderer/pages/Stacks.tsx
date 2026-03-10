@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useCallback, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useApi } from '../hooks/useApi'
 import { useStackStore } from '../stores/stackStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -382,8 +383,8 @@ export default function Stacks() {
       {/* ----------------------------------------------------------------- */}
       {/* Batch Progress Modal                                              */}
       {/* ----------------------------------------------------------------- */}
-      {showBatchProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      {showBatchProgress && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass p-6 max-w-lg w-full mx-4 space-y-5 animate-scale-in">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -493,7 +494,8 @@ export default function Stacks() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

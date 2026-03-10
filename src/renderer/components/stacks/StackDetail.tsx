@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
   Play,
@@ -22,9 +23,13 @@ import {
   ChevronDown,
   RefreshCw,
   FileCode2,
+  Copy,
+  Pencil,
+  X,
 } from 'lucide-react'
 import type { StackDetail as StackDetailType, ContainerInfo } from '../../../shared/types'
-import { fetchStack, fetchStackLogs, fetchStackCompose } from '../../api/endpoints'
+import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack } from '../../api/endpoints'
+import { useToast } from '../common/Toast'
 import { ComposeViewer } from './ComposeViewer'
 
 interface Props {
@@ -90,6 +95,17 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [composeLoading, setComposeLoading] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const { addToast } = useToast()
+
+  // Clone state
+  const [showCloneModal, setShowCloneModal] = useState(false)
+  const [cloneName, setCloneName] = useState('')
+  const [cloneLoading, setCloneLoading] = useState(false)
+
+  // Rename state
+  const [renameMode, setRenameMode] = useState(false)
+  const [renameTo, setRenameTo] = useState('')
+  const [renameLoading, setRenameLoading] = useState(false)
 
   // Fetch compose file content
   const handleViewCompose = useCallback(async () => {
@@ -106,6 +122,46 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       setComposeLoading(false)
     }
   }, [stackName])
+
+  // Clone stack handler
+  const handleClone = useCallback(async () => {
+    if (!cloneName.trim()) return
+    setCloneLoading(true)
+    try {
+      const result = await cloneStack(stackName, cloneName.trim())
+      if (result.success) {
+        addToast({ type: 'success', message: `Stack cloned as "${cloneName.trim()}"` })
+        setShowCloneModal(false)
+        setCloneName('')
+      } else {
+        addToast({ type: 'error', message: result.message || 'Clone failed', duration: 6000 })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Clone failed', duration: 6000 })
+    } finally {
+      setCloneLoading(false)
+    }
+  }, [stackName, cloneName, addToast])
+
+  // Rename stack handler
+  const handleRename = useCallback(async () => {
+    if (!renameTo.trim() || renameTo.trim() === stackName) return
+    setRenameLoading(true)
+    try {
+      const result = await renameStack(stackName, renameTo.trim())
+      if (result.success) {
+        addToast({ type: 'success', message: `Stack renamed to "${renameTo.trim()}"` })
+        setRenameMode(false)
+        onBack() // Go back to list since the stack name changed
+      } else {
+        addToast({ type: 'error', message: result.message || 'Rename failed', duration: 6000 })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Rename failed', duration: 6000 })
+    } finally {
+      setRenameLoading(false)
+    }
+  }, [stackName, renameTo, addToast, onBack])
 
   // Fetch stack detail
   const loadDetail = useCallback(async () => {
@@ -196,8 +252,8 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   return (
     <div className="space-y-6 animate-in">
       {/* Confirmation modal overlay */}
-      {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      {confirmAction && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="glass p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
@@ -240,7 +296,8 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Back button + stack name */}
@@ -251,11 +308,50 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">
-            {formatStackName(stackName)}
-          </h2>
-          <p className="text-xs text-slate-500 font-mono">{stackName}</p>
+        <div className="flex-1 min-w-0">
+          {renameMode ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={renameTo}
+                onChange={(e) => setRenameTo(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+                placeholder={stackName}
+                autoFocus
+                className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-sm text-white font-mono placeholder-slate-500 focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20 focus:outline-none w-56"
+              />
+              <button
+                onClick={handleRename}
+                disabled={renameLoading || !renameTo.trim() || renameTo.trim() === stackName}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40 transition-all"
+              >
+                {renameLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+              </button>
+              <button
+                onClick={() => { setRenameMode(false); setRenameTo('') }}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-100">
+                  {formatStackName(stackName)}
+                </h2>
+                <p className="text-xs text-slate-500 font-mono">{stackName}</p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => { setRenameMode(true); setRenameTo(stackName) }}
+                  className="p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                  title="Rename stack"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -419,6 +515,17 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               )}
               Compose
             </button>
+
+            {/* Clone */}
+            {isAdmin && (
+              <button
+                onClick={() => { setShowCloneModal(true); setCloneName('') }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all duration-200 bg-slate-500/10 text-slate-300 border-slate-500/20 hover:bg-slate-500/20 hover:border-slate-500/30"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Clone
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -430,6 +537,51 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
           content={composeContent}
           onClose={() => setShowCompose(false)}
         />
+      )}
+
+      {/* Clone modal */}
+      {showCloneModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCloneModal(false)}>
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/[0.08] shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                <Copy size={14} className="text-cyan-400" />
+              </div>
+              <h3 className="text-base font-semibold text-white">Clone Stack</h3>
+            </div>
+            <p className="text-sm text-slate-400 mb-4">
+              Create a copy of <span className="font-mono text-emerald-400">{stackName}</span> with a new name.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">New Stack Name</label>
+              <input
+                value={cloneName}
+                onChange={(e) => setCloneName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleClone()}
+                placeholder="my-stack-copy"
+                autoFocus
+                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white font-mono placeholder-slate-500 border border-white/[0.06] focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCloneModal(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-300 hover:bg-white/[0.08] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClone}
+                disabled={cloneLoading || !cloneName.trim()}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+              >
+                {cloneLoading ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                Clone
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* Tab navigation */}

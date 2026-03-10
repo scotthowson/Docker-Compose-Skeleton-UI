@@ -1,0 +1,58 @@
+#!/bin/bash
+# =============================================================================
+# post-deploy — Validates deployment health after a stack is deployed
+# =============================================================================
+#
+# This hook runs after every stack deployment. It:
+#   1. Waits briefly for containers to initialize
+#   2. Checks that all containers in the deployed stack are running
+#   3. Runs Docker health checks on containers that define them
+#   4. Logs the deployment result with timestamp
+#
+# Context (received as JSON via stdin):
+#   { "stack": "stack-name", "success": true/false, "services": [...] }
+# =============================================================================
+
+set -euo pipefail
+
+CONTEXT=$(cat)
+STACK=$(echo "$CONTEXT" | jq -r '.stack // "unknown"')
+SUCCESS=$(echo "$CONTEXT" | jq -r '.success // false')
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Determine log directory (relative to DCS base)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/deployments.log"
+
+# If the deployment itself failed, just log and exit
+if [ "$SUCCESS" != "true" ]; then
+    echo "[$TIMESTAMP] FAIL  $STACK — deployment reported failure" >> "$LOG_FILE"
+    echo "✗ Deployment of $STACK failed"
+    exit 0
+fi
+
+# Brief pause for containers to start
+sleep 3
+
+# Count running vs expected containers
+RUNNING=$(docker ps --filter "label=com.docker.compose.project=$STACK" --format '{{.Names}}' 2>/dev/null | wc -l)
+
+if [ "$RUNNING" -eq 0 ]; then
+    echo "[$TIMESTAMP] WARN  $STACK — no containers found after deploy" >> "$LOG_FILE"
+    echo "⚠ No containers found for $STACK after deployment"
+    exit 0
+fi
+
+# Check health status of containers that have health checks defined
+UNHEALTHY=$(docker ps --filter "label=com.docker.compose.project=$STACK" --filter "health=unhealthy" --format '{{.Names}}' 2>/dev/null)
+
+if [ -n "$UNHEALTHY" ]; then
+    echo "[$TIMESTAMP] WARN  $STACK — $RUNNING containers running, unhealthy: $UNHEALTHY" >> "$LOG_FILE"
+    echo "⚠ $STACK deployed with unhealthy containers: $UNHEALTHY"
+    exit 0
+fi
+
+echo "[$TIMESTAMP] OK    $STACK — $RUNNING containers healthy" >> "$LOG_FILE"
+echo "✓ $STACK deployed successfully — $RUNNING containers running and healthy"

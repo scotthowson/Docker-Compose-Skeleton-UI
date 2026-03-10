@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { CalendarClock, Plus, Trash2, Play, Pause, Clock, History, RefreshCw, Archive, Wrench, HeartPulse, RotateCcw, X, Loader2, ChevronDown, ChevronRight, CheckCircle, XCircle } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -115,8 +116,8 @@ export default function Schedules() {
       )}
 
       {/* Create Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreate(false)}>
+      {showCreate && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreate(false)}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">Create Schedule</h2>
@@ -133,12 +134,13 @@ export default function Schedules() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Delete Confirmation */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
+      {deleteTarget && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={e => e.stopPropagation()}>
             <h3 className="text-white font-semibold mb-2">Delete Schedule</h3>
             <p className="text-sm text-slate-400 mb-4">This will permanently remove this scheduled operation.</p>
@@ -147,7 +149,8 @@ export default function Schedules() {
               <button onClick={async () => { await deleteSchedule(deleteTarget); setDeleteTarget(null) }} className="flex-1 px-4 py-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 text-sm font-medium">Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

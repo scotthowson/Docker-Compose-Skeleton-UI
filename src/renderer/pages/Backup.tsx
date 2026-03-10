@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
@@ -600,8 +601,8 @@ export default function Backup() {
       {/* ================================================================= */}
       {/* Restore Confirmation Modal                                        */}
       {/* ================================================================= */}
-      {restoreTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {restoreTarget && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           {/* Overlay */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -727,7 +728,8 @@ export default function Backup() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

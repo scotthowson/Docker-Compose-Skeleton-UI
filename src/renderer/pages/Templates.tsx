@@ -42,6 +42,7 @@ import {
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { usePluginStore } from '../stores/pluginStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
@@ -179,6 +180,75 @@ function matchesSearch(template: TemplateInfo, query: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Client-side compose lint — surfaces common issues the compose-linter
+// plugin would catch, directly in the UI before deployment
+// ---------------------------------------------------------------------------
+
+interface LintWarning {
+  severity: 'warning' | 'info'
+  message: string
+  service?: string
+}
+
+/** Resolve ${VAR:-default}  to a readable port string */
+function cleanPortDisplay(raw: string): string {
+  // Replace ${VAR:-default} with just the default value, ${VAR} with *
+  return raw.replace(/\$\{[^}]*:-([^}]+)\}/g, '$1').replace(/\$\{[^}]+\}/g, '*')
+}
+
+function lintCompose(compose: string): LintWarning[] {
+  const warnings: LintWarning[] = []
+  if (!compose) return warnings
+
+  // Parse services from compose content
+  const serviceRegex = /^  ([a-zA-Z_-][a-zA-Z0-9_-]*):/gm
+  const services: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = serviceRegex.exec(compose)) !== null) {
+    services.push(m[1])
+  }
+
+  for (const svc of services) {
+    // Extract the service block (rough heuristic — from service name to next same-indent service or end)
+    const svcRegex = new RegExp(`^  ${svc}:(.+?)(?=^  [a-zA-Z_-][a-zA-Z0-9_-]*:|\\Z)`, 'ms')
+    const svcMatch = compose.match(svcRegex)
+    if (!svcMatch) continue
+    const block = svcMatch[0]
+
+    // Check for missing restart policy
+    if (!/restart\s*:/.test(block)) {
+      warnings.push({ severity: 'warning', message: 'Missing restart policy', service: svc })
+    }
+
+    // Check for privileged mode
+    if (/privileged\s*:\s*true/.test(block)) {
+      warnings.push({ severity: 'warning', message: 'Running in privileged mode', service: svc })
+    }
+
+    // Check for ports exposed without bind address (e.g., "8080:8080" without "127.0.0.1:")
+    const portsSection = block.match(/ports\s*:\s*\n((?:\s+-\s*.+\n?)+)/)
+    if (portsSection) {
+      const portLines = portsSection[1].match(/-\s*["']?(\S+?)["']?\s*$/gm) || []
+      for (const portLine of portLines) {
+        const cleaned = portLine.replace(/^-\s*["']?/, '').replace(/["']?\s*$/, '')
+        // If it has a colon but doesn't start with an IP address
+        if (cleaned.includes(':') && !/^\d+\.\d+\.\d+\.\d+:/.test(cleaned)) {
+          const display = cleanPortDisplay(cleaned)
+          warnings.push({ severity: 'info', message: `Port ${display} exposed on all interfaces`, service: svc })
+        }
+      }
+    }
+
+    // Check for missing healthcheck
+    if (!/healthcheck\s*:/.test(block)) {
+      warnings.push({ severity: 'info', message: 'No health check defined', service: svc })
+    }
+  }
+
+  return warnings
+}
+
+// ---------------------------------------------------------------------------
 // Deploy Modal
 // ---------------------------------------------------------------------------
 
@@ -221,6 +291,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [dryRunLoading, setDryRunLoading] = useState(false)
   // F6: Replace conflicting services toggle
   const [replaceServices, setReplaceServices] = useState(false)
+  // Lint details panel visibility
+  const [showLintDetails, setShowLintDetails] = useState(true)
   // F7: Optional services — initially all enabled per template defaults
   const optionalServices = detail?.template.optional_services ?? template.optional_services ?? []
   const [excludedServices, setExcludedServices] = useState<Set<string>>(() => {
@@ -272,6 +344,17 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const matches = detail.compose.match(/^  [a-zA-Z_-][a-zA-Z0-9_-]*:/gm)
     return matches ? matches.map((m) => m.trim().replace(/:$/, '')) : [template.name]
   }, [detail, template.name])
+
+  // Compose lint warnings (client-side compose-linter)
+  const lintWarnings = useMemo(() => lintCompose(detail?.compose || ''), [detail?.compose])
+
+  // Plugin hooks awareness — which active plugins fire during deployment
+  const plugins = usePluginStore((s) => s.plugins)
+  const deployHookPlugins = useMemo(() => {
+    return plugins.filter(
+      (p) => p.enabled && (p.hooks ?? []).some((h) => h === 'pre-deploy' || h === 'post-deploy'),
+    )
+  }, [plugins])
 
   // F1: Handle deploy click — first click shows confirmation, second executes
   const handleDeployClick = useCallback(async () => {
@@ -639,6 +722,83 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   </div>
                 )}
               </div>
+
+              {/* Compose Lint Warnings */}
+              {lintWarnings.length > 0 && (() => {
+                const warnCount = lintWarnings.filter((w) => w.severity === 'warning').length
+                const infoCount = lintWarnings.filter((w) => w.severity === 'info').length
+                return (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 animate-fade-in">
+                    <button
+                      type="button"
+                      onClick={() => setShowLintDetails((v) => !v)}
+                      className="flex items-center gap-2 w-full text-left group"
+                    >
+                      <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                      <span className="text-xs font-semibold text-amber-300 flex-1">
+                        Compose Lint
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {warnCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                            {warnCount} {warnCount === 1 ? 'warning' : 'warnings'}
+                          </span>
+                        )}
+                        {infoCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/20">
+                            {infoCount} {infoCount === 1 ? 'suggestion' : 'suggestions'}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`text-amber-500/50 transition-transform duration-200 ${showLintDetails ? '' : '-rotate-90'}`}
+                      />
+                    </button>
+                    {showLintDetails && (
+                      <div className="space-y-1 mt-2.5 pl-[22px]">
+                        {lintWarnings.map((w, i) => (
+                          <div key={i} className="flex items-start gap-2 text-[11px]">
+                            <Circle
+                              size={6}
+                              className={`mt-1 shrink-0 ${w.severity === 'warning' ? 'text-amber-400 fill-amber-400' : 'text-slate-500 fill-slate-500'}`}
+                            />
+                            <span className={w.severity === 'warning' ? 'text-amber-200/80' : 'text-slate-400'}>
+                              {w.service && <span className="font-mono text-slate-500">{w.service}: </span>}
+                              {w.message}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Plugin Hooks Indicator */}
+              {deployHookPlugins.length > 0 && (
+                <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={14} className="text-violet-400 shrink-0" />
+                    <p className="text-xs font-semibold text-violet-300">
+                      {deployHookPlugins.length} {deployHookPlugins.length === 1 ? 'plugin' : 'plugins'} will run during deployment
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2 pl-[22px]">
+                    {deployHookPlugins.map((p) => (
+                      <span
+                        key={p.name}
+                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/10 text-violet-300 border border-violet-500/15"
+                      >
+                        {p.name}
+                        <span className="text-violet-500 ml-1">
+                          {(p.hooks ?? []).filter((h) => h === 'pre-deploy' || h === 'post-deploy').join(', ')}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* F5: Dry-run preview result */}
               {dryRunResult && (

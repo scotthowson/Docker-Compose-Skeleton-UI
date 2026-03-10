@@ -10,7 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle,
+  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -82,6 +82,8 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   secrets: <KeyRound size={16} />,
   schedules: <CalendarClock size={16} />,
   plugins: <Puzzle size={16} />,
+  'event-feed': <Radio size={16} />,
+  export: <Download size={16} />,
   setup: <Sparkles size={16} />,
 }
 
@@ -119,6 +121,8 @@ const pageLabels: Record<PageId, string> = {
   secrets: 'Secrets Manager',
   schedules: 'Scheduled Tasks',
   plugins: 'Plugins',
+  'event-feed': 'Live Events',
+  export: 'Export Center',
   setup: 'Setup Wizard',
 }
 
@@ -219,6 +223,8 @@ export function CommandPalette() {
       snapshots: 'Container snapshots, checkpoints',
       diagnostics: 'Diagnostics, troubleshoot, debug, inspect',
       users: 'User management, accounts, permissions',
+      'event-feed': 'Live SSE events, real-time stream',
+      export: 'Export data, download reports, backup configs',
     }
     const pageKeywords: Partial<Record<PageId, string[]>> = {
       dashboard: ['home', 'overview', 'monitor', 'live', 'stats', 'status'],
@@ -251,9 +257,11 @@ export function CommandPalette() {
       snapshots: ['snapshot', 'checkpoint', 'capture', 'freeze'],
       diagnostics: ['diagnostic', 'troubleshoot', 'debug', 'inspect', 'doctor'],
       users: ['user', 'account', 'permission', 'role', 'invite'],
+      'event-feed': ['sse', 'stream', 'live', 'event', 'real-time', 'push'],
+      export: ['export', 'download', 'report', 'backup', 'json'],
     }
 
-    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'event-feed', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'export', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
     // Filter out admin-only pages for non-admin users
     const pages = allPages.filter((p) => !ADMIN_ONLY_PAGES.has(p) || isAdmin)
     for (const page of pages) {

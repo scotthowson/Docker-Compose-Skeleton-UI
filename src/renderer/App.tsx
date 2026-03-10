@@ -46,8 +46,12 @@ import DiskAnalysis from './pages/DiskAnalysis'
 import Secrets from './pages/Secrets'
 import Schedules from './pages/Schedules'
 import Plugins from './pages/Plugins'
+import EventFeed from './pages/EventFeed'
+import Export from './pages/Export'
 import SetupWizard from './pages/SetupWizard'
+import KeyboardShortcutsPanel from './components/common/KeyboardShortcutsPanel'
 import { apiClient } from './api/client'
+import { sseClient } from './lib/sse'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -84,6 +88,8 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   secrets: Secrets,
   schedules: Schedules,
   plugins: Plugins,
+  'event-feed': EventFeed,
+  export: Export,
   setup: SetupWizard as unknown as React.ComponentType,
 }
 
@@ -98,6 +104,7 @@ export default function App() {
   const [transitionPage, setTransitionPage] = useState(currentPage)
   const [transitioning, setTransitioning] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
 
   // Smooth logout transition: brief fade-to-dark before Login mounts.
   // useLayoutEffect fires synchronously BEFORE the browser paints, so
@@ -200,6 +207,17 @@ export default function App() {
       connect()
     }
   }, [isAuthenticated, settingsReady, connect])
+
+  // Activate SSE when connected, disconnect when not
+  const connectionStatus = useConnectionStore((s) => s.status)
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      sseClient.connect()
+    } else {
+      sseClient.disconnect()
+    }
+    return () => sseClient.disconnect()
+  }, [connectionStatus])
 
   // Apply theme class to document
   useEffect(() => {
@@ -349,6 +367,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setCurrentPage, isAuthenticated, currentPage, toggleSidebar, updateSetting])
 
+  // ? key to toggle keyboard shortcuts panel (only when no input focused)
+  useEffect(() => {
+    if (!isAuthenticated || currentPage === 'setup') return
+    function handleQuestion(e: KeyboardEvent) {
+      if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable) return
+      e.preventDefault()
+      setShowShortcuts((prev) => !prev)
+    }
+    window.addEventListener('keydown', handleQuestion)
+    return () => window.removeEventListener('keydown', handleQuestion)
+  }, [isAuthenticated, currentPage])
+
   // Show setup wizard if server needs first-run setup
   if (currentPage === 'setup' && settingsReady) {
     return <SetupWizard onComplete={() => setCurrentPage('dashboard')} />
@@ -413,6 +445,7 @@ export default function App() {
         {/* Command Palette + Keyboard Shortcuts */}
         <CommandPalette />
         <KeyboardShortcuts />
+        <KeyboardShortcutsPanel open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
         {/* Header — z-30 so dropdown renders above content area */}
         <div className="relative z-30">
