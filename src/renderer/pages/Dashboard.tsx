@@ -178,12 +178,18 @@ export default function Dashboard() {
   // Track previous health status for notification triggers
   const prevHealthStatusRef = useRef<HealthReport['status'] | null>(null)
 
-  // Welcome toast after first-time setup
+  // Welcome toast + onboarding after first-time setup
   const { addToast } = useToast()
   useEffect(() => {
     if (sessionStorage.getItem('dcs-just-setup')) {
       sessionStorage.removeItem('dcs-just-setup')
       addToast({ type: 'success', message: 'Welcome! Your server is configured and ready.', duration: 6000 })
+      // Trigger onboarding overlay after render settles (avoids flash from
+      // auth/connection state changes during the setup→dashboard transition)
+      setTimeout(() => {
+        localStorage.removeItem('onboarding_complete')
+        window.dispatchEvent(new Event('show-onboarding'))
+      }, 800)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

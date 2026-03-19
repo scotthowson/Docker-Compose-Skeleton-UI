@@ -409,19 +409,19 @@ export default function Updates() {
               <p className="text-xs text-slate-500">DCS framework and application version management</p>
             </div>
           </div>
-          <button
-            onClick={handleCheckSystemUpdate}
-            disabled={sysChecking}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 disabled:opacity-50 press shrink-0"
-          >
-            {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Check for Updates
-          </button>
-          {lastChecked && (
-            <span className="text-[10px] text-slate-600">
-              Last checked {formatRelativeTime(lastChecked)}
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={handleCheckSystemUpdate}
+              disabled={sysChecking}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 disabled:opacity-50 press"
+            >
+              {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Check for Updates
+            </button>
+            <span className="text-[10px] text-slate-600 min-w-[100px]">
+              {lastChecked ? `Last checked ${formatRelativeTime(lastChecked)}` : '\u00A0'}
             </span>
-          )}
+          </div>
         </div>
 
         {/* Auto-check settings */}
