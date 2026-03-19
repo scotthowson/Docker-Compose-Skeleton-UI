@@ -234,7 +234,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
         <button
           type="submit"
           disabled={!label.trim()}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all press"
         >
           <Bookmark size={12} />
           Add Bookmark
@@ -520,7 +520,7 @@ export default function Bookmarks() {
           {bookmarks.length === 0 && (
             <button
               onClick={() => setShowForm(true)}
-              className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all"
+              className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all press"
             >
               <Plus size={15} />
               Create Your First Bookmark

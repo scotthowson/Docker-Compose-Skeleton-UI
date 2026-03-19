@@ -760,6 +760,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       type={showPassword ? 'text' : 'password'}
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !needsAdmin && canNext()) handleNext() }}
                       placeholder={needsAdmin ? 'Min 8 chars, uppercase + number' : 'Enter your password'}
                       className="w-full pl-9 pr-12 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                     />
@@ -809,6 +810,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         type={showPassword ? 'text' : 'password'}
                         value={adminConfirm}
                         onChange={(e) => setAdminConfirm(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && canNext()) handleNext() }}
                         placeholder="Repeat password"
                         className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                       />
@@ -939,6 +941,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       type="number"
                       value={envVars.PGID || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PGID: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && canNext()) handleNext() }}
                       className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                     />
                   </div>

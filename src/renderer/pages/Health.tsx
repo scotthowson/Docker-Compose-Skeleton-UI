@@ -444,7 +444,7 @@ export default function Health() {
       {/* Status indicator + summary stats — side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
         {/* Large status indicator */}
-        <div className={`glass rounded-xl p-6 md:p-8 flex flex-col items-center justify-center gap-3 ${cfg.glow}`}>
+        <div className={`glass rounded-xl p-6 md:p-8 flex flex-col items-center justify-center gap-3 gradient-border ${cfg.glow}`}>
           <div className="relative flex items-center justify-center">
             <span
               className={`absolute h-16 w-16 md:h-20 md:w-20 rounded-full ${cfg.bg} opacity-20 animate-ping`}

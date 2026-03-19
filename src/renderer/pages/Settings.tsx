@@ -345,7 +345,7 @@ function ProfileSettings() {
             ${saved
               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
               : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30'
-            }
+            } press
           `}
         >
           {saved ? <Check size={15} /> : <Save size={15} />}
@@ -698,7 +698,7 @@ function DiskLabelManager() {
               <button
                 onClick={handleAddCustom}
                 disabled={!newMount.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/20"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/20 press"
               >
                 <Plus size={12} />
                 Add Location

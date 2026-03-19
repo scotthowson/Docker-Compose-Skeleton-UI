@@ -194,7 +194,7 @@ function DeleteConfirmModal({
               bg-rose-500 hover:bg-rose-400
               shadow-lg shadow-rose-500/25
               disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
+              transition-all duration-200 press
             "
           >
             {deleting ? (
@@ -295,7 +295,7 @@ function BatchDeleteConfirmModal({
               bg-rose-500 hover:bg-rose-400
               shadow-lg shadow-rose-500/25
               disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
+              transition-all duration-200 press
             "
           >
             <Trash2 size={14} />
@@ -612,7 +612,7 @@ export default function Volumes() {
               bg-rose-500 hover:bg-rose-400
               shadow-lg shadow-rose-500/25
               disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
+              transition-all duration-200 press
             "
           >
             {batchLoading ? (

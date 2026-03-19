@@ -196,7 +196,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
           <button
             onClick={handleCreate}
             disabled={!isValid || creating}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all press"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             {creating ? 'Creating...' : 'Create Network'}

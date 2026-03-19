@@ -133,7 +133,7 @@ export default function EventFeed() {
           <Radio size={20} className="text-cyan-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-white tracking-tight">Live Event Feed</h1>
+          <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Live Event Feed</span></h1>
           <p className="text-sm text-slate-400 mt-0.5">Real-time server events via SSE</p>
         </div>
 

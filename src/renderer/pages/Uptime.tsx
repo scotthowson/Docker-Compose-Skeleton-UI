@@ -416,7 +416,7 @@ export default function Uptime() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -543,7 +543,7 @@ export default function Uptime() {
             return (
               <div
                 key={container.name}
-                className="grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up"
+                className={`grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up${container.state === 'running' && (container.health === 'healthy' || container.health === '' || container.health === 'none') ? ' glow-emerald' : ''}`}
                 style={{
                   animationDelay: `${Math.min(idx * 30, 600)}ms`,
                   animationFillMode: 'both',

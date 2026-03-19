@@ -286,7 +286,7 @@ export default function DiskAnalysis() {
             <HardDrive size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Disk Analysis</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
             <p className="text-xs text-slate-500">Docker disk usage breakdown</p>
           </div>
         </div>
@@ -318,7 +318,7 @@ export default function DiskAnalysis() {
             <HardDrive size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Disk Analysis</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
             <p className="text-xs text-slate-500">Docker disk usage breakdown</p>
           </div>
         </div>
@@ -360,7 +360,7 @@ export default function DiskAnalysis() {
             <HardDrive size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Disk Analysis</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
             <p className="text-xs text-slate-500">
               {disk?.total_app_data
                 ? `Total application data: ${disk.total_app_data}`
@@ -549,7 +549,7 @@ export default function DiskAnalysis() {
             </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 stagger-children">
             {sortedStacks.map((entry: DiskStackSize, idx: number) => {
               const pct = Math.max((parseSizeToMB(entry.size) / maxStackMB) * 100, 2)
               return (

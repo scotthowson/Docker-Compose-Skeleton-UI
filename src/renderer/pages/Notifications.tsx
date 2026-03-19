@@ -2,7 +2,7 @@
 // Notifications — NTFY Notification Center: rules, history, test, status
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Bell, Plus, Trash2, Send, CheckCircle, XCircle,
@@ -160,6 +160,18 @@ export default function Notifications() {
   const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null)
   const [confirmDeleteWebhookId, setConfirmDeleteWebhookId] = useState<string | null>(null)
+
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showAddModal) { setShowAddModal(false); return }
+      if (confirmDeleteId) { setConfirmDeleteId(null); return }
+      if (confirmDeleteWebhookId) { setConfirmDeleteWebhookId(null); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showAddModal, confirmDeleteId, confirmDeleteWebhookId])
 
   // Add-rule form state
   const [newName, setNewName] = useState('')

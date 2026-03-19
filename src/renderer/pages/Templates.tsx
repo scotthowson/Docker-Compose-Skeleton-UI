@@ -1831,6 +1831,19 @@ export default function Templates() {
   const [historyData, setHistoryData] = useState<DeployHistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showHistory) { setShowHistory(false); return }
+      if (deployTarget) { setDeployTarget(null); return }
+      if (detail) { setDetail(null); return }
+      if (showUrlImport) { setShowUrlImport(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showHistory, deployTarget, detail, showUrlImport])
+
   // F6: Container list for deploy status
   const [containerList, setContainerList] = useState<ContainerInfo[]>([])
 

@@ -2,7 +2,7 @@
 // Snapshots — System snapshots & config export management page
 // =============================================================================
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Camera,
   Download,
@@ -360,6 +360,18 @@ export default function Snapshots() {
   // ---- Delete state ----
   const [deleteTarget, setDeleteTarget] = useState<SnapshotEntry | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Close topmost confirm on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (restoreTarget && !restoreLoading) { setRestoreTarget(null); setRestoreConfirmText(''); return }
+      if (deleteTarget && !deleteLoading) { setDeleteTarget(null); return }
+      if (showCreateInput) { setShowCreateInput(false); setCreateLabel(''); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [restoreTarget, restoreLoading, deleteTarget, deleteLoading, showCreateInput])
 
   // ---- Polling ----
   const {

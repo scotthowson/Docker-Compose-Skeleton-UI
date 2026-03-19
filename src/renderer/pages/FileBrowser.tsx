@@ -287,6 +287,16 @@ export default function FileBrowser() {
     loadDirectory()
   }, [loadDirectory])
 
+  // Close file viewer on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (fileContent) { setFileContent(null); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [fileContent])
+
   // -------------------------------------------------------------------------
   // Derived data
   // -------------------------------------------------------------------------
@@ -327,7 +337,7 @@ export default function FileBrowser() {
             <FolderOpen size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">File Browser</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">File Browser</span></h2>
             <p className="text-xs text-slate-500">
               Browse files inside running containers
             </p>
