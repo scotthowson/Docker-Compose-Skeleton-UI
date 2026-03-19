@@ -1,3 +1,7 @@
-// Build-time constants — fallback when Electron IPC is unavailable (browser mode)
-export const BUILD_VERSION = '2.3.0'
-export const BUILD_DATE = '2026-03-19'
+// Build-time constants injected by Vite (see vite.config.ts define)
+// Falls back to hardcoded values if Vite defines are unavailable (e.g., test environment)
+declare const __APP_VERSION__: string
+declare const __BUILD_DATE__: string
+
+export const BUILD_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.4.0'
+export const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : '2026-03-19'

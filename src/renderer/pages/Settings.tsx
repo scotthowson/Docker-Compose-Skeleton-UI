@@ -2388,7 +2388,9 @@ export default function Settings() {
           setAppVersion('unknown')
         }
       } else {
-        setAppVersion('dev')
+        // Docker/web mode — use build-time version from Vite
+        const { BUILD_VERSION } = await import('../constants/buildInfo')
+        setAppVersion(BUILD_VERSION)
       }
     }
     loadVersion()
