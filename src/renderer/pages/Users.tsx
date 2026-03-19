@@ -176,7 +176,7 @@ export default function Users() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 stagger-children">
         <SummaryCard
           icon={<UsersIcon className="h-5 w-5 text-emerald-400" />}
           label="Registered Users"
@@ -219,6 +219,14 @@ export default function Users() {
               <UsersIcon className="h-8 w-8 mb-3 opacity-40" />
               <p className="text-sm">No users registered yet</p>
               <p className="text-xs text-slate-600 mt-1">Create an invite code to get started</p>
+              <button
+                onClick={handleCreateInvite}
+                disabled={inviteLoading}
+                className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Invite User
+              </button>
             </div>
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">

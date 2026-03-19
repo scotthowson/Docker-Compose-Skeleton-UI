@@ -414,7 +414,7 @@ export default function Config() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base md:text-xl font-bold text-slate-100">Server Configuration</h2>
+          <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Server Configuration</span></h2>
           <p className="mt-0.5 text-sm text-slate-500">
             View and edit the server's active configuration — changes are written to the root .env file
           </p>

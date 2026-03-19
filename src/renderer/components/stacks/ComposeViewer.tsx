@@ -1033,10 +1033,10 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       ? 'bg-amber-400/[0.03]'
                       : diags
                         ? highestSeverity === 'error'
-                          ? 'bg-rose-500/[0.03]'
+                          ? 'border-l-2 border-l-rose-400 bg-rose-500/[0.04]'
                           : highestSeverity === 'warning'
-                            ? 'bg-amber-500/[0.02]'
-                            : 'hover:bg-white/[0.02]'
+                            ? 'border-l-2 border-l-amber-400 bg-amber-500/[0.03]'
+                            : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.02]'
                         : 'hover:bg-white/[0.02]'
                   }
                 `}

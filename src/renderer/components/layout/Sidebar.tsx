@@ -186,6 +186,14 @@ export function Sidebar() {
     }
   }
 
+  const updatesAvailable = useSettingsStore((s) => s.updatesAvailable) ?? 0
+  if (updatesAvailable > 0) {
+    badges.updates = {
+      value: `${updatesAvailable}`,
+      color: 'bg-cyan-500/20 text-cyan-400',
+    }
+  }
+
   // Health status icon for the health nav item
   const healthStatus = healthReport?.status
   const healthStatusIcon: Record<string, { icon: React.ElementType; color: string; title: string }> = {

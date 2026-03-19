@@ -117,7 +117,7 @@ function SnapshotCard({
   const isDeleteTarget = deleteTarget?.filename === snapshot.filename
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in">
+    <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in glass-hover">
       {/* Top row: filename + badges */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -672,7 +672,7 @@ export default function Snapshots() {
 
         {/* Snapshot cards */}
         {snapshots.length > 0 && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 stagger-children">
             {snapshots.map((snapshot) => (
               <SnapshotCard
                 key={snapshot.filename}

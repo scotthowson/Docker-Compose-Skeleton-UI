@@ -140,7 +140,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
           Containers
         </h3>
         <span className="text-[11px] text-slate-600">
-          <span className="text-emerald-400">{running.length}</span>
+          <span className="text-emerald-400 neon-emerald">{running.length}</span>
           <span className="text-slate-700 mx-0.5">/</span>
           {containers.length}
         </span>

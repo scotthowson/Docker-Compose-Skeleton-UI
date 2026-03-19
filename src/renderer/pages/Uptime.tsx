@@ -284,6 +284,7 @@ function StatCard({
   icon: Icon,
   color,
   delay,
+  neon,
 }: {
   label: string
   value: string | number
@@ -291,6 +292,7 @@ function StatCard({
   icon: React.ElementType
   color: string
   delay: number
+  neon?: string
 }) {
   return (
     <div
@@ -303,7 +305,7 @@ function StatCard({
           <Icon size={16} />
         </div>
       </div>
-      <p className={`text-lg md:text-2xl font-bold tabular-nums ${color}`}>{value}</p>
+      <p className={`text-lg md:text-2xl font-bold tabular-nums ${color} ${neon ?? ''}`}>{value}</p>
       {sub && <p className="text-[11px] text-slate-500 mt-1">{sub}</p>}
     </div>
   )
@@ -422,7 +424,7 @@ export default function Uptime() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-base md:text-xl font-bold text-slate-100">Uptime Monitor</h2>
+            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Uptime Monitor</span></h2>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
@@ -464,6 +466,7 @@ export default function Uptime() {
           icon={ArrowUp}
           color={availabilityColor(stats.overallAvailability)}
           delay={0}
+          neon={stats.overallAvailability >= 99 ? 'neon-emerald' : stats.overallAvailability >= 95 ? 'neon-amber' : 'neon-rose'}
         />
         <StatCard
           label="Healthy Containers"

@@ -37,6 +37,7 @@ interface SectionCardProps {
   children: React.ReactNode
   accentColor?: 'emerald' | 'cyan' | 'amber' | 'rose' | 'violet'
   storageKey?: string
+  extraClassName?: string
 }
 
 const accentBorderMap: Record<string, string> = {
@@ -47,7 +48,7 @@ const accentBorderMap: Record<string, string> = {
   violet: 'border-t-violet-500',
 }
 
-function SectionCard({ icon, title, children, accentColor = 'emerald', storageKey }: SectionCardProps) {
+function SectionCard({ icon, title, children, accentColor = 'emerald', storageKey, extraClassName }: SectionCardProps) {
   const key = storageKey || `sys-card-${title.toLowerCase().replace(/\s+/g, '-')}`
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(key) === 'true' } catch { return false }
@@ -59,14 +60,14 @@ function SectionCard({ icon, title, children, accentColor = 'emerald', storageKe
   }
 
   return (
-    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentBorderMap[accentColor]}`}>
+    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentBorderMap[accentColor]} ${extraClassName ?? ''}`}>
       <div
         className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
         onClick={toggle}
       >
         <div className="flex items-center gap-2.5">
           {icon}
-          <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+          <h3 className="text-sm font-semibold"><span className="text-gradient">{title}</span></h3>
         </div>
         <ChevronDown
           size={16}
@@ -316,6 +317,7 @@ export default function System() {
             icon={<Server size={16} className="text-emerald-400" />}
             title="Server"
             accentColor="emerald"
+            extraClassName="gradient-border"
           >
             <KvRow label="Hostname" value={info.hostname} />
             <KvRow label="Kernel" value={info.kernel} />

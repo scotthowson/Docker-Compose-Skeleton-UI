@@ -900,10 +900,10 @@ export default function Volumes() {
                     <div className="flex flex-col items-center gap-4">
                       <div className="relative">
                         <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl" />
-                        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/[0.06]">
-                          <HardDrive
+                        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/[0.06] glow-cyan">
+                          <Database
                             size={28}
-                            className="text-slate-500"
+                            className="text-cyan-400/60"
                             strokeWidth={1.5}
                           />
                         </div>
@@ -914,10 +914,10 @@ export default function Volumes() {
                             ? 'No volumes match your search'
                             : 'No volumes found'}
                         </p>
-                        <p className="text-xs text-slate-600 mt-1 max-w-xs">
+                        <p className="text-xs text-slate-600 mt-1 max-w-sm leading-relaxed">
                           {searchQuery
                             ? 'Try adjusting your search query or clearing the filter.'
-                            : 'Docker volumes will appear here when containers create persistent data stores.'}
+                            : 'Docker volumes provide persistent storage for container data. They will appear here automatically when your stacks create named volumes.'}
                         </p>
                       </div>
                       {searchQuery && (

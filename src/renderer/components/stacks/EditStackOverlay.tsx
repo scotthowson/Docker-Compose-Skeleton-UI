@@ -276,7 +276,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   const [showDiff, setShowDiff] = useState(false)
 
   // Validation and save states
-  const [validationResult, setValidationResult] = useState<{ valid: boolean; output: string } | null>(null)
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; output: string; hasLintWarnings?: boolean } | null>(null)
   const [validating, setValidating] = useState(false)
   const [savingCompose, setSavingCompose] = useState(false)
   const [savingEnv, setSavingEnv] = useState(false)
@@ -541,19 +541,45 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     setValidating(true)
     try {
       const res = await validateStackCompose(stack.name, composeContent)
-      setValidationResult({ valid: res.valid, output: res.output })
-      if (res.valid) addToast({ type: 'success', message: 'Compose file is valid' })
+
+      // Also run client-side lint for port conflicts and other warnings
+      const lintIssues = composeDiagnostics.filter(d => d.severity === 'error' || d.severity === 'warning')
+      const portConflicts = composeDiagnostics.filter(d => d.rule === 'port-conflict')
+      const lintErrors = composeDiagnostics.filter(d => d.severity === 'error')
+
+      if (res.valid && lintErrors.length > 0) {
+        // Syntax is valid but lint found errors (port conflicts, etc)
+        const lintSummary = lintErrors.map(d => `Line ${d.line}: ${d.message}`).join('\n')
+        setValidationResult({
+          valid: true,
+          output: `Syntax valid — ${lintErrors.length} lint error${lintErrors.length !== 1 ? 's' : ''} detected:\n${lintSummary}`,
+          hasLintWarnings: true
+        })
+        addToast({ type: 'warning', message: `Compose syntax OK but ${lintErrors.length} lint issue${lintErrors.length !== 1 ? 's' : ''} found` })
+      } else if (res.valid) {
+        setValidationResult({ valid: true, output: res.output, hasLintWarnings: lintIssues.length > 0 })
+        addToast({ type: 'success', message: lintIssues.length > 0 ? `Valid — ${lintIssues.length} lint warning${lintIssues.length !== 1 ? 's' : ''}` : 'Compose file is valid' })
+      } else {
+        setValidationResult({ valid: false, output: res.output })
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Validation failed'
       setValidationResult({ valid: false, output: msg })
     } finally {
       setValidating(false)
     }
-  }, [stack.name, composeContent, addToast])
+  }, [stack.name, composeContent, composeDiagnostics, addToast])
 
   // Save compose
   const handleSaveCompose = useCallback(async () => {
     if (!validationResult?.valid) return
+
+    // Warn about lint errors before saving
+    const errors = composeDiagnostics.filter(d => d.severity === 'error')
+    if (errors.length > 0) {
+      if (!window.confirm(`${errors.length} lint error${errors.length !== 1 ? 's' : ''} detected (port conflicts, etc). Save anyway?`)) return
+    }
+
     setSavingCompose(true)
     try {
       await saveStackCompose(stack.name, composeContent)
@@ -569,7 +595,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     } finally {
       setSavingCompose(false)
     }
-  }, [stack.name, composeContent, validationResult, addToast, onSaved])
+  }, [stack.name, composeContent, validationResult, composeDiagnostics, addToast, onSaved])
 
   // Save env
   const handleSaveEnv = useCallback(async () => {
@@ -835,6 +861,8 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           {composeLines.map((line, idx) => {
             const isMatchedLine = matchedLineSet.has(idx)
             const isActiveLine = idx === activeMatchLine
+            const diags = composeLintMap.get(idx + 1)
+            const sev = diags?.[0]?.severity
             return (
               <div
                 key={idx}
@@ -842,11 +870,43 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                 className={`flex px-5 transition-colors duration-100 ${
                   isActiveLine ? 'bg-amber-400/[0.06]'
                     : isMatchedLine ? 'bg-amber-400/[0.03]'
-                    : 'hover:bg-white/[0.02]'
+                    : diags
+                      ? sev === 'error'
+                        ? 'border-l-2 border-l-rose-400 bg-rose-500/[0.04]'
+                        : sev === 'warning'
+                          ? 'border-l-2 border-l-amber-400 bg-amber-500/[0.03]'
+                          : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.02]'
+                      : 'hover:bg-white/[0.02]'
                 }`}
               >
-                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                  {idx + 1}
+                <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-relaxed relative ${
+                  diags
+                    ? sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                    : 'text-slate-600'
+                }`}>
+                  {diags ? (
+                    <span className="group/diag cursor-help">
+                      {idx + 1}
+                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                          {diags.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
+                                {d.severity === 'error' ? '\u25CF' : d.severity === 'warning' ? '\u25B2' : '\u2139'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
+                                {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
+                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </span>
+                  ) : (
+                    <span>{idx + 1}</span>
+                  )}
                 </span>
                 <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
                   {renderLine(line, idx)}
@@ -1171,6 +1231,12 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               >
                 <FileCode2 size={12} />
                 Compose
+                {composeCounts.errors > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{composeCounts.errors}</span>
+                )}
+                {composeCounts.errors === 0 && composeCounts.warnings > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{composeCounts.warnings}</span>
+                )}
               </button>
               <button
                 onClick={() => switchTab('env')}
@@ -1184,6 +1250,12 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               >
                 <FileText size={12} />
                 .env
+                {envCounts.errors > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{envCounts.errors}</span>
+                )}
+                {envCounts.errors === 0 && envCounts.warnings > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{envCounts.warnings}</span>
+                )}
               </button>
               <button
                 onClick={() => switchTab('annotations')}
@@ -1405,18 +1477,27 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         {activeTab === 'compose' && composeEditMode && validationResult && (
           <div className={`
             flex items-start gap-2 px-6 py-2.5 border-b border-white/[0.06] shrink-0 text-xs
-            ${validationResult.valid
-              ? 'bg-emerald-500/[0.06] text-emerald-400'
-              : 'bg-rose-500/[0.06] text-rose-400'
+            ${!validationResult.valid
+              ? 'bg-rose-500/[0.06] text-rose-400'
+              : validationResult.hasLintWarnings
+                ? 'bg-amber-500/[0.06] text-amber-400'
+                : 'bg-emerald-500/[0.06] text-emerald-400'
             }
           `}>
-            {validationResult.valid ? (
-              <CheckCircle size={14} className="shrink-0 mt-0.5" />
-            ) : (
+            {!validationResult.valid ? (
               <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            ) : validationResult.hasLintWarnings ? (
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle size={14} className="shrink-0 mt-0.5" />
             )}
             <pre className="flex-1 whitespace-pre-wrap font-mono leading-relaxed">
-              {validationResult.valid ? 'Valid compose file' : validationResult.output}
+              {!validationResult.valid
+                ? validationResult.output
+                : validationResult.hasLintWarnings
+                  ? validationResult.output
+                  : 'Valid compose file'
+              }
             </pre>
           </div>
         )}

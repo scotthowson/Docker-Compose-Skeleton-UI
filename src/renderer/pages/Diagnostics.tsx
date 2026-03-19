@@ -201,7 +201,7 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
   return (
     <div className="flex items-center gap-2.5 mb-4">
       <span className="text-slate-500">{icon}</span>
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider"><span className="text-gradient">{title}</span></h3>
       <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
     </div>
   )

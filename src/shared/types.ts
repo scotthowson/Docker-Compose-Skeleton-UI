@@ -573,6 +573,10 @@ export interface AppSettings {
   backgroundImage: string
   /** Auto-lock screen after N minutes of inactivity (0 = disabled) */
   autoLockMinutes: number
+  /** Auto-check for system/image updates (0 = off, ms interval) */
+  autoCheckUpdates: number
+  /** Number of available DCS framework updates (for sidebar badge) */
+  updatesAvailable: number
   /** Show desktop notifications for critical events */
   notificationsEnabled: boolean
   /** Customizable project/app name displayed in sidebar and login */
@@ -840,12 +844,15 @@ export interface SystemUpdateCheckResponse {
 }
 
 export interface SystemUpdateApplyResponse {
-  success: boolean
+  success?: boolean
+  updated?: boolean
   previous_version: string
-  updated_to: string
+  updated_to?: string
+  new_version?: string
   changelog: { hash: string; message: string }[]
   backup_tag: string
-  restart_required: boolean
+  commits_applied?: number
+  restart_required?: boolean
   message?: string
 }
 

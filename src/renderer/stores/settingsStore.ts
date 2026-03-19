@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   stackAnnotations: {},
   backgroundImage: '',
   autoLockMinutes: 0,
+  autoCheckUpdates: 0, // 0 = off, or interval in ms (3600000 = hourly, 86400000 = daily)
+  updatesAvailable: 0, // number of available DCS framework updates
   notificationsEnabled: true,
   projectName: 'DCS Manager',
   projectSubtitle: 'Docker Compose Skeleton',

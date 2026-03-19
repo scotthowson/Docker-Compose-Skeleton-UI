@@ -397,7 +397,7 @@ export default function Health() {
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-base md:text-xl font-bold text-slate-100">Health Monitor</h2>
+          <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Health Monitor</span></h2>
           <p className="mt-0.5 text-xs md:text-sm text-slate-500">
             Real-time container health and system resource monitoring
           </p>
@@ -491,7 +491,7 @@ export default function Health() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <HeartPulse size={16} className="text-emerald-400" />
-            <h3 className="text-sm font-semibold text-slate-200">Health Score</h3>
+            <h3 className="text-sm font-semibold"><span className="text-gradient">Health Score</span></h3>
           </div>
           {!scoreLoading && healthScoreData && (
             <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${gradeBg[grade] || 'bg-slate-500/10 border-slate-500/20'} ${gradeColors[grade] || 'text-slate-400'}`}>
@@ -723,7 +723,7 @@ export default function Health() {
               {filteredContainers.map((c) => (
                 <tr
                   key={c.name}
-                  className="hover:bg-white/[0.03] transition-colors duration-150"
+                  className={`hover:bg-white/[0.03] transition-colors duration-150${c.health.toLowerCase() === 'unhealthy' ? ' glow-rose' : ''}`}
                 >
                   <td className="px-5 py-3 font-mono text-slate-200 text-xs max-w-[200px] truncate" title={c.name}>
                     {c.name}

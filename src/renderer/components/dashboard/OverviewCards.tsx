@@ -132,6 +132,7 @@ interface CardProps {
   onClick?: () => void
   pulse?: boolean
   sparkData?: number[]
+  extraClassName?: string
 }
 
 const accentBorderMap: Record<CardProps['accentColor'], string> = {
@@ -161,7 +162,7 @@ const sparkColorMap: Record<CardProps['accentColor'], string> = {
   rose: '#f43f5e',
 }
 
-function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse, sparkData }: CardProps) {
+function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse, sparkData, extraClassName }: CardProps) {
   return (
     <div
       onClick={onClick}
@@ -173,6 +174,7 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
         animate-fade-in
         ${onClick ? 'cursor-pointer' : ''}
         ${pulse ? 'border-amber-500/30 animate-pulse' : 'border-white/5'}
+        ${extraClassName ?? ''}
       `}
       style={{ animationDelay: `${index * 60}ms` }}
     >
@@ -202,7 +204,7 @@ function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, i
           </div>
           <div className="mt-4">
             <p className="text-sm font-medium text-slate-400">{label}</p>
-            <p className="mt-1 text-lg md:text-2xl font-bold text-white tracking-tight tabular-nums">
+            <p className={`mt-1 text-lg md:text-2xl font-bold text-white tracking-tight tabular-nums ${accentColor === 'emerald' ? 'neon-emerald' : ''}`}>
               {typeof value === 'number' ? (
                 <AnimatedCounter value={value} />
               ) : (
@@ -361,6 +363,7 @@ export default function OverviewCards() {
         index={3}
         onClick={() => setCurrentPage('health')}
         sparkData={metricHistory.health}
+        extraClassName="gradient-border"
       />
     </div>
   )
