@@ -53,6 +53,7 @@ import {
   Check,
   X,
   Trash2,
+  ExternalLink,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -1605,16 +1606,28 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {portMappings.map((port, idx) => (
+              {portMappings.map((port, idx) => {
+                // Build a clickable URL from the host port
+                const portUrl = port.hostPort ? (() => {
+                  const host = port.bindAddress === '127.0.0.1' ? 'localhost'
+                    : (port.bindAddress === '0.0.0.0' || !port.bindAddress) ? window.location.hostname
+                    : port.bindAddress
+                  const proto = ['443', '8443'].includes(port.hostPort) ? 'https' : 'http'
+                  return `${proto}://${host}:${port.hostPort}`
+                })() : null
+                return (
                 <div
                   key={idx}
-                  className="
+                  className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg
                     bg-white/[0.02] border border-white/[0.04]
                     hover:bg-white/[0.04] transition-colors duration-200
                     animate-fade-in
-                  "
+                    ${portUrl ? 'cursor-pointer group' : ''}
+                  `}
                   style={{ animationDelay: `${idx * 0.05}s` }}
+                  onClick={portUrl ? () => window.open(portUrl, '_blank', 'noopener') : undefined}
+                  title={portUrl ? `Open ${portUrl}` : undefined}
                 >
                   {/* Host port */}
                   <div className="flex flex-col items-center min-w-0">
@@ -1640,20 +1653,26 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     <span className="text-[10px] text-slate-600 uppercase">container</span>
                   </div>
 
-                  {/* Protocol badge */}
-                  <span
-                    className={`
-                      ml-auto flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
-                      ${port.protocol === 'udp'
-                        ? 'bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/20'
-                        : 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20'
-                      }
-                    `}
-                  >
-                    {port.protocol}
-                  </span>
+                  {/* Protocol badge + open link */}
+                  <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                    <span
+                      className={`
+                        px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
+                        ${port.protocol === 'udp'
+                          ? 'bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/20'
+                          : 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20'
+                        }
+                      `}
+                    >
+                      {port.protocol}
+                    </span>
+                    {portUrl && (
+                      <ExternalLink className="h-3.5 w-3.5 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                    )}
+                  </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </section>
