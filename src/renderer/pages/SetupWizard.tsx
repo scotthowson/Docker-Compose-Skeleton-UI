@@ -3,7 +3,7 @@
 // Full-screen page (renders outside Sidebar/Header, like Login.tsx)
 // =============================================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Server, CheckCircle2, User, Lock, Shield, Eye, EyeOff,
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
@@ -18,6 +18,7 @@ import {
   authSetup, authLogin,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
+import { isWebMode } from '../lib/env'
 import type { SetupDefaultsResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -220,6 +221,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     return () => { document.body.style.overflow = '' }
   }, [])
 
+  // Auto-connect in web/Docker mode (API is at /api on same origin)
+  const autoConnectRef = useRef(false)
+  useEffect(() => {
+    if (isWebMode() && !autoConnectRef.current) {
+      autoConnectRef.current = true
+      handleConnect()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Connect to server and fetch defaults
   const handleConnect = async () => {
     setError(null)
@@ -234,20 +244,23 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       setConnecting(false)
       return
     }
-    // Add protocol if missing
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = `http://${url}`
-    }
-    // Add default port if none specified
-    try {
-      const parsed = new URL(url)
-      if (!parsed.port && !url.includes(':9876')) {
-        url = `${parsed.protocol}//${parsed.hostname}:9876`
+    // Relative URLs (Docker/web mode uses /api) — pass through as-is
+    if (!url.startsWith('/')) {
+      // Add protocol if missing
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `http://${url}`
       }
-    } catch {
-      setError('Invalid URL format')
-      setConnecting(false)
-      return
+      // Add default port if none specified
+      try {
+        const parsed = new URL(url)
+        if (!parsed.port && !url.includes(':9876')) {
+          url = `${parsed.protocol}//${parsed.hostname}:9876`
+        }
+      } catch {
+        setError('Invalid URL format')
+        setConnecting(false)
+        return
+      }
     }
 
     // Apply the URL

@@ -13,6 +13,7 @@ import { GlobalPoller } from './components/GlobalPoller'
 import { useSettingsStore } from './stores/settingsStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useAuthStore } from './stores/authStore'
+import { getDefaultServerUrl } from './lib/env'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Stacks from './pages/Stacks'
@@ -137,8 +138,9 @@ export default function App() {
       // Check if server needs first-run setup.
       // In Electron: single IPC call uses Node.js http in main process (no CORS).
       // In browser: falls back to raw fetch().
-      let currentServerUrl = useSettingsStore.getState().serverUrl || 'http://127.0.0.1:9876'
-      if (!/^https?:\/\//i.test(currentServerUrl)) currentServerUrl = `http://${currentServerUrl}`
+      let currentServerUrl = useSettingsStore.getState().serverUrl || getDefaultServerUrl()
+      // Don't prepend http:// on relative URLs (Docker/web mode uses /api)
+      if (!currentServerUrl.startsWith('/') && !/^https?:\/\//i.test(currentServerUrl)) currentServerUrl = `http://${currentServerUrl}`
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           let initialized = true

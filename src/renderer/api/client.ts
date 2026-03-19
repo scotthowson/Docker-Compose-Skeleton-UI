@@ -2,6 +2,8 @@
 // API Client — fetch wrapper for Docker Compose Skeleton REST API
 // =============================================================================
 
+import { getDefaultServerUrl } from '../lib/env'
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -32,7 +34,7 @@ export class ApiClient {
   private maxRetries: number
   private authToken: string | null = null
 
-  constructor(baseUrl = 'http://127.0.0.1:9876', timeout = 30000) {
+  constructor(baseUrl = getDefaultServerUrl(), timeout = 30000) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.timeout = timeout
     this.maxRetries = 2

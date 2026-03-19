@@ -13,6 +13,7 @@ import { useHealthStore } from './healthStore'
 import { useSystemStore } from './systemStore'
 import { useImageStore } from './imageStore'
 import { useLogStore } from './logStore'
+import { getDefaultServerUrl } from '../lib/env'
 
 const STORAGE_KEY = 'dcs-servers'
 
@@ -56,7 +57,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
         const defaultServer: ServerProfile = {
           id: generateId(),
           name: 'Local Server',
-          url: serverUrl || 'http://127.0.0.1:9876',
+          url: serverUrl || getDefaultServerUrl(),
           isDefault: true,
         }
         set({ servers: [defaultServer], activeServerId: defaultServer.id })

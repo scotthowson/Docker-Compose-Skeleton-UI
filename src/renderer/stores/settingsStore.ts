@@ -3,9 +3,10 @@ import { AppSettings, PageId, ADMIN_ONLY_PAGES } from '../../shared/types'
 // Circular import with authStore is safe — both stores only reference each other
 // inside function bodies (never at module evaluation time).
 import { useAuthStore } from './authStore'
+import { getDefaultServerUrl } from '../lib/env'
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  serverUrl: 'http://127.0.0.1:9876',
+  serverUrl: getDefaultServerUrl(),
   pollingInterval: 10000,
   containerPollingInterval: 5000,
   imagePollingInterval: 60000,
