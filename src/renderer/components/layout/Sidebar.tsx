@@ -368,9 +368,11 @@ function NavButton({
         }
       `}
     >
-      {/* Active indicator bar */}
+      {/* Active indicator bar — inset-y centering avoids animate-scale-in
+           overriding the -translate-y-1/2 transform (which caused the bar to
+           start at the wrong position and jump to center) */}
       {isActive && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full accent-indicator animate-scale-in origin-left" />
+        <div className="absolute left-0 inset-y-0 my-auto w-[3px] h-4 rounded-r-full accent-indicator animate-scale-in origin-left" />
       )}
 
       {/* Active glow background */}
