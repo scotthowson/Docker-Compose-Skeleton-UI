@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Sun, Moon, LogOut, ChevronDown, Settings, Shield,
-  UserCircle, Mail, Clock, Bell,
+  UserCircle, Mail, Clock, Bell, Sparkles,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -17,44 +17,7 @@ import Breadcrumbs from '../common/Breadcrumbs'
 import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
-export const pageTitles: Record<PageId, string> = {
-  dashboard: 'Dashboard',
-  stacks: 'Stack Manager',
-  containers: 'Containers',
-  images: 'Images',
-  health: 'Health Monitor',
-  uptime: 'Uptime Monitor',
-  networks: 'Networks',
-  volumes: 'Volumes',
-  bookmarks: 'Bookmarks',
-  activity: 'Activity',
-  maintenance: 'Maintenance',
-  environment: 'Environment',
-  backup: 'Backup & Restore',
-  logs: 'Logs',
-  system: 'System Info',
-  diagnostics: 'Diagnostics',
-  users: 'User Management',
-  config: 'Server Config',
-  settings: 'Settings',
-  terminal: 'Terminal',
-  cronjobs: 'Cron Jobs',
-  trends: 'Resource Trends',
-  updates: 'Image Updates',
-  notifications: 'Notifications',
-  snapshots: 'Snapshots',
-  templates: 'Templates',
-  automations: 'Automations',
-  topology: 'Network Topology',
-  'file-browser': 'File Browser',
-  'disk-analysis': 'Disk Analysis',
-  secrets: 'Secrets Manager',
-  schedules: 'Scheduled Tasks',
-  plugins: 'Plugins',
-  'event-feed': 'Live Events',
-  export: 'Export Center',
-  setup: 'Setup Wizard',
-}
+import { pageTitles } from '../../constants/pageTitles'
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {
   connected: {
@@ -105,6 +68,24 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
   const profileIcon = profileData.icon ?? ''
   const profileEmail = profileData.email ?? ''
+  const statusEmoji = profileData.statusEmoji ?? ''
+
+  // Compute session duration from localStorage
+  const sessionDuration = (() => {
+    try {
+      const raw = localStorage.getItem('auth-session')
+      if (!raw) return ''
+      const session = JSON.parse(raw)
+      const start = session.loginAt ?? session.createdAt ?? session.timestamp
+      if (!start) return ''
+      const mins = Math.floor((Date.now() - start) / 60000)
+      if (mins < 1) return 'Just now'
+      if (mins < 60) return `${mins}m`
+      const hrs = Math.floor(mins / 60)
+      if (hrs < 24) return `${hrs}h ${mins % 60}m`
+      return `${Math.floor(hrs / 24)}d ${hrs % 24}h`
+    } catch { return '' }
+  })()
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -154,7 +135,9 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-100 truncate">{currentUser}</p>
+            <p className="text-sm font-semibold text-slate-100 truncate">
+              {currentUser}{statusEmoji ? ` ${statusEmoji}` : ''}
+            </p>
             {profileEmail ? (
               <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
                 <Mail size={8} />
@@ -164,10 +147,17 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
               <p className="text-[10px] text-slate-600 capitalize">{userRole ?? 'User'}</p>
             )}
           </div>
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[9px] font-semibold text-emerald-400">
-            <Clock size={8} />
-            Active
-          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[9px] font-semibold text-emerald-400">
+              <Clock size={8} />
+              Active
+            </span>
+            {sessionDuration && (
+              <span className="text-[9px] text-slate-600 tabular-nums">
+                Session: {sessionDuration}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -188,6 +178,22 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
             </div>
           </button>
         ))}
+      </div>
+
+      {/* What's New */}
+      <div className="border-t border-white/[0.06] py-1.5">
+        <button
+          onClick={() => { onClose(); setCurrentPage('settings') }}
+          className="no-drag flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-white/[0.05] transition-colors cursor-pointer"
+        >
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.04]">
+            <Sparkles size={14} className="text-amber-400" />
+          </div>
+          <div className="text-left">
+            <p className="text-xs font-medium text-slate-200">What's New</p>
+            <p className="text-[10px] text-slate-600">Latest features & changes</p>
+          </div>
+        </button>
       </div>
 
       {/* Logout */}
@@ -213,6 +219,7 @@ export function Header() {
   const theme = useSettingsStore((s) => s.theme)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const latencyMs = useConnectionStore((s) => s.latencyMs)
   const serverStatus = useSystemStore((s) => s.status)
   const { currentUser } = useAuthStore()
   const unreadCount = useNotificationStore((s) => s.getServerUnreadCount())
@@ -294,6 +301,7 @@ export function Header() {
             transition-all duration-200 press
           "
           title="Notifications"
+          aria-label="Notifications"
         >
           <Bell size={14} />
           {unreadCount > 0 && (
@@ -368,7 +376,8 @@ export function Header() {
             hover:bg-white/[0.08] hover:text-slate-200
             transition-all duration-200 press
           "
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Switch to light mode (Ctrl+D)' : 'Switch to dark mode (Ctrl+D)'}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {isDark ? <Sun size={14} /> : <Moon size={14} />}
         </button>
@@ -378,7 +387,7 @@ export function Header() {
           inline-flex items-center gap-1.5 md:gap-2 rounded-full px-2 md:px-3 py-1 md:py-1.5
           border transition-all duration-300
           ${connectionStatus === 'connected'
-            ? 'bg-emerald-500/8 border-emerald-500/15'
+            ? 'bg-emerald-500/8 border-emerald-500/15 glow-emerald'
             : connectionStatus === 'error'
               ? 'bg-rose-500/8 border-rose-500/15'
               : connectionStatus === 'connecting'
@@ -395,7 +404,13 @@ export function Header() {
             )}
             <span className={`relative inline-flex rounded-full h-2 w-2 ${color} ring-2 ${ringColor} transition-colors duration-500`} />
           </span>
-          <span className="hidden sm:inline text-[11px] text-slate-400 font-medium min-w-[72px]">{label}</span>
+          <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">{label}</span>
+          {connectionStatus === 'connected' && latencyMs != null && (
+            <>
+              <span className="hidden sm:inline text-slate-600 text-[10px]">&mdash;</span>
+              <span className={`hidden sm:inline text-[10px] tabular-nums font-mono ${latencyMs < 100 ? 'text-emerald-400/70' : latencyMs < 300 ? 'text-amber-400/70' : 'text-rose-400/70'}`}>{latencyMs}ms</span>
+            </>
+          )}
         </div>
       </div>
     </header>

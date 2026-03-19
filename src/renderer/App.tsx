@@ -1,7 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
-import { Header, pageTitles } from './components/layout/Header'
+import { Header } from './components/layout/Header'
+import { pageTitles } from './constants/pageTitles'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
@@ -101,6 +102,7 @@ export default function App() {
   const { connect, setServerUrl } = useConnectionStore()
   const { isAuthenticated, loading: authLoading, checkAccountExists, logout } = useAuthStore()
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mainRef = useRef<HTMLDivElement>(null)
   const [transitionPage, setTransitionPage] = useState(currentPage)
   const [transitioning, setTransitioning] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
@@ -304,6 +306,7 @@ export default function App() {
   useEffect(() => {
     if (currentPage !== transitionPage) {
       setTransitioning(true)
+      mainRef.current?.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
       const timer = setTimeout(() => {
         setTransitionPage(currentPage)
         setTransitioning(false)
@@ -457,8 +460,8 @@ export default function App() {
           <Sidebar />
 
           {/* Main content area */}
-          <main className="flex-1 overflow-y-auto p-3 md:p-6 transition-all duration-300 scrollbar-thin">
-            <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
+          <main ref={mainRef} className="flex-1 overflow-y-auto p-3 md:p-6 transition-all duration-300 scrollbar-thin">
+            <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-0.5 scale-[0.998]' : 'opacity-100 translate-y-0 scale-100'}`}>
               <ErrorBoundary
                 key={transitionPage}
                 fallbackMessage="This page encountered an error"

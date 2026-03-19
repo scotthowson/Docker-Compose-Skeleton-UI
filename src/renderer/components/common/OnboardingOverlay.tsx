@@ -9,6 +9,7 @@ import {
   Rocket,
   Server,
   Sparkles,
+  Puzzle,
   ArrowRight,
   ArrowLeft,
   X,
@@ -64,9 +65,20 @@ const steps: StepDef[] = [
     description:
       'Explore the full suite of tools at your fingertips. From network visualization to automated maintenance, DCS Manager has you covered.',
     details: [
-      'Health checks, logs viewer, and system diagnostics',
-      'Scheduled backups and cron job management',
+      'Health checks, logs viewer, real-time compose linter, and system diagnostics',
+      'Scheduled backups, cron job management, and a plugin ecosystem',
       'Command palette (Ctrl+K) for instant navigation',
+    ],
+  },
+  {
+    icon: <Puzzle size={40} strokeWidth={1.5} />,
+    title: 'Plugin Ecosystem & Compose Linting',
+    description:
+      'Extend DCS with 14+ plugins for security auditing, deployment guards, network analysis, and more. The real-time compose linter validates your YAML with 24 rules — catching port conflicts, security issues, and missing health checks before deployment.',
+    details: [
+      'Install and manage plugins from the built-in plugin registry',
+      'Compose linter runs automatically as you edit YAML files',
+      'Security auditing, deployment guards, and network analysis plugins',
     ],
   },
 ]

@@ -23,6 +23,7 @@ import type {
   NetworkInfo, NetworkDetail,
 } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { CopyButton } from '../components/common/CopyButton'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,7 +101,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
               onChange={(e) => { setName(e.target.value); setError('') }}
               placeholder="my-network"
               autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
             />
           </div>
 
@@ -137,7 +138,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
                 value={subnet}
                 onChange={(e) => setSubnet(e.target.value)}
                 placeholder="172.20.0.0/16"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all font-mono text-xs"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono text-xs"
               />
             </div>
             <div>
@@ -149,7 +150,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
                 value={gateway}
                 onChange={(e) => setGateway(e.target.value)}
                 placeholder="172.20.0.1"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all font-mono text-xs"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono text-xs"
               />
             </div>
           </div>
@@ -222,6 +223,15 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
   const [error, setError] = useState('')
 
   const isBuiltIn = BUILTIN_NETWORKS.includes(network.name)
+
+  // Escape to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   useEffect(() => {
     let mounted = true
@@ -348,7 +358,10 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
                         <div className="min-w-0">
                           <p className="text-sm text-slate-200 font-mono truncate">{c.name}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</p>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</span>
+                            {c.ipv4 && <CopyButton text={c.ipv4} size={10} />}
+                          </span>
                         </div>
                       </div>
                       {!isBuiltIn && isAdmin && (
@@ -390,6 +403,13 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
 }) {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+
+  // Escape to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -739,8 +759,10 @@ export default function Networks() {
 
       {/* Network cards */}
       {networksLoading && networks.length === 0 ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-slate-500" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[180px] border border-white/[0.04]" />
+          ))}
         </div>
       ) : filteredNetworks.length === 0 ? (
         <div className="glass-subtle rounded-xl p-12 text-center">
@@ -750,7 +772,7 @@ export default function Networks() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {filteredNetworks.map((net) => (
             <NetworkCard
               key={net.id}

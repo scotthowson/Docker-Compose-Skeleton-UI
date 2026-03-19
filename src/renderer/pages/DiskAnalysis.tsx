@@ -2,7 +2,7 @@
 // Disk Analysis — Dedicated disk usage analysis page with charts and deep prune
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   HardDrive, Trash2, RefreshCw, Loader2, WifiOff,
@@ -173,6 +173,16 @@ export default function DiskAnalysis() {
   // ---- Action state ----
   const [deepPruning, setDeepPruning] = useState(false)
   const [showPruneModal, setShowPruneModal] = useState(false)
+
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showPruneModal) { setShowPruneModal(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showPruneModal])
 
   // ---- Deep prune handler ----
   const handleDeepPrune = useCallback(async () => {

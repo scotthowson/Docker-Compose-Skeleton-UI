@@ -1,6 +1,6 @@
 import { ChevronRight, Home } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { pageTitles } from '../layout/Header'
+import { pageTitles } from '../../constants/pageTitles'
 import type { PageId } from '../../../shared/types'
 
 export interface BreadcrumbSegment {

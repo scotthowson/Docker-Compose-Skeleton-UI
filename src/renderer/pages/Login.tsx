@@ -560,7 +560,7 @@ export default function Login() {
         </div>
 
         {/* Form card */}
-        <div className="glass gradient-border p-8">
+        <div className="glass gradient-border-animated p-8">
 
           {/* ════════════════════════════════════════════════════════════════
               Phase 1 — Server Connection (shown until server is verified)
@@ -639,7 +639,7 @@ export default function Login() {
                     transition-all duration-300 press
                     bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
                     hover:bg-cyan-500/30 hover:border-cyan-500/50
-                    disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/20
+                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/20
                     flex items-center justify-center gap-2
                   "
                 >
@@ -709,10 +709,11 @@ export default function Login() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Username */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+                  <label htmlFor="setup-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="setup-username"
                       type="text"
                       value={username}
                       onChange={(e) => { setUsername(e.target.value); clearError() }}
@@ -722,7 +723,7 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
@@ -731,10 +732,11 @@ export default function Login() {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+                  <label htmlFor="setup-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="setup-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); clearError() }}
@@ -743,13 +745,15 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -762,10 +766,11 @@ export default function Login() {
 
                 {/* Confirm Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                  <label htmlFor="setup-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="setup-confirm-password"
                       type={showPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -777,7 +782,7 @@ export default function Login() {
                         focus:outline-none focus:ring-1 transition-all duration-300
                         ${confirmPassword && password !== confirmPassword
                           ? 'border-rose-500/50 focus:border-rose-500/50 focus:ring-rose-500/25'
-                          : 'border-white/10 focus:border-emerald-500/50 focus:ring-emerald-500/25'
+                          : 'border-white/10 focus:border-emerald-500/50 focus:ring-emerald-500/20'
                         }
                       `}
                     />
@@ -850,10 +855,11 @@ export default function Login() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Username */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+                  <label htmlFor="signin-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="signin-username"
                       type="text"
                       value={username}
                       onChange={(e) => { setUsername(e.target.value); clearError() }}
@@ -863,7 +869,7 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
@@ -872,10 +878,11 @@ export default function Login() {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+                  <label htmlFor="signin-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="signin-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); clearError() }}
@@ -884,13 +891,15 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1008,10 +1017,11 @@ export default function Login() {
               <form onSubmit={handleInviteRegister} className="space-y-4">
                 {/* Invite Code */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Invite Code</label>
+                  <label htmlFor="register-invite" className="block text-xs font-medium text-slate-400 mb-1.5">Invite Code</label>
                   <div className="relative">
                     <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="register-invite"
                       type="text"
                       value={inviteCode}
                       onChange={(e) => { setInviteCode(e.target.value); setRegisterError(null) }}
@@ -1030,10 +1040,11 @@ export default function Login() {
 
                 {/* Username */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+                  <label htmlFor="register-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="register-username"
                       type="text"
                       value={username}
                       onChange={(e) => { setUsername(e.target.value); setRegisterError(null) }}
@@ -1042,7 +1053,7 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
@@ -1051,10 +1062,11 @@ export default function Login() {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+                  <label htmlFor="register-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="register-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setRegisterError(null) }}
@@ -1063,13 +1075,15 @@ export default function Login() {
                       className="
                         w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
                         text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
+                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                         transition-all duration-300
                       "
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1106,10 +1120,11 @@ export default function Login() {
 
                 {/* Confirm Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                  <label htmlFor="register-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
                     <input
+                      id="register-confirm-password"
                       type={showPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(e) => { setConfirmPassword(e.target.value); setRegisterError(null) }}
@@ -1121,7 +1136,7 @@ export default function Login() {
                         focus:outline-none focus:ring-1 transition-all duration-300
                         ${confirmPassword && password !== confirmPassword
                           ? 'border-rose-500/50 focus:border-rose-500/50 focus:ring-rose-500/25'
-                          : 'border-white/10 focus:border-cyan-500/50 focus:ring-cyan-500/25'
+                          : 'border-white/10 focus:border-emerald-500/50 focus:ring-emerald-500/20'
                         }
                       `}
                     />

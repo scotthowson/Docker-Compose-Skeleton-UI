@@ -318,7 +318,7 @@ function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerPr
                 text-xs font-medium
                 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
                 hover:bg-emerald-500/20 transition-all
-                disabled:opacity-40 disabled:cursor-not-allowed
+                disabled:opacity-50 disabled:cursor-not-allowed
               "
               title="Download file"
             >

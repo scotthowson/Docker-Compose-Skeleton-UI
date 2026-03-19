@@ -277,7 +277,7 @@ export function ServerSwitcher() {
                   <button
                     onClick={handleAdd}
                     disabled={loading || !newName.trim() || !newUrl.trim() || !!switching}
-                    className="flex-1 px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 disabled:opacity-40 flex items-center justify-center gap-1.5 transition-colors press"
+                    className="flex-1 px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors press"
                   >
                     {switching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                     Add & Connect

@@ -11,7 +11,9 @@ import {
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { deleteStack } from '../../api/endpoints'
+import { deleteStack, fetchStackCompose } from '../../api/endpoints'
+import { lintCompose } from '../../hooks/useComposeLinter'
+import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
 
 interface Props {
@@ -38,7 +40,7 @@ const priorityOrder: Record<string, number> = {
 }
 
 export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin }: Props) {
-  const { stacks, actionLoading } = useStackStore()
+  const { stacks, actionLoading, loading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -46,6 +48,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [lintAllLoading, setLintAllLoading] = useState(false)
+  const [lintAllResults, setLintAllResults] = useState<{ name: string; diagnostics: LintDiagnostic[] }[] | null>(null)
 
   const sorted = useMemo(() => {
     const list = [...stacks]
@@ -90,6 +94,23 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   const runningCount = stacks.filter((s) => s.status === 'running').length
   const stoppedCount = stacks.filter((s) => s.status === 'stopped').length
   const criticalCount = stacks.filter((s) => stackAnnotations[s.name]?.priority === 'critical').length
+
+  const handleLintAll = useCallback(async () => {
+    if (lintAllLoading || stacks.length === 0) return
+    setLintAllLoading(true)
+    const results: { name: string; diagnostics: LintDiagnostic[] }[] = []
+    for (const stack of stacks) {
+      try {
+        const res = await fetchStackCompose(stack.name)
+        const diagnostics = lintCompose(res.content)
+        results.push({ name: stack.name, diagnostics })
+      } catch {
+        results.push({ name: stack.name, diagnostics: [] })
+      }
+    }
+    setLintAllResults(results)
+    setLintAllLoading(false)
+  }, [lintAllLoading, stacks])
 
   const handleDelete = useCallback(async (name: string) => {
     setDeleting(true)
@@ -237,6 +258,15 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             </button>
           )}
 
+          <button
+            onClick={handleLintAll}
+            disabled={lintAllLoading || stacks.length === 0}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
+          >
+            {lintAllLoading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />}
+            Lint All
+          </button>
+
           {isAdmin && (
             <button
               onClick={onCreateStack}
@@ -266,7 +296,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             className="
               w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg
               text-sm text-slate-200 placeholder-slate-500
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200
             "
           />
@@ -343,8 +373,14 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       )}
 
       {/* Stack grid */}
-      {filtered.length > 0 || stacks.length > 0 ? (
+      {loading && stacks.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[200px] border border-white/[0.04]" />
+          ))}
+        </div>
+      ) : filtered.length > 0 || stacks.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {filtered.map((stack) => (
             <StackCard
               key={stack.name}
@@ -415,6 +451,79 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       {/* Bottom spacer when batch mode is active to avoid floating bar overlap */}
       {batchMode && selectedStacks && selectedStacks.size > 0 && (
         <div className="h-20" />
+      )}
+
+      {/* Lint All Results Modal */}
+      {lintAllResults && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setLintAllResults(null)}>
+          <div className="glass rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto scrollbar-thin border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+                  <ListChecks size={18} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-100">Compose Lint Results</h3>
+                  <p className="text-[10px] text-slate-500">{stacks.length} stacks analyzed</p>
+                </div>
+              </div>
+              <button onClick={() => setLintAllResults(null)} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+            {/* Summary */}
+            <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+              <span className="flex items-center gap-1 text-[11px] font-medium text-rose-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'error').length, 0)} errors
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-medium text-amber-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'warning').length, 0)} warnings
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-medium text-cyan-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'info').length, 0)} info
+              </span>
+            </div>
+            {/* Per-stack results */}
+            <div className="space-y-2">
+              {lintAllResults.map((result) => {
+                const errors = result.diagnostics.filter(d => d.severity === 'error').length
+                const warnings = result.diagnostics.filter(d => d.severity === 'warning').length
+                const infos = result.diagnostics.filter(d => d.severity === 'info').length
+                return (
+                  <div key={result.name} className={`rounded-xl border p-3 ${errors > 0 ? 'border-rose-500/15 bg-rose-500/[0.03]' : warnings > 0 ? 'border-amber-500/10 bg-amber-500/[0.02]' : 'border-white/[0.06]'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono text-slate-200">{result.name}</span>
+                      <div className="flex items-center gap-2">
+                        {errors > 0 && <span className="text-[10px] font-medium text-rose-400">{errors}E</span>}
+                        {warnings > 0 && <span className="text-[10px] font-medium text-amber-400">{warnings}W</span>}
+                        {infos > 0 && <span className="text-[10px] font-medium text-cyan-400">{infos}I</span>}
+                        {result.diagnostics.length === 0 && <span className="text-[10px] font-medium text-emerald-400">Clean</span>}
+                      </div>
+                    </div>
+                    {result.diagnostics.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {result.diagnostics.slice(0, 5).map((d, i) => (
+                          <div key={i} className="flex items-start gap-2 text-[10px]">
+                            <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
+                              {d.severity === 'error' ? '\u25cf' : d.severity === 'warning' ? '\u25b2' : '\u2139'}
+                            </span>
+                            <span className="text-slate-500 tabular-nums shrink-0">L{d.line}</span>
+                            <span className="text-slate-400">{d.message}</span>
+                          </div>
+                        ))}
+                        {result.diagnostics.length > 5 && <p className="text-[9px] text-slate-600 ml-4">+{result.diagnostics.length - 5} more</p>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

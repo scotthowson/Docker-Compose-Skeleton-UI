@@ -2,7 +2,7 @@
 // CronJobs — View and manage server crontab entries with human-readable schedules
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   CalendarClock, Clock, Terminal, User, Server,
   Plus, Trash2, Edit3, Save, X, RefreshCw,
@@ -74,6 +74,17 @@ export default function CronJobs() {
   const [newCommand, setNewCommand] = useState('')
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showRawEditor) { setShowRawEditor(false); return }
+      if (showAddForm) { setShowAddForm(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showRawEditor, showAddForm])
 
   // Polling
   const { data: userData, loading: userLoading, refresh: refreshUser } = usePolling<CrontabResponse>(
@@ -191,7 +202,7 @@ export default function CronJobs() {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4">
+      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
         <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
           <WifiOff size={24} className="text-slate-600" />
         </div>
@@ -214,7 +225,7 @@ export default function CronJobs() {
             <CalendarClock size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Scheduled Tasks</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Scheduled Tasks</span></h2>
             <p className="text-xs text-slate-500">
               {entries.length} cron {entries.length === 1 ? 'entry' : 'entries'}
               {activeTab === 'user' ? ' (user)' : ' (system)'}
@@ -227,7 +238,7 @@ export default function CronJobs() {
             <>
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors press"
               >
                 <Plus size={13} />
                 Add Entry
@@ -283,7 +294,7 @@ export default function CronJobs() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter by schedule, command, or user..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 focus:bg-white/[0.05] transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
           />
         </div>
       </div>
@@ -304,7 +315,7 @@ export default function CronJobs() {
                 type="text"
                 value={newSchedule}
                 onChange={(e) => setNewSchedule(e.target.value)}
-                className="w-48 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-violet-500/30 transition-colors"
+                className="w-48 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
                 placeholder="* * * * *"
               />
             </div>
@@ -316,7 +327,7 @@ export default function CronJobs() {
                 type="text"
                 value={newCommand}
                 onChange={(e) => setNewCommand(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-violet-500/30 transition-colors"
+                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
                 placeholder="/usr/bin/my-script.sh --arg"
               />
             </div>
@@ -371,13 +382,30 @@ export default function CronJobs() {
 
       {/* Empty state */}
       {data && entries.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-            <CalendarClock size={22} className="text-slate-600" />
+        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
+          <div className="relative">
+            <div className="absolute inset-0 bg-violet-500/10 rounded-full blur-xl" />
+            <div className="relative w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+              <CalendarClock size={22} className="text-slate-600" />
+            </div>
           </div>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm font-medium text-slate-400">
             {search ? 'No entries match your filter' : 'No cron entries found'}
           </p>
+          <p className="text-xs text-slate-600 text-center max-w-sm">
+            {search
+              ? 'Try adjusting your search query or clearing the filter.'
+              : 'Cron entries will appear here once scheduled tasks are configured on the server.'}
+          </p>
+          {!search && activeTab === 'user' && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
+            >
+              <Plus size={13} />
+              Add Entry
+            </button>
+          )}
         </div>
       )}
 
@@ -506,28 +534,33 @@ export default function CronJobs() {
               <textarea
                 value={rawContent}
                 onChange={(e) => setRawContent(e.target.value)}
-                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs font-mono text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-violet-500/30 transition-colors leading-relaxed"
+                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs font-mono text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-emerald-500/50 transition-colors leading-relaxed"
                 placeholder="# min hour day month weekday command"
                 spellCheck={false}
               />
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06]">
-              <button
-                onClick={() => setShowRawEditor(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveRaw}
-                disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
-              >
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                Save Crontab
-              </button>
+            <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06]">
+              <span className="text-[10px] text-slate-700">
+                Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowRawEditor(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveRaw}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                  Save Crontab
+                </button>
+              </div>
             </div>
           </div>
         </div>,

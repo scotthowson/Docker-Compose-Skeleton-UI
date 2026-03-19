@@ -329,7 +329,7 @@ export default function LiveLogViewer({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter..."
-              className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 focus:w-56 transition-all"
+              className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:w-56 transition-all"
             />
             {search && (
               <button

@@ -251,7 +251,7 @@ export default function HealthSummary() {
   const runningCount = containers.filter((c) => c.state === 'running').length
 
   return (
-    <div className={`glass-card p-4 md:p-5 animate-fade-in flex flex-col ${config.glow}`}>
+    <div className={`glass-card glass-hover gradient-border p-4 md:p-5 animate-fade-in flex flex-col ${config.glow}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -260,7 +260,7 @@ export default function HealthSummary() {
         </div>
         <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${config.badge}`}>
           <StatusIcon className="h-3 w-3" />
-          {config.label}
+          <span className={effectiveStatus === 'healthy' ? 'neon-emerald' : ''}>{config.label}</span>
         </div>
       </div>
 

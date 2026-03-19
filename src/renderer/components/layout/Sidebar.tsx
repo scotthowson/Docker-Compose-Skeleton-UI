@@ -234,7 +234,7 @@ export function Sidebar() {
         </div>
         {!sidebarCollapsed && (
           <div className="overflow-hidden">
-            <span className="text-sm font-bold tracking-wide text-gradient whitespace-nowrap">
+            <span className="text-sm font-bold tracking-wide text-gradient neon-emerald whitespace-nowrap">
               {projectName}
             </span>
             <p className="text-[10px] text-slate-600 -mt-0.5 whitespace-nowrap">{projectSubtitle}</p>
@@ -307,7 +307,8 @@ export function Sidebar() {
             transition-all duration-200
             no-drag press
           "
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {sidebarCollapsed ? (
             <ChevronsRight size={16} strokeWidth={2} />
@@ -392,7 +393,7 @@ function NavButton({
           )}
           {badge && (
             <span className={`
-              inline-flex items-center justify-center min-w-[20px] h-5
+              z-10 inline-flex items-center justify-center min-w-[20px] h-5
               rounded-full px-1.5 text-[10px] font-bold tabular-nums
               ${badge.color}
               transition-all duration-300

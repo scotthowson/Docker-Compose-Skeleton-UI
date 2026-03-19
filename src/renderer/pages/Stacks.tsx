@@ -44,17 +44,45 @@ export default function Stacks() {
   const { addToast } = useToast()
 
   // React to navigation payloads (e.g. "View Stack" after deploy)
+  // Only consume if the payload has keys relevant to THIS page (highlight, resetView)
   useEffect(() => {
     if (!navigationPayload) return
-    const payload = useSettingsStore.getState().consumeNavigationPayload()
+    const payload = useSettingsStore.getState().navigationPayload
     if (!payload) return
 
-    if (payload.highlight && typeof payload.highlight === 'string') {
-      setSelectedStackName(payload.highlight)
-    } else if (payload.resetView) {
-      setSelectedStackName(null)
+    // Only consume payload if it's for us — don't steal focusContainer from Containers page
+    if (payload.highlight || payload.resetView) {
+      useSettingsStore.getState().consumeNavigationPayload()
+      if (payload.highlight && typeof payload.highlight === 'string') {
+        setSelectedStackName(payload.highlight)
+      } else if (payload.resetView) {
+        setSelectedStackName(null)
+      }
     }
   }, [navigationPayload])
+
+  // Escape key returns from stack detail to list
+  useEffect(() => {
+    if (!selectedStackName) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if ((e.target as HTMLElement)?.isContentEditable) return
+      // Check if a VISIBLE modal overlay is open
+      const hasVisibleOverlay = Array.from(document.querySelectorAll('.fixed.inset-0')).some(
+        (el) => {
+          const style = window.getComputedStyle(el)
+          return style.pointerEvents !== 'none' && style.opacity !== '0' && style.display !== 'none'
+        },
+      )
+      if (hasVisibleOverlay) return
+      e.preventDefault()
+      setSelectedStackName(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedStackName])
 
   // Overlay states
   const [showCreateOverlay, setShowCreateOverlay] = useState(false)
@@ -110,6 +138,7 @@ export default function Stacks() {
         const result = await actionFn(stackName)
 
         if (result.success) {
+          useStackStore.getState().recordAction(stackName)
           const pastTense: Record<typeof action, string> = {
             start: 'started',
             stop: 'stopped',
@@ -348,7 +377,7 @@ export default function Stacks() {
                   flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold
                   border transition-all duration-200
                   ${bg} ${hoverBg}
-                  disabled:opacity-40 disabled:cursor-not-allowed
+                  disabled:opacity-50 disabled:cursor-not-allowed
                 `}
               >
                 {batchLoading === action ? (

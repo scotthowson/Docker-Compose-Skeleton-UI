@@ -18,6 +18,17 @@ export default function Secrets() {
 
   useEffect(() => { if (isConnected) fetchSecrets() }, [fetchSecrets, isConnected])
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (deleteTarget) { setDeleteTarget(null); return }
+      if (showAddModal) { setShowAddModal(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [deleteTarget, showAddModal])
+
   const filtered = keys.filter(k => k.toLowerCase().includes(search.toLowerCase()))
 
   const validateKey = (k: string) => /^[a-zA-Z0-9_-]+$/.test(k)
@@ -44,13 +55,13 @@ export default function Secrets() {
             <KeyRound className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Secrets</h1>
+            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Secrets</span></h1>
             <p className="text-sm text-slate-400">Encrypted key-value secret storage</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => fetchSecrets()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
-          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors">
+          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors press">
             <Plus className="w-4 h-4" /> Add Secret
           </button>
         </div>
@@ -65,7 +76,12 @@ export default function Secrets() {
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search secrets..." className="w-full pl-10 pr-4 py-2.5 rounded-lg glass text-sm text-white placeholder-slate-500 border border-white/5 focus:border-amber-500/30 focus:outline-none" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search secrets..." className="w-full pl-10 pr-9 py-2.5 rounded-lg glass text-sm text-white placeholder-slate-500 border border-white/5 focus:border-emerald-500/50 focus:outline-none" />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       {error && <div className="glass-subtle rounded-lg p-3 text-rose-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
@@ -82,9 +98,9 @@ export default function Secrets() {
           <p className="text-sm text-slate-500 mt-1">Add your first secret to get started</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
           {filtered.map((key, i) => (
-            <div key={key} className="glass rounded-xl p-4 flex items-center justify-between group hover:border-amber-500/20 border border-transparent transition-all" style={{ animationDelay: `${i * 60}ms` }}>
+            <div key={key} className="glass rounded-xl p-4 flex items-center justify-between group hover:border-amber-500/20 border border-transparent transition-all animate-fade-in" style={{ animationDelay: `${i * 60}ms` }}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
                   <Shield className="w-4 h-4 text-amber-400" />
@@ -107,28 +123,28 @@ export default function Secrets() {
               <h2 className="text-lg font-semibold text-white">Add Secret</h2>
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
-            <div className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleAdd() }} className="space-y-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Key Name</label>
-                <input value={newKey} onChange={e => { setNewKey(e.target.value); setKeyError('') }} placeholder="MY_SECRET_KEY" className="w-full px-3 py-2 rounded-lg glass text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-amber-500/30 focus:outline-none" />
+                <input value={newKey} onChange={e => { setNewKey(e.target.value); setKeyError('') }} placeholder="MY_SECRET_KEY" className="w-full px-3 py-2 rounded-lg glass text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-emerald-500/50 focus:outline-none" />
               </div>
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Value</label>
                 <div className="relative">
-                  <textarea value={newValue} onChange={e => setNewValue(e.target.value)} rows={3} className={`w-full px-3 py-2 rounded-lg glass text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-amber-500/30 focus:outline-none resize-none ${!showValue ? 'text-security-disc' : ''}`} style={!showValue ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined} placeholder="Enter secret value..." />
-                  <button onClick={() => setShowValue(!showValue)} className="absolute right-2 top-2 p-1 rounded text-slate-500 hover:text-slate-300">
+                  <textarea value={newValue} onChange={e => setNewValue(e.target.value)} rows={3} className={`w-full px-3 py-2 rounded-lg glass text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-emerald-500/50 focus:outline-none resize-none ${!showValue ? 'text-security-disc' : ''}`} style={!showValue ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined} placeholder="Enter secret value..." />
+                  <button type="button" onClick={() => setShowValue(!showValue)} className="absolute right-2 top-2 p-1 rounded text-slate-500 hover:text-slate-300">
                     {showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               {keyError && <p className="text-sm text-rose-400">{keyError}</p>}
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5 transition-colors">Cancel</button>
-                <button onClick={handleAdd} disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5 transition-colors">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>,
         document.body,

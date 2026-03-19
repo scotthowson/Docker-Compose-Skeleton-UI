@@ -149,8 +149,7 @@ export default function Export() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Disconnected Banner */}
-      {!isConnected && <DisconnectedBanner />}
+      <DisconnectedBanner />
 
       {/* Page Header */}
       <div className="flex items-center gap-4">
@@ -158,7 +157,7 @@ export default function Export() {
           <Download className="w-6 h-6 text-cyan-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Export Center</h1>
+          <h1 className="text-2xl font-bold"><span className="text-gradient">Export Center</span></h1>
           <p className="text-sm text-slate-400 mt-0.5">Download server data and reports</p>
         </div>
       </div>
@@ -200,7 +199,7 @@ export default function Export() {
                   <button
                     onClick={() => handleExport(card)}
                     disabled={isLoading || !isConnected}
-                    className={`px-4 py-2 rounded-lg ${colors.btnBg} ${colors.btnText} ${colors.btnHover} text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shrink-0`}
+                    className={`px-4 py-2 rounded-lg ${colors.btnBg} ${colors.btnText} ${colors.btnHover} text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 press`}
                   >
                     {isLoading ? (
                       <>

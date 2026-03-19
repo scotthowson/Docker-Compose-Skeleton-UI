@@ -64,8 +64,10 @@ export default function ServerInfo() {
   const composeVersion = version?.compose_version?.replace(/Docker Compose version\s*/i, '').split(' ')[0] ?? '--'
   const apiVersion = version?.api_version ?? '--'
 
+  const isHealthy = status.stacks.running === status.stacks.total && status.docker.containers.stopped === 0
+
   return (
-    <div className="glass-card p-4 md:p-6 animate-fade-in">
+    <div className={`glass-card glass-hover p-4 md:p-6 animate-fade-in ${isHealthy ? 'glow-emerald' : ''}`}>
       <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
         <Server size={14} className="text-emerald-400" />
         Server Details

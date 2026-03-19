@@ -828,6 +828,43 @@ export interface ContainerExecResponse {
   success: boolean
 }
 
+// System Update Check
+export interface SystemUpdateCheckResponse {
+  available: boolean
+  current_version: string
+  latest_version: string
+  commits_behind: number
+  changelog: { hash: string; message: string; author: string; date: string }[]
+  has_local_changes: boolean
+  branch: string
+}
+
+export interface SystemUpdateApplyResponse {
+  success: boolean
+  previous_version: string
+  updated_to: string
+  changelog: { hash: string; message: string }[]
+  backup_tag: string
+  restart_required: boolean
+  message?: string
+}
+
+export interface SystemUpdateRollbackResponse {
+  success: boolean
+  rolled_back_to: string
+  message?: string
+}
+
+export interface UIUpdateCheckResponse {
+  available: boolean
+  current_version: string
+  latest_version: string
+  release_url: string
+  changelog: string
+  published_at: string
+  download_url?: string
+}
+
 // Navigation
 export type PageId =
   | 'dashboard'
@@ -1660,6 +1697,63 @@ export interface PluginInstallResponse {
 export interface PluginDeleteResponse {
   success: boolean
   name: string
+}
+
+// Plugin hooks & execution
+export interface PluginHookInfo {
+  name: string
+  size: number
+  executable: boolean
+  modified: number
+  lines: number
+}
+
+export interface PluginHooksListResponse {
+  plugin: string
+  hooks: PluginHookInfo[]
+}
+
+export interface PluginHookContentResponse {
+  plugin: string
+  hook: string
+  content: string
+  executable: boolean
+  size: number
+}
+
+export interface PluginHookUpdateResponse {
+  success: boolean
+  plugin: string
+  hook: string
+  message: string
+}
+
+export interface PluginHookTestResponse {
+  success: boolean
+  plugin: string
+  hook: string
+  exit_code: number
+  output: string
+}
+
+export interface PluginLogEntry {
+  timestamp: string
+  hook: string
+  status: string
+  message: string
+  exit_code?: number
+}
+
+export interface PluginLogsResponse {
+  plugin: string
+  entries: PluginLogEntry[]
+  total: number
+}
+
+export interface PluginConfigUpdateResponse {
+  success: boolean
+  plugin: string
+  message: string
 }
 
 export interface ConfigSchemaResponse {

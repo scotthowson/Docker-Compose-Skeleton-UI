@@ -7,7 +7,7 @@ import {
   Trash2, RefreshCw, Layers,
   HeartPulse, ScrollText, Monitor, Settings2, Loader2, Zap,
   ChevronDown, Archive,
-  TerminalSquare, Download, Wrench,
+  TerminalSquare, Download, Wrench, ListChecks, ArrowUpCircle,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
@@ -136,6 +136,22 @@ const apiActions: QuickAction[] = [
     bgColor: 'bg-cyan-500/10 group-hover:bg-cyan-500/15',
     apiAction: true,
   },
+  {
+    id: 'lint-stacks',
+    label: 'Lint All Stacks',
+    icon: <ListChecks size={18} />,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10 group-hover:bg-cyan-500/15',
+    navigateTo: 'stacks',
+  },
+  {
+    id: 'check-updates',
+    label: 'Check Updates',
+    icon: <ArrowUpCircle size={18} />,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10 group-hover:bg-emerald-500/15',
+    navigateTo: 'updates',
+  },
 ]
 
 const destructiveActionIds = new Set(['prune-images', 'rotate-logs', 'run-backup'])
@@ -256,7 +272,7 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
                   rounded-xl bg-slate-800/30 border border-white/[0.03]
                   hover:border-white/[0.08] hover:bg-slate-800/50
                   hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
-                  disabled:opacity-40
+                  disabled:opacity-50
                   transition-all duration-200
                   text-center press
                 "

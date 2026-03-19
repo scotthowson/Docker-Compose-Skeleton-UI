@@ -226,7 +226,7 @@ const Images: React.FC = () => {
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg md:text-2xl font-bold text-white">Images</h1>
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
             <p className="text-sm text-slate-400 mt-1">
               Track Docker image freshness and staleness
             </p>

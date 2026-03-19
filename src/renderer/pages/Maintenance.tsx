@@ -2,7 +2,7 @@
 // Maintenance — Docker system maintenance, orphan detection, disk analysis
 // =============================================================================
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Wrench, RefreshCw, Loader2, Trash2, RotateCcw, AlertTriangle,
@@ -75,6 +75,16 @@ export default function Maintenance() {
   const [deepPruning, setDeepPruning] = useState(false)
   const [rotating, setRotating] = useState(false)
   const [showDeepPruneModal, setShowDeepPruneModal] = useState(false)
+
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showDeepPruneModal) { setShowDeepPruneModal(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showDeepPruneModal])
 
   // ---- Action handlers ----
   const handleSafePrune = async () => {
@@ -168,7 +178,7 @@ export default function Maintenance() {
   const maxStackMb = stackSizes.reduce((max, s) => Math.max(max, parseSizeToMb(s.size)), 0) || 1
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Deep Prune Confirmation Modal */}
       {showDeepPruneModal && createPortal(
@@ -229,7 +239,7 @@ export default function Maintenance() {
         <div>
           <div className="flex items-center gap-2.5">
             <Wrench size={20} className="text-amber-400" />
-            <h2 className="text-base md:text-xl font-bold text-slate-100">Maintenance</h2>
+            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Maintenance</span></h2>
           </div>
           <p className="mt-0.5 text-sm text-slate-500">
             Docker system maintenance and cleanup

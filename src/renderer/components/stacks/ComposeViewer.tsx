@@ -24,6 +24,8 @@ import {
   fetchStackEnv,
   saveStackEnv,
 } from '../../api/endpoints'
+import { useComposeLinter, useEnvLinter } from '../../hooks/useComposeLinter'
+import type { LintDiagnostic, EnvDiagnostic } from '../../hooks/useComposeLinter'
 import { useToast } from '../common/Toast'
 import type { ComposeValidateResponse, StackEnvResponse } from '../../../shared/types'
 
@@ -180,8 +182,13 @@ interface DiffResult {
 
 /** Simple line-by-line comparison producing side-by-side diff */
 function computeDiff(original: string, edited: string): DiffResult {
-  const origLines = original.split('\n')
-  const editLines = edited.split('\n')
+  // Trim trailing empty lines to avoid phantom diffs at the bottom
+  const trimTrailing = (lines: string[]) => {
+    while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+    return lines
+  }
+  const origLines = trimTrailing(original.split('\n'))
+  const editLines = trimTrailing(edited.split('\n'))
 
   const left: DiffLine[] = []
   const right: DiffLine[] = []
@@ -242,6 +249,11 @@ function computeDiff(original: string, edited: string): DiffResult {
 // ComposeViewer component
 // ---------------------------------------------------------------------------
 
+// Shared design tokens for all editor modes (view, edit, diff, .env)
+// Inlined as comments for reference — applied directly in className strings
+// because Tailwind JIT requires complete literal class strings for detection.
+//   Font: text-[13px]   Line height: leading-6   Gutter: w-12   BG: bg-slate-950
+
 export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -277,6 +289,37 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
 
   const yaml = content ?? defaultPlaceholder(stackName)
   const lines = useMemo(() => yaml.split('\n'), [yaml])
+
+  // ---- Real-time linting ----
+  const { diagnostics: composeDiagnostics, counts: composeCounts } = useComposeLinter(
+    editMode ? editContent : yaml,
+    (envEditMode ? envEditContent : envContent) ?? undefined,
+  )
+  const { diagnostics: envDiagnostics, counts: envCounts } = useEnvLinter(
+    envEditMode ? envEditContent : (envContent ?? undefined),
+    editMode ? editContent : yaml,
+  )
+
+  // Build a map of line number -> diagnostics for the gutter
+  const lineDiagnostics = useMemo(() => {
+    const map = new Map<number, LintDiagnostic[]>()
+    for (const d of composeDiagnostics) {
+      const existing = map.get(d.line) || []
+      existing.push(d)
+      map.set(d.line, existing)
+    }
+    return map
+  }, [composeDiagnostics])
+
+  const envLineDiagnostics = useMemo(() => {
+    const map = new Map<number, EnvDiagnostic[]>()
+    for (const d of envDiagnostics) {
+      const existing = map.get(d.line) || []
+      existing.push(d)
+      map.set(d.line, existing)
+    }
+    return map
+  }, [envDiagnostics])
 
   // ---- Load .env when tab switches ----
   useEffect(() => {
@@ -656,74 +699,78 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   function renderDiffView() {
     if (!diff) return null
 
-    return (
-      <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
-        <div className="flex font-mono text-sm leading-relaxed">
-          {/* Left side — original */}
-          <div className="flex-1 border-r border-white/[0.06]">
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
-              Original
-            </div>
-            <div className="bg-slate-950">
-              {diff.left.map((dl, idx) => (
-                <div
-                  key={idx}
-                  className={`
-                    flex px-3 min-h-[1.625rem]
-                    ${dl.type === 'removed'
-                      ? 'bg-rose-500/10'
-                      : dl.type === 'added'
-                        ? 'bg-transparent'
-                        : 'hover:bg-white/[0.02]'
-                    }
-                  `}
-                >
-                  <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                    {dl.lineNumber ?? ''}
-                  </span>
-                  <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
-                    dl.type === 'removed' ? 'text-rose-300' : 'text-slate-300'
-                  }`}>
-                    {dl.content}
-                  </span>
-                </div>
-              ))}
-              <div className="h-4" />
-            </div>
-          </div>
+    // Trim trailing empty placeholder lines from both sides
+    let trimmedLeft = diff.left
+    let trimmedRight = diff.right
+    while (
+      trimmedLeft.length > 0 &&
+      trimmedRight.length > 0 &&
+      trimmedLeft[trimmedLeft.length - 1].content === '' &&
+      trimmedRight[trimmedRight.length - 1].content === '' &&
+      trimmedLeft[trimmedLeft.length - 1].lineNumber === null &&
+      trimmedRight[trimmedRight.length - 1].lineNumber === null
+    ) {
+      trimmedLeft = trimmedLeft.slice(0, -1)
+      trimmedRight = trimmedRight.slice(0, -1)
+    }
 
-          {/* Right side — edited */}
-          <div className="flex-1">
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
-              Edited
-            </div>
-            <div className="bg-slate-950">
-              {diff.right.map((dl, idx) => (
-                <div
-                  key={idx}
-                  className={`
-                    flex px-3 min-h-[1.625rem]
-                    ${dl.type === 'added'
-                      ? 'bg-emerald-500/10'
-                      : dl.type === 'removed'
-                        ? 'bg-transparent'
-                        : 'hover:bg-white/[0.02]'
-                    }
-                  `}
-                >
-                  <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                    {dl.lineNumber ?? ''}
-                  </span>
-                  <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
-                    dl.type === 'added' ? 'text-emerald-300' : 'text-slate-300'
-                  }`}>
-                    {dl.content}
-                  </span>
-                </div>
-              ))}
-              <div className="h-4" />
-            </div>
-          </div>
+    const renderDiffColumn = (
+      lines: DiffLine[],
+      side: 'left' | 'right',
+    ) => (
+      <div className={`min-w-0 flex flex-col ${side === 'left' ? 'border-r border-white/[0.06]' : ''}`}>
+        <div className="px-4 py-2 text-[10px] uppercase tracking-wider border-b border-white/[0.06] bg-slate-900/50 font-sans font-semibold flex items-center gap-2 shrink-0">
+          <span className={`w-1.5 h-1.5 rounded-full ${side === 'left' ? 'bg-rose-400/60' : 'bg-emerald-400/60'}`} />
+          <span className="text-slate-400">{side === 'left' ? 'Original' : 'Edited'}</span>
+          <span className="text-[9px] text-slate-600 ml-auto tabular-nums">
+            {lines.filter(l => l.type === (side === 'left' ? 'removed' : 'added')).length} {side === 'left' ? 'removed' : 'added'}
+          </span>
+        </div>
+        <div className="bg-slate-950 flex-1 overflow-x-auto">
+          {lines.map((dl, idx) => {
+            const isChange = side === 'left' ? dl.type === 'removed' : dl.type === 'added'
+            const isPlaceholder = side === 'left' ? dl.type === 'added' : dl.type === 'removed'
+            return (
+              <div
+                key={idx}
+                className={`
+                  flex min-h-6
+                  ${isChange
+                    ? side === 'left' ? 'bg-rose-500/[0.08]' : 'bg-emerald-500/[0.08]'
+                    : isPlaceholder
+                      ? 'bg-slate-900/40'
+                      : 'hover:bg-white/[0.02]'
+                  }
+                `}
+              >
+                <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-6 ${
+                  isChange
+                    ? side === 'left' ? 'text-rose-400/60 bg-rose-500/[0.06]' : 'text-emerald-400/60 bg-emerald-500/[0.06]'
+                    : 'text-slate-700'
+                }`}>
+                  {dl.lineNumber ?? ''}
+                </span>
+                <span className={`flex-1 py-[1px] whitespace-pre pl-2 pr-4 ${
+                  isChange
+                    ? side === 'left' ? 'text-rose-300' : 'text-emerald-300'
+                    : isPlaceholder
+                      ? 'text-transparent'
+                      : 'text-slate-400'
+                }`}>
+                  {dl.content || '\u00A0'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+
+    return (
+      <div className="overflow-y-auto max-h-[80vh] scrollbar-thin">
+        <div className={`grid grid-cols-2 font-mono text-[13px] leading-6`}>
+          {renderDiffColumn(trimmedLeft, 'left')}
+          {renderDiffColumn(trimmedRight, 'right')}
         </div>
       </div>
     )
@@ -754,13 +801,55 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     }
 
     if (envEditMode) {
+      const envEditLines = envEditContent.split('\n')
       return (
-        <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+        <div className={`flex overflow-y-auto max-h-[80vh] scrollbar-thin bg-slate-950`}>
+          {/* Line number gutter with diagnostic markers */}
+          <div className={`shrink-0 select-none border-r border-white/[0.06] bg-slate-950 sticky left-0`} aria-hidden="true">
+            <div className="h-4" />
+            {envEditLines.map((_, idx) => {
+              const diags = envLineDiagnostics.get(idx + 1)
+              const sev = diags?.[0]?.severity
+              return (
+                <div key={idx} className={`w-12 pr-3 pl-3 text-right leading-6 relative`}>
+                  {diags ? (
+                    <span className="group/diag cursor-help">
+                      <span className={`text-xs tabular-nums font-mono ${
+                        sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                          {diags.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <span className={`shrink-0 mt-0.5 ${
+                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                              }`}>
+                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
+                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </span>
+                  ) : (
+                    <span className="text-xs tabular-nums font-mono text-slate-700">{idx + 1}</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {/* Textarea — py-4 and leading-6 must match gutter exactly */}
           <textarea
             value={envEditContent}
             onChange={(e) => setEnvEditContent(e.target.value)}
-            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '60vh' }}
+            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none leading-6`}
+            style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
         </div>
@@ -770,8 +859,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     // Read-only view of .env with basic highlighting
     const envLines = (envContent ?? '').split('\n')
     return (
-      <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
-        <div className="bg-slate-950 font-mono text-sm leading-relaxed">
+      <div className="overflow-y-auto max-h-[80vh] scrollbar-thin">
+        <div className={`bg-slate-950 font-mono text-[13px] leading-6`}>
           {envLines.map((line, idx) => {
             const isComment = line.trimStart().startsWith('#')
             const isEmpty = line.trim() === ''
@@ -799,13 +888,46 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               }
             }
 
+            const diags = envLineDiagnostics.get(idx + 1)
+            const highestSeverity = diags?.[0]?.severity
+
             return (
               <div
                 key={idx}
-                className="flex px-5 hover:bg-white/[0.02]"
+                className={`flex px-5 ${diags
+                  ? highestSeverity === 'error' ? 'bg-rose-500/[0.03]' : highestSeverity === 'warning' ? 'bg-amber-500/[0.02]' : 'hover:bg-white/[0.02]'
+                  : 'hover:bg-white/[0.02]'
+                }`}
               >
-                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                  {idx + 1}
+                <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-6 relative`}>
+                  {diags ? (
+                    <span className="group/diag cursor-help">
+                      <span className={`
+                        ${highestSeverity === 'error' ? 'text-rose-400' : highestSeverity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}
+                      `}>
+                        {idx + 1}
+                      </span>
+                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                          {diags.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <span className={`shrink-0 mt-0.5 ${
+                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                              }`}>
+                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
+                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">{idx + 1}</span>
+                  )}
                 </span>
                 <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
                   {rendered}
@@ -826,16 +948,60 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
       return renderDiffView()
     }
 
-    // Edit mode — textarea
+    // Edit mode — textarea with line numbers and live diagnostics
     if (editMode) {
+      const editLines = editContent.split('\n')
       return (
-        <div className="overflow-y-auto max-h-[70vh] scrollbar-thin">
+        <div className={`flex overflow-y-auto max-h-[80vh] scrollbar-thin bg-slate-950`}>
+          {/* Line number gutter with diagnostic markers */}
+          <div className={`shrink-0 select-none border-r border-white/[0.06] bg-slate-950 sticky left-0`} aria-hidden="true">
+            {/* Top padding matching textarea py-4 */}
+            <div className="h-4" />
+            {editLines.map((_, idx) => {
+              const diags = lineDiagnostics.get(idx + 1)
+              const sev = diags?.[0]?.severity
+              return (
+                <div key={idx} className={`w-12 pr-3 pl-3 text-right leading-6 relative`}>
+                  {diags ? (
+                    <span className="group/diag cursor-help">
+                      <span className={`text-xs tabular-nums font-mono ${
+                        sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                          {diags.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <span className={`shrink-0 mt-0.5 ${
+                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                              }`}>
+                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
+                                {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
+                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </span>
+                  ) : (
+                    <span className="text-xs tabular-nums font-mono text-slate-700">{idx + 1}</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {/* Textarea — py-4 and leading-6 must match gutter exactly */}
           <textarea
             ref={textareaRef}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '60vh' }}
+            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none leading-6`}
+            style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
         </div>
@@ -846,30 +1012,67 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     return (
       <div
         ref={codeContainerRef}
-        className="overflow-y-auto max-h-[70vh] scrollbar-thin"
+        className="overflow-y-auto max-h-[80vh] scrollbar-thin"
       >
-        <div className="bg-slate-950 font-mono text-sm leading-relaxed">
+        <div className={`bg-slate-950 font-mono text-[13px] leading-6`}>
           {lines.map((line, idx) => {
             const isMatchedLine = matchedLineSet.has(idx)
             const isActiveLine = idx === activeMatchLine
+            const diags = lineDiagnostics.get(idx + 1) // diagnostics use 1-indexed lines
+            const highestSeverity = diags?.[0]?.severity
 
             return (
               <div
                 key={idx}
                 data-line-index={idx}
                 className={`
-                  flex px-5 transition-colors duration-100
+                  flex px-5 transition-colors duration-100 group/line relative
                   ${isActiveLine
                     ? 'bg-amber-400/[0.06]'
                     : isMatchedLine
                       ? 'bg-amber-400/[0.03]'
-                      : 'hover:bg-white/[0.02]'
+                      : diags
+                        ? highestSeverity === 'error'
+                          ? 'bg-rose-500/[0.03]'
+                          : highestSeverity === 'warning'
+                            ? 'bg-amber-500/[0.02]'
+                            : 'hover:bg-white/[0.02]'
+                        : 'hover:bg-white/[0.02]'
                   }
                 `}
               >
-                {/* Line number */}
-                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                  {idx + 1}
+                {/* Diagnostic gutter indicator */}
+                <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 py-[1px] select-none tabular-nums text-xs leading-6 relative`}>
+                  {diags ? (
+                    <span className="group/diag cursor-help">
+                      <span className={`
+                        ${highestSeverity === 'error' ? 'text-rose-400' : highestSeverity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}
+                      `}>
+                        {idx + 1}
+                      </span>
+                      {/* Diagnostic tooltip */}
+                      <div className="absolute left-full top-0 ml-1 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '320px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                          {diags.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <span className={`shrink-0 mt-0.5 ${
+                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
+                              }`}>
+                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
+                                {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
+                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">{idx + 1}</span>
+                  )}
                 </span>
 
                 {/* Line content */}
@@ -899,16 +1102,25 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
       "
     >
       <div
-        className="
+        className={`
           relative
-          w-full max-w-4xl mx-4
+          w-full ${showDiff ? 'max-w-[98vw]' : 'max-w-[95vw] xl:max-w-7xl'} mx-4
           bg-slate-950/95 backdrop-blur-xl
-          border border-white/[0.06] rounded-2xl
+          border rounded-2xl
           shadow-2xl shadow-black/50
           animate-fade-in
           flex flex-col
-          max-h-[85vh]
-        "
+          max-h-[92vh]
+          transition-all duration-500
+          ${(activeTab === 'compose' ? composeCounts : envCounts).errors > 0
+            ? 'border-rose-500/20 glow-rose'
+            : (activeTab === 'compose' ? composeCounts : envCounts).warnings > 0
+              ? 'border-amber-500/15'
+              : composeDiagnostics.length === 0 && envDiagnostics.length === 0
+                ? 'border-emerald-500/10'
+                : 'border-white/[0.06]'
+          }
+        `}
         role="dialog"
         aria-modal="true"
         aria-labelledby="compose-viewer-title"
@@ -949,6 +1161,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               >
                 <FileCode2 size={12} />
                 Compose
+                {composeCounts.errors > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{composeCounts.errors}</span>
+                )}
+                {composeCounts.errors === 0 && composeCounts.warnings > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{composeCounts.warnings}</span>
+                )}
               </button>
               <button
                 onClick={() => switchTab('env')}
@@ -962,6 +1180,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               >
                 <FileText size={12} />
                 .env
+                {envCounts.errors > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{envCounts.errors}</span>
+                )}
+                {envCounts.errors === 0 && envCounts.warnings > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{envCounts.warnings}</span>
+                )}
               </button>
             </div>
           </div>
@@ -1301,6 +1525,38 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         {/* ---- Content area ---- */}
         {activeTab === 'compose' ? renderComposeTab() : renderEnvTab()}
 
+        {/* ---- Diagnostics summary bar ---- */}
+        <div className="flex items-center gap-3 px-5 py-2 border-t border-white/[0.06] bg-slate-900/60 shrink-0">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Lint</span>
+          {(activeTab === 'compose' ? composeDiagnostics.length : envDiagnostics.length) === 0 ? (
+            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400 neon-emerald">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              All clear
+            </span>
+          ) : (
+            <>
+              {(activeTab === 'compose' ? composeCounts : envCounts).errors > 0 && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-rose-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  {(activeTab === 'compose' ? composeCounts : envCounts).errors} error{(activeTab === 'compose' ? composeCounts : envCounts).errors !== 1 ? 's' : ''}
+                </span>
+              )}
+              {(activeTab === 'compose' ? composeCounts : envCounts).warnings > 0 && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  {(activeTab === 'compose' ? composeCounts : envCounts).warnings} warning{(activeTab === 'compose' ? composeCounts : envCounts).warnings !== 1 ? 's' : ''}
+                </span>
+              )}
+              {(activeTab === 'compose' ? composeCounts : envCounts).info > 0 && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-cyan-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  {(activeTab === 'compose' ? composeCounts : envCounts).info} info
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
         {/* ---- Footer ---- */}
         <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.06] shrink-0">
           <span className="text-[11px] text-slate-600 font-mono">
@@ -1324,6 +1580,9 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             )}
             <span className="text-[11px] text-slate-600">
               {activeTab === 'compose' ? 'YAML' : 'ENV'}
+            </span>
+            <span className="text-[10px] text-slate-700">
+              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
             </span>
           </div>
         </div>

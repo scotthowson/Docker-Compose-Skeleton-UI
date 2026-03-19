@@ -165,7 +165,7 @@ export class ApiClient {
       // Simple reachability check — no auth headers (avoids CORS preflight)
       const url = `${this.baseUrl}/`
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      const timeoutId = setTimeout(() => controller.abort(), 8000)
       try {
         const response = await fetch(url, {
           method: 'GET',

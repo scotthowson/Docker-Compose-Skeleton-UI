@@ -186,7 +186,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
             onChange={(e) => setLabel(e.target.value)}
             placeholder="My Bookmark"
             autoFocus
-            className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25"
+            className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
           />
         </div>
 
@@ -211,7 +211,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder={type === 'stack' ? 'core-infrastructure' : type === 'container' ? 'nginx-proxy' : 'anything...'}
-              className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25"
+              className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
             />
           )}
         </div>
@@ -225,7 +225,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Quick notes about this bookmark..."
-          className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25"
+          className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
         />
       </div>
 
@@ -414,7 +414,7 @@ export default function Bookmarks() {
   }
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       {/* Page header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
@@ -528,7 +528,7 @@ export default function Bookmarks() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-children">
           {filtered.map((item) => (
             <BookmarkCard
               key={item.id}

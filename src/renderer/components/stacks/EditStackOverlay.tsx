@@ -33,6 +33,7 @@ import {
 } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useComposeLinter, useEnvLinter } from '../../hooks/useComposeLinter'
 import type { StackInfo, StackAnnotation, ComposeVersion } from '../../../shared/types'
 
 interface Props {
@@ -156,8 +157,13 @@ interface DiffLine {
 }
 
 function computeDiff(original: string, edited: string): { left: DiffLine[]; right: DiffLine[] } {
-  const origLines = original.split('\n')
-  const editLines = edited.split('\n')
+  // Trim trailing empty lines to avoid phantom empty diffs at the bottom
+  const trimTrailing = (lines: string[]) => {
+    while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+    return lines
+  }
+  const origLines = trimTrailing(original.split('\n'))
+  const editLines = trimTrailing(edited.split('\n'))
   const left: DiffLine[] = []
   const right: DiffLine[] = []
 
@@ -193,16 +199,42 @@ function computeDiff(original: string, edited: string): { left: DiffLine[]; righ
     }
   }
 
+  // Collect raw removed/added sequences, then collapse them side-by-side
+  // so changed lines appear on one row instead of two (removed + placeholder, placeholder + added)
+  const rawLeft: DiffLine[] = []
+  const rawRight: DiffLine[] = []
   for (const op of diffOps) {
     if (op.type === 'same') {
-      left.push({ type: 'same', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
-      right.push({ type: 'same', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
+      rawLeft.push({ type: 'same', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
+      rawRight.push({ type: 'same', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
     } else if (op.type === 'removed') {
-      left.push({ type: 'removed', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
-      right.push({ type: 'removed', content: '', lineNumber: null })
+      rawLeft.push({ type: 'removed', content: origLines[op.origIdx!], lineNumber: op.origIdx! + 1 })
+      rawRight.push({ type: 'removed', content: '', lineNumber: null })
     } else {
-      left.push({ type: 'added', content: '', lineNumber: null })
-      right.push({ type: 'added', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
+      rawLeft.push({ type: 'added', content: '', lineNumber: null })
+      rawRight.push({ type: 'added', content: editLines[op.editIdx!], lineNumber: op.editIdx! + 1 })
+    }
+  }
+
+  // Collapse: merge adjacent removed+added placeholder pairs into single changed rows
+  // Before: row A = [removed "old", placeholder ""]  row B = [placeholder "", added "new"]
+  // After:  row A = [removed "old", added "new"]  (row B eliminated)
+  let idx = 0
+  while (idx < rawLeft.length) {
+    // Check for a removed row followed by an added row
+    if (
+      idx + 1 < rawLeft.length &&
+      rawLeft[idx].type === 'removed' && rawRight[idx].lineNumber === null &&
+      rawLeft[idx + 1].lineNumber === null && rawRight[idx + 1].type === 'added'
+    ) {
+      // Collapse: take the removed content on the left, added content on the right
+      left.push(rawLeft[idx])  // removed line with content
+      right.push(rawRight[idx + 1])  // added line with content
+      idx += 2 // skip both rows
+    } else {
+      left.push(rawLeft[idx])
+      right.push(rawRight[idx])
+      idx++
     }
   }
 
@@ -248,6 +280,31 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   const [validating, setValidating] = useState(false)
   const [savingCompose, setSavingCompose] = useState(false)
   const [savingEnv, setSavingEnv] = useState(false)
+
+  // Real-time linting
+  const { diagnostics: composeDiagnostics, counts: composeCounts } = useComposeLinter(composeContent || undefined, envContent || undefined)
+  const { diagnostics: envDiagnostics, counts: envCounts } = useEnvLinter(envContent || undefined, composeContent || undefined)
+
+  // Build line -> diagnostics maps for gutter markers
+  const composeLintMap = useMemo(() => {
+    const map = new Map<number, typeof composeDiagnostics>()
+    for (const d of composeDiagnostics) {
+      const arr = map.get(d.line) || []
+      arr.push(d)
+      map.set(d.line, arr)
+    }
+    return map
+  }, [composeDiagnostics])
+
+  const envLintMap = useMemo(() => {
+    const map = new Map<number, typeof envDiagnostics>()
+    for (const d of envDiagnostics) {
+      const arr = map.get(d.line) || []
+      arr.push(d)
+      map.set(d.line, arr)
+    }
+    return map
+  }, [envDiagnostics])
 
   // Compose history
   const [composeVersions, setComposeVersions] = useState<ComposeVersion[]>([])
@@ -404,6 +461,18 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     return computeDiff(originalCompose, composeContent)
   }, [showDiff, composeEditMode, originalCompose, composeContent])
 
+  // Change detection + safe close (must be above keyboard handler)
+  const hasComposeChanges = composeContent !== originalCompose
+  const hasEnvChanges = envContent !== originalEnv
+  const hasAnyChanges = hasComposeChanges || hasEnvChanges
+
+  const safeClose = useCallback(() => {
+    if (hasAnyChanges) {
+      if (!window.confirm('You have unsaved changes. Close without saving?')) return
+    }
+    onClose()
+  }, [hasAnyChanges, onClose])
+
   // Keyboard handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -419,7 +488,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         } else if (envEditMode) {
           setEnvEditMode(false)
         } else {
-          onClose()
+          safeClose()
         }
         return
       }
@@ -447,14 +516,14 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, searchOpen, totalMatches, composeEditMode, envEditMode, activeTab, validationResult])
+  }, [safeClose, searchOpen, totalMatches, composeEditMode, envEditMode, activeTab, validationResult])
 
   // Backdrop click
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === overlayRef.current) onClose()
+      if (e.target === overlayRef.current) safeClose()
     },
-    [onClose],
+    [safeClose],
   )
 
   // Copy
@@ -539,14 +608,15 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   // Switch tab and reset edit states
   const switchTab = useCallback((tab: typeof activeTab) => {
     if (tab === activeTab) return
-    if (composeEditMode) {
-      setComposeEditMode(false)
-      setShowDiff(false)
-      setValidationResult(null)
+    // If currently editing, auto-enable edit mode on the target tab too
+    const wasEditing = (activeTab === 'compose' && composeEditMode) || (activeTab === 'env' && envEditMode)
+    if (wasEditing) {
+      if (tab === 'compose' && !composeEditMode) setComposeEditMode(true)
+      if (tab === 'env' && !envEditMode) setEnvEditMode(true)
     }
-    if (envEditMode) setEnvEditMode(false)
     setSearchOpen(false)
     setSearchQuery('')
+    setShowDiff(false)
     setActiveTab(tab)
   }, [activeTab, composeEditMode, envEditMode])
 
@@ -558,8 +628,6 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     return s
   }, [searchMatches])
 
-  const hasComposeChanges = composeContent !== originalCompose
-  const hasEnvChanges = envContent !== originalEnv
 
   // Priority config
   const priorityOptions = [
@@ -681,65 +749,65 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       )
     }
 
-    // Diff view
+    // Diff view — row-synchronized: each row renders both columns at equal height
     if (composeEditMode && showDiff && diff) {
       return (
-        <div className="overflow-y-auto flex-1 scrollbar-thin">
-          <div className="flex font-mono text-sm leading-relaxed">
-            <div className="flex-1 border-r border-white/[0.06]">
-              <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
-                Original
-              </div>
-              <div className="bg-slate-950">
-                {diff.left.map((dl, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex px-3 min-h-[1.625rem] ${
-                      dl.type === 'removed' ? 'bg-rose-500/10'
-                        : dl.type === 'added' ? 'bg-transparent'
-                        : 'hover:bg-white/[0.02]'
-                    }`}
-                  >
-                    <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+        <div className="overflow-y-auto flex-1 scrollbar-thin bg-slate-950">
+          {/* Header row */}
+          <div className="grid grid-cols-2 sticky top-0 z-10 border-b border-white/[0.06]">
+            <div className="px-4 py-2 text-[10px] uppercase tracking-wider bg-slate-900/90 backdrop-blur-sm font-sans font-semibold flex items-center gap-2 border-r border-white/[0.06]">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400/60" />
+              <span className="text-slate-400">Original</span>
+            </div>
+            <div className="px-4 py-2 text-[10px] uppercase tracking-wider bg-slate-900/90 backdrop-blur-sm font-sans font-semibold flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/60" />
+              <span className="text-slate-400">Edited</span>
+            </div>
+          </div>
+          {/* Diff rows — each row is a grid so both sides always match height */}
+          <div className="font-mono text-[13px] leading-6">
+            {diff.left.map((dl, idx) => {
+              const dr = diff.right[idx]
+              if (!dr) return null
+              const leftIsChange = dl.type === 'removed'
+              const rightIsChange = dr.type === 'added'
+              const leftIsPlaceholder = dl.type === 'added'
+              const rightIsPlaceholder = dr.type === 'removed'
+              return (
+                <div key={idx} className="grid grid-cols-2">
+                  {/* Left cell */}
+                  <div className={`flex border-r border-white/[0.06] min-h-6 ${
+                    leftIsChange ? 'bg-rose-500/[0.08]' : leftIsPlaceholder ? 'bg-slate-900/40' : ''
+                  }`}>
+                    <span className={`inline-block w-10 shrink-0 text-right pr-3 pl-2 text-xs leading-6 select-none tabular-nums ${
+                      leftIsChange ? 'text-rose-400/60' : 'text-slate-700'
+                    }`}>
                       {dl.lineNumber ?? ''}
                     </span>
-                    <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
-                      dl.type === 'removed' ? 'text-rose-300' : 'text-slate-300'
+                    <span className={`flex-1 whitespace-pre leading-6 pr-2 ${
+                      leftIsChange ? 'text-rose-300' : leftIsPlaceholder ? '' : 'text-slate-400'
                     }`}>
                       {dl.content}
                     </span>
                   </div>
-                ))}
-                <div className="h-4" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/[0.06] bg-slate-900/50 font-sans font-medium">
-                Edited
-              </div>
-              <div className="bg-slate-950">
-                {diff.right.map((dl, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex px-3 min-h-[1.625rem] ${
-                      dl.type === 'added' ? 'bg-emerald-500/10'
-                        : dl.type === 'removed' ? 'bg-transparent'
-                        : 'hover:bg-white/[0.02]'
-                    }`}
-                  >
-                    <span className="inline-block w-8 shrink-0 text-right pr-3 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
-                      {dl.lineNumber ?? ''}
-                    </span>
-                    <span className={`flex-1 py-[1px] whitespace-pre overflow-x-auto ${
-                      dl.type === 'added' ? 'text-emerald-300' : 'text-slate-300'
+                  {/* Right cell */}
+                  <div className={`flex min-h-6 ${
+                    rightIsChange ? 'bg-emerald-500/[0.08]' : rightIsPlaceholder ? 'bg-slate-900/40' : ''
+                  }`}>
+                    <span className={`inline-block w-10 shrink-0 text-right pr-3 pl-2 text-xs leading-6 select-none tabular-nums ${
+                      rightIsChange ? 'text-emerald-400/60' : 'text-slate-700'
                     }`}>
-                      {dl.content}
+                      {dr.lineNumber ?? ''}
+                    </span>
+                    <span className={`flex-1 whitespace-pre leading-6 pr-2 ${
+                      rightIsChange ? 'text-emerald-300' : rightIsPlaceholder ? '' : 'text-slate-400'
+                    }`}>
+                      {dr.content}
                     </span>
                   </div>
-                ))}
-                <div className="h-4" />
-              </div>
-            </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )
@@ -753,7 +821,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             value={composeContent}
             onChange={(e) => setComposeContent(e.target.value)}
             className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '60vh' }}
+            style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
         </div>
@@ -812,7 +880,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             value={envContent}
             onChange={(e) => setEnvContent(e.target.value)}
             className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '60vh' }}
+            style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
         </div>
@@ -869,6 +937,17 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   function renderAnnotationsTab() {
     return (
       <div className="overflow-y-auto flex-1 scrollbar-thin p-6 space-y-5">
+        {/* Info banner */}
+        <div className="flex items-start gap-3 rounded-xl bg-cyan-500/[0.05] border border-cyan-500/10 px-4 py-3">
+          <Tag size={14} className="text-cyan-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] text-cyan-300 font-medium">Stack Annotations</p>
+            <p className="text-[10px] text-cyan-400/60 mt-0.5 leading-relaxed">
+              Local metadata for organizing your stacks. Labels override display names, priority controls sort order and visual emphasis, and notes are for your reference. These are stored locally and don't affect the server.
+            </p>
+          </div>
+        </div>
+
         {/* Custom label */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
@@ -882,7 +961,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             className="
               w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
               text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200
             "
           />
@@ -893,9 +972,12 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
 
         {/* Priority */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Priority
           </label>
+          <p className="text-[10px] text-slate-600 mb-2">
+            Controls stack sort order and visual emphasis. Critical stacks sort first and get highlighted borders.
+          </p>
           <div className="flex items-center gap-2">
             {priorityOptions.map((p) => {
               const isActive = annoPriority === p.value
@@ -922,9 +1004,12 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Notes
           </label>
+          <p className="text-[10px] text-slate-600 mb-2">
+            Private notes about this stack — configuration details, maintenance reminders, or team context.
+          </p>
           <textarea
             value={annoNotes}
             onChange={(e) => setAnnoNotes(e.target.value)}
@@ -933,7 +1018,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             className="
               w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
               text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200 resize-none
             "
           />
@@ -1029,13 +1114,13 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       {/* Panel */}
       <div
         className="
-          relative w-full max-w-4xl mx-4
+          relative w-full max-w-[95vw] xl:max-w-[1400px] mx-4
           bg-slate-900/95 backdrop-blur-2xl
           border border-white/[0.08] rounded-2xl
           shadow-2xl shadow-black/40
           overflow-hidden animate-scale-in
           flex flex-col
-          max-h-[92vh]
+          max-h-[95vh]
         "
         role="dialog"
         aria-modal="true"
@@ -1303,7 +1388,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
 
             {/* Close */}
             <button
-              onClick={onClose}
+              onClick={safeClose}
               className="
                 flex items-center justify-center w-9 h-9 rounded-lg
                 text-slate-500 hover:text-slate-200 hover:bg-white/[0.06]
@@ -1401,6 +1486,48 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                 <>Labels &amp; metadata</>
               )}
             </span>
+            {/* Lint counts — hoverable with full diagnostic list */}
+            {(() => {
+              const diags = activeTab === 'compose' ? composeDiagnostics : activeTab === 'env' ? envDiagnostics : []
+              const counts = activeTab === 'compose' ? composeCounts : envCounts
+              const content = activeTab === 'compose' ? composeContent : envContent
+              if (!content) return null
+              return (
+                <span className="relative group/lint cursor-default flex items-center gap-2">
+                  {diags.length === 0 ? (
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Lint OK</span>
+                  ) : (
+                    <>
+                      {counts.errors > 0 && <span className="flex items-center gap-1 text-[10px] font-medium text-rose-400"><span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />{counts.errors} error{counts.errors !== 1 ? 's' : ''}</span>}
+                      {counts.warnings > 0 && <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />{counts.warnings} warning{counts.warnings !== 1 ? 's' : ''}</span>}
+                      {counts.info > 0 && <span className="flex items-center gap-1 text-[10px] font-medium text-cyan-400"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />{counts.info} info</span>}
+                    </>
+                  )}
+                  {/* Hover tooltip with full diagnostic list */}
+                  {diags.length > 0 && (
+                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover/lint:block z-50 animate-fade-in pointer-events-none" style={{ width: '400px', maxHeight: '300px' }}>
+                      <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-3 overflow-y-auto max-h-[300px] scrollbar-thin">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
+                          {activeTab === 'compose' ? 'Compose' : '.env'} Diagnostics ({diags.length})
+                        </p>
+                        <div className="space-y-1.5">
+                          {diags.slice(0, 20).map((d, di) => (
+                            <div key={di} className="flex items-start gap-2 text-[11px]">
+                              <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
+                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
+                              </span>
+                              <span className="text-slate-500 tabular-nums shrink-0">L{d.line}</span>
+                              <span className="text-slate-300">{d.message}</span>
+                            </div>
+                          ))}
+                          {diags.length > 20 && <p className="text-[10px] text-slate-600">+{diags.length - 20} more...</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </span>
+              )
+            })()}
             {activeTab === 'compose' && hasComposeChanges && composeEditMode && (
               <span className="text-[10px] text-amber-400/70 font-medium px-2 py-0.5 rounded bg-amber-500/10">
                 UNSAVED CHANGES

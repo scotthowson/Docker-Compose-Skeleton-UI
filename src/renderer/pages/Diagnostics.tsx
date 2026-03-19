@@ -47,12 +47,12 @@ function pct(n: number, d: number): number {
   return d > 0 ? Math.round((n / d) * 100) : 0
 }
 
-function scoreLabel(score: number): { text: string; color: string } {
-  if (score >= 90) return { text: 'Excellent', color: 'text-emerald-400' }
-  if (score >= 70) return { text: 'Good', color: 'text-cyan-400' }
-  if (score >= 50) return { text: 'Fair', color: 'text-amber-400' }
-  if (score >= 30) return { text: 'Poor', color: 'text-orange-400' }
-  return { text: 'Critical', color: 'text-rose-400' }
+function scoreLabel(score: number): { text: string; color: string; neon: string } {
+  if (score >= 90) return { text: 'Excellent', color: 'text-emerald-400', neon: 'neon-emerald' }
+  if (score >= 70) return { text: 'Good', color: 'text-cyan-400', neon: 'neon-cyan' }
+  if (score >= 50) return { text: 'Fair', color: 'text-amber-400', neon: 'neon-amber' }
+  if (score >= 30) return { text: 'Poor', color: 'text-orange-400', neon: 'neon-rose' }
+  return { text: 'Critical', color: 'text-rose-400', neon: 'neon-rose' }
 }
 
 function scoreGradientId(score: number): string {
@@ -124,7 +124,7 @@ function HealthScoreRing({ score }: { score: number }) {
       {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-5xl font-bold tabular-nums text-slate-100">{score}</span>
-        <span className={`text-xs font-semibold uppercase tracking-widest mt-1 ${label.color}`}>
+        <span className={`text-xs font-semibold uppercase tracking-widest mt-1 ${label.color} ${label.neon}`}>
           {label.text}
         </span>
       </div>
@@ -787,7 +787,7 @@ function ServerControlCard() {
                 group relative flex flex-col items-center gap-2.5 rounded-xl p-5
                 bg-white/[0.02] border border-white/[0.06]
                 ${action.bgHover}
-                transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed
+                transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
               `}
             >
               <div className={`
@@ -816,7 +816,7 @@ function ServerControlCard() {
           disabled={actionLoading !== null}
           className={`
             group relative flex flex-col items-center gap-2.5 rounded-xl p-5
-            border transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed
+            border transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
             ${maintenanceMode
               ? 'bg-violet-500/10 border-violet-500/25 ring-1 ring-violet-500/20'
               : 'bg-white/[0.02] border-white/[0.06] hover:bg-violet-500/10 hover:border-violet-500/25'
@@ -919,8 +919,9 @@ async function verifyCurrentPassword(password: string): Promise<{ valid: boolean
   return valid ? { valid: true } : { valid: false, error: 'Incorrect password' }
 }
 
-/** Perform the client-side reset (clear all local data, return to first-launch) */
-async function performClientReset(): Promise<void> {
+/** Perform the client-side reset (clear all local data, return to first-launch)
+ *  @param redirectToSetup — if true (full server reset), navigate to setup wizard instead of dashboard */
+async function performClientReset(redirectToSetup = false): Promise<void> {
   // Preserve server URL so we can reconnect to setup wizard after reset
   const currentServerUrl = useSettingsStore.getState().serverUrl
 
@@ -934,12 +935,13 @@ async function performClientReset(): Promise<void> {
     await window.electronAPI.setSetting('userAccounts', undefined)
   }
 
-  useSettingsStore.setState({ ...DEFAULT_SETTINGS, currentPage: 'dashboard' })
+  useSettingsStore.setState({ ...DEFAULT_SETTINGS, currentPage: redirectToSetup ? 'setup' : 'dashboard' })
 
   // Restore server URL so setup wizard can reconnect
   useSettingsStore.getState().updateSetting('serverUrl', currentServerUrl)
   useConnectionStore.getState().setServerUrl(currentServerUrl)
   apiClient.setBaseUrl(currentServerUrl)
+  apiClient.setAuthToken(null)
 
   useConnectionStore.getState().disconnect()
   useAuthStore.setState({
@@ -993,7 +995,7 @@ function FactoryResetCard() {
       setResetting(false)
       return
     }
-    await performClientReset()
+    await performClientReset(false)
   }, [canReset, confirmPassword])
 
   const handleFullReset = useCallback(async () => {
@@ -1024,7 +1026,7 @@ function FactoryResetCard() {
           setCountdown(null)
           return
         }
-        await performClientReset()
+        await performClientReset(true)
       })()
       return
     }
@@ -1218,7 +1220,7 @@ function FactoryResetCard() {
             flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold
             ${styles.button} text-white shadow-lg
             transition-all duration-200 press
-            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:opacity-50 disabled:cursor-not-allowed
           `}
         >
           {resetting ? (

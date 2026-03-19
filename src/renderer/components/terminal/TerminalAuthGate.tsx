@@ -95,6 +95,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
             bg-slate-900/60 backdrop-blur-xl border border-white/[0.06]
             rounded-2xl p-6 space-y-5
             shadow-xl shadow-black/20
+            gradient-border
           "
         >
           {/* Security badge */}
@@ -167,6 +168,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
                 tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -206,7 +208,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
               w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium
               bg-emerald-500/15 text-emerald-400 border border-emerald-500/20
               hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/30
-              disabled:opacity-40 disabled:cursor-not-allowed
+              disabled:opacity-50 disabled:cursor-not-allowed
               transition-all duration-200
             "
           >

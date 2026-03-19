@@ -106,7 +106,7 @@ function ToastItem({
   const [progress, setProgress] = useState(100)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const duration = toast.duration ?? 4000
+  const duration = toast.duration ?? (toast.type === 'error' ? 6000 : toast.type === 'success' ? 3000 : 4000)
 
   const dismiss = useCallback(() => {
     setExiting(true)

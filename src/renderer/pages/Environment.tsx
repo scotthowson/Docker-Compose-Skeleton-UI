@@ -402,7 +402,7 @@ export default function Environment() {
   ]
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -411,7 +411,7 @@ export default function Environment() {
             <FileCode size={20} className="text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-base md:text-xl font-bold text-slate-100">Environment Variables</h2>
+            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Environment Variables</span></h2>
             <p className="mt-0.5 text-sm text-slate-500">
               Manage root and per-stack .env configuration
             </p>

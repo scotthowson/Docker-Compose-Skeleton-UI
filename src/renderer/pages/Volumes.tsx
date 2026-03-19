@@ -2,7 +2,7 @@
 // Volumes — Docker volume management with search, sort, delete & batch ops
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   HardDrive,
@@ -330,6 +330,17 @@ export default function Volumes() {
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [batchResults, setBatchResults] = useState<BatchResult[] | null>(null)
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (batchConfirmOpen) { setBatchConfirmOpen(false); return }
+      if (deleteTarget) { setDeleteTarget(null); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [batchConfirmOpen, deleteTarget])
+
   // Poll volumes data
   const {
     data: volumesData,
@@ -600,7 +611,7 @@ export default function Volumes() {
               text-sm font-semibold text-white
               bg-rose-500 hover:bg-rose-400
               shadow-lg shadow-rose-500/25
-              disabled:opacity-40 disabled:cursor-not-allowed
+              disabled:opacity-50 disabled:cursor-not-allowed
               transition-all duration-200
             "
           >
@@ -665,7 +676,7 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       {/* Summary Stat Cards                                                */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-children">
         <div className="glass-subtle rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Database size={14} className="text-cyan-400" />

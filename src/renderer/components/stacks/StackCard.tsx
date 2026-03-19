@@ -4,10 +4,23 @@
 
 import {
   Play, Square, RotateCcw, Download, Loader2, Box,
-  AlertTriangle, Tag, Pencil, Check, Shield, Trash2,
+  AlertTriangle, Tag, Pencil, Check, Shield, Trash2, Clock,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useStackStore } from '../../stores/stackStore'
+import { CopyButton } from '../common/CopyButton'
 import type { StackInfo } from '../../../shared/types'
+
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
 
 interface Props {
   stack: StackInfo
@@ -39,6 +52,8 @@ const priorityConfig = {
 
 export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect, isAdmin = false }: Props) {
   const isRunning = stack.status === 'running'
+  const lastActionTimestamps = useStackStore((s) => s.lastActionTimestamps)
+  const lastAction = lastActionTimestamps[stack.name]
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const annotation = stackAnnotations[stack.name] ?? {}
   const hasPriority = annotation.priority && annotation.priority !== 'normal'
@@ -109,6 +124,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
         group relative glass glass-hover cursor-pointer overflow-hidden
         border-l-2 transition-all duration-300
         ${borderColor}
+        ${isRunning && !batchMode ? 'glow-emerald' : ''}
         ${batchMode && isSelected ? 'ring-2 ring-cyan-500/40' : ''}
       `}
       onClick={handleCardClick}
@@ -160,14 +176,18 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                   {annotation.label || formatStackName(stack.name)}
                 </h3>
                 {hasPriority && priorityCfg && (
-                  <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold border ${priorityCfg.bg} ${priorityCfg.color}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold border ${priorityCfg.bg} ${priorityCfg.color}`}
+                    title={`Priority: ${priorityCfg.label} — affects sort order and visual emphasis`}
+                  >
                     <priorityCfg.icon size={8} />
                     {priorityCfg.label}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 truncate mt-0.5 font-mono">
+              <p className="text-xs text-slate-500 truncate mt-0.5 font-mono flex items-center gap-1">
                 {stack.name}
+                <CopyButton text={stack.name} className="opacity-0 group-hover:opacity-100" size={10} />
               </p>
             </div>
           </div>
@@ -217,6 +237,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                 className={`w-1.5 h-1.5 rounded-full ${
                   isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
                 }`}
+                title={isRunning ? 'All containers are up' : 'Stack is not running'}
               />
               {isRunning ? 'Running' : 'Stopped'}
             </span>
@@ -237,6 +258,12 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             </span>{' '}
             container{stack.running_containers !== 1 ? 's' : ''} running
           </span>
+          {lastAction && (
+            <span className="flex items-center gap-1 text-[10px] text-slate-600">
+              <Clock size={10} />
+              {formatRelativeTime(lastAction)}
+            </span>
+          )}
         </div>
 
         {/* Action buttons (hidden in batch mode) */}

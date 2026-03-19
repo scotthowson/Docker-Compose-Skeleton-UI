@@ -244,14 +244,15 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
             </thead>
             <tbody>
               {loading && images.length === 0 ? (
-                <tr>
-                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
-                      <span className="text-sm text-slate-500">Loading images...</span>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  {[...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-1.5 px-3">
+                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.04]" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
               ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">

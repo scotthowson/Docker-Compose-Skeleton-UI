@@ -10,7 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio,
+  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -477,6 +477,58 @@ export function CommandPalette() {
           } catch { addToast({ type: 'error', message: 'Backup trigger failed' }) }
         },
       })
+
+      items.push({
+        id: 'lint-all',
+        label: 'Lint All Compose Files',
+        description: 'Validate all compose files for errors and warnings',
+        icon: <ListChecks size={16} className="text-cyan-400" />,
+        type: 'action',
+        keywords: ['validate', 'lint', 'compose', 'check', 'errors', 'warnings'],
+        onSelect: () => {
+          setCurrentPage('stacks')
+          setOpen(false)
+        },
+      })
+
+      items.push({
+        id: 'check-updates',
+        label: 'Check for System Updates',
+        description: 'Check for available image and system updates',
+        icon: <ArrowUpCircle size={16} className="text-emerald-400" />,
+        type: 'action',
+        keywords: ['update', 'upgrade', 'version', 'latest'],
+        onSelect: () => {
+          setCurrentPage('updates')
+          setOpen(false)
+        },
+      })
+
+      items.push({
+        id: 'view-plugins',
+        label: 'Manage Plugins',
+        description: 'Install, configure, and scaffold plugins',
+        icon: <Puzzle size={16} className="text-violet-400" />,
+        type: 'action',
+        keywords: ['plugin', 'extension', 'hooks', 'install', 'scaffold'],
+        onSelect: () => {
+          setCurrentPage('plugins')
+          setOpen(false)
+        },
+      })
+
+      items.push({
+        id: 'view-audit',
+        label: 'View Audit Log',
+        description: 'Review security audit trail and change history',
+        icon: <ScrollText size={16} className="text-amber-400" />,
+        type: 'action',
+        keywords: ['audit', 'log', 'history', 'security', 'changes'],
+        onSelect: () => {
+          setCurrentPage('activity')
+          setOpen(false)
+        },
+      })
     }
 
     // --- Server actions available to all authenticated users ---
@@ -777,6 +829,11 @@ export function CommandPalette() {
               </React.Fragment>
             )
           })}
+        </div>
+
+        {/* Result count */}
+        <div className="px-4 py-1.5 text-[10px] text-slate-600 border-t border-white/[0.04]">
+          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
         </div>
 
         {/* Footer */}

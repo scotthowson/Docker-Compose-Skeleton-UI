@@ -3,11 +3,12 @@
 // =============================================================================
 
 import { useEffect, useState, useCallback } from 'react'
-import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, Wifi } from 'lucide-react'
+import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, User, Wifi } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useAuthStore } from '../../stores/authStore'
 
 function formatUptime(seconds: number): string {
   if (seconds < 0) return '--'
@@ -48,14 +49,17 @@ export function StatusBar() {
   const version = useSystemStore((s) => s.version)
   const connectionStatus = useConnectionStore((s) => s.status)
   const lastConnected = useConnectionStore((s) => s.lastConnected)
+  const latencyMs = useConnectionStore((s) => s.latencyMs)
   const healthReport = useHealthStore((s) => s.report)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+  const currentUser = useAuthStore((s) => s.currentUser)
 
   const nav = (page: Parameters<typeof setCurrentPage>[0]) => () => setCurrentPage(page)
 
   const [appVersion, setAppVersion] = useState<string>('')
   const [now, setNow] = useState(formatTime(new Date()))
   const [lastRefreshAgo, setLastRefreshAgo] = useState('')
+  const [sessionDuration, setSessionDuration] = useState('')
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -75,6 +79,18 @@ export function StatusBar() {
     const timer = setInterval(() => {
       setNow(formatTime(new Date()))
       updateRefreshAgo()
+      try {
+        const raw = localStorage.getItem('auth-session')
+        if (raw) {
+          const session = JSON.parse(raw)
+          if (session.expiresAt > 0) {
+            const durationMs = useSettingsStore.getState().sessionDurationMinutes * 60 * 1000
+            const startedAt = session.expiresAt - durationMs
+            const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+            if (elapsed > 0) setSessionDuration(formatUptime(elapsed))
+          }
+        }
+      } catch {}
     }, 1000)
     return () => clearInterval(timer)
   }, [updateRefreshAgo])
@@ -133,6 +149,17 @@ export function StatusBar() {
             {appVersion && <><span className="text-slate-500">v{appVersion}</span> · </>}
             API <span className="text-slate-500">v{apiVersion}</span>
           </span>
+
+          {currentUser && (
+            <>
+              <span className="text-white/[0.06]">|</span>
+              <span className="flex items-center gap-1 text-slate-600">
+                <User size={9} />
+                <span className="text-slate-400">{currentUser}</span>
+                {sessionDuration && <span className="text-slate-600">· {sessionDuration}</span>}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Right */}
@@ -170,6 +197,11 @@ export function StatusBar() {
               <span className="flex items-center gap-1 text-slate-600">
                 <Wifi size={9} className="text-emerald-500/60" />
                 <span className="text-slate-500">{lastRefreshAgo}</span>
+                {latencyMs != null && (
+                  <span className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
+                    {latencyMs}ms
+                  </span>
+                )}
               </span>
             </>
           )}

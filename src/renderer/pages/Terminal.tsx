@@ -1,12 +1,12 @@
 // =============================================================================
 // Terminal — Host-level shell access with Linux authentication gate,
-// command history, quick commands, and auto-scrolling output display
+// command history, command queuing, quick commands, and auto-scrolling output
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   TerminalSquare, AlertTriangle, Play, Trash2, RefreshCw,
-  Clock, Copy, Check, Shield, Lock,
+  Clock, Copy, Check, Shield, Lock, Loader2,
 } from 'lucide-react'
 import { execTerminalCommandAuth, terminalAuthVerify, terminalLogout } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -51,6 +51,19 @@ function parseAnsi(text: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helper — shorten home directory in CWD to ~
+// ---------------------------------------------------------------------------
+
+function shortenCwd(fullCwd: string, user: string): string {
+  const homePrefix = `/home/${user}`
+  if (fullCwd === homePrefix) return '~'
+  if (fullCwd.startsWith(homePrefix + '/')) return '~' + fullCwd.slice(homePrefix.length)
+  if (fullCwd === '/root') return '~'
+  if (fullCwd.startsWith('/root/')) return '~' + fullCwd.slice(5)
+  return fullCwd
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -75,9 +88,15 @@ export default function Terminal() {
   })
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [queueLength, setQueueLength] = useState(0)
 
   const outputRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const queueRef = useRef<string[]>([])
+  const loadingRef = useRef(false)
+
+  // Keep loadingRef in sync
+  useEffect(() => { loadingRef.current = loading }, [loading])
 
   // Auto-scroll to bottom on new output
   useEffect(() => {
@@ -154,15 +173,33 @@ export default function Terminal() {
     setTerminalUser('')
     setEntries([])
     setCwd('~')
+    queueRef.current = []
+    setQueueLength(0)
   }
 
   // ---------------------------------------------------------------------------
-  // Execute command
+  // Execute command (with queuing support)
   // ---------------------------------------------------------------------------
 
   const executeCommand = useCallback(async (cmd?: string) => {
     const command = (cmd ?? commandInput).trim()
-    if (!command || loading) return
+    if (!command) return
+
+    // If already executing, queue the command instead of dropping it
+    if (loadingRef.current) {
+      queueRef.current.push(command)
+      setQueueLength(queueRef.current.length)
+      setCommandInput('')
+      setHistoryIndex(-1)
+      // Add to history
+      setHistory(prev => {
+        const filtered = prev.filter(h => h !== command)
+        const next = [command, ...filtered].slice(0, 50)
+        localStorage.setItem('terminal-history', JSON.stringify(next))
+        return next
+      })
+      return
+    }
 
     setLoading(true)
     setCommandInput('')
@@ -220,8 +257,15 @@ export default function Terminal() {
     } finally {
       setLoading(false)
       inputRef.current?.focus()
+
+      // Process next queued command if any
+      if (queueRef.current.length > 0) {
+        const nextCmd = queueRef.current.shift()!
+        setQueueLength(queueRef.current.length)
+        setTimeout(() => executeCommand(nextCmd), 0)
+      }
     }
-  }, [commandInput, cwd, loading, terminalToken])
+  }, [commandInput, cwd, terminalToken])
 
   // ---------------------------------------------------------------------------
   // Keyboard handling
@@ -272,13 +316,14 @@ export default function Terminal() {
   // ---------------------------------------------------------------------------
 
   const quickCommands = [
-    { label: 'docker ps', cmd: 'docker ps' },
-    { label: 'df -h', cmd: 'df -h' },
-    { label: 'free -m', cmd: 'free -m' },
-    { label: 'top (snapshot)', cmd: 'top -bn1 | head -20' },
-    { label: 'uptime', cmd: 'uptime' },
-    { label: 'whoami', cmd: 'whoami' },
-    { label: 'ls -la', cmd: 'ls -la' },
+    { label: 'docker ps', cmd: 'docker ps', tip: 'List running containers' },
+    { label: 'docker stats', cmd: 'docker stats --no-stream', tip: 'One-shot container resource usage' },
+    { label: 'df -h', cmd: 'df -h', tip: 'Disk space usage (human-readable)' },
+    { label: 'free -m', cmd: 'free -m', tip: 'Memory usage in megabytes' },
+    { label: 'top (snapshot)', cmd: 'top -bn1 | head -20', tip: 'One-shot CPU/memory snapshot (top 20 lines)' },
+    { label: 'uptime', cmd: 'uptime', tip: 'System uptime and load averages' },
+    { label: 'whoami', cmd: 'whoami', tip: 'Current logged-in user' },
+    { label: 'ls -la', cmd: 'ls -la', tip: 'Detailed directory listing' },
   ]
 
   // ---------------------------------------------------------------------------
@@ -322,6 +367,8 @@ export default function Terminal() {
     )
   }
 
+  const displayCwd = shortenCwd(cwd, terminalUser)
+
   // Authenticated — show terminal
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)] gap-3">
@@ -359,12 +406,12 @@ export default function Terminal() {
           <button
             key={qc.cmd}
             onClick={() => executeCommand(qc.cmd)}
-            disabled={loading}
+            title={qc.tip}
             className="
               px-2.5 py-1 rounded-lg text-[11px] font-mono
               bg-slate-800/60 border border-white/[0.06]
               text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20 hover:bg-emerald-500/5
-              transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed
+              transition-all duration-150
             "
           >
             {qc.label}
@@ -394,6 +441,7 @@ export default function Terminal() {
         className="
           flex-1 overflow-y-auto rounded-xl
           bg-slate-950 border border-white/[0.06]
+          shadow-[inset_0_1px_0_0_rgba(16,185,129,0.06)]
           font-mono text-sm
           scrollbar-thin
           cursor-text
@@ -413,16 +461,16 @@ export default function Terminal() {
         )}
 
         {/* Command entries */}
-        <div className="p-3 space-y-1">
+        <div className="p-3 space-y-0">
           {entries.map((entry, idx) => (
-            <div key={idx} className="group">
+            <div key={idx} className="group animate-fade-in border-b border-white/[0.02] pb-1 mb-1">
               {/* Prompt + command */}
               <div className="flex items-start gap-0">
                 <span className="text-emerald-500 select-none shrink-0">
                   {terminalUser}@{hostname}
                 </span>
                 <span className="text-slate-600 select-none">:</span>
-                <span className="text-cyan-400 select-none">{entry.cwd}</span>
+                <span className="text-cyan-400 select-none">{shortenCwd(entry.cwd, terminalUser)}</span>
                 <span className="text-slate-500 select-none mx-1">$</span>
                 <span className="text-slate-200">{entry.command}</span>
 
@@ -472,47 +520,59 @@ export default function Terminal() {
             </div>
           ))}
 
-          {/* Loading indicator */}
+          {/* Loading indicator — blinking cursor block */}
           {loading && (
-            <div className="flex items-center gap-2 text-slate-500 py-1">
-              <RefreshCw size={12} className="animate-spin" />
-              <span className="text-xs">Executing...</span>
+            <div className="flex items-center gap-0 py-1">
+              <span className="text-emerald-500 select-none shrink-0">
+                {terminalUser}@{hostname}
+              </span>
+              <span className="text-slate-600 select-none">:</span>
+              <span className="text-cyan-400 select-none">{displayCwd}</span>
+              <span className="text-slate-500 select-none mx-1">$</span>
+              <span className="text-emerald-400 animate-pulse">&#9610;</span>
             </div>
           )}
         </div>
       </div>
 
       {/* Input bar */}
-      <div className="flex items-center gap-0 rounded-xl bg-slate-950 border border-white/[0.06] px-3 py-2.5 font-mono text-sm">
+      <div className={`
+        flex items-center gap-0 rounded-xl bg-slate-950 border px-3 py-2.5 font-mono text-sm
+        transition-colors duration-200
+        ${loading ? 'border-emerald-500/20 shadow-[0_0_8px_0_rgba(16,185,129,0.06)]' : 'border-white/[0.06] focus-within:border-emerald-500/30'}
+      `}>
         {/* Prompt prefix */}
         <span className="text-emerald-500 select-none shrink-0">
           {terminalUser}@{hostname}
         </span>
         <span className="text-slate-600 select-none">:</span>
-        <span className="text-cyan-400 select-none">{cwd}</span>
+        <span className="text-cyan-400 select-none">{displayCwd}</span>
         <span className="text-slate-500 select-none mx-1">$</span>
 
-        {/* Input */}
+        {/* Input — never disabled */}
         <input
           ref={inputRef}
           type="text"
           value={commandInput}
           onChange={(e) => { setCommandInput(e.target.value); setHistoryIndex(-1) }}
           onKeyDown={handleKeyDown}
-          placeholder={loading ? 'Executing...' : 'Type a command...'}
-          disabled={loading}
-          className="
-            flex-1 bg-transparent text-slate-100 placeholder-slate-700
-            focus:outline-none disabled:opacity-50
-          "
+          placeholder={loading ? 'Type next command (queued)...' : 'Type a command...'}
+          className="flex-1 bg-transparent text-slate-100 placeholder-slate-700 focus:outline-none"
           autoComplete="off"
           spellCheck={false}
         />
 
-        {/* Execute button */}
+        {/* Queue indicator */}
+        {queueLength > 0 && (
+          <span className="text-[10px] text-amber-400/70 mr-2 select-none whitespace-nowrap">
+            ({queueLength} queued)
+          </span>
+        )}
+
+        {/* Execute button — spinner when loading */}
         <button
           onClick={() => executeCommand()}
-          disabled={loading || !commandInput.trim()}
+          disabled={!commandInput.trim()}
           className="
             flex items-center justify-center w-7 h-7 rounded-lg ml-2
             bg-emerald-500/15 text-emerald-400
@@ -520,9 +580,9 @@ export default function Terminal() {
             disabled:opacity-30 disabled:cursor-not-allowed
             transition-all duration-150
           "
-          title="Execute (Enter)"
+          title={loading ? 'Running... (command will be queued)' : 'Execute (Enter)'}
         >
-          <Play size={13} />
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
         </button>
       </div>
 

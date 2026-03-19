@@ -38,13 +38,14 @@ type HealthStatus = HealthReport['status'] | 'unknown'
 
 const statusConfig: Record<
   HealthStatus,
-  { bg: string; ring: string; glow: string; text: string; label: string; Icon: React.ElementType }
+  { bg: string; ring: string; glow: string; text: string; neon: string; label: string; Icon: React.ElementType }
 > = {
   healthy: {
     bg: 'bg-emerald-500',
     ring: 'ring-emerald-500/30',
     glow: 'glow-emerald',
     text: 'text-emerald-400',
+    neon: 'neon-emerald',
     label: 'All Systems Healthy',
     Icon: HeartPulse,
   },
@@ -53,6 +54,7 @@ const statusConfig: Record<
     ring: 'ring-amber-500/30',
     glow: 'glow-amber',
     text: 'text-amber-400',
+    neon: 'neon-amber',
     label: 'System Degraded',
     Icon: AlertTriangle,
   },
@@ -61,6 +63,7 @@ const statusConfig: Record<
     ring: 'ring-rose-500/30',
     glow: 'glow-rose',
     text: 'text-rose-400',
+    neon: 'neon-rose',
     label: 'Critical Issues Detected',
     Icon: XCircle,
   },
@@ -69,6 +72,7 @@ const statusConfig: Record<
     ring: 'ring-slate-500/30',
     glow: '',
     text: 'text-slate-400',
+    neon: '',
     label: 'Unable to Connect',
     Icon: WifiOff,
   },
@@ -388,7 +392,7 @@ export default function Health() {
   }
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -454,7 +458,7 @@ export default function Health() {
             </span>
           </div>
           <div className="text-center">
-            <p className={`text-lg md:text-xl font-bold ${cfg.text}`}>{cfg.label}</p>
+            <p className={`text-lg md:text-xl font-bold ${cfg.text} ${cfg.neon}`}>{cfg.label}</p>
             <p className="text-xs md:text-sm text-slate-400 mt-1">
               {summary.total} container{summary.total !== 1 ? 's' : ''} monitored
             </p>

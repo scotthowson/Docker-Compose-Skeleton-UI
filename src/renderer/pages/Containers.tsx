@@ -27,15 +27,19 @@ const Containers: React.FC = () => {
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
 
   // React to navigation payloads: resetView (sidebar re-click) or focusContainer (from Stacks)
+  // Only consume if the payload has keys relevant to THIS page
   useEffect(() => {
     if (!navigationPayload) return
-    const payload = useSettingsStore.getState().consumeNavigationPayload()
+    const payload = useSettingsStore.getState().navigationPayload
     if (!payload) return
 
-    if (payload.resetView) {
-      setSelectedName(null)
-    } else if (payload.focusContainer && typeof payload.focusContainer === 'string') {
-      setSelectedName(payload.focusContainer)
+    if (payload.focusContainer || payload.resetView) {
+      useSettingsStore.getState().consumeNavigationPayload()
+      if (payload.resetView) {
+        setSelectedName(null)
+      } else if (payload.focusContainer && typeof payload.focusContainer === 'string') {
+        setSelectedName(payload.focusContainer)
+      }
     }
   }, [navigationPayload])
 
@@ -59,12 +63,12 @@ const Containers: React.FC = () => {
   )
 
   // When a name is selected but the container vanishes from the list, deselect.
-  // This must be in a useEffect — calling setState during render causes infinite loops.
+  // Only deselect AFTER containers have loaded (not during initial load when list is empty).
   useEffect(() => {
-    if (selectedName && !selectedContainer) {
+    if (selectedName && !selectedContainer && containers.length > 0) {
       setSelectedName(null)
     }
-  }, [selectedName, selectedContainer])
+  }, [selectedName, selectedContainer, containers.length])
 
   const handleSelect = useCallback((name: string) => {
     setSelectedName(name)
@@ -74,8 +78,31 @@ const Containers: React.FC = () => {
     setSelectedName(null)
   }, [])
 
+  // Escape key returns to container list from detail view
+  useEffect(() => {
+    if (!selectedName) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if ((e.target as HTMLElement)?.isContentEditable) return
+      // Check if a VISIBLE modal overlay is open (ignore hidden drawers with pointer-events-none)
+      const hasVisibleOverlay = Array.from(document.querySelectorAll('.fixed.inset-0')).some(
+        (el) => {
+          const style = window.getComputedStyle(el)
+          return style.pointerEvents !== 'none' && style.opacity !== '0' && style.display !== 'none'
+        },
+      )
+      if (hasVisibleOverlay) return
+      e.preventDefault()
+      setSelectedName(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedName])
+
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+    <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6 animate-fade-in">
       <DisconnectedBanner />
       {selectedName && selectedContainer ? (
         <ErrorBoundary key={selectedName} fallbackMessage="Failed to render container details">

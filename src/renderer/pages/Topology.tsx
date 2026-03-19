@@ -428,6 +428,19 @@ export default function Topology() {
   const [hoveredContainer, setHoveredContainer] = useState<string | null>(null)
   const [hoveredNetwork, setHoveredNetwork] = useState<string | null>(null)
 
+  // Escape key closes detail panel
+  useEffect(() => {
+    if (!selectedNode) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      setSelectedNode(null)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [selectedNode])
+
   // Stable network name list for coloring
   const netNames = useMemo(
     () => (topoData?.networks ?? []).map((n) => n.name),
@@ -616,7 +629,7 @@ export default function Topology() {
             <Network size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Network Topology</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Network Topology</span></h2>
             <p className="text-xs text-slate-500">
               Hierarchical view of stacks, containers, and network connections
             </p>

@@ -43,9 +43,9 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   // ── Safety & Validation ──────────────────────────────────────────────
   {
     name: 'compose-linter',
-    description: 'Catches missing restart policies, privileged containers, unbound ports, and missing health checks in compose files before they reach production.',
+    description: 'Comprehensive compose validation — catches missing restart policies, privileged containers, unbound ports, Docker socket mounts, missing health checks, resource limits, and 18+ security rules before deployment.',
     author: 'DCS Community',
-    version: '1.0.0',
+    version: '1.2.0',
     icon: FileCheck,
     color: 'text-cyan-400',
     bgColor: 'bg-cyan-500/10',
@@ -62,9 +62,9 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'env-validator',
-    description: 'Scans compose files for referenced environment variables that are not defined, catching configuration gaps before they cause containers to start with missing settings.',
+    description: 'Scans compose files for referenced environment variables that are not defined, detects duplicate keys, flags empty values, and warns about hardcoded secrets — catching configuration gaps before deployment.',
     author: 'DCS Community',
-    version: '1.0.0',
+    version: '1.1.0',
     icon: FileSearch,
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
@@ -277,6 +277,65 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
       },
     },
   },
+  // ── Advanced / Sophisticated ──────────────────────────────────────────
+  {
+    name: 'security-audit',
+    description: 'Deep security scanner — checks for writable root filesystems, excessive capabilities, host PID/IPC namespace sharing, missing seccomp profiles, and containers running as UID 0. Generates a security score per service.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Shield,
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/20',
+    url: '',
+    tags: ['security', 'audit', 'hardening'],
+    hookCount: 2,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'pre-deploy': '#!/bin/bash\n# security-audit — pre-deploy deep scan\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then\n    echo "{\\"plugin\\":\\"security-audit\\",\\"status\\":\\"skip\\",\\"message\\":\\"No compose content\\"}"\n    exit 0\nfi\nSCORE=100\nFINDINGS=""\nFIND_COUNT=0\nadd_finding() {\n    local sev="$1" svc="$2" rule="$3" msg="$4" penalty="$5"\n    FIND_COUNT=$((FIND_COUNT+1))\n    SCORE=$((SCORE-penalty))\n    [[ -n "$FINDINGS" ]] && FINDINGS+=","\n    FINDINGS+="{\\"severity\\":\\"$sev\\",\\"service\\":\\"$svc\\",\\"rule\\":\\"$rule\\",\\"message\\":\\"$msg\\"}"\n}\nSERVICES=$(echo "$COMPOSE" | grep -E "^  [a-zA-Z_-][a-zA-Z0-9_-]*:" | sed "s/^  //;s/://")\nfor SVC in $SERVICES; do\n    BLOCK=$(echo "$COMPOSE" | sed -n "/^  ${SVC}:/,/^  [a-zA-Z_-]/p")\n    # Privileged mode\n    echo "$BLOCK" | grep -q "privileged:[[:space:]]*true" && add_finding "critical" "$SVC" "privileged" "Privileged mode — full host access" 25\n    # Docker socket mount\n    echo "$BLOCK" | grep -q "/var/run/docker.sock" && add_finding "critical" "$SVC" "docker-socket" "Docker socket mounted — daemon control" 20\n    # Host PID namespace\n    echo "$BLOCK" | grep -q "pid:[[:space:]]*host" && add_finding "high" "$SVC" "host-pid" "Host PID namespace — process visibility" 15\n    # Host IPC namespace\n    echo "$BLOCK" | grep -q "ipc:[[:space:]]*host" && add_finding "high" "$SVC" "host-ipc" "Host IPC namespace shared" 10\n    # Host network\n    echo "$BLOCK" | grep -q "network_mode:[[:space:]]*host" && add_finding "medium" "$SVC" "host-network" "Host network — no isolation" 10\n    # CAP_ADD ALL\n    echo "$BLOCK" | grep -q "ALL" && echo "$BLOCK" | grep -q "cap_add" && add_finding "critical" "$SVC" "cap-all" "ALL capabilities granted" 20\n    # No read_only root filesystem\n    if ! echo "$BLOCK" | grep -q "read_only:[[:space:]]*true"; then\n        add_finding "info" "$SVC" "writable-rootfs" "Root filesystem is writable" 2\n    fi\n    # No user directive (runs as root)\n    if ! echo "$BLOCK" | grep -q "user:"; then\n        add_finding "low" "$SVC" "root-user" "Runs as root (no user: set)" 3\n    fi\n    # No security_opt\n    if ! echo "$BLOCK" | grep -q "security_opt:"; then\n        add_finding "info" "$SVC" "no-seccomp" "No seccomp/apparmor profile" 1\n    fi\ndone\n[[ $SCORE -lt 0 ]] && SCORE=0\nGRADE="F"\n[[ $SCORE -ge 90 ]] && GRADE="A"\n[[ $SCORE -ge 80 ]] && [[ $SCORE -lt 90 ]] && GRADE="B"\n[[ $SCORE -ge 70 ]] && [[ $SCORE -lt 80 ]] && GRADE="C"\n[[ $SCORE -ge 50 ]] && [[ $SCORE -lt 70 ]] && GRADE="D"\necho "{\\"plugin\\":\\"security-audit\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"score\\":$SCORE,\\"grade\\":\\"$GRADE\\",\\"finding_count\\":$FIND_COUNT,\\"findings\\":[$FINDINGS],\\"message\\":\\"Security score: $SCORE/100 (Grade $GRADE) — $FIND_COUNT finding(s)\\"}"\nexit 0\n',
+        'post-deploy': '#!/bin/bash\n# security-audit — post-deploy runtime check\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nRUNTIME_ISSUES=""\nISSUE_COUNT=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    # Check if running as root\n    USER=$(docker inspect "$container" --format "{{.Config.User}}" 2>/dev/null)\n    if [[ -z "$USER" ]] || [[ "$USER" == "0" ]] || [[ "$USER" == "root" ]]; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n "$RUNTIME_ISSUES" ]] && RUNTIME_ISSUES+=","\n        RUNTIME_ISSUES+="{\\"container\\":\\"$container\\",\\"issue\\":\\"running-as-root\\"}"\n    fi\n    # Check if privileged\n    PRIV=$(docker inspect "$container" --format "{{.HostConfig.Privileged}}" 2>/dev/null)\n    if [[ "$PRIV" == "true" ]]; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n "$RUNTIME_ISSUES" ]] && RUNTIME_ISSUES+=","\n        RUNTIME_ISSUES+="{\\"container\\":\\"$container\\",\\"issue\\":\\"privileged-runtime\\"}"\n    fi\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\necho "{\\"plugin\\":\\"security-audit\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"runtime_issues\\":$ISSUE_COUNT,\\"issues\\":[$RUNTIME_ISSUES],\\"message\\":\\"$ISSUE_COUNT runtime security issue(s)\\"}"\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'network-policy',
+    description: 'Analyzes Docker network topology after deployment — detects services sharing the default bridge network, identifies containers with no network isolation, and maps inter-service connectivity.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Eye,
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/20',
+    url: '',
+    tags: ['networking', 'security', 'topology'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# network-policy — post-deploy network analysis\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBRIDGE_CONTAINERS=""\nISOLATED=0\nNON_ISOLATED=0\nNETWORK_MAP=""\n# Check each running container network assignments\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    NETWORKS=$(docker inspect "$container" --format \'{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}\' 2>/dev/null)\n    ON_BRIDGE=false\n    NET_LIST=""\n    for net in $NETWORKS; do\n        [[ -n "$NET_LIST" ]] && NET_LIST+=","\n        NET_LIST+="\\"$net\\""\n        [[ "$net" == "bridge" ]] && ON_BRIDGE=true\n    done\n    if $ON_BRIDGE; then\n        NON_ISOLATED=$((NON_ISOLATED+1))\n        [[ -n "$BRIDGE_CONTAINERS" ]] && BRIDGE_CONTAINERS+=","\n        BRIDGE_CONTAINERS+="{\\"name\\":\\"$container\\",\\"networks\\":[$NET_LIST]}"\n    else\n        ISOLATED=$((ISOLATED+1))\n    fi\n    [[ -n "$NETWORK_MAP" ]] && NETWORK_MAP+=","\n    NETWORK_MAP+="{\\"container\\":\\"$container\\",\\"networks\\":[$NET_LIST]}"\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\nTOTAL=$((ISOLATED+NON_ISOLATED))\necho "{\\"plugin\\":\\"network-policy\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"total_containers\\":$TOTAL,\\"isolated\\":$ISOLATED,\\"on_default_bridge\\":$NON_ISOLATED,\\"bridge_containers\\":[$BRIDGE_CONTAINERS],\\"network_map\\":[$NETWORK_MAP],\\"message\\":\\"$ISOLATED isolated, $NON_ISOLATED on default bridge out of $TOTAL containers\\"}"\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'dependency-checker',
+    description: 'Validates service dependency chains — detects circular depends_on references, missing dependency targets, and services that depend on containers without health checks (which makes depends_on unreliable).',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Code,
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/20',
+    url: '',
+    tags: ['validation', 'dependencies', 'compose'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'pre-deploy': "#!/bin/bash\n# dependency-checker — validates depends_on chains\nCONTEXT=$(cat)\nSTACK=$(echo \"$CONTEXT\" | jq -r '.stack // \"unknown\"' 2>/dev/null)\nCOMPOSE=$(echo \"$CONTEXT\" | jq -r '.compose // empty' 2>/dev/null)\nif [[ -z \"$COMPOSE\" ]]; then\n    echo '{\"plugin\":\"dependency-checker\",\"status\":\"skip\",\"message\":\"No compose content\"}'\n    exit 0\nfi\nISSUES=\"\"\nISSUE_COUNT=0\nSERVICES=$(echo \"$COMPOSE\" | grep -E '^  [a-zA-Z_-][a-zA-Z0-9_-]*:' | sed 's/^  //;s/://')\nDEPS_FILE=$(mktemp)\nHC_FILE=$(mktemp)\ntrap 'rm -f $DEPS_FILE $HC_FILE' EXIT\n# Build dependency + healthcheck maps using temp files\nfor SVC in $SERVICES; do\n    BLOCK=$(echo \"$COMPOSE\" | sed -n \"/^  ${SVC}:/,/^  [a-zA-Z_-]/p\")\n    echo \"$BLOCK\" | grep -q 'healthcheck:' && echo \"$SVC\" >> \"$HC_FILE\"\n    echo \"$BLOCK\" | grep -A20 'depends_on:' | grep -E '^      - ' | sed 's/^      - //' | tr -d ' ' | while read -r DEP; do\n        echo \"$SVC $DEP\" >> \"$DEPS_FILE\"\n    done\ndone\n# Validate\nwhile read -r SVC DEP; do\n    [[ -z \"$DEP\" ]] && continue\n    if ! echo \"$SERVICES\" | grep -qw \"$DEP\"; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"missing-dep\\\",\\\"message\\\":\\\"Depends on $DEP which is not defined\\\"}\"\n    elif ! grep -qw \"$DEP\" \"$HC_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"warning\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"no-hc-dep\\\",\\\"message\\\":\\\"Depends on $DEP which has no healthcheck\\\"}\"\n    fi\n    # Circular check\n    if grep -q \"^$DEP $SVC\" \"$DEPS_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"circular\\\",\\\"message\\\":\\\"Circular: $SVC <-> $DEP\\\"}\"\n    fi\ndone < \"$DEPS_FILE\"\nif [[ $ISSUE_COUNT -eq 0 ]]; then\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"pass\\\",\\\"issues\\\":[],\\\"message\\\":\\\"All dependency chains valid\\\"}\"\nelse\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"warn\\\",\\\"issue_count\\\":$ISSUE_COUNT,\\\"issues\\\":[$ISSUES],\\\"message\\\":\\\"$ISSUE_COUNT dependency issue(s)\\\"}\"\nfi\nexit 0\n",
+      },
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -364,6 +423,17 @@ export default function Plugins() {
 
   useEffect(() => { if (isConnected) fetchPlugins() }, [fetchPlugins, isConnected])
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (deleteTarget) { setDeleteTarget(null); return }
+      if (showInstall) { setShowInstall(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [deleteTarget, showInstall])
+
   const handleInstall = useCallback(async () => {
     if (!gitUrl) return
     const ok = await installPlugin(gitUrl)
@@ -414,7 +484,7 @@ export default function Plugins() {
             <Puzzle className="w-5 h-5 text-cyan-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Plugins</h1>
+            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Plugins</span></h1>
             <p className="text-sm text-slate-400">Extend DCS with templates and lifecycle hooks</p>
           </div>
         </div>
@@ -508,30 +578,72 @@ export default function Plugins() {
           <Sparkles size={12} className="text-violet-400" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Featured Plugins</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
           {FEATURED_PLUGINS.map((fp) => {
             const Icon = fp.icon
             const isInstalled = installedNames.has(fp.name)
             const isInstalling = installingFeatured === fp.name
+            const isSafety = fp.tags.includes('safety') || fp.tags.includes('validation')
             return (
               <div
                 key={fp.name}
                 className={`
-                  bg-slate-900/60 backdrop-blur-md border rounded-xl p-5
-                  transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
-                  ${isInstalled ? 'border-emerald-500/20' : 'border-white/[0.06] hover:border-white/[0.10]'}
+                  bg-slate-900/60 backdrop-blur-md border rounded-xl p-5 overflow-visible
+                  transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 hover:z-20 relative
+                  ${isSafety ? 'gradient-border' : ''}
+                  ${isInstalled ? 'border-emerald-500/20 glow-emerald' : 'border-white/[0.06] hover:border-white/[0.10]'}
                 `}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className={`w-10 h-10 rounded-xl ${fp.bgColor} border ${fp.borderColor} flex items-center justify-center`}>
                     <Icon className={`w-5 h-5 ${fp.color}`} />
                   </div>
-                  {isInstalled && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                      <CheckCircle size={10} />
-                      Installed
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {isInstalled && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                        <CheckCircle size={10} />
+                        Installed
+                      </span>
+                    )}
+                    {/* Info popover */}
+                    <div className="relative group/info">
+                      <button className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-colors" aria-label="Plugin details">
+                        <AlertCircle size={14} />
+                      </button>
+                      <div className="absolute right-full top-0 mr-1 z-[100] hidden group-hover/info:block animate-fade-in" style={{ width: '300px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Icon className={`w-4 h-4 ${fp.color}`} />
+                            <span className="text-xs font-semibold text-slate-200">{fp.name}</span>
+                            <span className="text-[9px] text-slate-600 font-mono">v{fp.version}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">{fp.description}</p>
+                          {fp.scaffold?.hooks && (
+                            <div>
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Lifecycle Hooks</p>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.keys(fp.scaffold.hooks).map((hook) => (
+                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.04]">
+                                    <Zap size={8} className="text-cyan-500/60" />
+                                    {hook}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Tags</p>
+                            <div className="flex flex-wrap gap-1">
+                              {fp.tags.map((tag) => (
+                                <span key={tag} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] text-slate-500">{tag}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-slate-600">by {fp.author}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <h3 className="text-sm font-semibold text-white mb-1">{fp.name}</h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3 line-clamp-2">{fp.description}</p>
@@ -552,7 +664,7 @@ export default function Plugins() {
                   <button
                     onClick={() => handleInstallFeatured(fp)}
                     disabled={isInstalling || !isConnected}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all press"
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all press"
                   >
                     {isInstalling ? (
                       <><Loader2 size={13} className="animate-spin" /> Installing...</>
@@ -587,11 +699,11 @@ export default function Plugins() {
             <p className="text-xs text-slate-500 mt-1">Install a featured plugin above or add one from a Git URL</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children">
             {plugins.map((p, i) => (
               <div
                 key={p.name}
-                className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-5 hover:border-white/[0.10] transition-all animate-fade-in"
+                className={`bg-slate-900/60 backdrop-blur-md border rounded-xl p-5 glass-hover transition-all animate-fade-in overflow-visible relative hover:z-20 ${p.enabled ? 'border-white/[0.06] glow-cyan' : 'border-white/[0.06]'}`}
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -607,20 +719,74 @@ export default function Plugins() {
                       {p.author && <span className="text-xs text-slate-500">{p.author}</span>}
                     </div>
                   </div>
-                  <button
-                    onClick={() => togglePlugin(p.name)}
-                    className="p-1 rounded-lg hover:bg-white/5 transition-colors"
-                    title={p.enabled ? 'Disable plugin' : 'Enable plugin'}
-                  >
-                    {p.enabled
-                      ? <ToggleRight className="w-6 h-6 text-emerald-400" />
-                      : <ToggleLeft className="w-6 h-6 text-slate-500" />
-                    }
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {/* Info popover */}
+                    <div className="relative group/info">
+                      <button className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-colors" aria-label="Plugin details">
+                        <AlertCircle size={14} />
+                      </button>
+                      <div className="absolute right-full top-0 mr-1 z-[100] hidden group-hover/info:block animate-fade-in" style={{ width: '280px' }}>
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Puzzle className={`w-4 h-4 ${p.enabled ? 'text-cyan-400' : 'text-slate-500'}`} />
+                            <span className="text-xs font-semibold text-slate-200">{p.name}</span>
+                            <span className="text-[9px] text-slate-600 font-mono">v{p.version}</span>
+                          </div>
+                          {p.description && <p className="text-[11px] text-slate-400 leading-relaxed">{p.description}</p>}
+                          {p.hooks && p.hooks.length > 0 && (
+                            <div>
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Lifecycle Hooks</p>
+                              <div className="flex flex-wrap gap-1">
+                                {p.hooks.map((hook) => (
+                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.04]">
+                                    <Zap size={8} className="text-cyan-500/60" />
+                                    {hook}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {p.templates && p.templates.length > 0 && (
+                            <div>
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Templates</p>
+                              <div className="flex flex-wrap gap-1">
+                                {p.templates.map((t) => (
+                                  <span key={t} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] text-slate-400">{t}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {p.author && <p className="text-[9px] text-slate-600">by {p.author}</p>}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => togglePlugin(p.name)}
+                      className="p-1 rounded-lg hover:bg-white/5 transition-colors"
+                      title={p.enabled ? 'Disable plugin' : 'Enable plugin'}
+                    >
+                      {p.enabled
+                        ? <ToggleRight className="w-6 h-6 text-emerald-400" />
+                        : <ToggleLeft className="w-6 h-6 text-slate-500" />
+                      }
+                    </button>
+                  </div>
                 </div>
 
                 {p.description && (
                   <p className="text-xs text-slate-400 leading-relaxed mb-3">{p.description}</p>
+                )}
+
+                {/* Hook chips */}
+                {p.hooks && p.hooks.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {p.hooks.map((hook) => (
+                      <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] font-mono text-slate-500 border border-white/[0.04]">
+                        <Zap size={7} className="text-cyan-500/50" />
+                        {hook}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
                 <div className="flex items-center gap-4 text-[10px] text-slate-500">
@@ -692,7 +858,7 @@ export default function Plugins() {
                 <button
                   onClick={handleInstall}
                   disabled={installing || !gitUrl.trim()}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
                 >
                   {installing
                     ? <><Loader2 size={14} className="animate-spin" /> Installing...</>

@@ -8,7 +8,9 @@ import { useContainerStore } from '../../stores/containerStore'
 import {
   Box, RefreshCw, CheckSquare, Square,
   Star, Cpu, MemoryStick, Clock, ChevronRight,
+  Play, RotateCw, Square as SquareStop,
 } from 'lucide-react'
+import { CopyButton } from '../common/CopyButton'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,6 +96,8 @@ interface ContainerRowProps {
   batchSelected?: boolean
   isFavorite?: boolean
   onToggleFavorite?: (name: string) => void
+  onQuickAction?: (name: string, action: 'start' | 'stop' | 'restart') => void
+  quickActionLoading?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +108,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
   container, isSelected, onClick,
   batchMode, batchSelected,
   isFavorite, onToggleFavorite,
+  onQuickAction, quickActionLoading,
 }) => {
   const stats: ContainerStats | undefined = useContainerStore((s) => s.stats[container.name])
 
@@ -157,9 +162,28 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
       <td className="px-3 py-3">
         <div className="flex items-center gap-2.5">
           <Box className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
-          <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">
-            {container.name}
-          </span>
+          <div className="relative group/name">
+            <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors flex items-center gap-1">
+              {container.name}
+              <CopyButton text={container.name} className="opacity-0 group-hover:opacity-100" size={10} />
+            </span>
+            {/* Quick-view popup */}
+            <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/name:block pointer-events-none animate-fade-in" style={{ width: '280px' }}>
+              <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-3 pointer-events-auto">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                  <span className="text-xs font-semibold text-slate-200">{container.name}</span>
+                </div>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex justify-between"><span className="text-slate-500">State</span><span className="text-slate-300 capitalize">{container.state}</span></div>
+                  {container.health && <div className="flex justify-between"><span className="text-slate-500">Health</span><span className={`capitalize ${container.health === 'healthy' ? 'text-emerald-400' : container.health === 'unhealthy' ? 'text-rose-400' : 'text-amber-400'}`}>{container.health}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-500">Image</span><span className="text-slate-300 font-mono truncate ml-2 max-w-[160px]">{container.image}</span></div>
+                  {container.ports && <div className="flex justify-between"><span className="text-slate-500">Ports</span><span className="text-cyan-400 font-mono truncate ml-2 max-w-[160px]">{container.ports}</span></div>}
+                  {container.uptime_seconds > 0 && <div className="flex justify-between"><span className="text-slate-500">Uptime</span><span className="text-slate-400">{formatUptime(container.uptime_seconds)}</span></div>}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </td>
 
@@ -201,6 +225,39 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
           {container.restart_count > 0 && <RefreshCw className="h-3 w-3" />}
           {container.restart_count}
         </span>
+      </td>
+
+      {/* Quick actions */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {container.state !== 'running' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'start') }}
+              className="p-1 rounded hover:bg-emerald-500/10 text-slate-600 hover:text-emerald-400 transition-colors"
+              title="Start"
+            >
+              <Play size={13} />
+            </button>
+          )}
+          {container.state === 'running' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'restart') }}
+              className="p-1 rounded hover:bg-amber-500/10 text-slate-600 hover:text-amber-400 transition-colors"
+              title="Restart"
+            >
+              <RotateCw size={13} />
+            </button>
+          )}
+          {container.state === 'running' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'stop') }}
+              className="p-1 rounded hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-colors"
+              title="Stop"
+            >
+              <SquareStop size={13} />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   )

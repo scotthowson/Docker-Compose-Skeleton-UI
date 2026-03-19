@@ -4,6 +4,11 @@ export default {
     './index.html',
     './src/renderer/**/*.{ts,tsx}',
   ],
+  safelist: [
+    // ComposeViewer + EditStackOverlay — dynamic template literals need safelist
+    'max-w-[98vw]', 'max-w-[95vw]', 'max-w-[1400px]', 'max-h-[92vh]', 'max-h-[95vh]', 'max-h-[80vh]',
+    'text-[13px]', 'leading-6', 'w-12', 'bg-slate-950', 'min-h-6',
+  ],
   theme: {
     extend: {
       colors: {

@@ -94,7 +94,7 @@ function AnimatedCounter({ value, duration = 800, className = '' }: AnimatedCoun
 function Sparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return null
   const w = 80
-  const h = 20
+  const h = 28
   const max = Math.max(...data, 1)
   const min = Math.min(...data, 0)
   const range = max - min || 1

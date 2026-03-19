@@ -8,6 +8,7 @@ import { useContainerStore, selectStatsHistory } from '../../stores/containerSto
 import { useToast } from '../common/Toast'
 import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
 import ContainerFileBrowser from './ContainerFileBrowser'
+import { CopyButton } from '../common/CopyButton'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import {
   AreaChart,
@@ -753,6 +754,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onBack}
+            title="Back to containers (Esc)"
             className="
               flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm flex-shrink-0
               text-slate-400 hover:text-white
@@ -762,6 +764,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Back</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/[0.04] border border-white/[0.06] ml-1">Esc</kbd>
           </button>
 
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
@@ -1087,7 +1090,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   <button
                     onClick={handleDownloadLogs}
                     disabled={!containerLogs}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Download logs as text file"
                   >
                     <Download className="h-3 w-3" />
@@ -1143,10 +1146,16 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     <Layers className="h-4 w-4 text-cyan-400" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-sm font-semibold text-slate-200 font-mono truncate block">{img.name}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-sm font-semibold text-slate-200 font-mono truncate">{img.name}</span>
+                      <CopyButton text={containerInfo.image} size={12} />
+                    </span>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/15">{img.tag}</span>
-                      <span className="text-[10px] text-slate-600 font-mono truncate" title={containerInfo.image_id}>{containerInfo.image_id ? containerInfo.image_id.slice(0, 16) : '--'}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-[10px] text-slate-600 font-mono truncate" title={containerInfo.image_id}>{containerInfo.image_id ? containerInfo.image_id.slice(0, 16) : '--'}</span>
+                        {containerInfo.image_id && <CopyButton text={containerInfo.image_id} size={10} />}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1208,6 +1217,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       <Network className="h-3 w-3 text-purple-400 flex-shrink-0" />
                       <span className="text-[10px] text-slate-500">{entry.network}</span>
                       <span className="text-xs font-mono text-cyan-400">{entry.ip}</span>
+                      <CopyButton text={entry.ip} size={10} />
                     </div>
                   ))}
                 </div>
@@ -1349,7 +1359,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       flex items-center gap-1.5 px-4 py-2.5 rounded-lg
                       text-xs font-medium text-white
                       bg-emerald-500 hover:bg-emerald-400
-                      disabled:opacity-40 disabled:cursor-not-allowed
+                      disabled:opacity-50 disabled:cursor-not-allowed
                       transition-all duration-200 shadow-lg shadow-emerald-500/20
                     "
                   >

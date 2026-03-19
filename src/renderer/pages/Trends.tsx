@@ -154,7 +154,7 @@ function ChartCard({
 
   return (
     <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in"
+      className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in gradient-border"
       style={{ animationDelay: `${delay}ms` }}
     >
       {/* Chart header */}

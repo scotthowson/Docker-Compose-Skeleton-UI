@@ -132,6 +132,12 @@ import type {
   PluginListResponse,
   PluginInstallResponse,
   PluginDeleteResponse,
+  PluginHooksListResponse,
+  PluginHookContentResponse,
+  PluginHookUpdateResponse,
+  PluginHookTestResponse,
+  PluginLogsResponse,
+  PluginConfigUpdateResponse,
   Plugin,
   ConfigSchemaResponse,
   DependencyGraphResponse,
@@ -148,6 +154,9 @@ import type {
   WebhookTestResponse,
   ImagePullResponse,
   SessionListResponse,
+  SystemUpdateCheckResponse,
+  SystemUpdateApplyResponse,
+  SystemUpdateRollbackResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -1181,6 +1190,36 @@ export function togglePlugin(name: string): Promise<Plugin> {
   return apiClient.post<Plugin>(`/plugins/${encodeURIComponent(name)}/toggle`)
 }
 
+/** GET /plugins/:name/hooks — List hooks with metadata */
+export function fetchPluginHooks(name: string): Promise<PluginHooksListResponse> {
+  return apiClient.get<PluginHooksListResponse>(`/plugins/${encodeURIComponent(name)}/hooks`)
+}
+
+/** GET /plugins/:name/hooks/:hook — Read hook script content */
+export function fetchPluginHookContent(name: string, hook: string): Promise<PluginHookContentResponse> {
+  return apiClient.get<PluginHookContentResponse>(`/plugins/${encodeURIComponent(name)}/hooks/${encodeURIComponent(hook)}`)
+}
+
+/** POST /plugins/:name/hooks/:hook/update — Update hook script */
+export function updatePluginHook(name: string, hook: string, content: string): Promise<PluginHookUpdateResponse> {
+  return apiClient.post<PluginHookUpdateResponse>(`/plugins/${encodeURIComponent(name)}/hooks/${encodeURIComponent(hook)}/update`, { content })
+}
+
+/** POST /plugins/:name/hooks/:hook/test — Dry-run a hook */
+export function testPluginHook(name: string, hook: string, context?: Record<string, unknown>): Promise<PluginHookTestResponse> {
+  return apiClient.post<PluginHookTestResponse>(`/plugins/${encodeURIComponent(name)}/hooks/${encodeURIComponent(hook)}/test`, { context }, 60000)
+}
+
+/** GET /plugins/:name/logs — Execution history */
+export function fetchPluginLogs(name: string): Promise<PluginLogsResponse> {
+  return apiClient.get<PluginLogsResponse>(`/plugins/${encodeURIComponent(name)}/logs`)
+}
+
+/** POST /plugins/:name/config — Update plugin configuration */
+export function updatePluginConfig(name: string, config: Record<string, unknown>): Promise<PluginConfigUpdateResponse> {
+  return apiClient.post<PluginConfigUpdateResponse>(`/plugins/${encodeURIComponent(name)}/config`, { config })
+}
+
 // ---------------------------------------------------------------------------
 // Config Schema & Dependency Graph
 // ---------------------------------------------------------------------------
@@ -1267,4 +1306,23 @@ export function testWebhook(id: string): Promise<WebhookTestResponse> {
 /** POST /images/pull — Pull an image from Docker Hub */
 export function pullImage(image: string): Promise<ImagePullResponse> {
   return apiClient.post<ImagePullResponse>('/images/pull', { image })
+}
+
+// ---------------------------------------------------------------------------
+// System Updates
+// ---------------------------------------------------------------------------
+
+/** GET /system/update/check — Check for DCS framework updates */
+export function checkSystemUpdate(): Promise<SystemUpdateCheckResponse> {
+  return apiClient.get<SystemUpdateCheckResponse>('/system/update/check')
+}
+
+/** POST /system/update/apply — Apply DCS framework update (git pull --ff-only) */
+export function applySystemUpdate(): Promise<SystemUpdateApplyResponse> {
+  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: 'UPDATE' }, 120000)
+}
+
+/** POST /system/update/rollback — Rollback to previous version */
+export function rollbackSystemUpdate(backupTag: string): Promise<SystemUpdateRollbackResponse> {
+  return apiClient.post<SystemUpdateRollbackResponse>('/system/update/rollback', { backup_tag: backupTag })
 }

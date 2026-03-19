@@ -64,7 +64,7 @@ function EventRow({ event, index }: { event: EventEntry; index: number }) {
 
   return (
     <div
-      className="flex items-center gap-3 py-2.5 px-2 rounded-lg group hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in"
+      className="flex items-center gap-3 py-2.5 px-2 rounded-lg group hover:bg-white/[0.04] hover:border-white/[0.06] border border-transparent transition-all duration-200 animate-fade-in"
       style={{ animationDelay: `${index * 30}ms` }}
     >
       {/* Type icon */}

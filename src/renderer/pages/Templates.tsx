@@ -1230,7 +1230,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
           <button
             onClick={() => onSave({ name, compose, env, metadata: { title: title || name, description, category, target_stack: targetStack || undefined, tags: [], variables: [] } })}
             disabled={!canSave}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed press"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
             {mode === 'create' ? 'Create Template' : 'Save Changes'}
@@ -1364,7 +1364,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                   value={url}
                   onChange={(e) => { setUrl(e.target.value); if (compose) { setCompose(''); setFetchedUrl('') } }}
                   placeholder="https://github.com/user/repo/blob/main/compose.yaml"
-                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors font-mono"
+                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
                   autoFocus
                 />
                 <button
@@ -1392,7 +1392,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                 value={name}
                 onChange={(e) => { setName(e.target.value); setNameManual(true) }}
                 placeholder="auto-detected"
-                className="w-full px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors font-mono"
+                className="w-full px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
               />
             </div>
           </div>
@@ -1625,13 +1625,13 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search gallery..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/30 transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
           />
         </div>
       </div>
 
       {/* Gallery grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
         {filtered.map((t) => {
           const colors = getCategoryColors(t.category)
           const CatIcon = getCategoryIcon(t.category)
@@ -2223,7 +2223,7 @@ export default function Templates() {
             <Rocket size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Stack Templates</h2>
+            <h2 className="text-lg font-bold tracking-tight"><span className="text-gradient">Stack Templates</span></h2>
             <p className="text-xs text-slate-500">
               {templates.length} template{templates.length !== 1 ? 's' : ''} available
               {filtered.length !== templates.length && ` (${filtered.length} shown)`}

@@ -190,7 +190,7 @@ function SnapshotCard({
             text-xs font-medium
             text-amber-400 bg-amber-500/10 border border-amber-500/20
             hover:bg-amber-500/20 hover:border-amber-500/30
-            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:opacity-50 disabled:cursor-not-allowed
             transition-all duration-200 press
           "
           title="Restore"
@@ -206,7 +206,7 @@ function SnapshotCard({
             text-xs font-medium
             text-rose-400 bg-rose-500/10 border border-rose-500/20
             hover:bg-rose-500/20 hover:border-rose-500/30
-            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:opacity-50 disabled:cursor-not-allowed
             transition-all duration-200 press
           "
           title="Delete"
@@ -251,7 +251,7 @@ function SnapshotCard({
                 bg-white/[0.04] border border-white/[0.08]
                 text-slate-200 placeholder-slate-600
                 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/30
-                disabled:opacity-40
+                disabled:opacity-50
                 transition-all duration-200
               "
               autoFocus
@@ -265,7 +265,7 @@ function SnapshotCard({
                 flex items-center gap-1.5 rounded-lg px-4 py-2
                 text-xs font-semibold text-white
                 bg-rose-600 hover:bg-rose-500
-                disabled:opacity-40 disabled:cursor-not-allowed
+                disabled:opacity-50 disabled:cursor-not-allowed
                 transition-all duration-200
                 shadow-lg shadow-rose-500/20
               "
@@ -284,7 +284,7 @@ function SnapshotCard({
                 rounded-lg px-4 py-2 text-xs font-medium
                 text-slate-400 bg-white/[0.04] border border-white/[0.06]
                 hover:bg-white/[0.08] hover:text-slate-300
-                disabled:opacity-40
+                disabled:opacity-50
                 transition-all duration-200
               "
             >
@@ -308,7 +308,7 @@ function SnapshotCard({
                 flex items-center gap-1.5 rounded-lg px-4 py-2
                 text-xs font-semibold text-white
                 bg-rose-600 hover:bg-rose-500
-                disabled:opacity-40 disabled:cursor-not-allowed
+                disabled:opacity-50 disabled:cursor-not-allowed
                 transition-all duration-200
               "
             >
@@ -326,7 +326,7 @@ function SnapshotCard({
                 rounded-lg px-4 py-2 text-xs font-medium
                 text-slate-400 bg-white/[0.04] border border-white/[0.06]
                 hover:bg-white/[0.08] hover:text-slate-300
-                disabled:opacity-40
+                disabled:opacity-50
                 transition-all duration-200
               "
             >
@@ -529,7 +529,7 @@ export default function Snapshots() {
             <Camera size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">System Snapshots</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">System Snapshots</span></h2>
             <p className="text-xs text-slate-500">
               Create, restore, and manage configuration snapshots
             </p>
@@ -563,7 +563,7 @@ export default function Snapshots() {
             <button
               onClick={() => setShowCreateInput(true)}
               disabled={creating}
-              className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/20 press"
+              className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/20 press"
             >
               <Camera size={15} />
               <span className="hidden sm:inline">New Snapshot</span>
@@ -587,14 +587,14 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }
               }}
-              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm bg-white/[0.04] border border-white/[0.08] text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-40 transition-all duration-200"
+              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm bg-white/[0.04] border border-white/[0.08] text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-50 transition-all duration-200"
               autoFocus
             />
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/20 press"
+                className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/20 press"
               >
                 {creating ? (
                   <Loader2 size={15} className="animate-spin" />
@@ -609,7 +609,7 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }}
                 disabled={creating}
-                className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-400 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 disabled:opacity-40 transition-all duration-200"
+                className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-400 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 disabled:opacity-50 transition-all duration-200"
               >
                 Cancel
               </button>

@@ -580,7 +580,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           <StepIndicator current={step} total={5} needsAdmin={needsAdmin} />
 
           {/* Content card */}
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20">
+          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20 gradient-border">
           {/* Error banner */}
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 mb-6 animate-fade-in">
@@ -733,10 +733,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="space-y-4">
                 {/* Username */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+                  <label htmlFor="wizard-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
                     <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
+                      id="wizard-username"
                       type="text"
                       value={adminUsername}
                       onChange={(e) => setAdminUsername(e.target.value)}
@@ -751,20 +752,23 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+                  <label htmlFor="wizard-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
                     <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
+                      id="wizard-password"
                       type={showPassword ? 'text' : 'password'}
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
                       placeholder={needsAdmin ? 'Min 8 chars, uppercase + number' : 'Enter your password'}
-                      className="w-full pl-9 pr-10 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className="w-full pl-9 pr-12 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
                     >
                       {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
@@ -797,10 +801,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 {/* Confirm Password — only for new account creation */}
                 {needsAdmin && (
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                    <label htmlFor="wizard-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
                     <div className="relative">
                       <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                       <input
+                        id="wizard-confirm-password"
                         type={showPassword ? 'text' : 'password'}
                         value={adminConfirm}
                         onChange={(e) => setAdminConfirm(e.target.value)}

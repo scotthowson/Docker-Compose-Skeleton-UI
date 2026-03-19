@@ -15,6 +15,7 @@ interface ConnectionState {
   lastConnected: number | null
   reconnectAttempts: number
   consecutiveFailures: number
+  latencyMs: number | null
   setServerUrl: (url: string) => void
   setStatus: (status: ConnectionStatus) => void
   setError: (error: string | null) => void
@@ -27,26 +28,53 @@ interface ConnectionState {
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
-/** Push a connection notification if the user has connection alerts enabled */
+/** Push a connection notification with cooldown to prevent flood */
+let lastConnNotifTime = 0
+let lastConnNotifType = ''
+const CONN_NOTIF_COOLDOWN_MS = 60000 // 60 seconds between same-type notifications
+
 function pushConnectionNotification(type: 'success' | 'error' | 'warning', title: string, message: string) {
   const { preferences, addNotification } = useNotificationStore.getState()
   if (!preferences.connectionAlerts) return
-  addNotification({ type, title, message, persist: true, action: { label: 'View Dashboard', page: 'dashboard' } })
+  // Deduplicate: skip if same type was sent within cooldown
+  const now = Date.now()
+  if (type === lastConnNotifType && now - lastConnNotifTime < CONN_NOTIF_COOLDOWN_MS) return
+  lastConnNotifTime = now
+  lastConnNotifType = type
+  addNotification({ type, title, message, persist: type === 'error', action: { label: 'View Dashboard', page: 'dashboard' } })
 }
+
+let heartbeatFailCount = 0
+const HEARTBEAT_FAIL_THRESHOLD = 3 // require 3 consecutive failures (30s) before declaring disconnected
 
 function startHeartbeat(connectFn: () => Promise<boolean>) {
   stopHeartbeat()
+  heartbeatFailCount = 0
   heartbeatTimer = setInterval(async () => {
-    const ok = await apiClient.testConnection()
-    if (!ok) {
-      // Connection lost — trigger reconnect
-      const store = useConnectionStore.getState()
-      if (store.status === 'connected') {
-        store.setStatus('error')
-        store.setError('Lost connection to API server')
-        pushConnectionNotification('error', 'Connection Lost', 'Lost connection to the API server. Attempting to reconnect...')
-        connectFn()
+    try {
+      const t0 = performance.now()
+      const ok = await apiClient.testConnection()
+      if (ok) {
+        heartbeatFailCount = 0
+        useConnectionStore.setState({ latencyMs: Math.round(performance.now() - t0) })
+      } else {
+        heartbeatFailCount++
+        // Only declare connection lost after multiple consecutive failures.
+        // The DCS API server is single-threaded bash — it can't respond to heartbeat
+        // pings while serving a large request (compose file load, image pull, etc).
+        // 3 failures × 10s = 30 seconds of unresponsiveness before we declare disconnected.
+        if (heartbeatFailCount >= HEARTBEAT_FAIL_THRESHOLD) {
+          const store = useConnectionStore.getState()
+          if (store.status === 'connected') {
+            store.setStatus('error')
+            store.setError('Lost connection to API server')
+            pushConnectionNotification('error', 'Connection Lost', 'Lost connection to the API server. Attempting to reconnect...')
+            connectFn()
+          }
+        }
       }
+    } catch {
+      // Swallow unexpected errors in heartbeat — don't let them crash the interval
     }
   }, HEARTBEAT_INTERVAL_MS)
 }
@@ -65,6 +93,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   lastConnected: null,
   reconnectAttempts: 0,
   consecutiveFailures: 0,
+  latencyMs: null,
 
   setServerUrl: (url) => {
     apiClient.setBaseUrl(url)
@@ -93,7 +122,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     }
 
     try {
+      const t0 = performance.now()
       const ok = await apiClient.testConnection()
+      const latencyMs = Math.round(performance.now() - t0)
       if (ok) {
         if (reconnectTimer) {
           clearTimeout(reconnectTimer)
@@ -105,6 +136,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           reconnectAttempts: 0,
           consecutiveFailures: 0,
           lastError: null,
+          latencyMs,
         })
 
         // Notify on reconnection (only if we were in error state, not initial connect)
@@ -174,8 +206,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   reportPollFailure: () => {
     const failures = get().consecutiveFailures + 1
     set({ consecutiveFailures: failures })
-    // After 3 consecutive poll failures, trigger reconnection
-    if (failures >= 3 && get().status === 'connected') {
+    // After 4 consecutive poll failures, trigger reconnection
+    // (higher threshold prevents false disconnects when server is busy with large requests)
+    if (failures >= 4 && get().status === 'connected') {
       set({ status: 'error', lastError: 'Multiple API requests failed' })
       pushConnectionNotification('error', 'Connection Unstable', 'Multiple API requests have failed. Attempting to reconnect...')
       get().connect()

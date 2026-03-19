@@ -79,6 +79,20 @@ export default function Backup() {
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [restoreLoading, setRestoreLoading] = useState(false)
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (restoreTarget && !restoreLoading) {
+        setRestoreTarget(null)
+        setRestoreConfirmText('')
+        return
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [restoreTarget, restoreLoading])
+
   // ---- Polling ----
   const {
     data: statusData,
@@ -194,13 +208,13 @@ export default function Backup() {
   }
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
+    <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6 animate-fade-in">
       <DisconnectedBanner />
       <div className="flex flex-col gap-5 animate-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg md:text-2xl font-bold text-white">Backup & Restore</h1>
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Backup & Restore</span></h1>
             <p className="text-sm text-slate-400 mt-1">
               Create, manage, and restore server backups
             </p>
@@ -428,9 +442,9 @@ export default function Backup() {
                   flex items-center gap-2.5 rounded-lg px-5 py-2.5
                   text-sm font-semibold text-white
                   bg-emerald-600 hover:bg-emerald-500
-                  disabled:opacity-40 disabled:cursor-not-allowed
+                  disabled:opacity-50 disabled:cursor-not-allowed
                   transition-all duration-200
-                  shadow-lg shadow-emerald-500/20
+                  shadow-lg shadow-emerald-500/20 press
                 "
               >
                 {triggerLoading ? (
@@ -452,7 +466,7 @@ export default function Backup() {
                     bg-white/[0.04] border border-white/[0.08]
                     text-slate-200
                     focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30
-                    disabled:opacity-40 disabled:cursor-not-allowed
+                    disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
                     appearance-none
                   "
@@ -482,7 +496,7 @@ export default function Backup() {
                     text-sm font-medium text-slate-300
                     bg-white/[0.04] border border-white/[0.08]
                     hover:bg-white/[0.08] hover:border-white/[0.12]
-                    disabled:opacity-40 disabled:cursor-not-allowed
+                    disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
                   "
                 >
@@ -526,7 +540,7 @@ export default function Backup() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-white/[0.04] stagger-children">
                 {backups.length === 0 && !backupsLoading && (
                   <tr>
                     <td colSpan={4} className="px-5 py-12 text-center">
@@ -582,7 +596,7 @@ export default function Backup() {
                           text-xs font-medium
                           text-rose-400 bg-rose-500/10 border border-rose-500/20
                           hover:bg-rose-500/20 hover:border-rose-500/30
-                          disabled:opacity-40 disabled:cursor-not-allowed
+                          disabled:opacity-50 disabled:cursor-not-allowed
                           transition-all duration-200
                         "
                       >
@@ -632,7 +646,7 @@ export default function Backup() {
                   }
                 }}
                 disabled={restoreLoading}
-                className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-40"
+                className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-50"
               >
                 <X size={16} />
               </button>
@@ -682,7 +696,7 @@ export default function Backup() {
                     bg-white/[0.04] border border-white/[0.08]
                     text-slate-200 placeholder-slate-600
                     focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/30
-                    disabled:opacity-40
+                    disabled:opacity-50
                     transition-all duration-200
                   "
                   autoFocus
@@ -702,7 +716,7 @@ export default function Backup() {
                   px-4 py-2 rounded-lg text-sm font-medium
                   text-slate-400 bg-white/[0.04] border border-white/[0.06]
                   hover:bg-white/[0.08] hover:text-slate-300
-                  disabled:opacity-40
+                  disabled:opacity-50
                   transition-all duration-200
                 "
               >
@@ -714,7 +728,7 @@ export default function Backup() {
                 className="
                   flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
                   text-white bg-rose-600 hover:bg-rose-500
-                  disabled:opacity-40 disabled:cursor-not-allowed
+                  disabled:opacity-50 disabled:cursor-not-allowed
                   transition-all duration-200
                   shadow-lg shadow-rose-500/20
                 "

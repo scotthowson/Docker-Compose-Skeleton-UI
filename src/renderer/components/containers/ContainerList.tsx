@@ -82,6 +82,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   const favorites = useContainerStore((s) => s.favorites)
   const toggleFavorite = useContainerStore((s) => s.toggleFavorite)
 
+  const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortConfig>({ key: 'name', direction: 'asc' })
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped' | 'paused'>('all')
@@ -147,6 +148,17 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     setBatchResults(null)
   }, [])
 
+  const handleQuickAction = useCallback(async (name: string, action: 'start' | 'stop' | 'restart') => {
+    if (quickActionLoading) return
+    setQuickActionLoading(`${name}-${action}`)
+    try {
+      if (action === 'start') await startContainer(name)
+      else if (action === 'stop') await stopContainer(name)
+      else if (action === 'restart') await restartContainer(name)
+    } catch { /* silent */ }
+    finally { setQuickActionLoading(null) }
+  }, [quickActionLoading])
+
   // Filter by tab + search
   const filtered = useMemo(() => {
     let result = containers
@@ -209,7 +221,14 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-white">Containers</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl md:text-2xl font-bold text-white">Containers</h1>
+            <span className="text-xs md:text-sm text-slate-400 mt-0.5">
+              <span className="text-emerald-400 font-semibold">{runningCount} running</span>
+              <span className="mx-1.5 text-slate-600">&middot;</span>
+              <span>{containers.length} total</span>
+            </span>
+          </div>
           <p className="text-xs md:text-sm text-slate-400 mt-1">
             Manage and monitor all Docker containers
           </p>
@@ -243,20 +262,20 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => handleBatchAction('start')} disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-40">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-50 press">
               {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Start
             </button>
             <button onClick={() => handleBatchAction('stop')} disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-40">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-50 press">
               {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />} Stop
             </button>
             <button onClick={() => handleBatchAction('restart')} disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all disabled:opacity-40">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all disabled:opacity-50 press">
               {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />} Restart
             </button>
             <span className="w-px h-5 bg-white/[0.08]" />
             <button onClick={() => handleBatchAction('remove')} disabled={batchLoading || selectedContainers.size === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-40">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-50 press">
               {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove
             </button>
           </div>
@@ -346,9 +365,10 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
       {/* ---- Mobile card view ---- */}
       <div className="md:hidden">
         {loading && containers.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
-            <span className="text-sm text-slate-500">Loading containers...</span>
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-20 border border-white/[0.04]" />
+            ))}
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16">
@@ -410,21 +430,25 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                     </span>
                   </th>
                 ))}
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading && containers.length === 0 ? (
-                <tr>
-                  <td colSpan={COLUMNS.length + 2} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
-                      <span className="text-sm text-slate-500">Loading containers...</span>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  {[...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td colSpan={COLUMNS.length + 3} className="py-1.5 px-3">
+                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.04]" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2} className="py-16 text-center">
+                  <td colSpan={COLUMNS.length + 3} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Box className="h-8 w-8 text-slate-600" />
                       <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
@@ -442,6 +466,8 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                     batchSelected={selectedContainers.has(container.name)}
                     isFavorite={favSet.has(container.name)}
                     onToggleFavorite={toggleFavorite}
+                    onQuickAction={handleQuickAction}
+                    quickActionLoading={quickActionLoading}
                   />
                 ))
               )}

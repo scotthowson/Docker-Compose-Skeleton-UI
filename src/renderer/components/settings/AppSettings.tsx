@@ -232,7 +232,7 @@ export default function AppSettingsForm() {
             text-sm font-medium
             text-emerald-400 bg-emerald-500/10 border border-emerald-500/20
             hover:bg-emerald-500/20 hover:border-emerald-500/30
-            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:opacity-50 disabled:cursor-not-allowed
             transition-all duration-200
           "
         >

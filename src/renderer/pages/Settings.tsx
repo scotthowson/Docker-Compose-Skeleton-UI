@@ -154,7 +154,7 @@ function ProfileSettings() {
             className="
               w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
               text-xs text-slate-200 placeholder-slate-600 font-mono
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all
             "
           />
@@ -175,7 +175,7 @@ function ProfileSettings() {
           className="
             w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
             text-sm text-slate-200 placeholder-slate-600
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
             transition-all
           "
         />
@@ -195,7 +195,7 @@ function ProfileSettings() {
           className="
             w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
             text-sm text-slate-200 placeholder-slate-600
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
             transition-all
           "
         />
@@ -215,7 +215,7 @@ function ProfileSettings() {
           className="
             w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
             text-sm text-slate-200 placeholder-slate-600 resize-none
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
             transition-all
           "
         />
@@ -234,7 +234,7 @@ function ProfileSettings() {
             className="
               w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
               text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
-              focus:ring-1 focus:ring-emerald-500/25 transition-all
+              focus:ring-1 focus:ring-emerald-500/20 transition-all
             "
           >
             <option value="">Select status...</option>
@@ -253,7 +253,7 @@ function ProfileSettings() {
             className="
               w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
               text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all
             "
           />
         </div>
@@ -271,7 +271,7 @@ function ProfileSettings() {
           className="
             w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
             text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
-            focus:ring-1 focus:ring-emerald-500/25 transition-all
+            focus:ring-1 focus:ring-emerald-500/20 transition-all
           "
         >
           {Intl.supportedValuesOf('timeZone').filter((tz) =>
@@ -793,7 +793,7 @@ function AppearanceSettings() {
               className="
                 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
                 text-xs text-slate-200 placeholder-slate-600
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                 transition-all
               "
             />
@@ -810,7 +810,7 @@ function AppearanceSettings() {
               className="
                 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
                 text-xs text-slate-200 placeholder-slate-600
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                 transition-all
               "
             />
@@ -877,7 +877,7 @@ function AppearanceSettings() {
             className="
               flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg
               text-xs text-slate-200 placeholder-slate-600 font-mono
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all
             "
           />
@@ -1126,14 +1126,14 @@ function SecuritySettings() {
             value={currentPw}
             onChange={(e) => setCurrentPw(e.target.value)}
             placeholder="Current password"
-            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
           />
           <input
             type="password"
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
             placeholder="New password (min 6, uppercase + number)"
-            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
           />
           <input
             type="password"
@@ -1141,7 +1141,7 @@ function SecuritySettings() {
             onChange={(e) => setConfirmPw(e.target.value)}
             placeholder="Confirm new password"
             className={`w-full px-3 py-2 bg-white/5 border rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none transition-all ${
-              confirmPw && confirmPw !== newPw ? 'border-rose-500/50' : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25'
+              confirmPw && confirmPw !== newPw ? 'border-rose-500/50' : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
             }`}
           />
           {confirmPw && confirmPw !== newPw && (
@@ -1689,7 +1689,7 @@ function ConnectionProfiles() {
               onChange={(e) => { setNewName(e.target.value); setAddError('') }}
               placeholder="Production Server"
               autoFocus
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
             />
           </div>
 
@@ -1701,7 +1701,7 @@ function ConnectionProfiles() {
               onChange={(e) => { setNewUrl(e.target.value); setAddError('') }}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               placeholder="http://192.168.1.100:9876"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25 transition-all"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
             />
           </div>
 
@@ -2070,7 +2070,7 @@ function AlertThresholdsEditor() {
               type="number" min={10} max={100} step={5}
               value={thresholds[warningKey]}
               onChange={(e) => updateField(warningKey, Number(e.target.value))}
-              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-amber-400 focus:outline-none focus:border-amber-500/30"
+              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-amber-400 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -2130,7 +2130,7 @@ function AlertThresholdsEditor() {
         <button
           onClick={handleSave}
           disabled={saving || !isConnected}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40 transition-all press"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-all press"
         >
           {saving ? <Timer size={12} className="animate-spin" /> : <Save size={12} />}
           Save Thresholds
@@ -2326,7 +2326,7 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
   }
 
   return (
-    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentColor} ${fullWidth ? 'lg:col-span-2' : ''} transition-all duration-300`}>
+    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentColor} ${fullWidth ? 'lg:col-span-2' : ''} ${title === 'About' ? 'gradient-border' : ''} transition-all duration-300`}>
       <button
         onClick={toggleCollapse}
         className="w-full px-5 py-4 border-b border-white/[0.06] flex items-center gap-2.5 hover:bg-white/[0.02] transition-colors text-left cursor-pointer"
@@ -2526,7 +2526,7 @@ export default function Settings() {
               className="
                 w-full px-4 py-3 bg-slate-950 border border-white/[0.08] rounded-xl
                 text-xs text-emerald-400 placeholder-slate-700 font-mono
-                focus:outline-none focus:border-violet-500/30 focus:ring-1 focus:ring-violet-500/15
+                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-violet-500/15
                 resize-y transition-all leading-relaxed
               "
               spellCheck={false}

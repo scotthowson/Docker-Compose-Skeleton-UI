@@ -1,8 +1,8 @@
 // =============================================================================
-// Updates — Image Update Checker page with registry check and bulk updates
+// Updates — System + Image Update Checker with registry check and bulk updates
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   Download,
   RefreshCw,
@@ -12,14 +12,20 @@ import {
   Clock,
   Package,
   ArrowUpCircle,
+  GitBranch,
+  GitCommit,
+  Shield,
+  RotateCcw,
+  Server,
+  Monitor,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useAuthStore } from '../stores/authStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage } from '../api/endpoints'
-import type { ImageCheckResponse, ImageUpdateInfo } from '../../shared/types'
+import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate } from '../api/endpoints'
+import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Staleness Badge
@@ -123,7 +129,86 @@ export default function Updates() {
   const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
 
-  // ---- State ----
+  // ---- System update state ----
+  const [sysUpdate, setSysUpdate] = useState<SystemUpdateCheckResponse | null>(null)
+  const [sysChecking, setSysChecking] = useState(false)
+  const [sysApplying, setSysApplying] = useState(false)
+  const [sysRollingBack, setSysRollingBack] = useState(false)
+  const [lastBackupTag, setLastBackupTag] = useState<string | null>(null)
+
+  // App version from Electron
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+  useEffect(() => {
+    window.electronAPI?.getVersion().then(v => setAppVersion(v)).catch(() => {})
+  }, [])
+
+  const handleCheckSystemUpdate = useCallback(async () => {
+    if (sysChecking) return
+    setSysChecking(true)
+    try {
+      const result = await checkSystemUpdate()
+      setSysUpdate(result)
+      if (result.available) {
+        addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
+      } else {
+        addToast({ type: 'success', message: 'DCS framework is up to date' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })
+    } finally {
+      setSysChecking(false)
+    }
+  }, [sysChecking, addToast])
+
+  const handleApplySystemUpdate = useCallback(async () => {
+    if (sysApplying || !sysUpdate?.available) return
+    setSysApplying(true)
+    try {
+      const result = await applySystemUpdate()
+      if (result.success) {
+        setLastBackupTag(result.backup_tag)
+        addToast({ type: 'success', message: `Updated to ${result.updated_to}${result.restart_required ? ' — API server restart may be needed' : ''}`, duration: 6000 })
+        // Re-check to update UI
+        const fresh = await checkSystemUpdate()
+        setSysUpdate(fresh)
+      } else {
+        addToast({ type: 'error', message: result.message || 'Update failed' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Update failed' })
+    } finally {
+      setSysApplying(false)
+    }
+  }, [sysApplying, sysUpdate, addToast])
+
+  const handleRollback = useCallback(async () => {
+    if (sysRollingBack || !lastBackupTag) return
+    setSysRollingBack(true)
+    try {
+      const result = await rollbackSystemUpdate(lastBackupTag)
+      if (result.success) {
+        addToast({ type: 'success', message: `Rolled back to ${result.rolled_back_to}` })
+        setLastBackupTag(null)
+        const fresh = await checkSystemUpdate()
+        setSysUpdate(fresh)
+      } else {
+        addToast({ type: 'error', message: result.message || 'Rollback failed' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Rollback failed' })
+    } finally {
+      setSysRollingBack(false)
+    }
+  }, [sysRollingBack, lastBackupTag, addToast])
+
+  // Auto-check for system updates on mount
+  useEffect(() => {
+    if (isConnected && !sysUpdate && !sysChecking) {
+      checkSystemUpdate().then(setSysUpdate).catch(() => {})
+    }
+  }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Image update state ----
   const [registryChecking, setRegistryChecking] = useState(false)
   const [updatingImages, setUpdatingImages] = useState<Set<string>>(new Set())
   const [bulkUpdating, setBulkUpdating] = useState(false)
@@ -265,6 +350,188 @@ export default function Updates() {
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          System & Framework Updates
+          ══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 gradient-border">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
+              <Server size={20} className="text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight"><span className="text-gradient">System Updates</span></h2>
+              <p className="text-xs text-slate-500">DCS framework and application version management</p>
+            </div>
+          </div>
+          <button
+            onClick={handleCheckSystemUpdate}
+            disabled={sysChecking}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 disabled:opacity-50 press shrink-0"
+          >
+            {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Check for Updates
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* DCS Backend */}
+          <div className={`rounded-xl border p-5 transition-all duration-300 ${
+            sysUpdate?.available
+              ? 'bg-emerald-500/[0.04] border-emerald-500/15 glow-emerald'
+              : 'bg-white/[0.02] border-white/[0.06]'
+          }`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                <GitBranch size={16} className="text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-200">DCS Framework</p>
+                <p className="text-[10px] text-slate-500">Docker Compose Skeleton backend</p>
+              </div>
+            </div>
+
+            {sysUpdate ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Current</span>
+                  <span className="text-xs font-mono text-slate-300">{sysUpdate.current_version}</span>
+                </div>
+                {sysUpdate.available && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Latest</span>
+                    <span className="text-xs font-mono text-emerald-400">{sysUpdate.latest_version}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Branch</span>
+                  <span className="text-xs font-mono text-slate-400">{sysUpdate.branch}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
+                  {sysUpdate.available ? (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {sysUpdate.commits_behind} update{sysUpdate.commits_behind !== 1 ? 's' : ''} available
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
+                      <CheckCircle size={10} />
+                      Up to date
+                    </span>
+                  )}
+                </div>
+
+                {sysUpdate.has_local_changes && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
+                    <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-300">Local modifications detected. Commit or stash changes before updating.</p>
+                  </div>
+                )}
+
+                {/* Changelog */}
+                {sysUpdate.available && sysUpdate.changelog.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/[0.04]">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Changelog</p>
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin">
+                      {sysUpdate.changelog.slice(0, 10).map((c) => (
+                        <div key={c.hash} className="flex items-start gap-2">
+                          <GitCommit size={12} className="text-slate-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-slate-300 truncate">{c.message}</p>
+                            <p className="text-[9px] text-slate-600">{c.hash} by {c.author}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                {isAdmin && sysUpdate.available && !sysUpdate.has_local_changes && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
+                    <button
+                      onClick={handleApplySystemUpdate}
+                      disabled={sysApplying}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all duration-200 press"
+                    >
+                      {sysApplying ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                      {sysApplying ? 'Updating...' : 'Apply Update'}
+                    </button>
+                    {lastBackupTag && (
+                      <button
+                        onClick={handleRollback}
+                        disabled={sysRollingBack}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-amber-400 disabled:opacity-50 transition-all press"
+                      >
+                        {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                        Rollback
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="h-3 w-16 rounded skeleton" />
+                    <div className="h-3 w-20 rounded skeleton" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* UI Application */}
+          <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
+                <Monitor size={16} className="text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-200">DCS Manager</p>
+                <p className="text-[10px] text-slate-500">Desktop application</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Version</span>
+                <span className="text-xs font-mono text-slate-300">{appVersion || 'Unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Platform</span>
+                <span className="text-xs text-slate-400">{window.electronAPI ? 'Electron Desktop' : 'Web Browser'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
+                  <CheckCircle size={10} />
+                  Current
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/[0.04]">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800/40">
+                <Shield size={12} className="text-slate-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  {window.electronAPI
+                    ? 'App updates are delivered via new releases. Check the GitHub repository for the latest version.'
+                    : 'Running in browser mode. Update by pulling the latest source and rebuilding.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          Image Updates (existing section)
+          ══════════════════════════════════════════════════════════════════════ */}
+
       {/* ---- Header ---- */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">

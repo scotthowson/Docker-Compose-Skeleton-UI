@@ -2,7 +2,7 @@
 // Automations — Scheduled Actions & Automation Rules for Docker operations
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   Zap, Plus, Trash2, Clock, Play, Pause, Loader2,
   CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
@@ -257,6 +257,18 @@ export default function Automations() {
     setExpandedHistoryIdx(null)
   }, [])
 
+  // Close topmost modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (historyRuleId) { closeHistory(); return }
+      if (confirmDeleteId) { setConfirmDeleteId(null); return }
+      if (showCreateModal) { setShowCreateModal(false); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [historyRuleId, confirmDeleteId, showCreateModal, closeHistory])
+
   // -------------------------------------------------------------------------
   // Disconnected state
   // -------------------------------------------------------------------------
@@ -286,7 +298,7 @@ export default function Automations() {
             <Zap size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Automations</h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Automations</span></h2>
             <p className="text-xs text-slate-500">
               Scheduled actions &amp; condition-based rules
             </p>
@@ -379,7 +391,7 @@ export default function Automations() {
 
       {/* Rule cards */}
       {automations.length > 0 && (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 gap-3 stagger-children">
           {automations.map((rule) => (
             <div
               key={rule.id}
@@ -626,9 +638,14 @@ export default function Automations() {
 
             {/* Footer */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06] shrink-0">
-              <span className="text-[10px] text-slate-600">
-                {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-slate-600">
+                  {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
+                </span>
+                <span className="text-[10px] text-slate-700">
+                  Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+                </span>
+              </div>
               <button
                 onClick={closeHistory}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
@@ -670,7 +687,7 @@ export default function Automations() {
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. Nightly backup"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
 
@@ -748,7 +765,7 @@ export default function Automations() {
                   <select
                     value={formCondition}
                     onChange={(e) => setFormCondition(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c.value} value={c.value} className="bg-slate-900 text-slate-200">
@@ -767,7 +784,7 @@ export default function Automations() {
                 <select
                   value={formActionType}
                   onChange={(e) => setFormActionType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
                 >
                   {ACTION_TYPES.map((a) => (
                     <option key={a.value} value={a.value} className="bg-slate-900 text-slate-200">
@@ -787,7 +804,7 @@ export default function Automations() {
                   value={formActionTarget}
                   onChange={(e) => setFormActionTarget(e.target.value)}
                   placeholder='Stack name, container name, or "*" for all'
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
                 />
                 <p className="text-[10px] text-slate-600 mt-1">
                   Leave empty or use "*" to target all stacks/containers.
@@ -796,21 +813,26 @@ export default function Automations() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06] shrink-0">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !formName.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
-              >
-                {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                Create
-              </button>
+            <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06] shrink-0">
+              <span className="text-[10px] text-slate-700">
+                Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !formName.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+                >
+                  {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                  Create
+                </button>
+              </div>
             </div>
           </div>
         </div>,

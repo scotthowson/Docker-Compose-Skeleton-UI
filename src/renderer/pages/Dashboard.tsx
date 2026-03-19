@@ -412,7 +412,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between animate-fade-in">
         <div>
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient">Dashboard</span>
+            <span className="text-gradient neon-emerald">Dashboard</span>
           </h1>
           <p className="mt-1 text-xs md:text-sm text-slate-500">
             {systemStatus

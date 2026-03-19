@@ -231,7 +231,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
               className="
                 w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
                 text-sm text-slate-200 placeholder-slate-600 font-mono
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25
+                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                 transition-all duration-200
               "
             />
@@ -367,7 +367,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
                 flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg
                 bg-emerald-500 text-white hover:bg-emerald-400
                 shadow-lg shadow-emerald-500/20 transition-all duration-200
-                disabled:opacity-40 disabled:cursor-not-allowed
+                disabled:opacity-50 disabled:cursor-not-allowed
               "
             >
               {creating ? (
