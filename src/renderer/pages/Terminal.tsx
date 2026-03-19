@@ -41,9 +41,21 @@ const ANSI_COLORS: Record<string, string> = {
   '1': 'font-weight:bold', '2': 'opacity:0.7', '4': 'text-decoration:underline',
 }
 
+/** Escape HTML entities to prevent XSS from command output */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function parseAnsi(text: string): string {
+  // SECURITY: Escape HTML FIRST to prevent XSS, then apply ANSI color spans
+  const safe = escapeHtml(text)
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[([0-9;]*)m/g, (_match, codes: string) => {
+  return safe.replace(/\x1b\[([0-9;]*)m/g, (_match, codes: string) => {
     if (!codes || codes === '0') return '</span>'
     const styles = codes.split(';').map((c: string) => ANSI_COLORS[c]).filter(Boolean).join(';')
     return styles ? `<span style="${styles}">` : ''

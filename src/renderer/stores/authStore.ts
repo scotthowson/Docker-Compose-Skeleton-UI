@@ -278,16 +278,29 @@ const API_TOKEN_KEY = 'api-auth-token'
 /** Persist API token to localStorage */
 function persistApiToken(token: string | null): void {
   if (token) {
-    localStorage.setItem(API_TOKEN_KEY, token)
+    // Store token with timestamp for client-side expiry validation
+    localStorage.setItem(API_TOKEN_KEY, JSON.stringify({ token, storedAt: Date.now() }))
   } else {
     localStorage.removeItem(API_TOKEN_KEY)
   }
 }
 
-/** Restore API token from localStorage */
+/** Restore API token from localStorage with expiry check */
+const TOKEN_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours — client-side safety net
+
 function getPersistedApiToken(): string | null {
   try {
-    return localStorage.getItem(API_TOKEN_KEY)
+    const raw = localStorage.getItem(API_TOKEN_KEY)
+    if (!raw) return null
+    // Handle legacy format (plain string token)
+    if (!raw.startsWith('{')) return raw
+    const { token, storedAt } = JSON.parse(raw)
+    // Reject tokens older than 24h on client side
+    if (storedAt && Date.now() - storedAt > TOKEN_MAX_AGE_MS) {
+      localStorage.removeItem(API_TOKEN_KEY)
+      return null
+    }
+    return token
   } catch {
     return null
   }
