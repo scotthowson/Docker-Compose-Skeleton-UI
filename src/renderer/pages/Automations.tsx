@@ -411,6 +411,7 @@ export default function Automations() {
                   disabled={togglingId === rule.id}
                   className="shrink-0 transition-colors"
                   title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                  aria-label={rule.enabled ? 'Disable rule' : 'Enable rule'}
                 >
                   {togglingId === rule.id ? (
                     <Loader2 size={20} className="animate-spin text-slate-500" />
@@ -643,7 +644,7 @@ export default function Automations() {
                   {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
                 </span>
                 <span className="text-[10px] text-slate-700">
-                  Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+                  Press <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
                 </span>
               </div>
               <button
@@ -815,7 +816,7 @@ export default function Automations() {
             {/* Footer */}
             <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06] shrink-0">
               <span className="text-[10px] text-slate-700">
-                Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+                Press <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
               </span>
               <div className="flex items-center gap-2">
                 <button

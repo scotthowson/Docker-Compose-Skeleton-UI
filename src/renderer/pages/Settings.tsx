@@ -485,7 +485,7 @@ function DiskLabelManager() {
               return (
                 <div
                   key={disk.mount}
-                  className="flex items-center gap-3 rounded-lg bg-slate-800/30 px-3 py-2.5 border border-white/[0.03] hover:border-white/[0.06] transition-colors"
+                  className="flex items-center gap-3 rounded-lg bg-slate-800/30 px-3 py-2.5 border border-white/[0.03] hover:border-white/[0.06] transition-all"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-slate-400 truncate" title={disk.mount}>
@@ -577,7 +577,7 @@ function DiskLabelManager() {
               return (
                 <div
                   key={custom.mount}
-                  className="flex items-center gap-3 rounded-lg bg-violet-500/[0.04] border border-violet-500/10 px-3 py-2.5 hover:border-violet-500/20 transition-colors"
+                  className="flex items-center gap-3 rounded-lg bg-violet-500/[0.04] border border-violet-500/10 px-3 py-2.5 hover:border-violet-500/20 transition-all"
                 >
                   <div className="flex items-center justify-center w-6 h-6 rounded-md bg-violet-500/10 shrink-0">
                     <FolderPlus size={11} className="text-violet-400" />
@@ -1632,7 +1632,7 @@ function ConnectionProfiles() {
               <div
                 key={profile.id}
                 className={`
-                  flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-colors
+                  flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all
                   ${active
                     ? 'bg-emerald-500/[0.04] border-emerald-500/15'
                     : 'bg-slate-800/30 border-white/[0.03] hover:border-white/[0.06]'
@@ -2329,7 +2329,7 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
     <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentColor} ${fullWidth ? 'lg:col-span-2' : ''} ${title === 'About' ? 'gradient-border' : ''} transition-all duration-300`}>
       <button
         onClick={toggleCollapse}
-        className="w-full px-5 py-4 border-b border-white/[0.06] flex items-center gap-2.5 hover:bg-white/[0.02] transition-colors text-left cursor-pointer"
+        className="w-full px-5 py-4 border-b border-white/[0.06] flex items-center gap-2.5 hover:bg-white/[0.02] transition-all text-left cursor-pointer"
       >
         {icon}
         <h3 className="text-sm font-semibold text-slate-200 flex-1">{title}</h3>

@@ -107,7 +107,7 @@ export default function Secrets() {
                 </div>
                 <span className="text-sm font-mono text-white truncate">{key}</span>
               </div>
-              <button onClick={() => setDeleteTarget(key)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all">
+              <button onClick={() => setDeleteTarget(key)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all" title="Delete secret" aria-label="Delete">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>

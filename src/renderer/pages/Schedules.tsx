@@ -92,13 +92,13 @@ export default function Schedules() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => toggleSchedule(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" title={s.enabled ? 'Pause' : 'Resume'}>
+                    <button onClick={() => toggleSchedule(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" title={s.enabled ? 'Pause schedule' : 'Resume schedule'} aria-label={s.enabled ? 'Pause schedule' : 'Resume schedule'}>
                       {s.enabled ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
                     </button>
                     <button onClick={() => handleExpand(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
                       {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                     </button>
-                    {isAdmin && <button onClick={() => setDeleteTarget(s.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"><Trash2 className="w-4 h-4" /></button>}
+                    {isAdmin && <button onClick={() => setDeleteTarget(s.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors" title="Delete schedule" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
                 {isExpanded && (

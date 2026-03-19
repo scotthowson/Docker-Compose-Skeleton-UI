@@ -747,7 +747,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const isRunning = containerInfo.state === 'running'
 
   return (
-    <div className="flex flex-col gap-5 animate-in">
+    <div className="flex flex-col gap-5 animate-fade-in">
       {/* ---- Back button + title ---- */}
       <div className="flex flex-col gap-3">
         {/* Top row: back + name + badges */}
@@ -759,7 +759,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm flex-shrink-0
               text-slate-400 hover:text-white
               bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
-              transition-all duration-200
+              transition-all duration-200 press
             "
           >
             <ArrowLeft className="h-4 w-4" />

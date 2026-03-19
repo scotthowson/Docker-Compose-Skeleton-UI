@@ -3,7 +3,7 @@
 //           charts powered by server-side metrics collection (cron snapshots)
 // =============================================================================
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   TrendingUp, Clock, Cpu, HardDrive, MemoryStick,
   RefreshCw, Loader2, Database, WifiOff, Camera,
@@ -281,6 +281,15 @@ export default function Trends() {
   const [savingConfig, setSavingConfig] = useState(false)
   const [editThresholds, setEditThresholds] = useState<AlertThresholds | null>(null)
 
+  // Escape closes alert config modal
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showAlertConfig) setShowAlertConfig(false)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showAlertConfig])
+
   // Fetch trends data with polling
   const fetchTrends = useCallback(() => fetchMetricsTrends(range), [range])
 
@@ -451,7 +460,7 @@ export default function Trends() {
               onClick={() => setRange(tr.id)}
               className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                 range === tr.id
-                  ? 'bg-white/[0.08] text-slate-200 shadow-sm shadow-black/20'
+                  ? 'bg-white/[0.08] text-slate-200 shadow-sm shadow-black/20 neon-cyan'
                   : 'text-slate-500 hover:text-slate-400'
               }`}
             >

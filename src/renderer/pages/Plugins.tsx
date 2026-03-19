@@ -805,6 +805,7 @@ export default function Plugins() {
                     onClick={() => setDeleteTarget(p.name)}
                     className="p-1 rounded text-slate-600 hover:text-rose-400 transition-colors"
                     title="Remove plugin"
+                    aria-label="Delete"
                   >
                     <Trash2 size={13} />
                   </button>

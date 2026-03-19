@@ -1022,6 +1022,7 @@ export default function Volumes() {
                               transition-all duration-200
                             "
                             title="Delete volume"
+                            aria-label="Delete"
                           >
                             <Trash2 size={13} />
                           </button>

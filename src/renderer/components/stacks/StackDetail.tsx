@@ -223,7 +223,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   // Skeleton loading state
   if (loading && !detail) {
     return (
-      <div className="space-y-6 animate-in">
+      <div className="space-y-6 animate-fade-in">
         {/* Back button skeleton */}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
@@ -250,7 +250,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   }
 
   return (
-    <div className="space-y-6 animate-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Confirmation modal overlay */}
       {confirmAction && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -305,7 +305,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         <button
           onClick={onBack}
           title="Back to stacks (Esc)"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10 hover:border-white/15 transition-all text-sm"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10 hover:border-white/15 transition-all text-sm press"
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="hidden sm:inline">Back</span>
