@@ -147,6 +147,7 @@ import type {
   WebhookDeleteResponse,
   WebhookTestResponse,
   ImagePullResponse,
+  SessionListResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -515,6 +516,16 @@ export function authLogoutAll(username: string): Promise<AuthLogoutResponse> {
 /** POST /auth/refresh — Refresh current session token */
 export function authRefresh(): Promise<AuthResponse> {
   return apiClient.post<AuthResponse>('/auth/refresh')
+}
+
+/** GET /auth/sessions — List active sessions (admin only) */
+export function authListSessions(): Promise<SessionListResponse> {
+  return apiClient.get<SessionListResponse>('/auth/sessions')
+}
+
+/** DELETE /auth/sessions/:prefix — Revoke a session by token prefix (admin only) */
+export function authRevokeSession(tokenPrefix: string): Promise<{ success: boolean; revoked: number; message: string }> {
+  return apiClient.delete<{ success: boolean; revoked: number; message: string }>(`/auth/sessions/${encodeURIComponent(tokenPrefix)}`)
 }
 
 /** POST /auth/factory-reset — Wipe auth state and return to setup wizard */

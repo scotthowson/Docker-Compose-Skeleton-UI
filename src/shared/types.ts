@@ -75,6 +75,7 @@ export interface HealthReport {
     stopped: number
   }
   containers: HealthContainer[]
+  api?: ApiHealthMetrics
 }
 
 export interface HealthContainer {
@@ -491,6 +492,31 @@ export interface ApiUser {
   username: string
   role: string
   created_at: string
+}
+
+// GET /auth/sessions
+export interface SessionInfo {
+  id: string
+  username: string
+  role: string
+  created_at: string
+  expires_at: number
+  remaining_seconds: number
+  ip: string
+}
+
+export interface SessionListResponse {
+  sessions: SessionInfo[]
+  total: number
+}
+
+// GET /health — extended API metrics
+export interface ApiHealthMetrics {
+  uptime_seconds: number
+  requests_total: number
+  errors_total: number
+  memory_kb: number
+  pid: number
 }
 
 // GET /
