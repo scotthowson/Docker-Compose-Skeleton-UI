@@ -591,7 +591,7 @@ export default function Updates() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider">Platform</span>
-                <span className="text-xs text-slate-400">{window.electronAPI ? 'Electron Desktop' : 'Web Browser'}</span>
+                <span className="text-xs text-slate-400">{window.electronAPI ? 'Electron Desktop' : 'Web Interface (Docker)'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>

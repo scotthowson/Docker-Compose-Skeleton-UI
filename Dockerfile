@@ -21,6 +21,12 @@ RUN npx vite build --base /
 # Stage 2 — Serve with nginx
 # ---------------------------------------------------------------------------
 FROM nginx:alpine
+
+LABEL org.opencontainers.image.title="DCS-UI" \
+      org.opencontainers.image.description="Docker Compose Skeleton — Web Management Interface" \
+      org.opencontainers.image.source="https://github.com/scotthowson/Docker-Compose-Skeleton-UI" \
+      org.opencontainers.image.licenses="MIT"
+
 COPY --from=build /app/dist/renderer /usr/share/nginx/html
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/entrypoint.sh /entrypoint.sh

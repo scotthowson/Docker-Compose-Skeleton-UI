@@ -21,7 +21,7 @@ export function GlobalPoller() {
 
   const statusTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const updateTimer = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null>(null)
   const fetchingStatus = useRef(false)
   const fetchingHealth = useRef(false)
   const fetchingUpdates = useRef(false)
@@ -68,7 +68,7 @@ export function GlobalPoller() {
     const clearTimers = () => {
       if (statusTimer.current) { clearInterval(statusTimer.current); statusTimer.current = null }
       if (healthTimer.current) { clearInterval(healthTimer.current); healthTimer.current = null }
-      if (updateTimer.current) { clearTimeout(updateTimer.current); updateTimer.current = null }
+      if (updateTimer.current) { clearTimeout(updateTimer.current); clearInterval(updateTimer.current); updateTimer.current = null }
     }
 
     if (!isConnected) {
@@ -88,7 +88,7 @@ export function GlobalPoller() {
       updateTimer.current = setTimeout(() => {
         pollUpdates()
         // After initial check, set up the recurring interval
-        updateTimer.current = setInterval(pollUpdates, autoCheckUpdates) as unknown as ReturnType<typeof setTimeout>
+        updateTimer.current = setInterval(pollUpdates, autoCheckUpdates)
       }, UPDATE_CHECK_DELAY)
     }
 

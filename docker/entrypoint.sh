@@ -17,4 +17,14 @@ sed -i \
   -e "s|DCS_API_PORT_PLACEHOLDER|${DCS_API_PORT}|g" \
   /etc/nginx/conf.d/default.conf
 
+# Verify substitution succeeded
+if grep -q 'PLACEHOLDER' /etc/nginx/conf.d/default.conf 2>/dev/null; then
+  echo "ERROR: nginx config still contains unresolved placeholders" >&2
+  echo "  DCS_API_HOST=${DCS_API_HOST}" >&2
+  echo "  DCS_API_PORT=${DCS_API_PORT}" >&2
+  exit 1
+fi
+
+echo "DCS-UI: API proxy → ${DCS_API_HOST}:${DCS_API_PORT}"
+
 exec "$@"

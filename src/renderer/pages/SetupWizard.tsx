@@ -292,7 +292,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         SERVICE_START_DELAY: data.defaults.SERVICE_START_DELAY || '5',
         ENABLE_POST_STARTUP_HEALTH_CHECK: data.defaults.ENABLE_POST_STARTUP_HEALTH_CHECK || 'true',
         API_PORT: data.defaults.API_PORT || '9876',
-        API_BIND: data.defaults.API_BIND || '127.0.0.1',
+        API_BIND: data.defaults.API_BIND || (isWebMode() ? '0.0.0.0' : '127.0.0.1'),
       })
 
       // Check if server is already initialized
@@ -608,7 +608,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="text-center mb-6">
                 <h2 className="text-xl font-bold text-slate-100">Welcome to Docker Compose Skeleton</h2>
                 <p className="text-sm text-slate-500 mt-2">
-                  Enter your server address to begin setup
+                  {isWebMode() ? 'Connecting to your server automatically...' : 'Enter your server address to begin setup'}
                 </p>
               </div>
 

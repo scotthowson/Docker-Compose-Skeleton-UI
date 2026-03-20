@@ -127,8 +127,10 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
       {/* Profile header */}
       <div className="px-4 py-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          {profileIcon ? (
+          {profileIcon && profileIcon.length > 2 ? (
             <img src={profileIcon} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover ring-2 ring-emerald-500/20" />
+          ) : profileIcon ? (
+            <span className="text-2xl">{profileIcon}</span>
           ) : (
             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/20">
               {userInitial}
@@ -349,8 +351,10 @@ export function Header() {
                 transition-all duration-200 press
               "
             >
-              {profileIcon ? (
+              {profileIcon && profileIcon.length > 2 ? (
                 <img src={profileIcon} alt="" className="w-5 h-5 rounded-full object-cover" />
+              ) : profileIcon ? (
+                <span className="text-sm">{profileIcon}</span>
               ) : (
                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-[9px] font-bold">
                   {userInitial}

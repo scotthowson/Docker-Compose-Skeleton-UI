@@ -1243,6 +1243,13 @@ export interface ComposeHistoryResponse {
   count: number
 }
 
+export interface ComposeVersionContentResponse {
+  stack: string
+  version_id: string
+  content: string
+  size: number
+}
+
 export interface ComposeRollbackResponse {
   success: boolean
   stack: string

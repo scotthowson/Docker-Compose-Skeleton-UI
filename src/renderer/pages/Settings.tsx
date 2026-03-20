@@ -111,13 +111,17 @@ function ProfileSettings() {
       {/* Avatar section */}
       <div className="flex items-start gap-5">
         <div className="relative group">
-          {avatarPreview ? (
+          {avatarPreview && avatarPreview.length > 2 ? (
             <img
               src={avatarPreview}
               alt="Profile"
               className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-lg"
               onError={() => setAvatarPreview('')}
             />
+          ) : avatarPreview ? (
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-800/80 border border-white/10 flex items-center justify-center text-3xl shadow-lg">
+              {avatarPreview}
+            </div>
           ) : (
             <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-emerald-500/20">
               {userInitial}
@@ -144,8 +148,23 @@ function ProfileSettings() {
         <div className="flex-1">
           <h4 className="text-sm font-semibold text-slate-200 mb-1">Profile Picture</h4>
           <p className="text-[11px] text-slate-500 mb-2">
-            Upload an image or paste a URL. Max 2MB for uploads.
+            Choose a preset, upload an image, or paste a URL. Max 2MB for uploads.
           </p>
+          {/* Preset avatar icons */}
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {['🐳', '🚀', '⚡', '🔥', '🎯', '💎', '🌊', '🦊', '🐧', '🤖', '👨‍💻', '👩‍💻', '🛡️', '🌟', '🎮', '🧠'].map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => { handleChange('icon', emoji); setAvatarPreview(emoji) }}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-base hover:bg-white/10 transition-all ${
+                  profile.icon === emoji ? 'bg-emerald-500/20 ring-1 ring-emerald-500/40' : 'bg-white/5'
+                }`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             value={profile.icon}
@@ -1781,8 +1800,8 @@ function NotificationPreferencesSection() {
     },
     {
       key: 'desktopNotifications',
-      label: 'Desktop Notifications',
-      description: 'Show OS-level notifications when the window is not focused',
+      label: window.electronAPI ? 'Desktop Notifications' : 'Browser Notifications',
+      description: window.electronAPI ? 'Show OS-level notifications when the window is not focused' : 'Show browser notifications for important events',
       icon: <Monitor size={12} />,
       color: 'text-cyan-400',
     },

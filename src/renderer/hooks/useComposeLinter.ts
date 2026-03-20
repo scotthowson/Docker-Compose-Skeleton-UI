@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { useMemo } from 'react'
+import { usePluginStore } from '../stores/pluginStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -184,14 +185,22 @@ function parseComposeServices(content: string): {
       const val = trimmed.slice(1).trim().replace(/['"]/g, '')
 
       if (currentKey === 'ports') {
-        // Handle formats: "80:80", "8080:80", "127.0.0.1:80:80", "80:80/tcp", "80"
-        const portMatch = val.match(/^(?:(\d+\.\d+\.\d+\.\d+):)?(\d+):(\d+)(?:\/\w+)?$/)
+        // Handle formats: "80:80", "8080:80", "127.0.0.1:80:80", "80:80/tcp", "80", "8080-8090:8080-8090"
+        const portMatch = val.match(/^(?:(\d+\.\d+\.\d+\.\d+):)?(\d+)(?:-\d+)?:(\d+)(?:-\d+)?(?:\/\w+)?$/)
+        const singlePort = !portMatch ? val.match(/^(\d+)(?:\/\w+)?$/) : null
         if (portMatch) {
           currentService.ports.push({
             raw: val,
             host: parseInt(portMatch[2]),
             container: parseInt(portMatch[3]),
             bindAddress: portMatch[1] || undefined,
+            line: i + 1,
+          })
+        } else if (singlePort) {
+          currentService.ports.push({
+            raw: val,
+            host: parseInt(singlePort[1]),
+            container: parseInt(singlePort[1]),
             line: i + 1,
           })
         }
@@ -628,10 +637,28 @@ function lintEnv(envContent: string, composeContent?: string): EnvDiagnostic[] {
 // React Hooks
 // ---------------------------------------------------------------------------
 
-/** Real-time compose linter hook — runs on every content change */
+const EMPTY_LINT = { diagnostics: [] as ComposeDiagnostic[], counts: { errors: 0, warnings: 0, info: 0 } }
+
+/** Check if the compose-linter plugin is enabled (non-reactive, for callbacks) */
+export function isComposeLinterEnabled(): boolean {
+  const p = usePluginStore.getState().plugins.find((pl) => pl.name === 'compose-linter')
+  return !p || p.enabled
+}
+
+/** Reactive hook for compose-linter enabled state */
+function useLinterEnabled(): boolean {
+  return usePluginStore((s) => {
+    const p = s.plugins.find((pl) => pl.name === 'compose-linter')
+    return !p || p.enabled
+  })
+}
+
+/** Real-time compose linter hook — respects plugin enabled state */
 export function useComposeLinter(content: string | undefined, envContent?: string) {
+  const linterEnabled = useLinterEnabled()
+
   return useMemo(() => {
-    if (!content) return { diagnostics: [], counts: { errors: 0, warnings: 0, info: 0 } }
+    if (!linterEnabled || !content) return EMPTY_LINT
 
     const envKeys = envContent
       ? new Set(
@@ -650,13 +677,15 @@ export function useComposeLinter(content: string | undefined, envContent?: strin
     }
 
     return { diagnostics, counts }
-  }, [content, envContent])
+  }, [content, envContent, linterEnabled])
 }
 
-/** Real-time env validator hook */
+/** Real-time env validator hook — respects plugin enabled state */
 export function useEnvLinter(envContent: string | undefined, composeContent?: string) {
+  const linterEnabled = useLinterEnabled()
+
   return useMemo(() => {
-    if (!envContent) return { diagnostics: [], counts: { errors: 0, warnings: 0, info: 0 } }
+    if (!linterEnabled || !envContent) return EMPTY_LINT
 
     const diagnostics = lintEnv(envContent, composeContent)
     const counts = {
@@ -666,7 +695,7 @@ export function useEnvLinter(envContent: string | undefined, composeContent?: st
     }
 
     return { diagnostics, counts }
-  }, [envContent, composeContent])
+  }, [envContent, composeContent, linterEnabled])
 }
 
 // Re-export for direct use

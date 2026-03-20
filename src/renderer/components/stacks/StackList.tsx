@@ -11,8 +11,9 @@ import {
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { usePluginStore } from '../../stores/pluginStore'
 import { deleteStack, fetchStackCompose } from '../../api/endpoints'
-import { lintCompose } from '../../hooks/useComposeLinter'
+import { lintCompose, isComposeLinterEnabled } from '../../hooks/useComposeLinter'
 import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
 
@@ -42,6 +43,7 @@ const priorityOrder: Record<string, number> = {
 export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin }: Props) {
   const { stacks, actionLoading, loading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
+  const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('priority')
@@ -96,7 +98,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   const criticalCount = stacks.filter((s) => stackAnnotations[s.name]?.priority === 'critical').length
 
   const handleLintAll = useCallback(async () => {
-    if (lintAllLoading || stacks.length === 0) return
+    if (lintAllLoading || stacks.length === 0 || !isComposeLinterEnabled()) return
     setLintAllLoading(true)
     const results: { name: string; diagnostics: LintDiagnostic[] }[] = []
     for (const stack of stacks) {
@@ -258,14 +260,16 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             </button>
           )}
 
-          <button
-            onClick={handleLintAll}
-            disabled={lintAllLoading || stacks.length === 0}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
-          >
-            {lintAllLoading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />}
-            Lint All
-          </button>
+          {linterPluginEnabled && (
+            <button
+              onClick={handleLintAll}
+              disabled={lintAllLoading || stacks.length === 0}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
+            >
+              {lintAllLoading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />}
+              Lint All
+            </button>
+          )}
 
           {isAdmin && (
             <button

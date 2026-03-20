@@ -1,6 +1,14 @@
 node_modules
 dist
 .git
+.github
+.claude
+android
 *.md
 .env*
-.claude
+.eslintrc*
+.prettierrc*
+tsconfig.node.json
+electron-builder.yml
+*.test.ts
+*.spec.ts

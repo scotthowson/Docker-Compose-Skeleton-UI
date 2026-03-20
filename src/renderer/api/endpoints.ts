@@ -90,6 +90,7 @@ import type {
   SnapshotCreateResponse,
   SnapshotRestoreResponse,
   ComposeHistoryResponse,
+  ComposeVersionContentResponse,
   ComposeRollbackResponse,
   TemplateListResponse,
   TemplateDetailResponse,
@@ -913,6 +914,13 @@ export function deleteSnapshot(id: string): Promise<{ success: boolean; deleted:
 /** GET /stacks/:name/compose/history — Compose version history */
 export function fetchComposeHistory(name: string): Promise<ComposeHistoryResponse> {
   return apiClient.get<ComposeHistoryResponse>(`/stacks/${encodeURIComponent(name)}/compose/history`)
+}
+
+/** GET /stacks/:name/compose/history/:id — View a specific compose version's content */
+export function fetchComposeVersionContent(name: string, versionId: string): Promise<ComposeVersionContentResponse> {
+  return apiClient.get<ComposeVersionContentResponse>(
+    `/stacks/${encodeURIComponent(name)}/compose/history/${encodeURIComponent(versionId)}`,
+  )
 }
 
 /** POST /stacks/:name/compose/rollback — Rollback compose file */

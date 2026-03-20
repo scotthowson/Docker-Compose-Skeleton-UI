@@ -600,7 +600,7 @@ export default function Login() {
                       type="url"
                       value={serverUrl}
                       onChange={(e) => setServerUrlLocal(e.target.value)}
-                      placeholder="http://192.168.1.100:9876"
+                      placeholder={window.electronAPI ? "http://192.168.1.100:9876" : "/api"}
                       autoFocus
                       autoComplete="url"
                       className="

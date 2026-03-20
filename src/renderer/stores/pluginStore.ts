@@ -2,6 +2,50 @@ import { create } from 'zustand'
 import type { Plugin, PluginHookInfo, PluginLogEntry } from '../../shared/types'
 import * as api from '../api/endpoints'
 
+// Built-in features that act as plugins (togglable without backend installation)
+const BUILT_IN_PLUGINS: Plugin[] = [
+  {
+    name: 'compose-linter',
+    version: '1.2.0',
+    description: 'Real-time compose validation with 24 rules',
+    author: 'DCS Community',
+    enabled: true,
+    templates: [],
+    hooks: ['pre-deploy'],
+  },
+]
+
+/** Read built-in plugin enabled state from localStorage */
+function getBuiltInEnabled(name: string): boolean {
+  try {
+    const stored = localStorage.getItem(`plugin-enabled-${name}`)
+    if (stored !== null) return stored === 'true'
+  } catch {}
+  return true
+}
+
+/** Merge API plugins with built-in plugins. localStorage is the source of truth
+ *  for built-in plugin enabled state (survives API refetch, page navigation, refresh). */
+function mergeWithBuiltIns(apiPlugins: Plugin[]): Plugin[] {
+  const builtInNames = new Set(BUILT_IN_PLUGINS.map(bp => bp.name))
+  const apiNames = new Set(apiPlugins.map(p => p.name))
+
+  // For API plugins that are also built-ins, override enabled from localStorage
+  const merged = apiPlugins.map(p => {
+    if (builtInNames.has(p.name)) {
+      return { ...p, enabled: getBuiltInEnabled(p.name) }
+    }
+    return p
+  })
+
+  // Add built-ins not returned by the API
+  const extras = BUILT_IN_PLUGINS
+    .filter(bp => !apiNames.has(bp.name))
+    .map(bp => ({ ...bp, enabled: getBuiltInEnabled(bp.name) }))
+
+  return [...merged, ...extras]
+}
+
 interface PluginState {
   plugins: Plugin[]
   loading: boolean
@@ -36,7 +80,7 @@ interface PluginState {
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
-  plugins: [],
+  plugins: mergeWithBuiltIns([]),
   loading: false,
   installing: false,
   error: null,
@@ -54,9 +98,10 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const res = await api.fetchPlugins()
-      set({ plugins: res.plugins, loading: false })
+      set({ plugins: mergeWithBuiltIns(res.plugins), loading: false })
     } catch (err) {
-      set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch plugins' })
+      // Even on error, keep built-in plugins available
+      set({ plugins: mergeWithBuiltIns([]), loading: false, error: err instanceof Error ? err.message : 'Failed to fetch plugins' })
     }
   },
 
@@ -98,11 +143,32 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
 
   togglePlugin: async (name) => {
+    // Check if this is a built-in plugin (not on backend)
+    const isBuiltIn = BUILT_IN_PLUGINS.some(bp => bp.name === name)
+    const current = get().plugins.find(p => p.name === name)
+
+    if (isBuiltIn && current) {
+      // Toggle locally — no API call needed
+      const newEnabled = !current.enabled
+      set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? { ...p, enabled: newEnabled } : p) }))
+      try { localStorage.setItem(`plugin-enabled-${name}`, String(newEnabled)) } catch {}
+      return true
+    }
+
+    // Backend plugin — call API
     try {
       const updated = await api.togglePlugin(name)
       set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? updated : p) }))
       return true
-    } catch { return false }
+    } catch {
+      // API failed — toggle locally as fallback
+      if (current) {
+        const newEnabled = !current.enabled
+        set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? { ...p, enabled: newEnabled } : p) }))
+        try { localStorage.setItem(`plugin-enabled-${name}`, String(newEnabled)) } catch {}
+      }
+      return true
+    }
   },
 
   // ── Detail panel ──

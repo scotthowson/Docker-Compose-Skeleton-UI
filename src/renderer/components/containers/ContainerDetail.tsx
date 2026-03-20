@@ -198,7 +198,8 @@ function parsePortMappings(portsStr: string): PortMapping[] {
         } else {
           containerPort = raw
         }
-        hostPort = containerPort
+        // Exposed-only — no host port bound
+        hostPort = ''
       } else {
         const leftSide = raw.slice(0, arrowIdx)
         const rightSide = raw.slice(arrowIdx + 2)
@@ -1629,18 +1630,24 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   onClick={portUrl ? () => window.open(portUrl, '_blank', 'noopener') : undefined}
                   title={portUrl ? `Open ${portUrl}` : undefined}
                 >
-                  {/* Host port */}
-                  <div className="flex flex-col items-center min-w-0">
-                    {port.bindAddress && (
-                      <span className="text-[10px] text-slate-600 font-mono truncate max-w-[80px]" title={port.bindAddress}>
-                        {port.bindAddress}
+                  {/* Host port (or "exposed" label if no host binding) */}
+                  {port.hostPort ? (
+                    <div className="flex flex-col items-center min-w-0">
+                      {port.bindAddress && (
+                        <span className="text-[10px] text-slate-600 font-mono truncate max-w-[80px]" title={port.bindAddress}>
+                          {port.bindAddress}
+                        </span>
+                      )}
+                      <span className="text-lg font-bold text-white leading-tight">
+                        {port.hostPort}
                       </span>
-                    )}
-                    <span className="text-lg font-bold text-white leading-tight">
-                      {port.hostPort}
-                    </span>
-                    <span className="text-[10px] text-slate-600 uppercase">host</span>
-                  </div>
+                      <span className="text-[10px] text-slate-600 uppercase">host</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center min-w-0">
+                      <span className="text-xs font-medium text-slate-500 italic">exposed</span>
+                    </div>
+                  )}
 
                   {/* Arrow */}
                   <ArrowRight className="h-4 w-4 text-cyan-500/50 flex-shrink-0" />

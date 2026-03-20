@@ -15,6 +15,7 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react'
+import { isWebMode } from '../../lib/env'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -25,12 +26,15 @@ interface StepDef {
   details: string[]
 }
 
+const webMode = isWebMode()
+
 const steps: StepDef[] = [
   {
     icon: <Container size={40} strokeWidth={1.5} />,
     title: 'Welcome to DCS Manager',
-    description:
-      'Your premium desktop companion for managing Docker Compose Skeleton servers. Monitor, deploy, and control your entire container infrastructure from one elegant interface.',
+    description: webMode
+      ? 'Your web-based control center for Docker Compose Skeleton. Monitor, deploy, and control your entire container infrastructure from one elegant interface.'
+      : 'Your premium desktop companion for managing Docker Compose Skeleton servers. Monitor, deploy, and control your entire container infrastructure from one elegant interface.',
     details: [
       'Real-time container monitoring and health checks',
       'Manage multiple stacks with dependency ordering',
@@ -39,9 +43,10 @@ const steps: StepDef[] = [
   },
   {
     icon: <Server size={40} strokeWidth={1.5} />,
-    title: 'Connect to Your Server',
-    description:
-      'Head to Settings and enter your DCS API server URL to get started. The default address is http://127.0.0.1:9876 for local servers.',
+    title: webMode ? 'Connected & Ready' : 'Connect to Your Server',
+    description: webMode
+      ? 'Your DCS-UI is connected to the API server automatically. Manage server profiles and connection settings from the Settings page.'
+      : 'Head to Settings and enter your DCS API server URL to get started. The default address is http://127.0.0.1:9876 for local servers.',
     details: [
       'Auto-reconnect with exponential backoff',
       'Connection health indicator in the status bar',

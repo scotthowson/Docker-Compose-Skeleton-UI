@@ -33,6 +33,8 @@ interface FeaturedPlugin {
   tags: string[]
   hookCount: number
   templateCount: number
+  /** Built-in feature — always available, toggle controls the feature directly */
+  builtIn?: boolean
   /** When provided, plugin is scaffolded locally instead of git-cloned */
   scaffold?: {
     hooks: Record<string, string>
@@ -43,6 +45,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   // ── Safety & Validation ──────────────────────────────────────────────
   {
     name: 'compose-linter',
+    builtIn: true,
     description: 'Comprehensive compose validation — catches missing restart policies, privileged containers, unbound ports, Docker socket mounts, missing health checks, resource limits, and 18+ security rules before deployment.',
     author: 'DCS Community',
     version: '1.2.0',
@@ -473,6 +476,20 @@ export default function Plugins() {
 
   const installedNames = new Set(plugins.map(p => p.name))
 
+  // Built-in plugin toggle — just calls the store (which handles localStorage persistence)
+  const handleBuiltInToggle = useCallback((name: string) => {
+    togglePlugin(name)
+  }, [togglePlugin])
+
+  // Read built-in toggle state from the store (reactive — re-renders on toggle)
+  const builtInToggles: Record<string, boolean> = {}
+  for (const fp of FEATURED_PLUGINS) {
+    if (fp.builtIn) {
+      const p = plugins.find(pl => pl.name === fp.name)
+      builtInToggles[fp.name] = p ? p.enabled : true
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <DisconnectedBanner />
@@ -652,7 +669,21 @@ export default function Plugins() {
                   <span className="flex items-center gap-1"><LayoutTemplate size={10} />{fp.templateCount} templates</span>
                   <span>v{fp.version}</span>
                 </div>
-                {isInstalled ? (
+                {fp.builtIn ? (
+                  <button
+                    onClick={() => handleBuiltInToggle(fp.name)}
+                    className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      builtInToggles[fp.name]
+                        ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20'
+                        : 'text-slate-500 bg-slate-800/60 border border-white/[0.06] hover:bg-slate-800'
+                    }`}
+                  >
+                    {builtInToggles[fp.name]
+                      ? <><ToggleRight size={16} /> Enabled</>
+                      : <><ToggleLeft size={16} /> Disabled</>
+                    }
+                  </button>
+                ) : isInstalled ? (
                   <button
                     disabled
                     className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-emerald-400/60 bg-emerald-500/5 border border-emerald-500/10 cursor-default"

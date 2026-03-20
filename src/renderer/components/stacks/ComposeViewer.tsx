@@ -25,6 +25,7 @@ import {
   saveStackEnv,
 } from '../../api/endpoints'
 import { useComposeLinter, useEnvLinter } from '../../hooks/useComposeLinter'
+import { usePluginStore } from '../../stores/pluginStore'
 import type { LintDiagnostic, EnvDiagnostic } from '../../hooks/useComposeLinter'
 import { useToast } from '../common/Toast'
 import type { ComposeValidateResponse, StackEnvResponse } from '../../../shared/types'
@@ -289,6 +290,9 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
 
   const yaml = content ?? defaultPlaceholder(stackName)
   const lines = useMemo(() => yaml.split('\n'), [yaml])
+
+  // ---- Plugin state (compose-linter toggle) ----
+  const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
 
   // ---- Real-time linting ----
   const { diagnostics: composeDiagnostics, counts: composeCounts } = useComposeLinter(
@@ -1525,7 +1529,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         {/* ---- Content area ---- */}
         {activeTab === 'compose' ? renderComposeTab() : renderEnvTab()}
 
-        {/* ---- Diagnostics summary bar ---- */}
+        {/* ---- Diagnostics summary bar (hidden when compose-linter plugin is disabled) ---- */}
+        {linterPluginEnabled && (
         <div className="flex items-center gap-3 px-5 py-2 border-t border-white/[0.06] bg-slate-900/60 shrink-0">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Lint</span>
           {(activeTab === 'compose' ? composeDiagnostics.length : envDiagnostics.length) === 0 ? (
@@ -1556,6 +1561,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             </>
           )}
         </div>
+        )}
 
         {/* ---- Footer ---- */}
         <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.06] shrink-0">

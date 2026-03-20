@@ -155,7 +155,7 @@ function matchesCategory(template: TemplateInfo, filter: CategoryId): boolean {
 function parseComposeVariables(compose: string): { name: string; defaultValue: string }[] {
   const varMap = new Map<string, string>()
   // Match ${VAR}, ${VAR:-default}, ${VAR:-}, ${VAR:?err}
-  const regex = /\$\{([A-Z_][A-Z0-9_]*)(?::?[-=?+]([^}]*))?\}/g
+  const regex = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?[-=?+]([^}]*))?\}/g
   let match: RegExpExecArray | null
   while ((match = regex.exec(compose)) !== null) {
     const varName = match[1]
@@ -210,7 +210,7 @@ function lintCompose(compose: string): LintWarning[] {
 
   for (const svc of services) {
     // Extract the service block (rough heuristic — from service name to next same-indent service or end)
-    const svcRegex = new RegExp(`^  ${svc}:(.+?)(?=^  [a-zA-Z_-][a-zA-Z0-9_-]*:|\\Z)`, 'ms')
+    const svcRegex = new RegExp(`^  ${svc}:(.+?)(?=^  [a-zA-Z_-][a-zA-Z0-9_-]*:|(?![\\s\\S]))`, 'ms')
     const svcMatch = compose.match(svcRegex)
     if (!svcMatch) continue
     const block = svcMatch[0]
@@ -345,8 +345,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     return matches ? matches.map((m) => m.trim().replace(/:$/, '')) : [template.name]
   }, [detail, template.name])
 
-  // Compose lint warnings (client-side compose-linter)
-  const lintWarnings = useMemo(() => lintCompose(detail?.compose || ''), [detail?.compose])
+  // Compose lint warnings (client-side compose-linter — respects plugin toggle)
+  const linterEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
+  const lintWarnings = useMemo(() => linterEnabled ? lintCompose(detail?.compose || '') : [], [detail?.compose, linterEnabled])
 
   // Plugin hooks awareness — which active plugins fire during deployment
   const plugins = usePluginStore((s) => s.plugins)

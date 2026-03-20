@@ -110,7 +110,9 @@ function DisconnectedHero() {
           {isConnecting
             ? 'Establishing connection to the API server...'
             : isError
-              ? <>Unable to reach <span className="font-mono text-slate-400">{serverUrl}</span>. Make sure the server is running.</>
+              ? serverUrl === '/api'
+                ? <>Unable to reach the API server. Run <span className="font-mono text-slate-400">./setup.sh</span> or <span className="font-mono text-slate-400">./start.sh</span> on your host.</>
+                : <>Unable to reach <span className="font-mono text-slate-400">{serverUrl}</span>. Make sure the server is running.</>
               : <>Connect to your Docker Compose Skeleton API to see live dashboard data.</>
           }
         </p>
