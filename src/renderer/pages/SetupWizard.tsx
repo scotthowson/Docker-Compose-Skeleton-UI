@@ -15,7 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup, authLogin,
+  authSetup, authLogin, deployTemplate,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
@@ -198,7 +198,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showStartup, setShowStartup] = useState(false)
   const [showBackup, setShowBackup] = useState(false)
+  const [showTraefik, setShowTraefik] = useState(false)
   const [showPreferences, setShowPreferences] = useState(false)
+
+  // Traefik HTTPS configuration
+  const [enableTraefik, setEnableTraefik] = useState(false)
+  const [traefikEmail, setTraefikEmail] = useState('')
+  const [traefikTrustedLan, setTraefikTrustedLan] = useState('192.168.1.0/24')
+  const [cfDnsToken, setCfDnsToken] = useState('')
+  const [includeDockerSocket, setIncludeDockerSocket] = useState(true)
 
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
@@ -431,6 +439,25 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
       // 2. Mark setup as complete
       await setupComplete()
+
+      // 2b. Deploy Traefik if enabled (non-fatal — setup already succeeded)
+      if (enableTraefik && envVars.PROXY_DOMAIN && traefikEmail) {
+        try {
+          await deployTemplate('traefik', {
+            target_stack: 'networking-security',
+            variables: {
+              TRAEFIK_DOMAIN: envVars.PROXY_DOMAIN,
+              TRAEFIK_ACME_EMAIL: traefikEmail,
+              TRAEFIK_TRUSTED_LAN: traefikTrustedLan,
+              ...(cfDnsToken ? { CF_DNS_API_TOKEN: cfDnsToken } : {}),
+            },
+            auto_start: true,
+            exclude_services: includeDockerSocket ? [] : ['docker-socket-proxy'],
+          })
+        } catch {
+          // Traefik deploy failed — user can deploy later from Templates page
+        }
+      }
 
       // 3. Persist client-side dashboard preferences
       const settingsState = useSettingsStore.getState()
@@ -1119,6 +1146,118 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   )}
                 </div>
 
+                {/* ── HTTPS with Traefik (collapsible) ── */}
+                <div className={`border rounded-xl overflow-hidden ${enableTraefik ? 'border-emerald-500/20 glow-emerald' : 'border-white/[0.06]'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTraefik(!showTraefik)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Shield size={14} className="text-emerald-400" />
+                      <span className="text-xs font-semibold text-slate-300">HTTPS & Reverse Proxy</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">Recommended</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {enableTraefik && <span className="text-[9px] text-emerald-400 font-medium">Enabled</span>}
+                      <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showTraefik ? 'rotate-90' : ''}`} />
+                    </div>
+                  </button>
+                  {showTraefik && (
+                    <div className="px-4 py-4 space-y-4 border-t border-white/[0.04] animate-fade-in">
+                      {/* Master toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-medium text-slate-300">Enable HTTPS with Traefik</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Automatic TLS certificates via Let's Encrypt</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEnableTraefik(!enableTraefik)}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${enableTraefik ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enableTraefik ? 'translate-x-5' : ''}`} />
+                        </button>
+                      </div>
+
+                      {enableTraefik && (
+                        <div className="space-y-3 animate-fade-in">
+                          {/* Domain (read-only, inherited from PROXY_DOMAIN) */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Domain</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={envVars.PROXY_DOMAIN || 'example.com'}
+                                disabled
+                                className="flex-1 px-3 py-2.5 bg-slate-800/30 border border-white/5 rounded-lg text-sm text-slate-400 font-mono"
+                              />
+                              <span className="text-[9px] text-slate-600 shrink-0">from Domain above</span>
+                            </div>
+                          </div>
+
+                          {/* Email for Let's Encrypt */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                              Let's Encrypt Email <span className="text-rose-400">*</span>
+                            </label>
+                            <input
+                              type="email"
+                              value={traefikEmail}
+                              onChange={(e) => setTraefikEmail(e.target.value)}
+                              placeholder="admin@example.com"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                            />
+                            <p className="text-[10px] text-slate-600 mt-1">Used for certificate expiry notifications</p>
+                          </div>
+
+                          {/* Trusted LAN */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Trusted LAN Subnet</label>
+                            <input
+                              type="text"
+                              value={traefikTrustedLan}
+                              onChange={(e) => setTraefikTrustedLan(e.target.value)}
+                              placeholder="192.168.1.0/24"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                            />
+                          </div>
+
+                          {/* Docker Socket Proxy toggle */}
+                          <div className="flex items-center justify-between py-2">
+                            <div>
+                              <p className="text-xs font-medium text-slate-300">Include Docker Socket Proxy</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">Secure read-only Docker API access (recommended)</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIncludeDockerSocket(!includeDockerSocket)}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${includeDockerSocket ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includeDockerSocket ? 'translate-x-5' : ''}`} />
+                            </button>
+                          </div>
+
+                          {/* Cloudflare DNS (optional) */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                              Cloudflare DNS API Token <span className="text-[9px] text-slate-600">(optional)</span>
+                            </label>
+                            <input
+                              type="password"
+                              value={cfDnsToken}
+                              onChange={(e) => setCfDnsToken(e.target.value)}
+                              placeholder="Leave empty for HTTP challenge"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                            />
+                            <p className="text-[10px] text-slate-600 mt-1">Required for wildcard certs or DNS challenge. Uses HTTP-01 challenge if empty.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* ── Dashboard Preferences (collapsible) ── */}
                 <div className="border border-white/[0.06] rounded-xl overflow-hidden">
                   <button
@@ -1532,6 +1671,42 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   </div>
                 )}
+
+                {/* HTTPS & Reverse Proxy */}
+                <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/[0.06]'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield size={14} className={enableTraefik ? 'text-emerald-400' : 'text-slate-500'} />
+                    <h3 className="text-xs font-semibold text-slate-300">HTTPS & Reverse Proxy</h3>
+                  </div>
+                  {enableTraefik ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-emerald-500/5">
+                        <span className="text-[10px] text-emerald-400 font-medium">Traefik Enabled</span>
+                        <span className="text-[10px] text-emerald-400">✓</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <span className="text-[10px] text-slate-500">Domain</span>
+                        <span className="text-[10px] font-mono text-slate-300">{envVars.PROXY_DOMAIN}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <span className="text-[10px] text-slate-500">ACME Email</span>
+                        <span className="text-[10px] font-mono text-slate-300">{traefikEmail}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <span className="text-[10px] text-slate-500">Docker Socket Proxy</span>
+                        <span className="text-[10px] text-slate-300">{includeDockerSocket ? 'Included' : 'Excluded'}</span>
+                      </div>
+                      {cfDnsToken && (
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <span className="text-[10px] text-slate-500">Cloudflare DNS</span>
+                          <span className="text-[10px] text-slate-300">Configured</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 px-2">Not configured — can be enabled later from Templates</p>
+                  )}
+                </div>
 
                 {/* Stack Order */}
                 <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
