@@ -1224,18 +1224,27 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           </div>
 
                           {/* Docker Socket Proxy toggle */}
-                          <div className="flex items-center justify-between py-2">
+                          <div className="flex items-center justify-between py-2 group/dsp relative">
                             <div>
-                              <p className="text-xs font-medium text-slate-300">Include Docker Socket Proxy</p>
-                              <p className="text-[10px] text-slate-500 mt-0.5">Secure read-only Docker API access (recommended)</p>
+                              <p className={`text-xs font-medium ${isWebMode() ? 'text-slate-400' : 'text-slate-300'}`}>Include Docker Socket Proxy</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                {isWebMode() ? 'Enabled by default in AIO for security' : 'Secure read-only Docker API access (recommended)'}
+                              </p>
                             </div>
                             <button
                               type="button"
-                              onClick={() => setIncludeDockerSocket(!includeDockerSocket)}
-                              className={`relative w-10 h-5 rounded-full transition-colors ${includeDockerSocket ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                              onClick={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${includeDockerSocket ? 'bg-emerald-500' : 'bg-slate-700'} ${isWebMode() ? 'opacity-60 cursor-not-allowed' : ''}`}
                             >
                               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includeDockerSocket ? 'translate-x-5' : ''}`} />
                             </button>
+                            {isWebMode() && (
+                              <div className="absolute right-0 bottom-full mb-1 hidden group-hover/dsp:block z-50 animate-fade-in">
+                                <div className="bg-slate-800/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl px-3 py-2 text-[10px] text-slate-300 whitespace-nowrap">
+                                  Locked on in AIO — Docker Socket Proxy secures the Docker API
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Cloudflare DNS (optional) */}
