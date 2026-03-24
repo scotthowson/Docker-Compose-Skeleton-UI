@@ -122,7 +122,7 @@ export function ServerSwitcher() {
   return (
     <div ref={dropdownRef} className="relative">
       {/* Trigger button */}
-      <button onClick={() => { setOpen(!open); if (open) { setEditingId(null); resetAddForm() } }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors group">
+      <button onClick={() => { setOpen(!open); if (open) { setEditingId(null); resetAddForm() } }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors duration-200 group">
         <div className="relative">
           <Server className="w-4 h-4 text-slate-400" />
           <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusDot} ring-2 ring-slate-900 transition-colors duration-500`} />
@@ -241,7 +241,7 @@ export function ServerSwitcher() {
           </div>
 
           {/* Add Server section */}
-          <div className="border-t border-white/[0.06]">
+          <div className="border-t border-white/5">
             {showAddForm ? (
               <div className="p-2.5 space-y-2 animate-fade-in">
                 <input
@@ -249,7 +249,7 @@ export function ServerSwitcher() {
                   value={newName}
                   onChange={e => { setNewName(e.target.value); setAddError('') }}
                   placeholder="Server name"
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white placeholder-slate-500 border border-white/[0.06] focus:border-cyan-500/30 focus:outline-none transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:outline-none transition-colors"
                   onKeyDown={e => { if (e.key === 'Enter' && newName.trim() && newUrl.trim()) handleAdd(); if (e.key === 'Escape') resetAddForm() }}
                 />
                 <input
@@ -257,7 +257,7 @@ export function ServerSwitcher() {
                   onChange={e => { setNewUrl(e.target.value); setAddError('') }}
                   placeholder="http://192.168.1.100:9876"
                   className={`w-full px-2.5 py-1.5 rounded-lg bg-black/30 text-sm text-white font-mono placeholder-slate-500 border focus:outline-none transition-colors ${
-                    addError ? 'border-rose-500/30 focus:border-rose-500/40' : 'border-white/[0.06] focus:border-cyan-500/30'
+                    addError ? 'border-rose-500/30 focus:border-rose-500/40' : 'border-white/5 focus:border-cyan-500/30'
                   }`}
                   onKeyDown={e => { if (e.key === 'Enter' && newName.trim() && newUrl.trim()) handleAdd(); if (e.key === 'Escape') resetAddForm() }}
                 />
@@ -288,7 +288,7 @@ export function ServerSwitcher() {
               <div className="p-1">
                 <button
                   onClick={() => setShowAddForm(true)}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-emerald-400 hover:bg-white/[0.04] transition-colors"
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-emerald-400 hover:bg-white/5 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   Add Server

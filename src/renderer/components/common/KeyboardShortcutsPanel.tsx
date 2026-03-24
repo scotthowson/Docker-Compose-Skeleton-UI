@@ -60,11 +60,11 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-slate-900/95 backdrop-blur-xl rounded-2xl w-full max-w-lg mx-4 border border-white/[0.08] shadow-2xl shadow-black/40 animate-scale-in"
+        className="bg-slate-900/95 backdrop-blur-xl rounded-2xl w-full max-w-lg mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
               <Keyboard size={16} className="text-violet-400" />
@@ -99,8 +99,8 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
                     <div className="flex items-center gap-1">
                       {shortcut.keys.map((key, i) => (
                         <span key={i}>
-                          {i > 0 && <span className="text-slate-600 mx-0.5">+</span>}
-                          <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-6 px-1.5 rounded-md bg-slate-800/80 border border-white/[0.08] text-[11px] font-mono font-medium text-slate-300 shadow-sm">
+                          {i > 0 && <span className="text-slate-500 mx-0.5">+</span>}
+                          <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-6 px-1.5 rounded-md bg-slate-800/80 border border-white/10 text-[11px] font-mono font-medium text-slate-300 shadow-sm">
                             {key}
                           </kbd>
                         </span>
@@ -114,9 +114,9 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-white/[0.06] text-center">
-          <p className="text-[11px] text-slate-600">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800/60 border border-white/[0.06] text-[10px] font-mono text-slate-400">?</kbd> anytime to toggle this panel
+        <div className="px-6 py-3 border-t border-white/5 text-center">
+          <p className="text-[11px] text-slate-500">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800/60 border border-white/5 text-[10px] font-mono text-slate-400">?</kbd> anytime to toggle this panel
           </p>
         </div>
       </div>

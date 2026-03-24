@@ -64,7 +64,7 @@ function EventRow({ event, index }: { event: EventEntry; index: number }) {
 
   return (
     <div
-      className="flex items-center gap-3 py-2.5 px-2 rounded-lg group hover:bg-white/[0.04] hover:border-white/[0.06] border border-transparent transition-all duration-200 animate-fade-in"
+      className="flex items-center gap-3 py-2.5 px-2 rounded-lg group hover:bg-white/5 hover:border-white/5 border border-transparent transition-all duration-200 animate-fade-in"
       style={{ animationDelay: `${index * 30}ms` }}
     >
       {/* Type icon */}
@@ -83,7 +83,7 @@ function EventRow({ event, index }: { event: EventEntry; index: number }) {
       </span>
 
       {/* Timestamp */}
-      <span className="flex-shrink-0 text-[11px] text-slate-600 tabular-nums">
+      <span className="flex-shrink-0 text-[11px] text-slate-500 tabular-nums">
         {formatTimestamp(event.timestamp)}
       </span>
     </div>
@@ -99,18 +99,18 @@ function EmptyState() {
       {isDisconnected ? (
         <>
           <div className="rounded-xl bg-slate-800/40 p-4 mb-3">
-            <Zap className="h-6 w-6 text-slate-600" />
+            <Zap className="h-6 w-6 text-slate-500" />
           </div>
           <p className="text-sm text-slate-500">No events available</p>
-          <p className="text-xs text-slate-600 mt-1">Connect to API server to see Docker events</p>
+          <p className="text-xs text-slate-500 mt-1">Connect to API server to see Docker events</p>
         </>
       ) : (
         <>
           <div className="rounded-xl bg-slate-800/40 p-4 mb-3">
-            <Activity className="h-6 w-6 text-slate-600" />
+            <Activity className="h-6 w-6 text-slate-500" />
           </div>
           <p className="text-sm text-slate-500">No recent events</p>
-          <p className="text-xs text-slate-600 mt-1">Events will appear here as Docker activity occurs</p>
+          <p className="text-xs text-slate-500 mt-1">Events will appear here as Docker activity occurs</p>
         </>
       )}
     </div>
@@ -164,7 +164,7 @@ export default function RecentEvents({ collapsible = false }: { collapsible?: bo
         </h3>
         <div className="flex items-center gap-2">
           {recentEvents.length > 0 && !collapsed && (
-            <span className="text-[11px] text-slate-600 font-mono">
+            <span className="text-[11px] text-slate-500 font-mono">
               {recentEvents.length} events
             </span>
           )}

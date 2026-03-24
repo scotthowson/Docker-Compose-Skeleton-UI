@@ -174,7 +174,7 @@ function ResourceGauge({ label, value, icon: Icon, color, detail }: {
   const barColor = pct > 90 ? 'bg-rose-500' : pct > 70 ? 'bg-amber-500' : `bg-${color}-500`
 
   return (
-    <div className="glass-subtle rounded-xl p-4">
+    <div className="glass rounded-xl border border-white/5 hover:border-white/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 p-4">
       <div className="flex items-center gap-2 mb-2">
         <Icon size={14} className={`text-${color}-400`} />
         <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{label}</span>
@@ -254,11 +254,11 @@ function ScoreFactorBar({ label, value, detail }: { label: string; value: number
   return (
     <div className="flex items-center gap-2.5">
       <span className="text-xs text-slate-500 w-[60px] shrink-0">{label}</span>
-      <div className="flex-1 h-2 rounded-full bg-white/[0.04] overflow-hidden">
+      <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
         <div className={`h-full rounded-full ${color} transition-all duration-700`} style={{ width: `${value}%` }} />
       </div>
       <span className="text-xs text-slate-400 w-7 text-right tabular-nums font-medium">{value}</span>
-      {detail && <span className="text-[10px] text-slate-600 w-16 text-right truncate">{detail}</span>}
+      {detail && <span className="text-[10px] text-slate-500 w-16 text-right truncate">{detail}</span>}
     </div>
   )
 }
@@ -397,8 +397,8 @@ export default function Health() {
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Health Monitor</span></h2>
-          <p className="mt-0.5 text-xs md:text-sm text-slate-500">
+          <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Health Monitor</span></h2>
+          <p className="text-sm text-slate-400">
             Real-time container health and system resource monitoring
           </p>
         </div>
@@ -436,7 +436,7 @@ export default function Health() {
 
       {/* Error state */}
       {error && (
-        <div className="glass rounded-xl p-4 border-rose-500/30">
+        <div className="glass rounded-xl p-4 border border-rose-500/20">
           <p className="text-sm text-rose-400">Failed to fetch health data: {error.message}</p>
         </div>
       )}
@@ -466,7 +466,7 @@ export default function Health() {
         </div>
 
         {/* Summary stats grid */}
-        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3 stagger-children">
           {([
             { label: 'Healthy', value: summary.healthy, color: 'text-emerald-400', icon: HeartPulse, iconColor: 'text-emerald-400' },
             { label: 'Unhealthy', value: summary.unhealthy, color: 'text-rose-400', icon: XCircle, iconColor: 'text-rose-400' },
@@ -475,7 +475,7 @@ export default function Health() {
             { label: 'Total Restarts', value: totalRestarts, color: totalRestarts > 10 ? 'text-amber-400' : 'text-slate-100', icon: RefreshCw, iconColor: totalRestarts > 10 ? 'text-amber-400' : 'text-slate-400' },
             { label: 'Running', value: summary.total - summary.stopped, color: 'text-cyan-400', icon: Activity, iconColor: 'text-cyan-400' },
           ] as const).map((item) => (
-            <div key={item.label} className="glass-subtle rounded-xl p-3 md:p-4">
+            <div key={item.label} className="glass rounded-xl border border-white/5 hover:border-white/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 p-3 md:p-4">
               <div className="flex items-center gap-1.5 mb-1">
                 <item.icon size={12} className={item.iconColor} />
                 <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">{item.label}</p>
@@ -487,7 +487,7 @@ export default function Health() {
       </div>
 
       {/* Health Score — gauge + factor breakdown */}
-      <div className="glass-subtle rounded-xl p-5 md:p-6">
+      <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <HeartPulse size={16} className="text-emerald-400" />
@@ -527,8 +527,8 @@ export default function Health() {
 
         {/* Per-stack scores */}
         {healthScoreData?.stacks && healthScoreData.stacks.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-white/[0.04]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Stack Scores</p>
+          <div className="mt-5 pt-4 border-t border-white/[0.03]">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2.5">Stack Scores</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
               {healthScoreData.stacks.map((stack) => {
                 const sg = stack.grade || getGrade(stack.score)
@@ -538,7 +538,7 @@ export default function Health() {
                       <span className="text-[11px] text-slate-300 font-mono truncate">{stack.stack}</span>
                       <span className={`text-[10px] font-semibold ${gradeColors[sg] || 'text-slate-400'}`}>{sg}</span>
                     </div>
-                    <div className="mt-1.5 h-1 rounded-full bg-white/[0.04] overflow-hidden">
+                    <div className="mt-1.5 h-1 rounded-full bg-white/5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${
                           stack.score >= 80 ? 'bg-emerald-500' : stack.score >= 60 ? 'bg-amber-500' : 'bg-rose-500'
@@ -584,7 +584,7 @@ export default function Health() {
 
       {/* Visual health bar */}
       {summary.total > 0 && (
-        <div className="glass-subtle rounded-xl p-4 md:p-5">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 p-4 md:p-5">
           <p className="text-xs md:text-sm font-medium text-slate-300 mb-3">Health Distribution</p>
           <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-800">
             {healthyPct > 0 && (
@@ -624,9 +624,9 @@ export default function Health() {
       )}
 
       {/* Container health table */}
-      <div className="glass-subtle rounded-xl overflow-hidden">
+      <div className="glass rounded-xl overflow-hidden">
         {/* Header with filters */}
-        <div className="px-4 md:px-5 py-3 md:py-4 border-b border-white/[0.06] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="px-4 md:px-5 py-3 md:py-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2 shrink-0">
             <Activity size={16} className="text-emerald-400" />
             Container Health
@@ -636,7 +636,7 @@ export default function Health() {
           </h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             {/* Filter tabs */}
-            <div className="flex items-center gap-0.5 bg-white/[0.02] border border-white/[0.04] rounded-lg p-0.5 shrink-0 overflow-x-auto">
+            <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.03] rounded-lg p-0.5 shrink-0 overflow-x-auto select-none">
               {([
                 { key: 'all', label: 'All' },
                 { key: 'healthy', label: 'OK' },
@@ -667,7 +667,7 @@ export default function Health() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Filter..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-white/[0.03] border border-white/[0.06] text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-all"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-white/[0.03] border border-white/5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-all"
               />
             </div>
           </div>
@@ -677,14 +677,14 @@ export default function Health() {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-white/5">
                 <th
                   className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors"
                   onClick={() => setSortAsc(!sortAsc)}
                 >
                   <span className="inline-flex items-center gap-1">
                     Container
-                    <ArrowUpDown size={10} className="text-slate-600" />
+                    <ArrowUpDown size={10} className="text-slate-500" />
                   </span>
                 </th>
                 <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -704,7 +704,7 @@ export default function Health() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/[0.04]">
+            <tbody className="divide-y divide-white/[0.03]">
               {filteredContainers.length === 0 && !loading && (
                 <tr>
                   <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
@@ -731,14 +731,14 @@ export default function Health() {
                   <td className="px-5 py-3 text-xs text-slate-400 max-w-[200px] truncate font-mono" title={c.image}>
                     {c.image ? c.image.split(':')[0].split('/').pop() : '--'}
                     {c.image?.includes(':') && (
-                      <span className="text-slate-600">:{c.image.split(':').pop()}</span>
+                      <span className="text-slate-500">:{c.image.split(':').pop()}</span>
                     )}
                   </td>
                   <td className="px-5 py-3">{stateBadge(c.state)}</td>
                   <td className="px-5 py-3">{healthBadge(c.health)}</td>
                   <td className="px-5 py-3 text-xs text-slate-400">
                     <span className="inline-flex items-center gap-1">
-                      <Clock size={10} className="text-slate-600" />
+                      <Clock size={10} className="text-slate-500" />
                       {formatUptime(c.uptime_seconds ?? 0)}
                     </span>
                   </td>
@@ -751,7 +751,7 @@ export default function Health() {
                         {c.restart_count}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-600">0</span>
+                      <span className="text-xs text-slate-500">0</span>
                     )}
                   </td>
                 </tr>
@@ -761,7 +761,7 @@ export default function Health() {
         </div>
 
         {/* Mobile card list (shown only on mobile) */}
-        <div className="md:hidden divide-y divide-white/[0.04]">
+        <div className="md:hidden divide-y divide-white/[0.03]">
           {filteredContainers.length === 0 && !loading && (
             <div className="px-4 py-8 text-center text-slate-500 text-xs">
               No container data available
@@ -778,7 +778,7 @@ export default function Health() {
             return (
               <div
                 key={c.name}
-                className="px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                className="px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
                 <button
                   type="button"

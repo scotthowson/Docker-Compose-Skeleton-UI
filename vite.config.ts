@@ -25,5 +25,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Proxy /api to the DCS API server (mirrors Docker nginx behavior)
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:9876',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
 })

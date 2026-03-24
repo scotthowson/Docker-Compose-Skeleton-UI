@@ -2,7 +2,8 @@
 // ContainerRow — Table row + mobile card for a single container
 // =============================================================================
 
-import React from 'react'
+import React, { useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { ContainerInfo, ContainerStats } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
 import {
@@ -125,12 +126,12 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
     <tr
       onClick={() => onClick(container.name)}
       className={`
-        group cursor-pointer transition-all duration-200 border-b border-white/[0.04]
+        group cursor-pointer transition-all duration-200 border-b border-white/[0.03]
         ${batchMode && batchSelected
           ? 'bg-cyan-500/[0.08] border-l-2 border-l-cyan-400'
           : isSelected
             ? 'bg-emerald-500/10 border-l-2 border-l-emerald-400'
-            : 'hover:bg-white/[0.04] border-l-2 border-l-transparent'
+            : 'hover:bg-white/5 border-l-2 border-l-transparent'
         }
       `}
     >
@@ -148,7 +149,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
       <td className="px-1 py-3 w-8">
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
-          className="p-0.5 rounded transition-colors hover:bg-white/[0.06]"
+          className="p-0.5 rounded transition-colors hover:bg-white/5"
           title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Star
@@ -162,28 +163,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
       <td className="px-3 py-3">
         <div className="flex items-center gap-2.5">
           <Box className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
-          <div className="relative group/name">
-            <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors flex items-center gap-1">
-              {container.name}
-              <CopyButton text={container.name} className="opacity-0 group-hover:opacity-100" size={10} />
-            </span>
-            {/* Quick-view popup */}
-            <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/name:block pointer-events-none animate-fade-in" style={{ width: '280px' }}>
-              <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-3 pointer-events-auto">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                  <span className="text-xs font-semibold text-slate-200">{container.name}</span>
-                </div>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between"><span className="text-slate-500">State</span><span className="text-slate-300 capitalize">{container.state}</span></div>
-                  {container.health && <div className="flex justify-between"><span className="text-slate-500">Health</span><span className={`capitalize ${container.health === 'healthy' ? 'text-emerald-400' : container.health === 'unhealthy' ? 'text-rose-400' : 'text-amber-400'}`}>{container.health}</span></div>}
-                  <div className="flex justify-between"><span className="text-slate-500">Image</span><span className="text-slate-300 font-mono truncate ml-2 max-w-[160px]">{container.image}</span></div>
-                  {container.ports && <div className="flex justify-between"><span className="text-slate-500">Ports</span><span className="text-cyan-400 font-mono truncate ml-2 max-w-[160px]">{container.ports}</span></div>}
-                  {container.uptime_seconds > 0 && <div className="flex justify-between"><span className="text-slate-500">Uptime</span><span className="text-slate-400">{formatUptime(container.uptime_seconds)}</span></div>}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ContainerNameWithPopover container={container} formatUptime={formatUptime} />
         </div>
       </td>
 
@@ -293,7 +273,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
           ? 'bg-cyan-500/[0.08] border-cyan-500/20'
           : isSelected
             ? 'bg-emerald-500/[0.06] border-emerald-500/20'
-            : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] active:scale-[0.98]'
+            : 'bg-white/[0.03] border-white/5 hover:bg-white/5 active:scale-[0.98]'
         }
       `}
     >
@@ -341,7 +321,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
       </div>
 
       {/* Bottom: stats + uptime */}
-      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.04]">
+      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.03]">
         {isRunning && stats ? (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
@@ -361,6 +341,66 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
           {formatUptime(container.uptime_seconds)}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Portal-based container name popover (escapes overflow:hidden on parent glass)
+// ---------------------------------------------------------------------------
+function ContainerNameWithPopover({ container, formatUptime }: { container: ContainerInfo; formatUptime: (s: number) => string }) {
+  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const ref = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleEnter = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    setPos({ x: rect.left, y: rect.bottom + 6 })
+    setShow(true)
+  }, [])
+
+  const handleLeave = useCallback(() => {
+    timerRef.current = setTimeout(() => setShow(false), 150)
+  }, [])
+
+  const handlePopoverEnter = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+  }, [])
+
+  return (
+    <div className="relative">
+      <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+        <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors flex items-center gap-1">
+          {container.name}
+          <CopyButton text={container.name} className="opacity-0 group-hover:opacity-100" size={10} />
+        </span>
+      </div>
+      {show && createPortal(
+        <div
+          className="fixed z-[99999] animate-fade-in"
+          style={{ left: pos.x, top: pos.y, width: 280 }}
+          onMouseEnter={handlePopoverEnter}
+          onMouseLeave={handleLeave}
+        >
+          <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/40 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+              <span className="text-xs font-semibold text-slate-200">{container.name}</span>
+            </div>
+            <div className="space-y-1.5 text-[11px]">
+              <div className="flex justify-between"><span className="text-slate-500">State</span><span className="text-slate-300 capitalize">{container.state}</span></div>
+              {container.health && container.health !== 'none' && <div className="flex justify-between"><span className="text-slate-500">Health</span><span className={`capitalize ${container.health === 'healthy' ? 'text-emerald-400' : container.health === 'unhealthy' ? 'text-rose-400' : 'text-amber-400'}`}>{container.health}</span></div>}
+              <div className="flex justify-between"><span className="text-slate-500">Image</span><span className="text-slate-300 font-mono truncate ml-2 max-w-[160px]">{container.image}</span></div>
+              {container.ports && <div className="flex justify-between"><span className="text-slate-500">Ports</span><span className="text-cyan-400 font-mono truncate ml-2 max-w-[160px]">{container.ports}</span></div>}
+              {container.uptime_seconds > 0 && <div className="flex justify-between"><span className="text-slate-500">Uptime</span><span className="text-slate-400">{formatUptime(container.uptime_seconds)}</span></div>}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

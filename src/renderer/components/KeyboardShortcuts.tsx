@@ -62,7 +62,7 @@ const sections: ShortcutSection[] = [
 
 function KeyBadge({ children }: { children: string }) {
   return (
-    <kbd className="rounded-md border border-white/[0.1] bg-white/[0.05] px-2 py-1 font-mono text-xs text-slate-300">
+    <kbd className="rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-xs text-slate-300">
       {children}
     </kbd>
   )
@@ -141,15 +141,15 @@ export function KeyboardShortcuts() {
         className="
           relative w-full max-w-[520px] mx-4
           bg-slate-900/95 backdrop-blur-2xl
-          border border-white/[0.08]
+          border border-white/10
           rounded-2xl shadow-2xl shadow-black/40
           animate-scale-in
         "
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08]">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.05] border border-white/10">
               <Keyboard size={16} className="text-slate-400" />
             </div>
             <h2 className="text-sm font-semibold text-slate-200">
@@ -162,7 +162,7 @@ export function KeyboardShortcuts() {
             onClick={() => setOpen(false)}
             className="
               flex items-center justify-center w-7 h-7 rounded-lg
-              text-slate-500 hover:bg-white/[0.06] hover:text-slate-300
+              text-slate-500 hover:bg-white/5 hover:text-slate-300
               transition-all duration-150
             "
             title="Close"
@@ -191,7 +191,7 @@ export function KeyboardShortcuts() {
                       {shortcut.keys.map((key, kidx) => (
                         <span key={kidx} className="flex items-center gap-1">
                           {kidx > 0 && (
-                            <span className="text-[10px] text-slate-600">+</span>
+                            <span className="text-[10px] text-slate-500">+</span>
                           )}
                           <KeyBadge>{key}</KeyBadge>
                         </span>
@@ -205,10 +205,10 @@ export function KeyboardShortcuts() {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-white/[0.06]">
-          <p className="text-[11px] text-slate-600 text-center">
-            Press <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">?</kbd> or{' '}
-            <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Ctrl+/</kbd> to toggle
+        <div className="px-6 py-3 border-t border-white/5">
+          <p className="text-[11px] text-slate-500 text-center">
+            Press <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">?</kbd> or{' '}
+            <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Ctrl+/</kbd> to toggle
           </p>
         </div>
       </div>

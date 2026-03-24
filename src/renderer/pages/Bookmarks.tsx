@@ -122,7 +122,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="glass-subtle rounded-xl p-5 border-t-2 border-t-emerald-500 animate-fade-in">
+    <form onSubmit={handleSubmit} className="glass rounded-xl p-5 border-t-2 border-t-emerald-500 animate-fade-in">
       <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
         <Plus size={14} className="text-emerald-400" />
         Add Bookmark
@@ -142,7 +142,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
                   px-3 py-1.5 rounded-md text-[11px] font-medium border transition-all capitalize
                   ${type === t
                     ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                    : 'border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'}
+                    : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'}
                 `}
               >
                 {t}
@@ -186,7 +186,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
             onChange={(e) => setLabel(e.target.value)}
             placeholder="My Bookmark"
             autoFocus
-            className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
           />
         </div>
 
@@ -199,7 +199,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
             <select
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50"
             >
               {pageTargets.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
@@ -211,7 +211,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder={type === 'stack' ? 'core-infrastructure' : type === 'container' ? 'nginx-proxy' : 'anything...'}
-              className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
             />
           )}
         </div>
@@ -225,7 +225,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Quick notes about this bookmark..."
-          className="w-full bg-slate-900 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+          className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
         />
       </div>
 
@@ -242,7 +242,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 border border-white/[0.08] hover:bg-white/[0.04] transition-colors"
+          className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 border border-white/10 hover:bg-white/5 transition-colors"
         >
           Cancel
         </button>
@@ -289,7 +289,7 @@ function BookmarkCard({ item, onDelete, onTogglePin, onNavigate }: {
             <h4 className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
               {item.label}
             </h4>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-800 border border-white/[0.06] text-slate-500 uppercase font-medium shrink-0">
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-800 border border-white/5 text-slate-500 uppercase font-medium shrink-0">
               {item.type}
             </span>
           </div>
@@ -297,7 +297,7 @@ function BookmarkCard({ item, onDelete, onTogglePin, onNavigate }: {
           {item.notes && (
             <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">{item.notes}</p>
           )}
-          <p className="text-[10px] text-slate-600 mt-1.5 flex items-center gap-1">
+          <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1">
             <Clock size={9} />
             {timeAgo}
           </p>
@@ -417,33 +417,38 @@ export default function Bookmarks() {
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       {/* Page header */}
       <div className="flex items-center justify-between animate-fade-in">
-        <div>
-          <h2 className="text-base md:text-xl font-bold text-slate-100 flex items-center gap-2">
-            <span className="text-gradient">Bookmarks</span>
-          </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Pin your favorite pages, stacks, and containers for quick access
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/10 flex items-center justify-center text-amber-400">
+            <Bookmark size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">
+              <span className="text-gradient">Bookmarks</span>
+            </h2>
+            <p className="text-sm text-slate-400">
+              Pin your favorite pages, stacks, and containers for quick access
+            </p>
+          </div>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className={`
-            flex items-center gap-2 rounded-lg px-3.5 py-2
-            text-sm font-medium transition-all duration-200
+            flex items-center gap-1.5 rounded-lg px-4 py-2
+            text-xs font-medium transition-all press
             ${showForm
               ? 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10'
-              : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
+              : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25'
             }
           `}
         >
-          {showForm ? <X size={15} /> : <Plus size={15} />}
+          {showForm ? <X size={14} /> : <Plus size={14} />}
           {showForm ? 'Cancel' : 'Add Bookmark'}
         </button>
       </div>
 
       {/* Stats bar */}
       <div className="flex items-center gap-3 animate-fade-in">
-        <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg glass-subtle">
+        <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg glass">
           <span className="text-xs text-slate-500">
             <span className="text-slate-300 font-semibold">{stats.total}</span> bookmarks
           </span>
@@ -474,7 +479,7 @@ export default function Bookmarks() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search bookmarks..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-white/[0.06] rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30"
+            className="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-white/5 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30"
           />
           {search && (
             <button
@@ -494,7 +499,7 @@ export default function Bookmarks() {
                 px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition-all capitalize
                 ${filter === f
                   ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                  : 'border-white/[0.04] text-slate-500 hover:text-slate-300 hover:border-white/10'}
+                  : 'border-white/[0.03] text-slate-500 hover:text-slate-300 hover:border-white/10'}
               `}
             >
               {f}
@@ -507,7 +512,7 @@ export default function Bookmarks() {
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
           <div className="rounded-2xl bg-slate-800/40 p-6 mb-4">
-            <FolderHeart size={40} className="text-slate-600" />
+            <FolderHeart size={40} className="text-slate-500" />
           </div>
           <h3 className="text-lg font-semibold text-slate-300 mb-2">
             {bookmarks.length === 0 ? 'No bookmarks yet' : 'No matches'}
@@ -520,9 +525,9 @@ export default function Bookmarks() {
           {bookmarks.length === 0 && (
             <button
               onClick={() => setShowForm(true)}
-              className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all press"
+              className="mt-4 flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               Create Your First Bookmark
             </button>
           )}

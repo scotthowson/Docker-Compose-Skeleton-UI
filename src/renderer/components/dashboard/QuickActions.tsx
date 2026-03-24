@@ -270,7 +270,7 @@ export default function QuickActions({ collapsible = false }: { collapsible?: bo
                 className="
                   group flex flex-col items-center gap-2.5 p-4
                   rounded-xl bg-slate-800/30 border border-white/[0.03]
-                  hover:border-white/[0.08] hover:bg-slate-800/50
+                  hover:border-white/10 hover:bg-slate-800/50
                   hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20
                   disabled:opacity-50
                   transition-all duration-200

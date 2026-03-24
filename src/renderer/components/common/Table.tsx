@@ -87,7 +87,7 @@ export function Table<T>({
     if (!sortable) return null
 
     if (sortKey !== key || sortDirection === null) {
-      return <ChevronsUpDown size={14} className="text-slate-600" />
+      return <ChevronsUpDown size={14} className="text-slate-500" />
     }
     if (sortDirection === 'asc') {
       return <ChevronUp size={14} className="text-emerald-400" />
@@ -104,11 +104,11 @@ export function Table<T>({
   }
 
   return (
-    <div className="overflow-x-auto scrollbar-thin rounded-xl border border-white/[0.06]">
+    <div className="overflow-x-auto scrollbar-thin rounded-xl border border-white/5">
       <table className="w-full text-sm text-left">
         {/* Header */}
         <thead>
-          <tr className="bg-white/[0.04] border-b border-white/[0.06]">
+          <tr className="bg-white/5 border-b border-white/5">
             {columns.map((col) => (
               <th
                 key={col.key}
@@ -138,7 +138,7 @@ export function Table<T>({
               className={`
                 border-b border-white/[0.03] last:border-b-0
                 ${rowIndex % 2 === 1 ? 'bg-white/[0.015]' : 'bg-transparent'}
-                ${onRowClick ? 'cursor-pointer hover:bg-white/[0.06] transition-colors duration-150' : ''}
+                ${onRowClick ? 'cursor-pointer hover:bg-white/5 transition-colors duration-150' : ''}
               `}
             >
               {columns.map((col) => (

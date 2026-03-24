@@ -67,7 +67,7 @@ interface BatchResult {
 
 function SkeletonRow() {
   return (
-    <tr className="border-b border-white/[0.04]">
+    <tr className="border-b border-white/[0.03]">
       <td className="px-5 py-4">
         <div className="h-4 w-48 bg-white/[0.06] rounded-md animate-pulse" />
       </td>
@@ -140,7 +140,7 @@ function DeleteConfirmModal({
       >
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
             <AlertTriangle size={18} className="text-rose-400" />
           </div>
           <div>
@@ -238,7 +238,7 @@ function BatchDeleteConfirmModal({
       >
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
             <AlertTriangle size={18} className="text-rose-400" />
           </div>
           <div>
@@ -264,7 +264,7 @@ function BatchDeleteConfirmModal({
             placeholder={expected}
             className="
               mt-2 w-full px-3 py-2
-              bg-white/[0.03] border border-white/[0.08] rounded-lg
+              bg-white/[0.03] border border-white/10 rounded-lg
               text-sm text-slate-200 placeholder-slate-600
               focus:outline-none focus:border-rose-500/30 focus:ring-1 focus:ring-rose-500/15
               transition-all duration-200
@@ -504,9 +504,9 @@ export default function Volumes() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-24 animate-fade-in">
-        <Loader2 className="w-8 h-8 text-slate-600 animate-spin mb-4" />
+        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
         <p className="text-sm text-slate-500">Waiting for server connection...</p>
-        <p className="text-xs text-slate-600 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Ensure the Docker Compose Skeleton API server is running
         </p>
       </div>
@@ -538,13 +538,18 @@ export default function Volumes() {
       {/* Page Header                                                       */}
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base md:text-xl font-bold text-slate-100">
-            <span className="text-gradient">Volumes</span>
-          </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage Docker volume storage and persistent data
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
+            <HardDrive className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">
+              <span className="text-gradient">Volumes</span>
+            </h2>
+            <p className="text-sm text-slate-400">
+              Manage Docker volume storage and persistent data
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
@@ -677,7 +682,7 @@ export default function Volumes() {
       {/* Summary Stat Cards                                                */}
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-children">
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Database size={14} className="text-cyan-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
@@ -688,7 +693,7 @@ export default function Volumes() {
             {hasLoaded ? volumes.length : '--'}
           </p>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <HardDrive size={14} className="text-emerald-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
@@ -699,7 +704,7 @@ export default function Volumes() {
             {hasLoaded ? formatBytes(totalSize) : '--'}
           </p>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <FolderOpen size={14} className="text-violet-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
@@ -724,7 +729,7 @@ export default function Volumes() {
             )}
           </div>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <AlertTriangle size={14} className="text-amber-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
@@ -756,7 +761,7 @@ export default function Volumes() {
         <div className="relative flex-1">
           <Search
             size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
           />
           <input
             type="text"
@@ -765,7 +770,7 @@ export default function Volumes() {
             placeholder="Search volumes by name, driver, or mountpoint..."
             className="
               w-full pl-9 pr-4 py-2.5
-              bg-white/[0.03] border border-white/[0.06] rounded-lg
+              bg-white/[0.03] border border-white/5 rounded-lg
               text-sm text-slate-200 placeholder-slate-600
               focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15
               transition-all duration-200
@@ -789,7 +794,7 @@ export default function Volumes() {
                 flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
                 ${
                   sortField === field
-                    ? 'bg-white/[0.06] border-white/[0.1] text-slate-200'
+                    ? 'bg-white/[0.06] border-white/10 text-slate-200'
                     : 'border-transparent text-slate-500 hover:text-slate-300'
                 }
               `}
@@ -818,14 +823,14 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
         {/* Table header bar */}
-        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
             <HardDrive size={16} className="text-cyan-400" />
             Docker Volumes
           </h3>
           <div className="flex items-center gap-1.5">
-            <Database size={11} className="text-slate-600" />
-            <span className="text-[10px] text-slate-600">
+            <Database size={11} className="text-slate-500" />
+            <span className="text-[10px] text-slate-500">
               {hasLoaded
                 ? `${filteredVolumes.length} volume${filteredVolumes.length !== 1 ? 's' : ''} \u00B7 ${formatBytes(totalSize)} total`
                 : 'Loading...'}
@@ -836,7 +841,7 @@ export default function Volumes() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-white/5">
                 {/* Batch checkbox column */}
                 {batchMode && (
                   <th className="text-center px-3 py-3 w-10">
@@ -900,7 +905,7 @@ export default function Volumes() {
                     <div className="flex flex-col items-center gap-4">
                       <div className="relative">
                         <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl" />
-                        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/[0.06] glow-cyan">
+                        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/5 glow-cyan">
                           <Database
                             size={28}
                             className="text-cyan-400/60"
@@ -914,7 +919,7 @@ export default function Volumes() {
                             ? 'No volumes match your search'
                             : 'No volumes found'}
                         </p>
-                        <p className="text-xs text-slate-600 mt-1 max-w-sm leading-relaxed">
+                        <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
                           {searchQuery
                             ? 'Try adjusting your search query or clearing the filter.'
                             : 'Docker volumes provide persistent storage for container data. They will appear here automatically when your stacks create named volumes.'}
@@ -949,11 +954,11 @@ export default function Volumes() {
                       key={vol.name}
                       onClick={batchMode ? () => toggleVolumeSelection(vol.name) : undefined}
                       className={`
-                        border-b border-white/[0.04] group transition-colors duration-150
+                        border-b border-white/[0.03] group transition-colors duration-150
                         ${batchMode ? 'cursor-pointer' : ''}
                         ${isSelected
                           ? 'bg-emerald-500/[0.06] hover:bg-emerald-500/[0.08]'
-                          : 'hover:bg-white/[0.02]'
+                          : 'hover:bg-white/[0.03]'
                         }
                       `}
                     >
@@ -963,7 +968,7 @@ export default function Volumes() {
                           {isSelected ? (
                             <CheckSquare size={15} className="text-emerald-400 mx-auto" />
                           ) : (
-                            <Square size={15} className="text-slate-600 mx-auto" />
+                            <Square size={15} className="text-slate-500 mx-auto" />
                           )}
                         </td>
                       )}
@@ -1017,7 +1022,7 @@ export default function Volumes() {
                             onClick={() => setDeleteTarget(vol.name)}
                             className="
                               p-1.5 rounded-md
-                              text-slate-600 hover:text-rose-400 hover:bg-rose-500/10
+                              text-slate-500 hover:text-rose-400 hover:bg-rose-500/10
                               opacity-0 group-hover:opacity-100
                               transition-all duration-200
                             "

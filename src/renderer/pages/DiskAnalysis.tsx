@@ -104,11 +104,11 @@ function DeepPruneModal({ onConfirm, onCancel }: PruneModalProps) {
       onClick={onCancel}
     >
       <div
-        className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in"
+        className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
             <Trash2 size={18} className="text-rose-400" />
           </div>
           <div>
@@ -243,8 +243,8 @@ export default function DiskAnalysis() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <WifiOff size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to view disk analysis</p>
       </div>
@@ -282,21 +282,21 @@ export default function DiskAnalysis() {
     return (
       <div className="space-y-3 md:space-y-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
-            <HardDrive size={20} />
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5">
+            <HardDrive size={24} className="text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
-            <p className="text-xs text-slate-500">Docker disk usage breakdown</p>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Docker disk usage breakdown</p>
           </div>
         </div>
-        <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/15 rounded-xl p-6 text-center">
+        <div className="glass border border-rose-500/15 rounded-xl p-6 text-center">
           <PieChart size={28} className="text-rose-500/40 mx-auto mb-3" />
           <p className="text-sm text-slate-400 mb-1">Failed to load disk analysis</p>
-          <p className="text-xs text-slate-600 mb-4">{error.message}</p>
+          <p className="text-xs text-slate-500 mb-4">{error.message}</p>
           <button
             onClick={refresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
           >
             <RefreshCw size={13} />
             Retry
@@ -314,20 +314,20 @@ export default function DiskAnalysis() {
     return (
       <div className="space-y-3 md:space-y-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
-            <HardDrive size={20} />
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5">
+            <HardDrive size={24} className="text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
-            <p className="text-xs text-slate-500">Docker disk usage breakdown</p>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Docker disk usage breakdown</p>
           </div>
         </div>
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 md:p-12 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
-            <PieChart size={24} className="text-slate-600" />
+        <div className="glass border border-white/5 rounded-xl p-8 md:p-12 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center mx-auto mb-4">
+            <PieChart size={24} className="text-slate-500" />
           </div>
           <p className="text-sm text-slate-400 font-medium mb-1.5">No disk data available</p>
-          <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
+          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
             Disk analysis data will appear here once Docker services are running and the
             maintenance endpoint reports usage statistics.
           </p>
@@ -355,13 +355,13 @@ export default function DiskAnalysis() {
       {/* Page header                                                        */}
       {/* ----------------------------------------------------------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
-            <HardDrive size={20} />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5">
+            <HardDrive size={24} className="text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Disk Analysis</span></h2>
-            <p className="text-xs text-slate-500">
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">
               {disk?.total_app_data
                 ? `Total application data: ${disk.total_app_data}`
                 : 'Docker disk usage breakdown'}
@@ -392,7 +392,7 @@ export default function DiskAnalysis() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
@@ -405,7 +405,7 @@ export default function DiskAnalysis() {
       {/* ----------------------------------------------------------------- */}
       {disk?.total_app_data && (
         <div
-          className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in"
+          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
           style={{ animationDelay: '60ms' }}
         >
           <div className="flex items-center gap-3">
@@ -429,7 +429,7 @@ export default function DiskAnalysis() {
       {/* ----------------------------------------------------------------- */}
       {disk?.docker_df && disk.docker_df.length > 0 && (
         <div
-          className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in"
+          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
           style={{ animationDelay: '120ms' }}
         >
           <div className="flex items-center gap-2 mb-4">
@@ -496,7 +496,7 @@ export default function DiskAnalysis() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-white/5">
                   <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
                   <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
                   <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Active</th>
@@ -504,9 +504,9 @@ export default function DiskAnalysis() {
                   <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Reclaimable</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-white/[0.03]">
                 {disk.docker_df.map((row: DiskDfEntry) => (
-                  <tr key={row.type} className="hover:bg-white/[0.02] transition-colors duration-150">
+                  <tr key={row.type} className="hover:bg-white/[0.03] transition-colors duration-150">
                     <td className="px-4 py-2 text-xs">
                       <div className="flex items-center gap-2">
                         {dfIcon(row.type)}
@@ -534,7 +534,7 @@ export default function DiskAnalysis() {
       {/* ----------------------------------------------------------------- */}
       {sortedStacks.length > 0 && (
         <div
-          className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in"
+          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
           style={{ animationDelay: '180ms' }}
         >
           <div className="flex items-center justify-between mb-4">
@@ -544,7 +544,7 @@ export default function DiskAnalysis() {
                 Per-Stack App Data
               </h3>
             </div>
-            <span className="text-[10px] text-slate-600">
+            <span className="text-[10px] text-slate-500">
               {sortedStacks.length} stack{sortedStacks.length === 1 ? '' : 's'}
             </span>
           </div>

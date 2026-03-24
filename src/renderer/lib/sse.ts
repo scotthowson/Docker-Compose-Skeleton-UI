@@ -4,6 +4,7 @@
 
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { apiClient } from '../api/client'
 
 export type SSEEventType = 'docker-event' | 'metrics' | 'log-line' | 'health-score' | 'keepalive'
 
@@ -22,18 +23,25 @@ class SSEClient {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 20
   private _connected = false
+  private _authFailed = false
 
   connect(): void {
     this.disconnect()
+    this._authFailed = false
 
     const { serverUrl } = useSettingsStore.getState()
-    const url = `${serverUrl}/stream`
+    // Pass auth token as query parameter since EventSource can't set headers
+    const token = apiClient.getAuthToken()
+    const url = token
+      ? `${serverUrl}/stream?token=${encodeURIComponent(token)}`
+      : `${serverUrl}/stream`
 
     try {
       this.eventSource = new EventSource(url)
 
       this.eventSource.onopen = () => {
         this._connected = true
+        this._authFailed = false
         this.reconnectAttempts = 0
       }
 
@@ -53,6 +61,11 @@ class SSEClient {
 
       this.eventSource.onerror = () => {
         this._connected = false
+        // Check if this was an auth failure (EventSource fires onerror for HTTP errors)
+        // If readyState is CLOSED and we never connected, likely 401
+        if (this.eventSource?.readyState === EventSource.CLOSED && this.reconnectAttempts === 0) {
+          this._authFailed = true
+        }
         this.eventSource?.close()
         this.eventSource = null
         this.scheduleReconnect()
@@ -101,6 +114,18 @@ class SSEClient {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return
     const { status } = useConnectionStore.getState()
     if (status === 'disconnected') return
+
+    // If auth failed, use long backoff (don't spam 401s) — retry every 60s max 5 times
+    if (this._authFailed) {
+      if (this.reconnectAttempts >= 5) return
+      const delay = 60000
+      this.reconnectAttempts++
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null
+        this.connect()
+      }, delay)
+      return
+    }
 
     const delay = Math.min(1000 * Math.pow(2, Math.min(this.reconnectAttempts, 5)), 30000)
     this.reconnectAttempts++

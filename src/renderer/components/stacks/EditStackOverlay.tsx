@@ -780,8 +780,8 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       return (
         <div className="overflow-y-auto flex-1 scrollbar-thin bg-slate-950">
           {/* Header row */}
-          <div className="grid grid-cols-2 sticky top-0 z-10 border-b border-white/[0.06]">
-            <div className="px-4 py-2 text-[10px] uppercase tracking-wider bg-slate-900/90 backdrop-blur-sm font-sans font-semibold flex items-center gap-2 border-r border-white/[0.06]">
+          <div className="grid grid-cols-2 sticky top-0 z-10 border-b border-white/5">
+            <div className="px-4 py-2 text-[10px] uppercase tracking-wider bg-slate-900/90 backdrop-blur-sm font-sans font-semibold flex items-center gap-2 border-r border-white/5">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400/60" />
               <span className="text-slate-400">Original</span>
             </div>
@@ -802,7 +802,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               return (
                 <div key={idx} className="grid grid-cols-2">
                   {/* Left cell */}
-                  <div className={`flex border-r border-white/[0.06] min-h-6 ${
+                  <div className={`flex border-r border-white/5 min-h-6 ${
                     leftIsChange ? 'bg-rose-500/[0.08]' : leftIsPlaceholder ? 'bg-slate-900/40' : ''
                   }`}>
                     <span className={`inline-block w-10 shrink-0 text-right pr-3 pl-2 text-xs leading-6 select-none tabular-nums ${
@@ -875,20 +875,20 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                         ? 'border-l-2 border-l-rose-400 bg-rose-500/[0.04]'
                         : sev === 'warning'
                           ? 'border-l-2 border-l-amber-400 bg-amber-500/[0.03]'
-                          : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.02]'
-                      : 'hover:bg-white/[0.02]'
+                          : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.03]'
+                      : 'hover:bg-white/[0.03]'
                 }`}
               >
                 <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-relaxed relative ${
                   diags
                     ? sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                    : 'text-slate-600'
+                    : 'text-slate-500'
                 }`}>
                   {diags ? (
                     <span className="group/diag cursor-help">
                       {idx + 1}
                       <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
                           {diags.map((d, di) => (
                             <div key={di} className="flex items-start gap-2">
                               <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
@@ -897,7 +897,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                               <div>
                                 <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
                                 {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
-                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
                               </div>
                             </div>
                           ))}
@@ -977,8 +977,8 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             }
 
             return (
-              <div key={idx} className="flex px-5 hover:bg-white/[0.02]">
-                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-600 select-none tabular-nums text-xs leading-relaxed">
+              <div key={idx} className="flex px-5 hover:bg-white/[0.03]">
+                <span className="inline-block w-10 shrink-0 text-right pr-4 py-[1px] text-slate-500 select-none tabular-nums text-xs leading-relaxed">
                   {idx + 1}
                 </span>
                 <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
@@ -1019,13 +1019,13 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             onChange={(e) => setAnnoLabel(e.target.value)}
             placeholder="Custom display name..."
             className="
-              w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
+              w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl
               text-sm text-slate-200 placeholder-slate-600
               focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200
             "
           />
-          <p className="text-[10px] text-slate-600 mt-1.5">
+          <p className="text-[10px] text-slate-500 mt-1.5">
             Overrides the display name in the stack grid
           </p>
         </div>
@@ -1035,7 +1035,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Priority
           </label>
-          <p className="text-[10px] text-slate-600 mb-2">
+          <p className="text-[10px] text-slate-500 mb-2">
             Controls stack sort order and visual emphasis. Critical stacks sort first and get highlighted borders.
           </p>
           <div className="flex items-center gap-2">
@@ -1050,7 +1050,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-xs font-medium border transition-all duration-200
                     ${isActive
                       ? `${p.bg} ${p.color} ring-1 ring-current/20`
-                      : 'border-white/[0.08] text-slate-500 hover:text-slate-300 hover:border-white/[0.15] hover:bg-white/[0.04]'
+                      : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/[0.15] hover:bg-white/5'
                     }
                   `}
                 >
@@ -1067,7 +1067,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Notes
           </label>
-          <p className="text-[10px] text-slate-600 mb-2">
+          <p className="text-[10px] text-slate-500 mb-2">
             Private notes about this stack — configuration details, maintenance reminders, or team context.
           </p>
           <textarea
@@ -1076,7 +1076,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             placeholder="Add notes about this stack..."
             rows={4}
             className="
-              w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
+              w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl
               text-sm text-slate-200 placeholder-slate-600
               focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200 resize-none
@@ -1120,7 +1120,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         <div className="flex flex-col items-center justify-center h-64 text-slate-500">
           <History size={32} className="mb-3 opacity-30" />
           <p className="text-sm">No version history yet</p>
-          <p className="text-xs text-slate-600 mt-1">Versions are saved automatically when you edit the compose file</p>
+          <p className="text-xs text-slate-500 mt-1">Versions are saved automatically when you edit the compose file</p>
         </div>
       )
     }
@@ -1134,7 +1134,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           return (
             <div
               key={v.version_id}
-              className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors"
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors"
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-mono text-slate-300 truncate">{v.version_id}</p>
@@ -1176,7 +1176,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         className="
           relative w-full max-w-[95vw] xl:max-w-[1400px] mx-4
           bg-slate-900/95 backdrop-blur-2xl
-          border border-white/[0.08] rounded-2xl
+          border border-white/10 rounded-2xl
           shadow-2xl shadow-black/40
           overflow-hidden animate-scale-in
           flex flex-col
@@ -1187,7 +1187,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         aria-labelledby="edit-stack-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 ring-1 ring-cyan-500/20 shrink-0">
               <Pencil className="w-5 h-5 text-cyan-400" />
@@ -1218,7 +1218,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded-lg p-0.5 shrink-0 ml-2">
+            <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/5 rounded-lg p-0.5 shrink-0 ml-2">
               <button
                 onClick={() => switchTab('compose')}
                 className={`
@@ -1307,7 +1307,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                     ${composeEditMode
                       ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={composeEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
@@ -1323,7 +1323,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                       flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                       ${showDiff
                         ? 'text-violet-400 bg-violet-500/10 ring-1 ring-violet-500/20'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Toggle diff view"
@@ -1340,8 +1340,8 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     className={`
                       flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                       ${validating
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        ? 'text-slate-500 cursor-not-allowed'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Validate compose file"
@@ -1362,7 +1362,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     className={`
                       flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                       ${!validationResult?.valid || savingCompose
-                        ? 'text-slate-600 cursor-not-allowed'
+                        ? 'text-slate-500 cursor-not-allowed'
                         : 'text-emerald-400 hover:bg-emerald-500/10'
                       }
                     `}
@@ -1388,7 +1388,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                       flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150
                       ${searchOpen
                         ? 'text-cyan-400 bg-cyan-500/10'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Search (Ctrl+F)"
@@ -1403,7 +1403,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150
                     ${copied
                       ? 'text-emerald-400 bg-emerald-500/10'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={copied ? 'Copied!' : 'Copy to clipboard'}
@@ -1425,7 +1425,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                     ${envEditMode
                       ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
@@ -1441,7 +1441,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                     className={`
                       flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150
                       ${savingEnv
-                        ? 'text-slate-600 cursor-not-allowed'
+                        ? 'text-slate-500 cursor-not-allowed'
                         : 'text-emerald-400 hover:bg-emerald-500/10'
                       }
                     `}
@@ -1463,7 +1463,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               onClick={safeClose}
               className="
                 flex items-center justify-center w-9 h-9 rounded-lg
-                text-slate-500 hover:text-slate-200 hover:bg-white/[0.06]
+                text-slate-500 hover:text-slate-200 hover:bg-white/5
                 transition-colors duration-150 ml-1
               "
               aria-label="Close"
@@ -1476,7 +1476,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         {/* Validation result bar */}
         {activeTab === 'compose' && composeEditMode && validationResult && (
           <div className={`
-            flex items-start gap-2 px-6 py-2.5 border-b border-white/[0.06] shrink-0 text-xs
+            flex items-start gap-2 px-6 py-2.5 border-b border-white/5 shrink-0 text-xs
             ${!validationResult.valid
               ? 'bg-rose-500/[0.06] text-rose-400'
               : validationResult.hasLintWarnings
@@ -1504,7 +1504,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
 
         {/* Search bar (compose view mode only) */}
         {activeTab === 'compose' && !composeEditMode && searchOpen && (
-          <div className="flex items-center gap-2 px-6 py-2.5 border-b border-white/[0.06] bg-slate-900/50 shrink-0">
+          <div className="flex items-center gap-2 px-6 py-2.5 border-b border-white/5 bg-slate-900/50 shrink-0">
             <Search size={14} className="text-slate-500 shrink-0" />
             <input
               ref={searchInputRef}
@@ -1524,13 +1524,13 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               <div className="flex items-center gap-0.5 shrink-0">
                 <button
                   onClick={() => setActiveMatchIndex((prev) => (prev - 1 + totalMatches) % totalMatches)}
-                  className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] text-xs transition-colors"
+                  className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 text-xs transition-colors"
                 >
                   &#x2191;
                 </button>
                 <button
                   onClick={() => setActiveMatchIndex((prev) => (prev + 1) % totalMatches)}
-                  className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] text-xs transition-colors"
+                  className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 text-xs transition-colors"
                 >
                   &#x2193;
                 </button>
@@ -1538,7 +1538,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             )}
             <button
               onClick={() => { setSearchOpen(false); setSearchQuery('') }}
-              className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors shrink-0"
+              className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
             >
               <X size={14} />
             </button>
@@ -1554,9 +1554,9 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-2.5 border-t border-white/[0.06] shrink-0 bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-2.5 border-t border-white/5 shrink-0 bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-600 font-mono">
+            <span className="text-[11px] text-slate-500 font-mono">
               {activeTab === 'compose' && (
                 <>{(composeEditMode ? composeContent : originalCompose).split('\n').length} lines</>
               )}
@@ -1587,7 +1587,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                   {/* Hover tooltip with full diagnostic list */}
                   {diags.length > 0 && (
                     <div className="absolute bottom-full left-0 mb-2 hidden group-hover/lint:block z-50 animate-fade-in pointer-events-none" style={{ width: '400px', maxHeight: '300px' }}>
-                      <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-3 overflow-y-auto max-h-[300px] scrollbar-thin">
+                      <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/40 p-3 overflow-y-auto max-h-[300px] scrollbar-thin">
                         <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
                           {activeTab === 'compose' ? 'Compose' : '.env'} Diagnostics ({diags.length})
                         </p>
@@ -1601,7 +1601,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
                               <span className="text-slate-300">{d.message}</span>
                             </div>
                           ))}
-                          {diags.length > 20 && <p className="text-[10px] text-slate-600">+{diags.length - 20} more...</p>}
+                          {diags.length > 20 && <p className="text-[10px] text-slate-500">+{diags.length - 20} more...</p>}
                         </div>
                       </div>
                     </div>
@@ -1624,11 +1624,11 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             {(composeEditMode || envEditMode) && (
               <span className="text-[11px] text-amber-500/70 font-medium">EDITING</span>
             )}
-            <span className="text-[11px] text-slate-600">
+            <span className="text-[11px] text-slate-500">
               {activeTab === 'compose' ? 'YAML' : activeTab === 'env' ? 'ENV' : 'META'}
             </span>
             <span className="text-[10px] text-slate-700">
-              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-500 font-mono text-[9px]">Esc</kbd> to close
             </span>
           </div>
         </div>

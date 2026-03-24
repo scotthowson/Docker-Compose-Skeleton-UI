@@ -44,10 +44,10 @@ export default function PersistentTrends({ data, error, onRetry }: Props) {
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
         <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">Trends</h3>
+          <ServerOff size={14} className="text-slate-500" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Trends</h3>
         </div>
-        <p className="text-xs text-slate-600">Not connected</p>
+        <p className="text-xs text-slate-500">Not connected</p>
       </div>
     )
   }
@@ -92,7 +92,7 @@ export default function PersistentTrends({ data, error, onRetry }: Props) {
 
   return (
     <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/[0.1] transition-colors"
+      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
       onClick={() => setCurrentPage('trends')}
     >
       <div className="flex items-center justify-between mb-3">

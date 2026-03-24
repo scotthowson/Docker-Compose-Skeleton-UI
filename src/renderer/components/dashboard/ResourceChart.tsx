@@ -62,13 +62,14 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '' }
             absolute -top-9 left-1/2 -translate-x-1/2 z-20
             flex items-center gap-1.5
             px-2.5 py-1 rounded-lg
-            bg-slate-800/95 border border-white/10 backdrop-blur-md
+            backdrop-blur-md
             shadow-lg shadow-black/30
-            text-[11px] text-slate-200 font-medium
+            text-[11px] font-medium
             whitespace-nowrap pointer-events-none
             transition-all duration-150 origin-bottom
             ${activeSegment ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
           `}
+          style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#e2e8f0' }}
         >
           {activeSegment && (
             <>
@@ -78,7 +79,10 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '' }
               />
               <span>{activeSegment.name}</span>
               <span className="text-slate-400">
-                {activeSegment.value.toLocaleString()}{unit}
+                {unit.trim() === 'MB' && activeSegment.value >= 1024
+                  ? `${(activeSegment.value / 1024).toFixed(1)} GB`
+                  : `${activeSegment.value.toLocaleString()}${unit}`
+                }
               </span>
             </>
           )}
@@ -174,9 +178,9 @@ function TrendingCharts({ history }: { history: ResourceHistoryPoint[] }) {
 
   if (history.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-slate-600">
+      <div className="flex flex-col items-center justify-center py-12 text-slate-500">
         <p className="text-sm text-slate-500">Collecting data...</p>
-        <p className="text-xs text-slate-600 mt-1">Charts appear after a few poll cycles</p>
+        <p className="text-xs text-slate-500 mt-1">Charts appear after a few poll cycles</p>
       </div>
     )
   }
@@ -344,10 +348,10 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
         <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400">
           System Resources
         </h3>
-        <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+        <div className="flex flex-col items-center justify-center py-10 text-slate-500">
           <ServerOff className="h-8 w-8 mb-3 opacity-40" />
           <p className="text-sm text-slate-500">No resource data</p>
-          <p className="text-xs text-slate-600 mt-1">Connect to API server to view system metrics</p>
+          <p className="text-xs text-slate-500 mt-1">Connect to API server to view system metrics</p>
         </div>
       </div>
     )
@@ -397,7 +401,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
           System Resources
         </h3>
-        <div className="flex items-center gap-1 rounded-lg bg-slate-800/60 p-0.5 border border-white/[0.04]">
+        <div className="flex items-center gap-1 rounded-lg bg-slate-800/60 p-0.5 border border-white/[0.03]">
           {tabs.map((tab) => (
             <button
               key={tab.id}

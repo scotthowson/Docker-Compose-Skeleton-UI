@@ -346,8 +346,8 @@ export default function Notifications() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <Bell size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <Bell size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to manage notifications</p>
       </div>
@@ -363,13 +363,13 @@ export default function Notifications() {
       <DisconnectedBanner />
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/10 flex items-center justify-center text-amber-400">
-            <Bell size={20} />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
+            <Bell size={24} className="text-amber-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Notification Center</h2>
-            <p className="text-xs text-slate-500">
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Notification Center</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">
               {rules.length} {rules.length === 1 ? 'rule' : 'rules'} configured
             </p>
           </div>
@@ -398,7 +398,7 @@ export default function Notifications() {
       </div>
 
       {/* ── NTFY Connection Status ──────────────────────────────────────── */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+      <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -418,23 +418,23 @@ export default function Notifications() {
           </div>
           {ntfyConfigured && ntfyUrl && (
             <div className="hidden sm:flex items-center gap-2">
-              <span className="text-[10px] text-slate-600 uppercase tracking-wider">Endpoint</span>
-              <code className="text-xs font-mono text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Endpoint</span>
+              <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                 {ntfyUrl}
               </code>
             </div>
           )}
         </div>
         {ntfyConfigured && ntfyUrl && (
-          <div className="sm:hidden mt-3 pt-3 border-t border-white/[0.04]">
-            <span className="text-[10px] text-slate-600 uppercase tracking-wider block mb-1">Endpoint</span>
-            <code className="text-xs font-mono text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06] break-all">
+          <div className="sm:hidden mt-3 pt-3 border-t border-white/[0.03]">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Endpoint</span>
+            <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5 break-all">
               {ntfyUrl}
             </code>
           </div>
         )}
         {!ntfyConfigured && (
-          <div className="mt-3 pt-3 border-t border-white/[0.04]">
+          <div className="mt-3 pt-3 border-t border-white/[0.03]">
             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
               <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
               <p className="text-[11px] text-amber-400/90">
@@ -452,15 +452,15 @@ export default function Notifications() {
         {/* Loading */}
         {rulesLoading && !rulesData && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-slate-600" />
+            <Loader2 size={24} className="animate-spin text-slate-500" />
           </div>
         )}
 
         {/* Empty state */}
         {rulesData && rules.length === 0 && (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 flex flex-col items-center justify-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-              <Bell size={22} className="text-slate-600" />
+          <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+              <Bell size={22} className="text-slate-500" />
             </div>
             <p className="text-sm text-slate-500">No notification rules yet</p>
             <button
@@ -479,7 +479,7 @@ export default function Notifications() {
             {rules.map((rule) => (
               <div
                 key={rule.id}
-                className={`bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 transition-all ${
+                className={`glass border border-white/5 rounded-xl p-4 md:p-6 transition-all ${
                   !rule.enabled ? 'opacity-60' : ''
                 }`}
               >
@@ -499,7 +499,7 @@ export default function Notifications() {
                       </span>
                       {/* Target */}
                       {rule.target && rule.target !== '*' && (
-                        <span className="text-[10px] text-slate-500 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded border border-white/[0.06]">
+                        <span className="text-[10px] text-slate-500 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded border border-white/5">
                           {rule.target}
                         </span>
                       )}
@@ -513,7 +513,7 @@ export default function Notifications() {
                     <button
                       onClick={() => handleToggleRule(rule)}
                       disabled={togglingId === rule.id}
-                      className="p-1.5 rounded-lg transition-colors hover:bg-white/[0.04]"
+                      className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
                       title={rule.enabled ? 'Disable rule' : 'Enable rule'}
                     >
                       {togglingId === rule.id ? (
@@ -521,7 +521,7 @@ export default function Notifications() {
                       ) : rule.enabled ? (
                         <ToggleRight size={22} className="text-emerald-400" />
                       ) : (
-                        <ToggleLeft size={22} className="text-slate-600" />
+                        <ToggleLeft size={22} className="text-slate-500" />
                       )}
                     </button>
 
@@ -546,7 +546,7 @@ export default function Notifications() {
                     ) : (
                       <button
                         onClick={() => setConfirmDeleteId(rule.id)}
-                        className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                         title="Delete rule"
                       >
                         <Trash2 size={14} />
@@ -562,7 +562,7 @@ export default function Notifications() {
                     {rule.tags.map((tag, i) => (
                       <span
                         key={i}
-                        className="text-[10px] text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded border border-white/[0.06]"
+                        className="text-[10px] text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded border border-white/5"
                       >
                         {tag}
                       </span>
@@ -583,7 +583,7 @@ export default function Notifications() {
         >
           <Clock size={13} />
           Notification History
-          <span className="text-[10px] font-normal normal-case text-slate-600">
+          <span className="text-[10px] font-normal normal-case text-slate-500">
             ({history.length} {history.length === 1 ? 'entry' : 'entries'})
           </span>
           <svg
@@ -599,15 +599,15 @@ export default function Notifications() {
             {/* Loading */}
             {historyLoading && !historyData && (
               <div className="flex items-center justify-center py-12">
-                <Loader2 size={20} className="animate-spin text-slate-600" />
+                <Loader2 size={20} className="animate-spin text-slate-500" />
               </div>
             )}
 
             {/* Empty state */}
             {historyData && history.length === 0 && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 flex flex-col items-center justify-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-                  <Clock size={18} className="text-slate-600" />
+              <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+                  <Clock size={18} className="text-slate-500" />
                 </div>
                 <p className="text-sm text-slate-500">No notifications sent yet</p>
               </div>
@@ -619,7 +619,7 @@ export default function Notifications() {
                 {history.map((entry, idx) => (
                   <div
                     key={idx}
-                    className={`bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-5 border-l-2 ${historyPriorityAccent(entry.priority)}`}
+                    className={`glass border border-white/5 rounded-xl p-4 md:p-5 border-l-2 ${historyPriorityAccent(entry.priority)}`}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-col gap-1.5 min-w-0">
@@ -653,7 +653,7 @@ export default function Notifications() {
                           )}
                         </span>
                         {/* Timestamp */}
-                        <span className="text-[10px] text-slate-600 whitespace-nowrap">
+                        <span className="text-[10px] text-slate-500 whitespace-nowrap">
                           {formatTimestamp(entry.timestamp)}
                         </span>
                       </div>
@@ -674,7 +674,7 @@ export default function Notifications() {
         >
           <Webhook size={13} />
           Webhooks
-          <span className="text-[10px] font-normal normal-case text-slate-600">
+          <span className="text-[10px] font-normal normal-case text-slate-500">
             ({webhooks.length} {webhooks.length === 1 ? 'webhook' : 'webhooks'})
           </span>
           <ChevronDown
@@ -714,7 +714,7 @@ export default function Notifications() {
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
                     placeholder="https://example.com/webhook"
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors"
                   />
                 </div>
 
@@ -729,7 +729,7 @@ export default function Notifications() {
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
                           webhookEvents.has(evt.value)
                             ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-                            : 'bg-white/[0.02] text-slate-500 border-white/[0.06] hover:bg-white/[0.05]'
+                            : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
                         }`}
                       >
                         {webhookEventIcon(evt.value)}
@@ -761,12 +761,12 @@ export default function Notifications() {
 
             {/* Empty state */}
             {webhooks.length === 0 && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-                  <Webhook size={18} className="text-slate-600" />
+              <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+                  <Webhook size={18} className="text-slate-500" />
                 </div>
                 <p className="text-sm text-slate-500">No webhooks configured</p>
-                <p className="text-xs text-slate-600">Add a webhook to receive event notifications via HTTP</p>
+                <p className="text-xs text-slate-500">Add a webhook to receive event notifications via HTTP</p>
               </div>
             )}
 
@@ -776,7 +776,7 @@ export default function Notifications() {
                 {webhooks.map((wh) => (
                   <div
                     key={wh.id}
-                    className={`bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-5 transition-all ${
+                    className={`glass border border-white/5 rounded-xl p-4 md:p-5 transition-all ${
                       !wh.enabled ? 'opacity-60' : ''
                     }`}
                   >
@@ -800,7 +800,7 @@ export default function Notifications() {
                           {wh.events.map((evt) => (
                             <span
                               key={evt}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-white/[0.04] text-slate-500 border border-white/[0.06]"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-white/5 text-slate-500 border border-white/5"
                             >
                               {webhookEventIcon(evt)}
                               {evt}
@@ -844,7 +844,7 @@ export default function Notifications() {
                           ) : (
                             <button
                               onClick={() => setConfirmDeleteWebhookId(wh.id)}
-                              className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                               title="Delete webhook"
                             >
                               <Trash2 size={13} />
@@ -866,16 +866,16 @@ export default function Notifications() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
-          <div className="w-full max-w-md mx-4 bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden">
+          <div className="w-full max-w-md mx-4 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <Plus size={16} className="text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">New Notification Rule</h3>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
                 <XCircle size={16} />
               </button>
@@ -891,7 +891,7 @@ export default function Notifications() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="e.g. Critical container alerts"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
 
@@ -901,7 +901,7 @@ export default function Notifications() {
                 <select
                   value={newTrigger}
                   onChange={(e) => setNewTrigger(e.target.value as TriggerType)}
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors appearance-none cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors appearance-none cursor-pointer"
                 >
                   {TRIGGER_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-200">
@@ -915,14 +915,14 @@ export default function Notifications() {
               <div>
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
                   Target
-                  <span className="text-slate-600 ml-1 normal-case">(container, stack, or * for all)</span>
+                  <span className="text-slate-500 ml-1 normal-case">(container, stack, or * for all)</span>
                 </label>
                 <input
                   type="text"
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
                   placeholder="*"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
 
@@ -937,7 +937,7 @@ export default function Notifications() {
                       className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
                         newPriority === opt.value
                           ? priorityColor(opt.value).replace('/15', '/25')
-                          : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06]'
+                          : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
                       }`}
                     >
                       {opt.label}
@@ -950,20 +950,20 @@ export default function Notifications() {
               <div>
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
                   Tags
-                  <span className="text-slate-600 ml-1 normal-case">(comma-separated, optional)</span>
+                  <span className="text-slate-500 ml-1 normal-case">(comma-separated, optional)</span>
                 </label>
                 <input
                   type="text"
                   value={newTags}
                   onChange={(e) => setNewTags(e.target.value)}
                   placeholder="warning, server, docker"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5">
               <button
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"

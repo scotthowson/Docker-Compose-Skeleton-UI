@@ -17,10 +17,10 @@ export default function ImageUpdateAlert({ data, error, onRetry }: Props) {
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
         <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">Image Updates</h3>
+          <ServerOff size={14} className="text-slate-500" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Image Updates</h3>
         </div>
-        <p className="text-xs text-slate-600">Not connected</p>
+        <p className="text-xs text-slate-500">Not connected</p>
       </div>
     )
   }
@@ -66,7 +66,7 @@ export default function ImageUpdateAlert({ data, error, onRetry }: Props) {
 
   return (
     <div
-      className={`glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/[0.1] transition-colors ${hasStale ? 'border-amber-500/30' : ''}`}
+      className={`glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors ${hasStale ? 'border-amber-500/30' : ''}`}
       onClick={() => setCurrentPage('updates')}
     >
       <div className="flex items-center justify-between mb-3">

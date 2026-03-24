@@ -92,7 +92,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
         <form
           onSubmit={handleSubmit}
           className="
-            bg-slate-900/60 backdrop-blur-xl border border-white/[0.06]
+            bg-slate-900/60 backdrop-blur-xl border border-white/5
             rounded-2xl p-6 space-y-5
             shadow-xl shadow-black/20
             gradient-border
@@ -120,7 +120,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
               Username
             </label>
             <div className="relative">
-              <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+              <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 ref={usernameRef}
                 type="text"
@@ -131,7 +131,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
                 autoComplete="username"
                 className="
                   w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
-                  bg-slate-800/60 border border-white/[0.06]
+                  bg-slate-800/60 border border-white/5
                   text-slate-200 placeholder-slate-600
                   focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20
                   disabled:opacity-50 transition-all duration-200
@@ -146,7 +146,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
               Password
             </label>
             <div className="relative">
-              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
@@ -157,7 +157,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
                 className="
                   w-full pl-10 pr-11 py-2.5 rounded-xl text-sm
-                  bg-slate-800/60 border border-white/[0.06]
+                  bg-slate-800/60 border border-white/5
                   text-slate-200 placeholder-slate-600
                   focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20
                   disabled:opacity-50 transition-all duration-200
@@ -166,7 +166,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
                 tabIndex={-1}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
@@ -185,7 +185,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
                 relative w-9 h-5 rounded-full transition-colors duration-200
                 ${rememberSession
                   ? 'bg-emerald-500/30 border-emerald-500/40'
-                  : 'bg-slate-700/50 border-white/[0.06]'
+                  : 'bg-slate-700/50 border-white/5'
                 }
                 border
               `}

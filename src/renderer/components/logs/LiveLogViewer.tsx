@@ -161,8 +161,16 @@ export default function LiveLogViewer({
       const data = await fetchLogs(lastTimestampRef.current || undefined)
       if (data?.entries && data.entries.length > 0) {
         setLines((prev) => {
-          const combined = [...prev, ...data.entries]
-          // Trim to maxLines
+          // Deduplicate: skip entries that match the last known timestamp + line content
+          const lastTs = lastTimestampRef.current
+          const lastLine = prev.length > 0 ? prev[prev.length - 1].line : ''
+          const newEntries = data.entries.filter((e) => {
+            // Skip if same timestamp AND same line content (duplicate from inclusive since)
+            if (e.timestamp === lastTs && e.line === lastLine) return false
+            return true
+          })
+          if (newEntries.length === 0) return prev
+          const combined = [...prev, ...newEntries]
           if (combined.length > maxLines) {
             return combined.slice(combined.length - maxLines)
           }
@@ -257,7 +265,7 @@ export default function LiveLogViewer({
   return (
     <div className="flex flex-col h-full bg-slate-900/60 backdrop-blur-md border border-white/[0.05] rounded-xl overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2">
           {/* Live toggle */}
           <button
@@ -265,7 +273,7 @@ export default function LiveLogViewer({
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
               isLive
                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
-                : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06]'
+                : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
             }`}
           >
             {isLive ? (
@@ -315,7 +323,7 @@ export default function LiveLogViewer({
           </div>
 
           {/* Line count */}
-          <span className="text-[10px] text-slate-600 ml-2 tabular-nums">
+          <span className="text-[10px] text-slate-500 ml-2 tabular-nums">
             {filteredLines.length} / {lines.length} lines
           </span>
         </div>
@@ -323,18 +331,18 @@ export default function LiveLogViewer({
         <div className="flex items-center gap-1.5">
           {/* Search */}
           <div className="relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600" />
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter..."
-              className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:w-56 transition-all"
+              className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:w-56 transition-all"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
               >
                 <X size={10} />
               </button>
@@ -347,7 +355,7 @@ export default function LiveLogViewer({
             className={`p-1.5 rounded-lg border transition-all ${
               levelFilter !== 'all'
                 ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
-                : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06]'
+                : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
             }`}
             title="Level filter"
           >
@@ -357,7 +365,7 @@ export default function LiveLogViewer({
           {/* Export */}
           <button
             onClick={handleExport}
-            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-400 transition-all"
+            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/5 hover:bg-white/5 hover:text-slate-400 transition-all"
             title="Export logs"
           >
             <Download size={13} />
@@ -366,7 +374,7 @@ export default function LiveLogViewer({
           {/* Clear */}
           <button
             onClick={handleClear}
-            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/[0.06] hover:bg-white/[0.06] hover:text-rose-400 transition-all"
+            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/5 hover:bg-white/5 hover:text-rose-400 transition-all"
             title="Clear buffer"
           >
             <Trash2 size={13} />
@@ -376,16 +384,16 @@ export default function LiveLogViewer({
 
       {/* Level filter dropdown */}
       {showFilters && (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-white/[0.06] bg-white/[0.02]">
-          <span className="text-[10px] text-slate-600 uppercase tracking-wider mr-2">Level:</span>
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-white/5 bg-white/[0.03]">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider mr-2">Level:</span>
           {(['all', 'error', 'warn', 'info', 'debug'] as const).map((level) => (
             <button
               key={level}
               onClick={() => { setLevelFilter(level); setShowFilters(false) }}
               className={`px-2 py-1 rounded text-[10px] font-medium border transition-all ${
                 levelFilter === level
-                  ? 'bg-white/[0.08] text-slate-200 border-white/[0.1]'
-                  : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06]'
+                  ? 'bg-white/[0.08] text-slate-200 border-white/10'
+                  : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
               }`}
             >
               {level === 'all' ? 'All' : level.toUpperCase()}
@@ -402,14 +410,14 @@ export default function LiveLogViewer({
       >
         {loading && (
           <div className="flex items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin text-slate-600" />
+            <Loader2 size={20} className="animate-spin text-slate-500" />
           </div>
         )}
 
         {!loading && filteredLines.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <RefreshCw size={18} className="text-slate-700" />
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-500">
               {search || levelFilter !== 'all' ? 'No lines match your filter' : 'Waiting for log output...'}
             </p>
           </div>
@@ -421,11 +429,11 @@ export default function LiveLogViewer({
           return (
             <div
               key={idx}
-              className={`flex items-start gap-2 px-4 py-0.5 hover:bg-white/[0.02] ${cfg.bg} transition-colors`}
+              className={`flex items-start gap-2 px-4 py-0.5 hover:bg-white/[0.03] ${cfg.bg} transition-colors`}
             >
               {/* Timestamp */}
               {entry.timestamp && (
-                <span className="text-slate-600 shrink-0 select-none tabular-nums">
+                <span className="text-slate-500 shrink-0 select-none tabular-nums">
                   {formatTimestamp(entry.timestamp)}
                 </span>
               )}
@@ -452,7 +460,7 @@ export default function LiveLogViewer({
         <div className="absolute bottom-4 right-4">
           <button
             onClick={scrollToBottom}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 text-slate-300 border border-white/[0.1] shadow-lg hover:bg-slate-700/90 transition-all animate-fade-in"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 text-slate-300 border border-white/10 shadow-lg hover:bg-slate-700/90 transition-all animate-fade-in"
           >
             <ArrowDown size={14} />
             <span className="text-[11px] font-medium">Scroll to bottom</span>
@@ -472,7 +480,7 @@ function highlightSearch(text: string, query: string): React.ReactNode {
   const parts = text.split(new RegExp(`(${escapeRegex(query)})`, 'gi'))
   return parts.map((part, i) =>
     part.toLowerCase() === query.toLowerCase()
-      ? <mark key={i} className="bg-amber-500/30 text-amber-200 rounded px-0.5">{part}</mark>
+      ? <mark key={`${i}-${part}`} className="bg-amber-500/30 text-amber-200 rounded px-0.5">{part}</mark>
       : part
   )
 }

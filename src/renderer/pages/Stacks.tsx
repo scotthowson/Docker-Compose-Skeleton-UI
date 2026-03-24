@@ -418,7 +418,7 @@ export default function Stacks() {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 ring-1 ring-cyan-500/20">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/10">
                   <ListChecks className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
@@ -488,7 +488,7 @@ export default function Stacks() {
                 Array.from(selectedStacks).map((name) => (
                   <div
                     key={name}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-white/[0.02] border-white/[0.06]"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-white/[0.03] border-white/5"
                   >
                     <Loader2 size={16} className="text-cyan-400 animate-spin shrink-0" />
                     <p className="text-xs text-slate-400 truncate">{name}</p>
@@ -499,7 +499,7 @@ export default function Stacks() {
 
             {/* Summary + Dismiss */}
             {isComplete && (
-              <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
                 <p className="text-xs text-slate-500">
                   {batchResults.filter((r) => r.success).length} succeeded,{' '}
                   {batchResults.filter((r) => !r.success).length} failed

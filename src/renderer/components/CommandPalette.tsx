@@ -745,7 +745,7 @@ export function CommandPalette() {
         className="
           relative w-full max-w-lg
           bg-slate-900/95 backdrop-blur-2xl
-          border border-white/[0.08]
+          border border-white/10
           rounded-2xl shadow-2xl shadow-black/40
           overflow-hidden
           animate-scale-in
@@ -753,7 +753,7 @@ export function CommandPalette() {
         onKeyDown={handleKeyDown}
       >
         {/* Search bar */}
-        <div className="flex items-center gap-3 px-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-3 px-4 border-b border-white/5">
           <Search size={18} className="text-slate-500 shrink-0" />
           <input
             ref={inputRef}
@@ -767,7 +767,7 @@ export function CommandPalette() {
               focus:outline-none
             "
           />
-          <kbd className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-slate-500 font-mono">
+          <kbd className="shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-500 font-mono">
             ESC
           </kbd>
         </div>
@@ -791,7 +791,7 @@ export function CommandPalette() {
               <React.Fragment key={cmd.id}>
                 {showGroupHeader && (
                   <div className="px-4 pt-3 pb-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">{groupLabel}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{groupLabel}</span>
                   </div>
                 )}
                 <button
@@ -802,7 +802,7 @@ export function CommandPalette() {
                     transition-colors duration-100
                     ${isSelected
                       ? 'bg-emerald-500/10 text-emerald-400'
-                      : 'text-slate-300 hover:bg-white/[0.04]'
+                      : 'text-slate-300 hover:bg-white/5'
                     }
                   `}
                 >
@@ -817,10 +817,10 @@ export function CommandPalette() {
                     <p className="text-[11px] text-slate-500 truncate">{cmd.description}</p>
                   </div>
                   {cmd.type === 'stack' && (
-                    <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Stack</span>
+                    <span className="shrink-0 rounded-md border border-white/5 bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Stack</span>
                   )}
                   {cmd.type === 'container' && (
-                    <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Container</span>
+                    <span className="shrink-0 rounded-md border border-white/5 bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">Container</span>
                   )}
                   {isSelected && (
                     <ArrowRight size={14} className="shrink-0 text-emerald-400/60" />
@@ -832,20 +832,20 @@ export function CommandPalette() {
         </div>
 
         {/* Result count */}
-        <div className="px-4 py-1.5 text-[10px] text-slate-600 border-t border-white/[0.04]">
+        <div className="px-4 py-1.5 text-[10px] text-slate-500 border-t border-white/[0.03]">
           {filtered.length} result{filtered.length !== 1 ? 's' : ''}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06] text-[11px] text-slate-600">
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5 text-[11px] text-slate-500">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&uarr;</kbd>
-              <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&darr;</kbd>
+              <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&uarr;</kbd>
+              <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&darr;</kbd>
               Navigate
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&crarr;</kbd>
+              <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">&crarr;</kbd>
               Select
             </span>
           </div>

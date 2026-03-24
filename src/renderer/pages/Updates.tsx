@@ -74,7 +74,7 @@ function StalenessBadge({ staleness }: { staleness: string }) {
 
 function SkeletonRow() {
   return (
-    <tr className="border-b border-white/[0.04]">
+    <tr className="border-b border-white/[0.03]">
       {[...Array(6)].map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="h-3 w-20 rounded skeleton" />
@@ -106,7 +106,7 @@ const GLOW_MAP: Record<string, string> = {
 function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
   return (
     <div
-      className={`bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}
+      className={`bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 ${GLOW_MAP[color] ?? ''}`}
     >
       <div className="flex-shrink-0">{icon}</div>
       <div>
@@ -214,8 +214,8 @@ export default function Updates() {
     setSysRollingBack(true)
     try {
       const result = await rollbackSystemUpdate(lastBackupTag)
-      if (result.success) {
-        addToast({ type: 'success', message: `Rolled back to ${result.rolled_back_to}` })
+      if (result.success || result.rolled_back) {
+        addToast({ type: 'success', message: `Rolled back to ${result.restored_version || 'previous version'}` })
         setLastBackupTag(null)
         const fresh = await checkSystemUpdate()
         setSysUpdate(fresh)
@@ -380,8 +380,8 @@ export default function Updates() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <ArrowUpCircle size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <ArrowUpCircle size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to check for image updates</p>
       </div>
@@ -398,7 +398,7 @@ export default function Updates() {
       {/* ══════════════════════════════════════════════════════════════════════
           System & Framework Updates
           ══════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 gradient-border">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 gradient-border transition-all duration-200">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
@@ -418,14 +418,14 @@ export default function Updates() {
               {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Check for Updates
             </button>
-            <span className="text-[10px] text-slate-600 min-w-[100px]">
+            <span className="text-[10px] text-slate-500 min-w-[100px]">
               {lastChecked ? `Last checked ${formatRelativeTime(lastChecked)}` : '\u00A0'}
             </span>
           </div>
         </div>
 
         {/* Auto-check settings */}
-        <div className="flex items-center gap-3 mt-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+        <div className="flex items-center gap-3 mt-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
           <div className="flex-1">
             <p className="text-xs font-medium text-slate-300">Auto-check for updates</p>
             <p className="text-[10px] text-slate-500 mt-0.5">Periodically check for DCS framework and image updates</p>
@@ -447,7 +447,7 @@ export default function Updates() {
           <div className={`rounded-xl border p-5 transition-all duration-300 ${
             sysUpdate?.available
               ? 'bg-emerald-500/[0.04] border-emerald-500/15 glow-emerald'
-              : 'bg-white/[0.02] border-white/[0.06]'
+              : 'bg-white/[0.03] border-white/5'
           }`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
@@ -516,15 +516,15 @@ export default function Updates() {
 
                 {/* Changelog */}
                 {sysUpdate.available && sysUpdate.changelog.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/[0.04]">
+                  <div className="mt-3 pt-3 border-t border-white/[0.03]">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Changelog</p>
                     <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin">
                       {sysUpdate.changelog.slice(0, 10).map((c) => (
                         <div key={c.hash} className="flex items-start gap-2">
-                          <GitCommit size={12} className="text-slate-600 shrink-0 mt-0.5" />
+                          <GitCommit size={12} className="text-slate-500 shrink-0 mt-0.5" />
                           <div className="min-w-0">
                             <p className="text-[11px] text-slate-300 truncate">{c.message}</p>
-                            <p className="text-[9px] text-slate-600">{c.hash} by {c.author}</p>
+                            <p className="text-[9px] text-slate-500">{c.hash} by {c.author}</p>
                           </div>
                         </div>
                       ))}
@@ -534,7 +534,7 @@ export default function Updates() {
 
                 {/* Action buttons */}
                 {isAdmin && sysUpdate.available && !sysUpdate.has_local_changes && (
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.03]">
                     <button
                       onClick={handleApplySystemUpdate}
                       disabled={sysApplying}
@@ -569,7 +569,7 @@ export default function Updates() {
           </div>
 
           {/* UI Application */}
-          <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-5">
+          <div className="rounded-xl bg-white/[0.03] border border-white/5 p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
                 <Monitor size={16} className="text-cyan-400" />
@@ -602,7 +602,7 @@ export default function Updates() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-white/[0.04]">
+            <div className="mt-4 pt-3 border-t border-white/[0.03]">
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800/40">
                 <Shield size={12} className="text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -682,7 +682,7 @@ export default function Updates() {
       </div>
 
       {/* ---- Summary stat cards ---- */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger-children">
         <SummaryCard
           icon={<Package className="h-4 w-4 text-cyan-400" />}
           label="Total Images"
@@ -714,12 +714,12 @@ export default function Updates() {
       </div>
 
       {/* ---- Image Table ---- */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-200">
             Tracked Images
           </h3>
-          <p className="text-[10px] text-slate-600 leading-relaxed max-w-md">
+          <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
             Staleness is based on when the image was built upstream, not when you pulled it. An image may show as "aging" or "stale" even after updating if the upstream hasn't released a newer build.
           </p>
         </div>
@@ -729,7 +729,7 @@ export default function Updates() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-white/5">
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Image</th>
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Container(s)</th>
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider hidden sm:table-cell">Stack</th>
@@ -748,7 +748,7 @@ export default function Updates() {
         ) : images.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-            <Package className="h-10 w-10 text-slate-600 mb-3" />
+            <Package className="h-10 w-10 text-slate-500 mb-3" />
             <p className="text-sm text-slate-400 font-medium">No images found</p>
             <p className="text-xs text-slate-500 mt-1">
               {isConnected
@@ -775,7 +775,7 @@ export default function Updates() {
           <div className="overflow-x-auto -mx-4 md:-mx-6">
             <table className="w-full text-sm min-w-[480px]">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-white/5">
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
                     Image
                   </th>
@@ -796,13 +796,13 @@ export default function Updates() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-white/[0.03]">
                 {images.map((img: ImageUpdateInfo) => {
                   const isUpdating = updatingImages.has(img.image) || bulkUpdating
                   return (
                     <tr
                       key={img.image}
-                      className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-150"
+                      className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors duration-150"
                     >
                       {/* Image name */}
                       <td className="px-4 py-3">
@@ -830,7 +830,7 @@ export default function Updates() {
                             {img.stack}
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-600">-</span>
+                          <span className="text-xs text-slate-500">-</span>
                         )}
                       </td>
 
@@ -856,7 +856,7 @@ export default function Updates() {
                               inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
                               transition-all duration-200
                               ${img.staleness === 'current'
-                                ? 'bg-white/[0.03] text-slate-600 border border-white/[0.04] cursor-default'
+                                ? 'bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default'
                                 : isUpdating
                                   ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
                                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
@@ -877,7 +877,7 @@ export default function Updates() {
                                 : 'Update'}
                           </button>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-500">
                             {img.staleness === 'current' ? (
                               <><CheckCircle className="h-3 w-3" /> Up to date</>
                             ) : (

@@ -96,7 +96,7 @@ export default function ConnectionForm() {
           className="
             flex-1 rounded-lg px-3 py-1.5
             text-xs text-slate-200 placeholder-slate-600 font-mono
-            bg-black/30 border border-white/[0.08]
+            bg-black/30 border border-white/10
             focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
             transition-all duration-200
           "

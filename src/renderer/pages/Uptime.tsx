@@ -296,12 +296,12 @@ function StatCard({
 }) {
   return (
     <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 transition-all duration-300"
+      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-5 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-300"
       style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
-        <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.04] ${color}`}>
+        <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 ${color}`}>
           <Icon size={16} />
         </div>
       </div>
@@ -424,7 +424,7 @@ export default function Uptime() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Uptime Monitor</span></h2>
+            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Uptime Monitor</span></h2>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
@@ -458,7 +458,7 @@ export default function Uptime() {
       )}
 
       {/* Summary stat cards */}
-      <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4 stagger-children">
         <StatCard
           label="Overall Availability"
           value={`${stats.overallAvailability}%`}
@@ -497,7 +497,7 @@ export default function Uptime() {
       {/* Container Uptime Bars */}
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
         {/* Section header */}
-        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
             <Activity size={16} className="text-emerald-400" />
             Container Uptime
@@ -538,7 +538,7 @@ export default function Uptime() {
         )}
 
         {/* Container rows */}
-        <div className="divide-y divide-white/[0.04]">
+        <div className="divide-y divide-white/[0.03]">
           {sortedContainers.map((container, idx) => {
             const segments = segmentsMap.get(container.name) ?? []
             const availability = calculateAvailability(container)
@@ -546,7 +546,7 @@ export default function Uptime() {
             return (
               <div
                 key={container.name}
-                className={`grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up${container.state === 'running' && (container.health === 'healthy' || container.health === '' || container.health === 'none') ? ' glow-emerald' : ''}`}
+                className={`grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up${container.state === 'running' && (container.health === 'healthy' || container.health === '' || container.health === 'none') ? ' glow-emerald' : ''}`}
                 style={{
                   animationDelay: `${Math.min(idx * 30, 600)}ms`,
                   animationFillMode: 'both',
@@ -560,7 +560,7 @@ export default function Uptime() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <p className="text-[10px] text-slate-600 font-mono truncate max-w-[140px]">
+                    <p className="text-[10px] text-slate-500 font-mono truncate max-w-[140px]">
                       {truncateImage(container.image)}
                     </p>
                     <StatusBadge state={container.state} health={container.health} />
@@ -588,7 +588,7 @@ export default function Uptime() {
 
         {/* Time labels */}
         {containers.length > 0 && (
-          <div className="px-5 py-2 border-t border-white/[0.04] flex justify-between text-[9px] text-slate-600">
+          <div className="px-5 py-2 border-t border-white/[0.03] flex justify-between text-[9px] text-slate-500">
             <span>30 min ago</span>
             <span>Now</span>
           </div>
@@ -598,7 +598,7 @@ export default function Uptime() {
       {/* Incident Log */}
       {incidents.length > 0 && (
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-400" />
             <h3 className="text-sm font-semibold text-slate-200">
               Incident Log
@@ -615,7 +615,7 @@ export default function Uptime() {
               return (
                 <div
                   key={container.name}
-                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors duration-150 animate-fade-in-up"
+                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up"
                   style={{
                     animationDelay: `${idx * 60}ms`,
                     animationFillMode: 'both',
@@ -667,7 +667,7 @@ export default function Uptime() {
                     </p>
                   </div>
 
-                  <ChevronRight size={14} className="text-slate-700 shrink-0" />
+                  <ChevronRight size={14} className="text-slate-500 shrink-0" />
                 </div>
               )
             })}

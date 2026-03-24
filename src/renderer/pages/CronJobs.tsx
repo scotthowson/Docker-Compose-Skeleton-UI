@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Edit3, Save, X, RefreshCw,
   Search, Filter, FileText, AlertTriangle,
   Loader2, WifiOff, ChevronDown, ChevronRight,
-  Copy, Check,
+  Copy, Check, BookOpen, Zap, Code,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -57,6 +57,74 @@ function sourceIcon(source: CronEntry['source']) {
 }
 
 // ---------------------------------------------------------------------------
+// Guide sections
+// ---------------------------------------------------------------------------
+
+const CRON_GUIDE_SECTIONS = [
+  {
+    title: 'Cron Expression Syntax',
+    icon: Clock,
+    content: `┌───────── minute (0-59)
+│ ┌─────── hour (0-23)
+│ │ ┌───── day of month (1-31)
+│ │ │ ┌─── month (1-12)
+│ │ │ │ ┌─ day of week (0-7, 0 and 7 = Sun)
+│ │ │ │ │
+* * * * *    command to run
+
+Special characters:
+  *     Any value
+  ,     Value list (1,3,5)
+  -     Range (1-5)
+  /     Step (*/15 = every 15)`,
+  },
+  {
+    title: 'Common Schedules',
+    icon: CalendarClock,
+    content: `* * * * *        Every minute
+*/5 * * * *      Every 5 minutes
+*/15 * * * *     Every 15 minutes
+0 * * * *        Every hour (on the hour)
+0 */6 * * *      Every 6 hours
+0 0 * * *        Daily at midnight
+0 3 * * *        Daily at 3 AM
+0 0 * * 0        Weekly on Sunday
+0 0 1 * *        First of every month
+0 0 1 1 *        Yearly on January 1st`,
+  },
+  {
+    title: 'User vs System Crontabs',
+    icon: User,
+    content: `User Crontab (editable)
+  Your personal cron schedule. Edit directly
+  from this page or via the Raw Editor.
+  Location: crontab -e
+
+System Crontab (read-only)
+  System-wide scheduled tasks managed by
+  the OS and installed packages.
+  Location: /etc/crontab, /etc/cron.d/
+
+Only user crontab entries can be added,
+edited, or deleted from this interface.`,
+  },
+  {
+    title: 'Example: Nightly Backup',
+    icon: Terminal,
+    content: `Schedule:  0 2 * * *
+Command:   /opt/dcs/backup.sh >> /var/log/backup.log 2>&1
+
+This runs a backup script at 2 AM every night
+and appends output to a log file.
+
+Tips:
+  • Use full paths for commands
+  • Redirect output to avoid cron mail
+  • Test commands manually before scheduling`,
+  },
+]
+
+// ---------------------------------------------------------------------------
 // CronJobs Page
 // ---------------------------------------------------------------------------
 
@@ -74,6 +142,8 @@ export default function CronJobs() {
   const [newCommand, setNewCommand] = useState('')
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
   // Close topmost modal on Escape
   useEffect(() => {
@@ -203,8 +273,8 @@ export default function CronJobs() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <WifiOff size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to view cron jobs</p>
       </div>
@@ -245,7 +315,7 @@ export default function CronJobs() {
               </button>
               <button
                 onClick={handleOpenRawEditor}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
               >
                 <Edit3 size={13} />
                 Raw Editor
@@ -253,9 +323,16 @@ export default function CronJobs() {
             </>
           )}
           <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
+          >
+            <BookOpen size={13} />
+            <span className="hidden sm:inline">Guide</span>
+          </button>
+          <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -263,10 +340,57 @@ export default function CronJobs() {
         </div>
       </div>
 
+      {/* Cron Guide (collapsible) */}
+      {showGuide && (
+        <div className="glass rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen size={16} className="text-violet-400" />
+              <h2 className="text-sm font-semibold text-white">Cron Schedule Guide</h2>
+            </div>
+            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <X size={14} className="text-slate-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-slate-400 mb-4">
+              Scheduled tasks run commands at specific intervals using cron expressions.
+              Use the <code className="text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded text-xs">User</code> tab to manage your own cron entries, or view <code className="text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded text-xs">System</code> entries for read-only OS schedules.
+            </p>
+            {CRON_GUIDE_SECTIONS.map((section, i) => {
+              const isExpanded = expandedGuide === i
+              const Icon = section.icon
+              return (
+                <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedGuide(isExpanded ? null : i)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                  >
+                    <Icon size={14} className="text-violet-400 shrink-0" />
+                    <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
+                    {isExpanded
+                      ? <ChevronDown size={14} className="text-slate-500" />
+                      : <ChevronRight size={14} className="text-slate-500" />
+                    }
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 animate-fade-in">
+                      <pre className="bg-slate-950/60 border border-white/[0.03] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
+                        {section.content}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Tab bar + search */}
       <div className="flex items-center flex-wrap gap-4">
         {/* Tabs */}
-        <div className="flex rounded-lg bg-white/[0.03] border border-white/[0.06] p-0.5">
+        <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
           {([
             { id: 'user' as TabId, label: 'User Crontab', icon: <User size={13} /> },
             { id: 'system' as TabId, label: 'System Cron', icon: <Server size={13} /> },
@@ -276,7 +400,7 @@ export default function CronJobs() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 activeTab === tab.id
-                  ? 'bg-white/[0.08] text-slate-200 shadow-sm'
+                  ? 'bg-white/10 text-slate-200 shadow-sm'
                   : 'text-slate-500 hover:text-slate-400'
               }`}
             >
@@ -288,13 +412,13 @@ export default function CronJobs() {
 
         {/* Search */}
         <div className="flex-1 relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter by schedule, command, or user..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
           />
         </div>
       </div>
@@ -315,7 +439,7 @@ export default function CronJobs() {
                 type="text"
                 value={newSchedule}
                 onChange={(e) => setNewSchedule(e.target.value)}
-                className="w-48 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className="w-48 px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
                 placeholder="* * * * *"
               />
             </div>
@@ -327,7 +451,7 @@ export default function CronJobs() {
                 type="text"
                 value={newCommand}
                 onChange={(e) => setNewCommand(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
                 placeholder="/usr/bin/my-script.sh --arg"
               />
             </div>
@@ -344,7 +468,7 @@ export default function CronJobs() {
                   className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${
                     newSchedule === p.cron
                       ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
-                      : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-400'
+                      : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5 hover:text-slate-400'
                   }`}
                 >
                   {p.label}
@@ -376,7 +500,7 @@ export default function CronJobs() {
       {/* Loading */}
       {loading && !data && (
         <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-slate-600" />
+          <Loader2 size={24} className="animate-spin text-slate-500" />
         </div>
       )}
 
@@ -385,14 +509,14 @@ export default function CronJobs() {
         <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
           <div className="relative">
             <div className="absolute inset-0 bg-violet-500/10 rounded-full blur-xl" />
-            <div className="relative w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-              <CalendarClock size={22} className="text-slate-600" />
+            <div className="relative w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+              <CalendarClock size={22} className="text-slate-500" />
             </div>
           </div>
           <p className="text-sm font-medium text-slate-400">
             {search ? 'No entries match your filter' : 'No cron entries found'}
           </p>
-          <p className="text-xs text-slate-600 text-center max-w-sm">
+          <p className="text-xs text-slate-500 text-center max-w-sm">
             {search
               ? 'Try adjusting your search query or clearing the filter.'
               : 'Cron entries will appear here once scheduled tasks are configured on the server.'}
@@ -414,7 +538,7 @@ export default function CronJobs() {
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.05] rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-white/5">
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 w-8" />
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Schedule</th>
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Human Readable</th>
@@ -429,13 +553,13 @@ export default function CronJobs() {
               {entries.map((entry, idx) => (
                 <tr
                   key={idx}
-                  className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors group"
+                  className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors group"
                 >
                   {/* Expand toggle */}
                   <td className="px-4 py-3">
                     <button
                       onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
-                      className="text-slate-600 hover:text-slate-400 transition-colors"
+                      className="text-slate-500 hover:text-slate-400 transition-colors"
                     >
                       {expandedIdx === idx ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
@@ -449,7 +573,7 @@ export default function CronJobs() {
                       </code>
                       <button
                         onClick={() => handleCopy(entry.schedule, idx)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-all"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-400 transition-all"
                         title="Copy schedule"
                       >
                         {copiedIdx === idx ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
@@ -460,7 +584,7 @@ export default function CronJobs() {
                   {/* Human readable */}
                   <td className="px-4 py-3">
                     <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                      <Clock size={12} className="text-slate-600 shrink-0" />
+                      <Clock size={12} className="text-slate-500 shrink-0" />
                       {entry.human_readable}
                     </span>
                   </td>
@@ -479,7 +603,7 @@ export default function CronJobs() {
                       {entry.source}
                     </span>
                     {entry.user && (
-                      <span className="text-[10px] text-slate-600 ml-1.5">{entry.user}</span>
+                      <span className="text-[10px] text-slate-500 ml-1.5">{entry.user}</span>
                     )}
                   </td>
 
@@ -489,7 +613,7 @@ export default function CronJobs() {
                       <button
                         onClick={() => handleDeleteEntry(idx)}
                         disabled={saving}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-50"
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-50"
                         title="Delete entry"
                       >
                         <Trash2 size={13} />
@@ -506,16 +630,16 @@ export default function CronJobs() {
       {/* Raw Editor Overlay */}
       {showRawEditor && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <Terminal size={16} className="text-violet-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Raw Crontab Editor</h3>
               </div>
               <button
                 onClick={() => setShowRawEditor(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -534,16 +658,16 @@ export default function CronJobs() {
               <textarea
                 value={rawContent}
                 onChange={(e) => setRawContent(e.target.value)}
-                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs font-mono text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-emerald-500/50 transition-colors leading-relaxed"
+                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs font-mono text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-emerald-500/50 transition-colors leading-relaxed"
                 placeholder="# min hour day month weekday command"
                 spellCheck={false}
               />
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06]">
-              <span className="text-[10px] text-slate-700">
-                Press <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
+            <div className="flex items-center justify-between px-5 py-4 border-t border-white/5">
+              <span className="text-[10px] text-slate-500">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
               </span>
               <div className="flex items-center gap-2">
                 <button

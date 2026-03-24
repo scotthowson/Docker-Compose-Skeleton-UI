@@ -67,7 +67,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
         aria-labelledby="modal-title"
       >
         {/* Title bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <h2
             id="modal-title"
             className="text-base font-semibold text-slate-100"
@@ -80,7 +80,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
               flex items-center justify-center
               w-8 h-8 rounded-lg
               text-slate-500 hover:text-slate-300
-              hover:bg-white/[0.06]
+              hover:bg-white/5
               transition-colors duration-150
             "
             aria-label="Close modal"
@@ -96,7 +96,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
 
         {/* Actions */}
         {actions && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/[0.06]">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/5">
             {actions}
           </div>
         )}

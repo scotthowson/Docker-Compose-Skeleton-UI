@@ -3,10 +3,13 @@
 // =============================================================================
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Sun, Moon, LogOut, ChevronDown, Settings, Shield,
-  UserCircle, Mail, Clock, Bell, Sparkles,
+  UserCircle, Mail, Clock, Bell, Sparkles, X,
+  Zap, Palette, Download, Network, Lock, RefreshCw, Package, Layout,
 } from 'lucide-react'
+import { BUILD_VERSION, BUILD_DATE } from '../../constants/buildInfo'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -50,7 +53,128 @@ const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string;
 // User Profile Dropdown
 // ---------------------------------------------------------------------------
 
-function UserProfileDropdown({ onClose }: { onClose: () => void }) {
+// ---------------------------------------------------------------------------
+// What's New Changelog
+// ---------------------------------------------------------------------------
+
+const CHANGELOG = [
+  {
+    version: BUILD_VERSION,
+    date: BUILD_DATE,
+    highlights: [
+      { icon: Shield, color: 'text-violet-400', text: 'Two-Factor Authentication — TOTP 2FA with authenticator app support' },
+      { icon: Lock, color: 'text-amber-400', text: 'Auto-Lock — screen locks after inactivity, preserves app state' },
+      { icon: Zap, color: 'text-emerald-400', text: 'Performance — batch Docker inspect, 470x faster at scale' },
+      { icon: Shield, color: 'text-cyan-400', text: '7 rounds of penetration testing — 67+ security fixes applied' },
+      { icon: Zap, color: 'text-emerald-400', text: 'Traefik auto-routing — deploy templates with automatic HTTPS + DNS' },
+      { icon: Layout, color: 'text-amber-400', text: 'Customizable dashboard — drag, resize, and rearrange cards freely' },
+      { icon: Palette, color: 'text-rose-400', text: 'Consistent design system — unified button styles across all 37 pages' },
+      { icon: RefreshCw, color: 'text-emerald-400', text: 'System updates — git-based with backup tags and one-click rollback' },
+    ],
+  },
+  {
+    version: '2.3.0',
+    date: '2026-03-18',
+    highlights: [
+      { icon: Zap, color: 'text-emerald-400', text: 'Setup Wizard — guided first-run configuration with Traefik integration' },
+      { icon: Package, color: 'text-cyan-400', text: '100+ service templates with one-click deployment' },
+      { icon: Lock, color: 'text-amber-400', text: 'Security hardening — SSRF protection, terminal guards, session management' },
+      { icon: Layout, color: 'text-violet-400', text: 'Plugin system with lifecycle hooks and template support' },
+    ],
+  },
+  {
+    version: '2.2.0',
+    date: '2026-03-15',
+    highlights: [
+      { icon: Zap, color: 'text-emerald-400', text: 'Stack management — create, deploy, start, stop, and delete stacks' },
+      { icon: Download, color: 'text-cyan-400', text: 'Backup & restore with scheduled automation support' },
+      { icon: RefreshCw, color: 'text-amber-400', text: 'Container management — logs, exec, file browser, stats' },
+    ],
+  },
+]
+
+function WhatsNewModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  // Mark as seen
+  useEffect(() => {
+    localStorage.setItem('whats-new-seen', BUILD_VERSION)
+  }, [])
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg mx-4 glass rounded-2xl border border-white/10 shadow-2xl shadow-black/40 animate-scale-in max-h-[80vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/10">
+              <Sparkles size={20} className="text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">What's New</h2>
+              <p className="text-xs text-slate-400">Latest features and improvements</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors duration-200">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Changelog */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4 space-y-6">
+          {CHANGELOG.map((release, ri) => (
+            <div key={release.version}>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-sm font-bold text-white">v{release.version}</span>
+                <span className="text-[10px] text-slate-500 font-mono">{release.date}</span>
+                {ri === 0 && (
+                  <span className="text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                    Latest
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {release.highlights.map((item, idx) => {
+                  const Icon = item.icon
+                  return (
+                    <div key={idx} className="flex items-start gap-3 py-1.5">
+                      <Icon size={14} className={`${item.color} shrink-0 mt-0.5`} />
+                      <p className="text-xs text-slate-300 leading-relaxed">{item.text}</p>
+                    </div>
+                  )
+                })}
+              </div>
+              {ri < CHANGELOG.length - 1 && <div className="border-b border-white/5 mt-4" />}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-white/5 flex items-center justify-between shrink-0">
+          <p className="text-[10px] text-slate-500">Docker Compose Skeleton Manager v{BUILD_VERSION}</p>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// User Profile Dropdown
+// ---------------------------------------------------------------------------
+
+function UserProfileDropdown({ onClose, onWhatsNew, hasUnseen }: { onClose: () => void; onWhatsNew?: () => void; hasUnseen?: boolean }) {
   const { currentUser, userRole, logout } = useAuthStore()
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const ref = useRef<HTMLDivElement>(null)
@@ -66,7 +190,9 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
   })()
 
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
-  const profileIcon = profileData.icon ?? ''
+  const profileIconRaw = profileData.icon ?? ''
+  // SECURITY: Only allow http/https/data URIs for profile images — prevents javascript: XSS
+  const profileIcon = profileIconRaw.length > 2 && /^(https?:|data:image\/)/.test(profileIconRaw) ? profileIconRaw : profileIconRaw.length <= 2 ? profileIconRaw : ''
   const profileEmail = profileData.email ?? ''
   const statusEmoji = profileData.statusEmoji ?? ''
 
@@ -121,11 +247,11 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
   return (
     <div
       ref={ref}
-      className="no-drag absolute right-0 top-full mt-2 w-72 glass rounded-xl overflow-hidden animate-scale-in z-50 shadow-2xl shadow-black/30"
-      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      className="no-drag absolute right-0 top-full mt-2 w-72 rounded-xl overflow-hidden animate-scale-in z-50 shadow-2xl shadow-black/40 border border-white/10"
+      style={{ WebkitAppRegion: 'no-drag', backgroundColor: 'rgba(15, 23, 42, 0.97)', backdropFilter: 'blur(24px)' } as React.CSSProperties}
     >
       {/* Profile header */}
-      <div className="px-4 py-4 border-b border-white/[0.06]">
+      <div className="px-4 py-4 border-b border-white/5">
         <div className="flex items-center gap-3">
           {profileIcon && profileIcon.length > 2 ? (
             <img src={profileIcon} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover ring-2 ring-emerald-500/20" />
@@ -146,7 +272,7 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
                 {profileEmail}
               </p>
             ) : (
-              <p className="text-[10px] text-slate-600 capitalize">{userRole ?? 'User'}</p>
+              <p className="text-[10px] text-slate-500 capitalize">{userRole ?? 'User'}</p>
             )}
           </div>
           <div className="flex flex-col items-end gap-0.5">
@@ -155,7 +281,7 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
               Active
             </span>
             {sessionDuration && (
-              <span className="text-[9px] text-slate-600 tabular-nums">
+              <span className="text-[9px] text-slate-500 tabular-nums">
                 Session: {sessionDuration}
               </span>
             )}
@@ -169,40 +295,48 @@ function UserProfileDropdown({ onClose }: { onClose: () => void }) {
           <button
             key={item.label}
             onClick={item.onClick}
-            className="no-drag flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-white/[0.05] transition-colors cursor-pointer"
+            className="no-drag flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-white/5 transition-colors duration-200 cursor-pointer"
           >
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.04]">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5">
               <item.icon size={14} className="text-slate-400" />
             </div>
             <div className="text-left">
               <p className="text-xs font-medium text-slate-200">{item.label}</p>
-              <p className="text-[10px] text-slate-600">{item.description}</p>
+              <p className="text-[10px] text-slate-500">{item.description}</p>
             </div>
           </button>
         ))}
       </div>
 
       {/* What's New */}
-      <div className="border-t border-white/[0.06] py-1.5">
+      <div className="border-t border-white/5 py-1.5">
         <button
-          onClick={() => { onClose(); setCurrentPage('settings') }}
-          className="no-drag flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-white/[0.05] transition-colors cursor-pointer"
+          onClick={() => { onClose(); onWhatsNew?.() }}
+          className="no-drag flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-white/5 transition-colors duration-200 cursor-pointer"
         >
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.04]">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 relative">
             <Sparkles size={14} className="text-amber-400" />
+            {hasUnseen && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400" />}
           </div>
           <div className="text-left">
             <p className="text-xs font-medium text-slate-200">What's New</p>
-            <p className="text-[10px] text-slate-600">Latest features & changes</p>
+            <p className="text-[10px] text-slate-500">Latest features & changes</p>
           </div>
         </button>
       </div>
 
-      {/* Logout */}
-      <div className="border-t border-white/[0.06] p-2">
+      {/* Lock & Logout */}
+      <div className="border-t border-white/5 p-2 space-y-1">
+        <button
+          onClick={() => { onClose(); window.dispatchEvent(new CustomEvent('dcs-lock-screen')) }}
+          className="no-drag flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors duration-200 cursor-pointer"
+        >
+          <Lock size={14} />
+          <span className="text-xs font-medium">Lock Screen</span>
+        </button>
         <button
           onClick={() => { onClose(); logout() }}
-          className="no-drag flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+          className="no-drag flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors duration-200 cursor-pointer"
         >
           <LogOut size={14} />
           <span className="text-xs font-medium">Sign Out</span>
@@ -228,7 +362,12 @@ export function Header() {
   const toggleDrawer = useNotificationStore((s) => s.toggleDrawer)
 
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showWhatsNew, setShowWhatsNew] = useState(false)
   const [profileVersion, setProfileVersion] = useState(0)
+
+  // Show What's New badge if user hasn't seen this version
+  const whatsNewSeen = localStorage.getItem('whats-new-seen')
+  const hasNewChangelog = whatsNewSeen !== BUILD_VERSION
 
   // Re-read profile data when the profile-updated event fires
   useEffect(() => {
@@ -266,7 +405,7 @@ export function Header() {
         flex items-center justify-between
         h-11 md:h-14 px-3 md:px-5
         bg-slate-900/80 backdrop-blur-2xl
-        border-b border-white/[0.06]
+        border-b border-white/5
         shrink-0
       "
     >
@@ -298,8 +437,8 @@ export function Header() {
           className="
             relative flex items-center justify-center w-9 h-9 md:w-8 md:h-8
             rounded-lg text-slate-400
-            bg-white/[0.03] border border-white/[0.06]
-            hover:bg-white/[0.08] hover:text-slate-200
+            bg-white/[0.03] border border-white/5
+            hover:bg-white/10 hover:text-slate-200
             transition-all duration-200 press
           "
           title="Notifications"
@@ -328,15 +467,15 @@ export function Header() {
             hidden sm:flex items-center gap-2
             rounded-lg px-2.5 py-1.5
             text-[11px] text-slate-500
-            bg-white/[0.03] border border-white/[0.06]
-            hover:bg-white/[0.06] hover:text-slate-400
+            bg-white/[0.03] border border-white/5
+            hover:bg-white/5 hover:text-slate-400
             transition-all duration-200 press
           "
           title="Search (Ctrl+K)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <span>Jump to page or action...</span>
-          <kbd className="rounded border border-white/[0.06] bg-white/[0.03] px-1 py-0.5 font-mono text-[9px]">Ctrl+K</kbd>
+          <kbd className="rounded border border-white/5 bg-white/[0.03] px-1 py-0.5 font-mono text-[9px]">Ctrl+K</kbd>
         </button>
 
         {/* User Profile Button */}
@@ -346,8 +485,8 @@ export function Header() {
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="
                 flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1 md:py-1.5 rounded-lg
-                bg-white/[0.03] border border-white/[0.06]
-                hover:bg-white/[0.06] hover:border-white/[0.1]
+                bg-white/[0.03] border border-white/5
+                hover:bg-white/5 hover:border-white/10
                 transition-all duration-200 press
               "
             >
@@ -361,11 +500,11 @@ export function Header() {
                 </div>
               )}
               <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">{currentUser}</span>
-              <ChevronDown size={10} className={`text-slate-600 transition-transform duration-200 hidden sm:block ${showProfileMenu ? 'rotate-180' : ''}`} />
+              <ChevronDown size={10} className={`text-slate-500 transition-transform duration-200 hidden sm:block ${showProfileMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showProfileMenu && (
-              <UserProfileDropdown onClose={() => setShowProfileMenu(false)} />
+              <UserProfileDropdown onClose={() => setShowProfileMenu(false)} onWhatsNew={() => setShowWhatsNew(true)} hasUnseen={hasNewChangelog} />
             )}
           </div>
         )}
@@ -376,8 +515,8 @@ export function Header() {
           className="
             flex items-center justify-center w-9 h-9 md:w-8 md:h-8
             rounded-lg text-slate-400
-            bg-white/[0.03] border border-white/[0.06]
-            hover:bg-white/[0.08] hover:text-slate-200
+            bg-white/[0.03] border border-white/5
+            hover:bg-white/10 hover:text-slate-200
             transition-all duration-200 press
           "
           title={isDark ? 'Switch to light mode (Ctrl+D)' : 'Switch to dark mode (Ctrl+D)'}
@@ -411,7 +550,7 @@ export function Header() {
           <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">{label}</span>
           {connectionStatus === 'connected' && latencyMs != null && (
             <>
-              <span className="hidden sm:inline text-slate-600 text-[10px]">&mdash;</span>
+              <span className="hidden sm:inline text-slate-500 text-[10px]">&mdash;</span>
               <span className={`hidden sm:inline text-[10px] tabular-nums font-mono ${latencyMs < 100 ? 'text-emerald-400/70' : latencyMs < 300 ? 'text-amber-400/70' : 'text-rose-400/70'}`}>{latencyMs}ms</span>
             </>
           )}
@@ -419,6 +558,7 @@ export function Header() {
       </div>
     </header>
     <NotificationDrawer />
+    {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
     </>
   )
 }

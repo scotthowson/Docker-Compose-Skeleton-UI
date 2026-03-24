@@ -213,7 +213,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                 onClick={(e) => { e.stopPropagation(); onDelete(stack.name) }}
                 className="
                   flex items-center justify-center w-7 h-7 rounded-md
-                  bg-white/[0.04] border border-white/[0.06] text-slate-500
+                  bg-white/5 border border-white/5 text-slate-500
                   hover:bg-rose-500/15 hover:border-rose-500/25 hover:text-rose-400
                   opacity-0 group-hover:opacity-100
                   transition-all duration-200
@@ -259,7 +259,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             container{stack.running_containers !== 1 ? 's' : ''} running
           </span>
           {lastAction && (
-            <span className="flex items-center gap-1 text-[10px] text-slate-600">
+            <span className="flex items-center gap-1 text-[10px] text-slate-500">
               <Clock size={10} />
               {formatRelativeTime(lastAction)}
             </span>
@@ -269,7 +269,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
         {/* Action buttons (hidden in batch mode) */}
         {!batchMode && (
           <div
-            className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/[0.06]"
+            className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/5"
             onClick={(e) => e.stopPropagation()}
           >
             {actionButtons.filter((b) => b.action !== 'update' || isAdmin).map(({ action, icon: Icon, label, color, hoverColor, disabled }) => {
@@ -286,7 +286,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                     transition-all duration-200
                     ${
                       isDisabled
-                        ? 'text-slate-600 cursor-not-allowed'
+                        ? 'text-slate-500 cursor-not-allowed'
                         : `${color} ${hoverColor}`
                     }
                   `}
@@ -302,7 +302,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
 
             {/* Compose file indicator */}
             {stack.has_env && (
-              <span className="ml-auto text-[10px] text-slate-600 font-mono">.env</span>
+              <span className="ml-auto text-[10px] text-slate-500 font-mono">.env</span>
             )}
           </div>
         )}

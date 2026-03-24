@@ -78,7 +78,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
       >
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/10">
               <Network size={18} className="text-emerald-400" />
             </div>
             <div>
@@ -117,7 +117,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
                     rounded-lg px-3 py-2 text-xs font-medium border transition-all
                     ${driver === d
                       ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                      : 'border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/[0.12]'
+                      : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/[0.12]'
                     }
                   `}
                 >
@@ -131,7 +131,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                Subnet <span className="text-slate-600">(optional)</span>
+                Subnet <span className="text-slate-500">(optional)</span>
               </label>
               <input
                 type="text"
@@ -143,7 +143,7 @@ function CreateNetworkModal({ onClose, onCreated }: {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                Gateway <span className="text-slate-600">(optional)</span>
+                Gateway <span className="text-slate-500">(optional)</span>
               </label>
               <input
                 type="text"
@@ -260,11 +260,11 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 animate-scale-in"
+        className="relative w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-8 py-6 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className={`flex items-center justify-center w-11 h-11 rounded-xl ring-1 ${
               isBuiltIn ? 'bg-slate-500/10 ring-slate-500/20' : 'bg-cyan-500/10 ring-cyan-500/20'
@@ -276,7 +276,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
               <p className="text-xs text-slate-500 font-mono">{network.id}</p>
             </div>
           </div>
-          <button onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all">
+          <button onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
             <X size={18} />
           </button>
         </div>
@@ -299,21 +299,21 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Network Properties</h3>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Driver</p>
                   <span className="inline-flex rounded-full bg-cyan-500/15 px-3 py-1 text-xs font-semibold text-cyan-400">
                     {detail.driver}
                   </span>
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Scope</p>
                   <p className="text-sm font-medium text-slate-200">{detail.scope}</p>
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Subnet</p>
                   <p className="text-sm text-slate-200 font-mono">{detail.subnet || 'Auto-assigned'}</p>
                 </div>
-                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Gateway</p>
                   <p className="text-sm text-slate-200 font-mono">{detail.gateway || 'Auto-assigned'}</p>
                 </div>
@@ -328,7 +328,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
               )}
 
               {/* Full ID */}
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+              <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Full Network ID</p>
                 <p className="text-xs text-slate-300 font-mono break-all">{detail.id}</p>
               </div>
@@ -343,16 +343,16 @@ function NetworkDetailPanel({ network, onClose, onRefresh, isAdmin }: {
 
               {detail.containers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Unplug size={28} className="text-slate-700 mb-3" />
+                  <Unplug size={28} className="text-slate-500 mb-3" />
                   <p className="text-sm text-slate-500">No containers connected</p>
-                  <p className="text-xs text-slate-600 mt-1">Connect containers to this network using Docker CLI</p>
+                  <p className="text-xs text-slate-500 mt-1">Connect containers to this network using Docker CLI</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {detail.containers.map((c) => (
                     <div
                       key={c.id}
-                      className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5 hover:bg-white/[0.05] transition-colors"
+                      className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3.5 hover:bg-white/5 transition-colors"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
@@ -429,7 +429,7 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="relative w-full max-w-md mx-4 glass p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
             <Trash2 size={18} className="text-rose-400" />
           </div>
           <div>
@@ -507,13 +507,13 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
                 {net.name}
               </h3>
             </div>
-            <p className="text-[10px] text-slate-600 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {!isBuiltIn && isAdmin && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete() }}
-                className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
                 title="Delete network"
               >
                 <Trash2 size={12} />
@@ -521,7 +521,7 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
             )}
             <button
               onClick={(e) => { e.stopPropagation(); onInspect() }}
-              className="p-1.5 rounded-md text-slate-600 hover:text-cyan-400 hover:bg-cyan-500/10 opacity-0 group-hover:opacity-100 transition-all"
+              className="p-1.5 rounded-md text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 opacity-0 group-hover:opacity-100 transition-all"
               title="Inspect"
             >
               <Eye size={12} />
@@ -545,7 +545,7 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
         </div>
 
         {/* Connected containers */}
-        <div className="pt-3 border-t border-white/[0.06]">
+        <div className="pt-3 border-t border-white/5">
           <div className="flex items-center gap-1.5 mb-2">
             <Plug size={11} className="text-slate-500" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
@@ -557,18 +557,18 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
               {net.containers.slice(0, 5).map((c) => (
                 <span
                   key={c}
-                  className="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-300 border border-white/[0.06]"
+                  className="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-300 border border-white/5"
                 >
                   <span className="w-1 h-1 rounded-full bg-emerald-400" />
                   {c}
                 </span>
               ))}
               {containerCount > 5 && (
-                <span className="text-[10px] text-slate-600">+{containerCount - 5} more</span>
+                <span className="text-[10px] text-slate-500">+{containerCount - 5} more</span>
               )}
             </div>
           ) : (
-            <p className="text-[10px] text-slate-600 italic">No containers connected</p>
+            <p className="text-[10px] text-slate-500 italic">No containers connected</p>
           )}
         </div>
       </div>
@@ -631,7 +631,7 @@ export default function Networks() {
   const totalContainers = networks.reduce((sum, n) => sum + n.containers.length, 0)
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Modals */}
       {showCreateModal && (
@@ -658,25 +658,24 @@ export default function Networks() {
 
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base md:text-xl font-bold text-slate-100">Networks</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Docker network topology and container connections
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10 flex items-center justify-center">
+            <Network className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Networks</span></h2>
+            <p className="text-sm text-slate-400">
+              Docker network topology and container connections
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="
-                flex items-center gap-2 rounded-lg px-3.5 py-2
-                text-sm font-medium text-emerald-400
-                bg-emerald-500/10 border border-emerald-500/20
-                hover:bg-emerald-500/20 hover:border-emerald-500/30
-                transition-all duration-200
-              "
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               New Network
             </button>
           )}
@@ -699,21 +698,21 @@ export default function Networks() {
 
       {/* Stats row — 3 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Network size={14} className="text-cyan-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">Total Networks</span>
           </div>
           <p className="text-xl md:text-2xl font-bold text-slate-100">{networks.length}</p>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Plus size={14} className="text-emerald-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">User Networks</span>
           </div>
           <p className="text-xl md:text-2xl font-bold text-slate-100">{userNetworks.length}</p>
         </div>
-        <div className="glass-subtle rounded-xl p-4">
+        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <Plug size={14} className="text-amber-400" />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">Connections</span>
@@ -725,13 +724,13 @@ export default function Networks() {
       {/* Search + Sort bar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search networks..."
-            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15 transition-all"
+            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15 transition-all"
           />
         </div>
         <div className="flex items-center gap-1">
@@ -745,7 +744,7 @@ export default function Networks() {
               className={`
                 flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
                 ${sortBy === s
-                  ? 'bg-white/[0.06] border-white/[0.1] text-slate-200'
+                  ? 'bg-white/[0.06] border-white/10 text-slate-200'
                   : 'border-transparent text-slate-500 hover:text-slate-300'
                 }
               `}
@@ -761,12 +760,12 @@ export default function Networks() {
       {networksLoading && networks.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[180px] border border-white/[0.04]" />
+            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[180px] border border-white/[0.03]" />
           ))}
         </div>
       ) : filteredNetworks.length === 0 ? (
-        <div className="glass-subtle rounded-xl p-12 text-center">
-          <Network size={32} className="text-slate-600 mx-auto mb-3" />
+        <div className="glass rounded-xl p-12 text-center">
+          <Network size={32} className="text-slate-500 mx-auto mb-3" />
           <p className="text-sm text-slate-400">
             {searchQuery ? 'No networks match your search' : 'No networks found'}
           </p>

@@ -18,8 +18,9 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useNotificationStore } from '../stores/notificationStore'
+import { Tooltip } from '../components/common/Tooltip'
 import { usePolling } from '../hooks/usePolling'
-import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
+import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, fetchProfile, saveProfileToServer } from '../api/endpoints'
 import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, ConnectionProfile, AlertThresholds } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,11 @@ function saveProfileData(data: ProfileData) {
   localStorage.setItem(key, JSON.stringify(data))
   // Dispatch event so Header and App re-read the data
   window.dispatchEvent(new Event('profile-updated'))
+  // Sync to server in background (fire-and-forget)
+  const isConnected = useConnectionStore.getState().status === 'connected'
+  if (isConnected) {
+    saveProfileToServer(data as unknown as Record<string, unknown>).catch(() => {})
+  }
 }
 
 function ProfileSettings() {
@@ -72,6 +78,35 @@ function ProfileSettings() {
   const [avatarPreview, setAvatarPreview] = useState(profile.icon)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Sync profile from server on mount
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  useEffect(() => {
+    if (!isConnected) return
+    let cancelled = false
+    fetchProfile()
+      .then((res) => {
+        if (cancelled || !res.profile) return
+        const serverProfile = res.profile as unknown as Partial<ProfileData>
+        const localProfile = getProfileData()
+        // Server wins for all fields, but keep local if server field is empty
+        const merged: ProfileData = { ...localProfile }
+        for (const k of Object.keys(serverProfile) as (keyof ProfileData)[]) {
+          const sv = serverProfile[k]
+          if (sv !== undefined && sv !== null && sv !== '') {
+            merged[k] = sv as string
+          }
+        }
+        // Save merged data locally
+        const key = getProfileKey()
+        localStorage.setItem(key, JSON.stringify(merged))
+        setProfile(merged)
+        setAvatarPreview(merged.icon)
+        window.dispatchEvent(new Event('profile-updated'))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isConnected])
+
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
 
   const handleChange = (key: keyof ProfileData, value: string) => {
@@ -80,7 +115,9 @@ function ProfileSettings() {
   }
 
   const handleSave = () => {
-    saveProfileData(profile)
+    // Re-read backgroundImage from localStorage since AppearanceSettings may have changed it
+    const current = getProfileData()
+    saveProfileData({ ...profile, backgroundImage: current.backgroundImage })
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
@@ -335,7 +372,7 @@ function ProfileSettings() {
       </div>
 
       {/* Account info */}
-      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3 space-y-2">
+      <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <User size={12} className="text-slate-500" />
@@ -504,7 +541,7 @@ function DiskLabelManager() {
               return (
                 <div
                   key={disk.mount}
-                  className="flex items-center gap-3 rounded-lg bg-slate-800/30 px-3 py-2.5 border border-white/[0.03] hover:border-white/[0.06] transition-all"
+                  className="flex items-center gap-3 rounded-lg bg-slate-800/30 px-3 py-2.5 border border-white/[0.03] hover:border-white/5 transition-all"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-slate-400 truncate" title={disk.mount}>
@@ -541,7 +578,7 @@ function DiskLabelManager() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => { setEditValue(diskLabels[disk.mount] ?? ''); setEditingMount(disk.mount) }}
-                        className="p-1 text-slate-600 hover:text-slate-400 transition-colors"
+                        className="p-1 text-slate-500 hover:text-slate-400 transition-colors"
                         title="Edit label"
                       >
                         <Pencil size={11} />
@@ -549,7 +586,7 @@ function DiskLabelManager() {
                       {hasLabel && (
                         <button
                           onClick={() => handleRemoveLabel(disk.mount)}
-                          className="p-1 text-slate-600 hover:text-rose-400 transition-colors"
+                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
                           title="Remove label"
                         >
                           <Trash2 size={11} />
@@ -565,7 +602,7 @@ function DiskLabelManager() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-white/[0.04]" />
+      <div className="border-t border-white/[0.03]" />
 
       {/* Custom locations */}
       <div>
@@ -639,14 +676,14 @@ function DiskLabelManager() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => { setEditValue(custom.label); setEditingMount(`custom:${custom.mount}`) }}
-                        className="p-1 text-slate-600 hover:text-violet-400 transition-colors"
+                        className="p-1 text-slate-500 hover:text-violet-400 transition-colors"
                         title="Edit label"
                       >
                         <Pencil size={11} />
                       </button>
                       <button
                         onClick={() => handleRemoveCustom(custom.mount)}
-                        className="p-1 text-slate-600 hover:text-rose-400 transition-colors"
+                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
                         title="Remove custom location"
                       >
                         <Trash2 size={11} />
@@ -734,12 +771,12 @@ function DiskLabelManager() {
 
         {/* Empty state */}
         {customDisks.length === 0 && !showAddForm && (
-          <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/[0.06] p-4 text-center">
-            <FolderPlus size={20} className="text-slate-600 mx-auto mb-2" />
+          <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/5 p-4 text-center">
+            <FolderPlus size={20} className="text-slate-500 mx-auto mb-2" />
             <p className="text-[11px] text-slate-500">
               No custom locations added yet
             </p>
-            <p className="text-[10px] text-slate-600 mt-0.5">
+            <p className="text-[10px] text-slate-500 mt-0.5">
               Add NFS shares, USB drives, or other mount points
             </p>
           </div>
@@ -838,7 +875,7 @@ function AppearanceSettings() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-white/[0.04]" />
+      <div className="border-t border-white/[0.03]" />
 
       {/* Theme Toggle */}
       <div>
@@ -853,7 +890,7 @@ function AppearanceSettings() {
               flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
               ${theme === 'dark'
                 ? 'bg-slate-800 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/20'
-                : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
               }
             `}
           >
@@ -866,7 +903,7 @@ function AppearanceSettings() {
               flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
               ${theme === 'light'
                 ? 'bg-slate-800 border-amber-500/30 text-amber-400 ring-1 ring-amber-500/20'
-                : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
               }
             `}
           >
@@ -926,7 +963,7 @@ function AppearanceSettings() {
                 px-2.5 py-1.5 rounded-md text-[10px] font-medium border transition-all
                 ${backgroundImage === p.value
                   ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                  : 'border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                  : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
                 }
               `}
             >
@@ -937,7 +974,7 @@ function AppearanceSettings() {
 
         {/* Preview */}
         {backgroundImage && (
-          <div className="mt-3 rounded-lg overflow-hidden border border-white/[0.06] h-24 relative bg-slate-800/50">
+          <div className="mt-3 rounded-lg overflow-hidden border border-white/5 h-24 relative bg-slate-800/50">
             <img
               src={backgroundImage}
               alt="Background preview"
@@ -1000,7 +1037,7 @@ function KeyboardShortcuts() {
     <div className="space-y-4">
       {shortcutGroups.map((group) => (
         <div key={group.group}>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
             {group.group}
           </p>
           <div className="space-y-0.5">
@@ -1010,7 +1047,7 @@ function KeyboardShortcuts() {
                 className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-white/[0.03] transition-colors"
               >
                 <span className="text-xs text-slate-400">{s.description}</span>
-                <kbd className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-slate-500">
+                <kbd className="shrink-0 rounded-md border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-slate-500">
                   {s.keys}
                 </kbd>
               </div>
@@ -1023,11 +1060,169 @@ function KeyboardShortcuts() {
 }
 
 // ---------------------------------------------------------------------------
+// Two-Factor Authentication Setup
+// ---------------------------------------------------------------------------
+
+function TwoFactorSetup() {
+  const [status, setStatus] = useState<'idle' | 'setup' | 'verify' | 'enabled' | 'disabling'>('idle')
+  const [secret, setSecret] = useState('')
+  const [uri, setUri] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [disablePassword, setDisablePassword] = useState('')
+
+  // Check if TOTP is already enabled (look for totp_enabled in user data from server)
+  useEffect(() => {
+    // We'll check via the auth verify endpoint or just try setup
+    // For now, start as idle and let user click to set up
+  }, [])
+
+  const handleSetup = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { totpSetup } = await import('../api/endpoints')
+      const res = await totpSetup()
+      setSecret(res.secret)
+      setUri(res.uri)
+      setStatus('setup')
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('already enabled')) {
+        setStatus('enabled')
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to set up 2FA')
+      }
+    }
+    setLoading(false)
+  }
+
+  const handleVerify = async () => {
+    if (code.length !== 6) return
+    setLoading(true)
+    setError('')
+    try {
+      const { totpVerify } = await import('../api/endpoints')
+      const res = await totpVerify(code)
+      if (res.success) {
+        setStatus('enabled')
+        setCode('')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid code')
+    }
+    setLoading(false)
+  }
+
+  const handleDisable = async () => {
+    if (!disablePassword) return
+    setLoading(true)
+    setError('')
+    try {
+      const { totpDisable } = await import('../api/endpoints')
+      await totpDisable(disablePassword)
+      setStatus('idle')
+      setDisablePassword('')
+      setSecret('')
+      setUri('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disable 2FA')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="rounded-lg border border-white/[0.03] bg-white/[0.03] p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-violet-500/10 shrink-0">
+            <Shield size={12} className="text-violet-400" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-200">Two-Factor Authentication</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {status === 'enabled' ? 'Enabled — your account requires a code on login' : 'Add an extra layer of security with TOTP'}
+            </p>
+          </div>
+        </div>
+        {status === 'idle' && (
+          <button onClick={handleSetup} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/15 text-violet-400 border border-violet-500/20 hover:bg-violet-500/25 transition-all disabled:opacity-50">
+            {loading ? <Loader2 size={11} className="animate-spin" /> : <Shield size={11} />}
+            Enable 2FA
+          </button>
+        )}
+        {status === 'enabled' && (
+          <button onClick={() => setStatus('disabling')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/15 hover:bg-rose-500/20 transition-all">
+            Disable
+          </button>
+        )}
+      </div>
+
+      {/* Setup step — show secret */}
+      {status === 'setup' && (
+        <div className="mt-3 pt-3 border-t border-white/[0.03] space-y-3">
+          <p className="text-[11px] text-slate-400">
+            Open your authenticator app (Google Authenticator, Authy, etc.) and add this account manually using the secret below:
+          </p>
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+            <code className="flex-1 text-xs font-mono text-violet-300 tracking-wider break-all select-all">{secret}</code>
+          </div>
+          <p className="text-[11px] text-slate-500">Enter the 6-digit code from your app to verify:</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
+              placeholder="000000"
+              className="w-32 text-center font-mono text-lg tracking-[0.3em] px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-200 placeholder-slate-700 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20"
+            />
+            <button
+              onClick={handleVerify}
+              disabled={loading || code.length !== 6}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+              Verify & Enable
+            </button>
+          </div>
+          {error && <p className="text-[10px] text-rose-400">{error}</p>}
+        </div>
+      )}
+
+      {/* Disable step */}
+      {status === 'disabling' && (
+        <div className="mt-3 pt-3 border-t border-white/[0.03] space-y-3">
+          <p className="text-[11px] text-slate-400">Enter your password to disable two-factor authentication:</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={disablePassword}
+              onChange={(e) => { setDisablePassword(e.target.value); setError('') }}
+              placeholder="Password"
+              className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20"
+            />
+            <button onClick={handleDisable} disabled={loading || !disablePassword} className="px-4 py-2 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/15 hover:bg-rose-500/20 transition-all disabled:opacity-50">
+              {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+              Disable 2FA
+            </button>
+            <button onClick={() => { setStatus('enabled'); setError('') }} className="px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-400 transition-colors">
+              Cancel
+            </button>
+          </div>
+          {error && <p className="text-[10px] text-rose-400">{error}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Security Settings — Change password, delete account, security info
 // ---------------------------------------------------------------------------
 
 function SecuritySettings() {
-  const { changePassword, deleteAccount, error, clearError } = useAuthStore()
+  const { changePassword, deleteAccount, error, clearError, currentUser, userRole } = useAuthStore()
   const [section, setSection] = useState<'info' | 'password' | 'delete' | null>('info')
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -1064,7 +1259,7 @@ function SecuritySettings() {
       {section === 'info' && (
         <>
           <div className="space-y-2.5">
-            <div className="flex items-start gap-3 rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+            <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
               <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 shrink-0">
                 <Lock size={12} className="text-emerald-400" />
               </div>
@@ -1075,7 +1270,7 @@ function SecuritySettings() {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+            <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
               <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
                 <Shield size={12} className="text-cyan-400" />
               </div>
@@ -1086,7 +1281,7 @@ function SecuritySettings() {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+            <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
               <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/10 shrink-0">
                 <Key size={12} className="text-amber-400" />
               </div>
@@ -1099,22 +1294,37 @@ function SecuritySettings() {
             </div>
           </div>
 
+          {/* Two-Factor Authentication */}
+          <TwoFactorSetup />
+
           {/* Action buttons */}
           <div className="flex items-center gap-2 pt-2">
             <button
               onClick={() => { clearError(); setSection('password') }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
             >
               <Key size={12} />
               Change Password
             </button>
-            <button
-              onClick={() => { clearError(); setSection('delete') }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/5 border border-rose-500/15 text-rose-400 hover:bg-rose-500/10 transition-all press"
-            >
-              <Trash2 size={12} />
-              Delete Account
-            </button>
+            {userRole === 'admin' ? (
+              <Tooltip content="Admin accounts cannot be deleted from here" position="bottom">
+                <button
+                  disabled
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/30 border border-white/[0.03] text-slate-500 cursor-not-allowed opacity-50"
+                >
+                  <Trash2 size={12} />
+                  Delete Account
+                </button>
+              </Tooltip>
+            ) : (
+              <button
+                onClick={() => { clearError(); setSection('delete') }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/5 border border-rose-500/15 text-rose-400 hover:bg-rose-500/10 transition-all press"
+              >
+                <Trash2 size={12} />
+                Delete Account
+              </button>
+            )}
           </div>
         </>
       )}
@@ -1288,7 +1498,7 @@ function AutoLockSettings() {
                 px-3 py-2 rounded-lg text-xs font-medium border transition-all
                 ${autoLockMinutes === opt.value
                   ? 'bg-amber-500/15 border-amber-500/25 text-amber-400 ring-1 ring-amber-500/15'
-                  : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
                 }
               `}
             >
@@ -1305,7 +1515,7 @@ function AutoLockSettings() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-white/[0.04]" />
+      <div className="border-t border-white/[0.03]" />
 
       {/* Session Duration */}
       <div>
@@ -1325,7 +1535,7 @@ function AutoLockSettings() {
                 px-3 py-2 rounded-lg text-xs font-medium border transition-all
                 ${sessionDurationMinutes === opt.value
                   ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 ring-1 ring-emerald-500/15'
-                  : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/10'
+                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
                 }
               `}
             >
@@ -1347,7 +1557,7 @@ function AutoLockSettings() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-white/[0.04]" />
+      <div className="border-t border-white/[0.03]" />
 
       {/* Remember Username */}
       <div>
@@ -1383,7 +1593,7 @@ function AutoLockSettings() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-white/[0.04]" />
+      <div className="border-t border-white/[0.03]" />
 
       {/* Notifications */}
       <div>
@@ -1525,7 +1735,7 @@ function ExportImportSettings() {
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
         >
           <Upload size={13} />
           Import Settings
@@ -1550,7 +1760,7 @@ function ExportImportSettings() {
         </div>
       )}
 
-      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+      <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
         <p className="text-[10px] text-slate-500">
           Exported data includes: connection URL, polling intervals, theme, disk labels, custom disk locations, stack annotations, background image, auto-lock settings, notification preferences, and profile data. Credentials are <strong className="text-slate-400">never</strong> exported.
         </p>
@@ -1628,7 +1838,7 @@ function ConnectionProfiles() {
       </p>
 
       {/* Current connection */}
-      <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+      <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {connectionStatus === 'connected' ? (
@@ -1654,7 +1864,7 @@ function ConnectionProfiles() {
                   flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all
                   ${active
                     ? 'bg-emerald-500/[0.04] border-emerald-500/15'
-                    : 'bg-slate-800/30 border-white/[0.03] hover:border-white/[0.06]'
+                    : 'bg-slate-800/30 border-white/[0.03] hover:border-white/5'
                   }
                 `}
               >
@@ -1673,7 +1883,7 @@ function ConnectionProfiles() {
                 ) : (
                   <button
                     onClick={() => handleSwitch(profile)}
-                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/[0.06] hover:text-slate-200 transition-all shrink-0 press"
+                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/5 hover:text-slate-200 transition-all shrink-0 press"
                   >
                     Connect
                   </button>
@@ -1681,7 +1891,7 @@ function ConnectionProfiles() {
 
                 <button
                   onClick={() => handleRemove(profile.id)}
-                  className="p-1 text-slate-600 hover:text-rose-400 transition-colors shrink-0"
+                  className="p-1 text-slate-500 hover:text-rose-400 transition-colors shrink-0"
                   title="Remove profile"
                 >
                   <Trash2 size={11} />
@@ -1694,7 +1904,7 @@ function ConnectionProfiles() {
 
       {/* Add form */}
       {showAdd ? (
-        <div className="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3 animate-fade-in">
+        <div className="rounded-lg bg-white/[0.03] border border-white/5 p-4 space-y-3 animate-fade-in">
           <div className="flex items-center gap-2">
             <Plus size={14} className="text-emerald-400" />
             <span className="text-xs font-semibold text-slate-200">New Profile</span>
@@ -1751,7 +1961,7 @@ function ConnectionProfiles() {
       ) : (
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.08] hover:border-white/10 transition-all press"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
         >
           <Plus size={12} />
           Add Server Profile
@@ -1759,10 +1969,10 @@ function ConnectionProfiles() {
       )}
 
       {profiles.length === 0 && !showAdd && (
-        <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/[0.06] p-4 text-center">
-          <Server size={20} className="text-slate-600 mx-auto mb-2" />
+        <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/5 p-4 text-center">
+          <Server size={20} className="text-slate-500 mx-auto mb-2" />
           <p className="text-[11px] text-slate-500">No saved profiles</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">Save server connections for quick switching</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Save server connections for quick switching</p>
         </div>
       )}
     </div>
@@ -1821,10 +2031,10 @@ function NotificationPreferencesSection() {
           return (
             <div
               key={item.key}
-              className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-white/[0.02] transition-colors"
+              className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-white/[0.03] transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className={`flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] ${item.color}`}>
+                <div className={`flex items-center justify-center w-7 h-7 rounded-lg bg-white/5 ${item.color}`}>
                   {item.icon}
                 </div>
                 <div>
@@ -1864,7 +2074,7 @@ function NotificationPreferencesSection() {
       </div>
 
       {/* Disk warning threshold */}
-      <div className="border-t border-white/[0.04] pt-4">
+      <div className="border-t border-white/[0.03] pt-4">
         <div className="flex items-center justify-between mb-2">
           <div>
             <p className="text-xs font-medium text-slate-200">Disk Warning Threshold</p>
@@ -1882,8 +2092,8 @@ function NotificationPreferencesSection() {
           className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-amber-500"
         />
         <div className="flex items-center justify-between mt-1">
-          <span className="text-[9px] text-slate-600">75%</span>
-          <span className="text-[9px] text-slate-600">95%</span>
+          <span className="text-[9px] text-slate-500">75%</span>
+          <span className="text-[9px] text-slate-500">95%</span>
         </div>
       </div>
     </div>
@@ -2000,21 +2210,21 @@ function SessionInfo() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowToken(!showToken)}
-                  className="p-1 text-slate-600 hover:text-slate-300 transition-colors"
+                  className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
                   title={showToken ? 'Hide token' : 'Show token'}
                 >
                   {showToken ? <EyeOff size={11} /> : <Eye size={11} />}
                 </button>
                 <button
                   onClick={handleCopyToken}
-                  className={`p-1 transition-colors ${copied ? 'text-emerald-400' : 'text-slate-600 hover:text-slate-300'}`}
+                  className={`p-1 transition-colors ${copied ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}
                   title="Copy token"
                 >
                   {copied ? <Check size={11} /> : <Copy size={11} />}
                 </button>
               </div>
             </div>
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded px-2.5 py-1.5 overflow-x-auto">
+            <div className="bg-white/[0.03] border border-white/5 rounded px-2.5 py-1.5 overflow-x-auto">
               <code className="text-[10px] text-slate-400 font-mono break-all select-all">
                 {showToken ? token : tokenMasked}
               </code>
@@ -2089,7 +2299,7 @@ function AlertThresholdsEditor() {
               type="number" min={10} max={100} step={5}
               value={thresholds[warningKey]}
               onChange={(e) => updateField(warningKey, Number(e.target.value))}
-              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-amber-400 focus:outline-none focus:border-emerald-500/50"
+              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/5 rounded-lg text-amber-400 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -2104,7 +2314,7 @@ function AlertThresholdsEditor() {
               type="number" min={10} max={100} step={5}
               value={thresholds[criticalKey]}
               onChange={(e) => updateField(criticalKey, Number(e.target.value))}
-              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-rose-400 focus:outline-none focus:border-rose-500/30"
+              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/5 rounded-lg text-rose-400 focus:outline-none focus:border-rose-500/30"
             />
           </div>
         </div>
@@ -2113,7 +2323,7 @@ function AlertThresholdsEditor() {
   )
 
   if (loading) {
-    return <div className="flex items-center gap-2 py-4"><Timer size={14} className="text-slate-600 animate-spin" /><span className="text-xs text-slate-600">Loading thresholds...</span></div>
+    return <div className="flex items-center gap-2 py-4"><Timer size={14} className="text-slate-500 animate-spin" /><span className="text-xs text-slate-500">Loading thresholds...</span></div>
   }
 
   return (
@@ -2123,23 +2333,23 @@ function AlertThresholdsEditor() {
       </p>
 
       {sliderRow('CPU Usage', 'cpu_warning', 'cpu_critical')}
-      <div className="border-b border-white/[0.04]" />
+      <div className="border-b border-white/[0.03]" />
       {sliderRow('Memory Usage', 'memory_warning', 'memory_critical')}
-      <div className="border-b border-white/[0.04]" />
+      <div className="border-b border-white/[0.03]" />
       {sliderRow('Disk Usage', 'disk_warning', 'disk_critical')}
-      <div className="border-b border-white/[0.04]" />
+      <div className="border-b border-white/[0.03]" />
 
       {/* Restart threshold */}
       <div className="flex items-center justify-between">
         <div>
           <span className="text-xs font-medium text-slate-400">Container Restart Threshold</span>
-          <p className="text-[10px] text-slate-600">Alert when a container restarts more than this many times</p>
+          <p className="text-[10px] text-slate-500">Alert when a container restarts more than this many times</p>
         </div>
         <input
           type="number" min={1} max={50} step={1}
           value={thresholds.restart_threshold}
           onChange={(e) => updateField('restart_threshold', Number(e.target.value))}
-          className="w-16 px-2 py-1.5 text-sm text-center bg-slate-800/60 border border-white/[0.06] rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500/30"
+          className="w-16 px-2 py-1.5 text-sm text-center bg-slate-800/60 border border-white/5 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500/30"
         />
       </div>
 
@@ -2182,7 +2392,7 @@ function SettingsExportImport() {
       _version: 1,
       _exported_at: new Date().toISOString(),
       settings: { ...settings },
-      profile: profile ? JSON.parse(profile) : null,
+      profile: (() => { try { return profile ? JSON.parse(profile) : null } catch { return null } })(),
     }
 
     const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
@@ -2230,7 +2440,8 @@ function SettingsExportImport() {
     const profile = (importData as Record<string, unknown>).profile as Record<string, unknown> | undefined
 
     if (settings) {
-      const skipKeys = new Set(['currentPage', '_type', '_version', '_exported_at'])
+      // SECURITY: Blocklist keys that could be dangerous when imported from external files
+      const skipKeys = new Set(['currentPage', '_type', '_version', '_exported_at', 'serverUrl', 'apiToken'])
       for (const [key, value] of Object.entries(settings)) {
         if (!skipKeys.has(key) && typeof key === 'string') {
           updateSetting(key as keyof import('../../shared/types').AppSettings, value as never)
@@ -2309,7 +2520,7 @@ function SettingsExportImport() {
         </div>
       )}
 
-      <p className="text-[10px] text-slate-600">
+      <p className="text-[10px] text-slate-500">
         Export saves your preferences, polling intervals, disk labels, and profile. Import restores them on any device.
       </p>
     </div>
@@ -2345,10 +2556,10 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
   }
 
   return (
-    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentColor} ${fullWidth ? 'lg:col-span-2' : ''} ${title === 'About' ? 'gradient-border' : ''} transition-all duration-300`}>
+    <div className={`glass rounded-xl border border-white/5 overflow-hidden ${fullWidth ? 'lg:col-span-2' : ''} transition-all duration-300`}>
       <button
         onClick={toggleCollapse}
-        className="w-full px-5 py-4 border-b border-white/[0.06] flex items-center gap-2.5 hover:bg-white/[0.02] transition-all text-left cursor-pointer"
+        className="w-full px-5 py-4 border-b border-white/5 flex items-center gap-2.5 hover:bg-white/[0.03] transition-all text-left cursor-pointer"
       >
         {icon}
         <h3 className="text-sm font-semibold text-slate-200 flex-1">{title}</h3>
@@ -2418,11 +2629,14 @@ export default function Settings() {
   return (
     <div className="space-y-3 md:space-y-6">
       {/* Page header */}
-      <div>
-        <h2 className="text-base md:text-xl font-bold text-slate-100">Settings</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Configure connection, appearance, polling intervals, disk labels, and more
-        </p>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 border border-white/5">
+          <Cog size={24} className="text-violet-400" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold"><span className="text-gradient">Settings</span></h1>
+          <p className="text-sm text-slate-400 mt-0.5">Configure connection, appearance, preferences, and more</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -2442,7 +2656,7 @@ export default function Settings() {
             accentColor="border-t-emerald-500"
           >
             <ConnectionForm />
-            <div className="border-t border-white/[0.04] mt-4 pt-4">
+            <div className="border-t border-white/[0.03] mt-4 pt-4">
               <ConnectionProfiles />
             </div>
           </SectionCard>
@@ -2524,7 +2738,7 @@ export default function Settings() {
             accentColor="border-t-cyan-500"
           >
             <ExportImportSettings />
-            <div className="border-t border-white/[0.04] mt-4 pt-4">
+            <div className="border-t border-white/[0.03] mt-4 pt-4">
               <SettingsExportImport />
             </div>
           </SectionCard>
@@ -2545,7 +2759,7 @@ export default function Settings() {
               placeholder={"/* Add your custom CSS here */\n.glass { border-radius: 1rem; }"}
               rows={10}
               className="
-                w-full px-4 py-3 bg-slate-950 border border-white/[0.08] rounded-xl
+                w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl
                 text-xs text-emerald-400 placeholder-slate-700 font-mono
                 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-violet-500/15
                 resize-y transition-all leading-relaxed
@@ -2553,7 +2767,7 @@ export default function Settings() {
               spellCheck={false}
             />
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-600">
+              <span className="text-[10px] text-slate-500">
                 {customCSSLocal.length} characters
               </span>
               <div className="flex items-center gap-2">
@@ -2571,7 +2785,7 @@ export default function Settings() {
                 </button>
               </div>
             </div>
-            <p className="text-[10px] text-slate-600">
+            <p className="text-[10px] text-slate-500">
               Changes apply instantly when you click Apply. Use browser dev tools to inspect element classes.
             </p>
           </div>
@@ -2592,7 +2806,7 @@ export default function Settings() {
               { label: 'Compose', value: versionData?.compose_version ?? '--' },
               { label: 'Server URL', value: serverUrl },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-b-0">
+              <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-white/[0.03] last:border-b-0">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{item.label}</span>
                 <span className="text-sm text-slate-200 font-mono truncate max-w-[200px]" title={typeof item.value === 'string' ? item.value : undefined}>
                   {item.value}
@@ -2602,7 +2816,7 @@ export default function Settings() {
           </div>
 
           {/* Show Onboarding button */}
-          <div className="pt-3 mt-3 border-t border-white/[0.04]">
+          <div className="pt-3 mt-3 border-t border-white/[0.03]">
             <button
               onClick={() => {
                 localStorage.removeItem('onboarding_complete')

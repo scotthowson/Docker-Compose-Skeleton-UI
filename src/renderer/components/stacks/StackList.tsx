@@ -274,13 +274,9 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           {isAdmin && (
             <button
               onClick={onCreateStack}
-              className="
-                flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
-                bg-emerald-500 text-white hover:bg-emerald-400
-                shadow-lg shadow-emerald-500/20 transition-all duration-200
-              "
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               New Stack
             </button>
           )}
@@ -315,7 +311,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         </div>
 
         {/* Status filter pills */}
-        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/5 rounded-lg">
           <Filter className="w-3.5 h-3.5 text-slate-500 ml-2 mr-1" />
           {(['all', 'running', 'stopped'] as StatusFilter[]).map((f) => (
             <button
@@ -340,7 +336,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         </div>
 
         {/* Sort dropdown */}
-        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/5 rounded-lg">
           <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 ml-2 mr-1" />
           {(['priority', 'name', 'status', 'containers'] as SortMode[]).map((s) => (
             <button
@@ -380,7 +376,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       {loading && stacks.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[200px] border border-white/[0.04]" />
+            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[200px] border border-white/[0.03]" />
           ))}
         </div>
       ) : filtered.length > 0 || stacks.length > 0 ? (
@@ -407,21 +403,21 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               onClick={onCreateStack}
               className="
                 group relative flex flex-col items-center justify-center
-                min-h-[200px] rounded-xl border-2 border-dashed
-                border-white/[0.12] hover:border-emerald-500/40
-                bg-slate-800/40 hover:bg-emerald-500/[0.06]
+                min-h-[200px] rounded-xl border border-dashed
+                border-white/10 hover:border-emerald-500/30
+                bg-white/[0.02] hover:bg-emerald-500/[0.04]
                 transition-all duration-300 cursor-pointer
               "
             >
               <div className="
-                flex items-center justify-center w-14 h-14 rounded-2xl
-                bg-slate-700/30 group-hover:bg-emerald-500/15
-                ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
+                flex items-center justify-center w-12 h-12 rounded-xl
+                bg-white/5 group-hover:bg-emerald-500/15
+                border border-white/5 group-hover:border-emerald-500/20
                 transition-all duration-300 mb-3
               ">
-                <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
+                <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
               </div>
-              <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
+              <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
                 Create New Stack
               </span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
@@ -432,7 +428,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         </div>
       ) : (
         <div className="glass-subtle flex flex-col items-center justify-center py-16 rounded-xl">
-          <Layers className="w-10 h-10 text-slate-600 mb-3" />
+          <Layers className="w-10 h-10 text-slate-500 mb-3" />
           <p className="text-sm text-slate-500">
             {search || statusFilter !== 'all'
               ? 'No stacks match your filters'
@@ -476,7 +472,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               </button>
             </div>
             {/* Summary */}
-            <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
               <span className="flex items-center gap-1 text-[11px] font-medium text-rose-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'error').length, 0)} errors
@@ -497,7 +493,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 const warnings = result.diagnostics.filter(d => d.severity === 'warning').length
                 const infos = result.diagnostics.filter(d => d.severity === 'info').length
                 return (
-                  <div key={result.name} className={`rounded-xl border p-3 ${errors > 0 ? 'border-rose-500/15 bg-rose-500/[0.03]' : warnings > 0 ? 'border-amber-500/10 bg-amber-500/[0.02]' : 'border-white/[0.06]'}`}>
+                  <div key={result.name} className={`rounded-xl border p-3 ${errors > 0 ? 'border-rose-500/15 bg-rose-500/[0.03]' : warnings > 0 ? 'border-amber-500/10 bg-amber-500/[0.02]' : 'border-white/5'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono text-slate-200">{result.name}</span>
                       <div className="flex items-center gap-2">
@@ -518,7 +514,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                             <span className="text-slate-400">{d.message}</span>
                           </div>
                         ))}
-                        {result.diagnostics.length > 5 && <p className="text-[9px] text-slate-600 ml-4">+{result.diagnostics.length - 5} more</p>}
+                        {result.diagnostics.length > 5 && <p className="text-[9px] text-slate-500 ml-4">+{result.diagnostics.length - 5} more</p>}
                       </div>
                     )}
                   </div>

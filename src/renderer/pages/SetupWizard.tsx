@@ -98,14 +98,14 @@ function StepIndicator({ current, total, needsAdmin = true }: { current: Step; t
                   ? 'bg-emerald-500 text-white ring-2 ring-emerald-500/30'
                   : isActive
                     ? 'bg-emerald-500/20 text-emerald-400 ring-2 ring-emerald-500/40'
-                    : 'bg-slate-800/60 text-slate-600 ring-1 ring-white/[0.06]'
+                    : 'bg-slate-800/60 text-slate-500 ring-1 ring-white/[0.06]'
                 }
               `}>
                 {isComplete ? <Check size={14} /> : s}
               </div>
               <span className={`
                 text-[10px] mt-1.5 font-medium transition-colors duration-300
-                ${isActive ? 'text-emerald-400' : isComplete ? 'text-slate-400' : 'text-slate-600'}
+                ${isActive ? 'text-emerald-400' : isComplete ? 'text-slate-400' : 'text-slate-500'}
               `}>
                 {labels[i]}
               </span>
@@ -207,6 +207,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [traefikTrustedLan, setTraefikTrustedLan] = useState('192.168.1.0/24')
   const [cfDnsToken, setCfDnsToken] = useState('')
   const [includeDockerSocket, setIncludeDockerSocket] = useState(true)
+  const [enableDDNS, setEnableDDNS] = useState(false)
+  const [ddnsSubdomains, setDdnsSubdomains] = useState('@')
+  const [ddnsInterval, setDdnsInterval] = useState(300)
 
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
@@ -431,16 +434,39 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     setCompleting(true)
 
     try {
-      // 1. Apply configuration
+      // 1. Build ALL env vars in one go — includes API, Traefik, DDNS settings
+      const allEnvVars: Record<string, string> = {
+        ...envVars,
+        API_ENABLED: 'true',
+        API_PORT: '9876',
+        API_BIND: '0.0.0.0',
+        // Don't set API_AUTH_ENABLED — let the server auto-detect from API_BIND.
+        // When API_BIND=0.0.0.0, the server enables auth automatically.
+      }
+
+      // Add Traefik + Cloudflare vars if enabled
+      if (enableTraefik && envVars.PROXY_DOMAIN) {
+        allEnvVars.TRAEFIK_DOMAIN = envVars.PROXY_DOMAIN
+        if (cfDnsToken) allEnvVars.CF_DNS_API_TOKEN = cfDnsToken
+      }
+
+      // Add DDNS vars if enabled
+      if (enableDDNS && cfDnsToken) {
+        allEnvVars.DDNS_ENABLED = 'true'
+        allEnvVars.DDNS_SUBDOMAINS = ddnsSubdomains || '@'
+        allEnvVars.DDNS_INTERVAL = String(ddnsInterval)
+      }
+
+      // Single setupConfigure call with everything — MUST be before setupComplete
       await setupConfigure({
-        env_vars: envVars,
+        env_vars: allEnvVars,
         stacks: stacks.map((s) => s.name),
       })
 
-      // 2. Mark setup as complete
+      // 2. Mark setup as complete (blocks future setupConfigure calls)
       await setupComplete()
 
-      // 2b. Deploy Traefik if enabled (non-fatal — setup already succeeded)
+      // 3. Deploy Traefik if enabled (non-fatal — setup already succeeded)
       if (enableTraefik && envVars.PROXY_DOMAIN && traefikEmail) {
         try {
           await deployTemplate('traefik', {
@@ -577,7 +603,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             <Loader2 size={12} className="animate-spin text-emerald-400" />
             <span>Entering Dashboard...</span>
           </div>
-          <p className="text-[10px] text-slate-600 mt-6">
+          <p className="text-[10px] text-slate-500 mt-6">
             Tip: Export your settings from Settings to back up this configuration
           </p>
         </div>
@@ -620,7 +646,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           <StepIndicator current={step} total={5} needsAdmin={needsAdmin} />
 
           {/* Content card */}
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20 gradient-border">
+          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-2xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/20 gradient-border">
           {/* Error banner */}
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 mb-6 animate-fade-in">
@@ -640,7 +666,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               </div>
 
               {/* Server URL input */}
-              <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-5 mb-4">
+              <div className="bg-slate-800/40 border border-white/5 rounded-xl p-5 mb-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Link size={16} className="text-emerald-400" />
                   <h3 className="text-sm font-semibold text-slate-300">Server Connection</h3>
@@ -703,7 +729,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   )}
 
                   {/* System info card */}
-                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-5 animate-fade-in">
+                  <div className="bg-slate-800/40 border border-white/5 rounded-xl p-5 animate-fade-in">
                     <div className="flex items-center gap-2 mb-4">
                       <Server size={16} className="text-emerald-400" />
                       <h3 className="text-sm font-semibold text-slate-300">Detected System</h3>
@@ -718,7 +744,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         { label: 'Group ID', value: String(defaults.system.pgid) },
                         { label: 'Docker Status', value: defaults.system.docker_available ? 'Available' : 'Not Available', status: defaults.system.docker_available },
                       ].map((item) => (
-                        <div key={item.label + (('status' in item) ? '-status' : '')} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.02]">
+                        <div key={item.label + (('status' in item) ? '-status' : '')} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.03]">
                           <span className="text-[11px] text-slate-500">{item.label}</span>
                           {'status' in item ? (
                             <span className={`text-[11px] font-mono flex items-center gap-1 ${item.status ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -734,7 +760,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   </div>
                 </>
               ) : !connecting && !connected && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-white/[0.06]">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-white/5">
                   <WifiOff size={12} className="text-slate-500" />
                   <span className="text-[11px] text-slate-500">
                     Not connected — enter your server IP and click Connect
@@ -922,7 +948,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               setEnvVars({ ...envVars, TZ: tz })
                               setTzDropdownOpen(false)
                             }}
-                            className={`w-full text-left px-3 py-2 text-xs hover:bg-white/[0.06] transition-colors ${
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors ${
                               envVars.TZ === tz ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-300'
                             }`}
                           >
@@ -988,7 +1014,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* ── Advanced: Notifications ── */}
-                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                <div className="border border-white/5 rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowNotifications(!showNotifications)}
@@ -1002,7 +1028,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showNotifications ? 'rotate-90' : ''}`} />
                   </button>
                   {showNotifications && (
-                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY URL</label>
                         <input
@@ -1012,14 +1038,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           placeholder="https://ntfy.sh/your-topic"
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                         />
-                        <p className="text-[10px] text-slate-600 mt-1">Leave empty to disable push notifications</p>
+                        <p className="text-[10px] text-slate-500 mt-1">Leave empty to disable push notifications</p>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* ── Advanced: Startup & Health ── */}
-                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                <div className="border border-white/5 rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowStartup(!showStartup)}
@@ -1033,7 +1059,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showStartup ? 'rotate-90' : ''}`} />
                   </button>
                   {showStartup && (
-                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       {/* Log Level */}
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Log Level</label>
@@ -1106,7 +1132,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* ── Advanced: Backup ── */}
-                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                <div className="border border-white/5 rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowBackup(!showBackup)}
@@ -1120,7 +1146,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showBackup ? 'rotate-90' : ''}`} />
                   </button>
                   {showBackup && (
-                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Backup Source Directory</label>
                         <input
@@ -1141,17 +1167,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                         />
                       </div>
-                      <p className="text-[10px] text-slate-600">Configure after setup if unsure</p>
+                      <p className="text-[10px] text-slate-500">Configure after setup if unsure</p>
                     </div>
                   )}
                 </div>
 
                 {/* ── HTTPS with Traefik (collapsible) ── */}
-                <div className={`border rounded-xl overflow-hidden ${enableTraefik ? 'border-emerald-500/20 glow-emerald' : 'border-white/[0.06]'}`}>
+                <div className={`border rounded-xl overflow-hidden ${enableTraefik ? 'border-emerald-500/20 glow-emerald' : 'border-white/5'}`}>
                   <button
                     type="button"
                     onClick={() => setShowTraefik(!showTraefik)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <Shield size={14} className="text-emerald-400" />
@@ -1164,7 +1190,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   </button>
                   {showTraefik && (
-                    <div className="px-4 py-4 space-y-4 border-t border-white/[0.04] animate-fade-in">
+                    <div className="px-4 py-4 space-y-4 border-t border-white/[0.03] animate-fade-in">
                       {/* Master toggle */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -1192,7 +1218,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                                 disabled
                                 className="flex-1 px-3 py-2.5 bg-slate-800/30 border border-white/5 rounded-lg text-sm text-slate-400 font-mono"
                               />
-                              <span className="text-[9px] text-slate-600 shrink-0">from Domain above</span>
+                              <span className="text-[9px] text-slate-500 shrink-0">from Domain above</span>
                             </div>
                           </div>
 
@@ -1208,7 +1234,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               placeholder="admin@example.com"
                               className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                             />
-                            <p className="text-[10px] text-slate-600 mt-1">Used for certificate expiry notifications</p>
+                            <p className="text-[10px] text-slate-500 mt-1">Used for certificate expiry notifications</p>
                           </div>
 
                           {/* Trusted LAN */}
@@ -1234,23 +1260,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <button
                               type="button"
                               onClick={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }}
+                              title={isWebMode() ? 'Locked on in AIO — Docker Socket Proxy secures the Docker API' : includeDockerSocket ? 'Click to exclude' : 'Click to include'}
                               className={`relative w-10 h-5 rounded-full transition-colors ${includeDockerSocket ? 'bg-emerald-500' : 'bg-slate-700'} ${isWebMode() ? 'opacity-60 cursor-not-allowed' : ''}`}
                             >
                               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includeDockerSocket ? 'translate-x-5' : ''}`} />
                             </button>
-                            {isWebMode() && (
-                              <div className="absolute right-0 bottom-full mb-1 hidden group-hover/dsp:block z-50 animate-fade-in">
-                                <div className="bg-slate-800/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl px-3 py-2 text-[10px] text-slate-300 whitespace-nowrap">
-                                  Locked on in AIO — Docker Socket Proxy secures the Docker API
-                                </div>
-                              </div>
-                            )}
+                            {/* Native title tooltip avoids overflow:hidden z-index issues */}
                           </div>
 
                           {/* Cloudflare DNS (optional) */}
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                              Cloudflare DNS API Token <span className="text-[9px] text-slate-600">(optional)</span>
+                              Cloudflare DNS API Token <span className="text-[9px] text-slate-500">(optional)</span>
                             </label>
                             <input
                               type="password"
@@ -1259,8 +1280,80 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               placeholder="Leave empty for HTTP challenge"
                               className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                             />
-                            <p className="text-[10px] text-slate-600 mt-1">Required for wildcard certs or DNS challenge. Uses HTTP-01 challenge if empty.</p>
+                            <p className="text-[10px] text-slate-500 mt-1">Required for wildcard certs or DNS challenge. Uses HTTP-01 challenge if empty.</p>
                           </div>
+
+                          {/* Auto-routing info */}
+                          {envVars.PROXY_DOMAIN && envVars.PROXY_DOMAIN !== 'example.com' && (
+                            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+                              <p className="text-[11px] font-medium text-emerald-400 mb-1">Auto-Routing Enabled</p>
+                              <p className="text-[10px] text-slate-400 leading-relaxed">
+                                Services deployed from the Templates page will automatically get HTTPS routes at <span className="font-mono text-emerald-400/80">servicename.{envVars.PROXY_DOMAIN}</span>. You can edit routes before deploying or modify them later in the Traefik config files.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Dynamic DNS toggle */}
+                          {cfDnsToken && (
+                            <div className="space-y-3 pt-1">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-medium text-slate-300">Dynamic DNS (DDNS)</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">Auto-update DNS when your public IP changes</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEnableDDNS(!enableDDNS)}
+                                  className={`relative w-10 h-5 rounded-full transition-colors ${enableDDNS ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                                >
+                                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enableDDNS ? 'translate-x-5' : ''}`} />
+                                </button>
+                              </div>
+
+                              {enableDDNS && (
+                                <div className="animate-fade-in space-y-3">
+                                  <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Subdomains to Monitor</label>
+                                    <input
+                                      type="text"
+                                      value={ddnsSubdomains}
+                                      onChange={(e) => setDdnsSubdomains(e.target.value)}
+                                      placeholder="@,www,traefik,ui"
+                                      className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                                    />
+                                    <p className="text-[10px] text-slate-500 mt-1">Use @ for root domain. Comma-separated.</p>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Check Interval</label>
+                                    <div className="flex flex-wrap gap-2">
+                                      {[
+                                        { value: 60, label: '1 min' },
+                                        { value: 300, label: '5 min' },
+                                        { value: 900, label: '15 min' },
+                                        { value: 1800, label: '30 min' },
+                                        { value: 3600, label: '1 hour' },
+                                      ].map((opt) => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() => setDdnsInterval(opt.value)}
+                                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                            ddnsInterval === opt.value
+                                              ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
+                                              : 'bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/15'
+                                          }`}
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-1.5">How often to check if your public IP has changed</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1268,11 +1361,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* ── Dashboard Preferences (collapsible) ── */}
-                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                <div className="border border-white/5 rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowPreferences(!showPreferences)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <Palette size={14} className="text-cyan-400" />
@@ -1282,7 +1375,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showPreferences ? 'rotate-90' : ''}`} />
                   </button>
                   {showPreferences && (
-                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.04] animate-fade-in">
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Theme</label>
                         <select
@@ -1342,7 +1435,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                         />
                       </div>
-                      <p className="text-[10px] text-slate-600">These can be changed later in Settings</p>
+                      <p className="text-[10px] text-slate-500">These can be changed later in Settings</p>
                     </div>
                   )}
                 </div>
@@ -1366,11 +1459,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 {stacks.map((stack, index) => (
                   <div
                     key={`${stack.name}-${index}`}
-                    className="bg-slate-800/40 border border-white/[0.06] rounded-lg px-3 py-2 group"
+                    className="bg-slate-800/40 border border-white/5 rounded-lg px-3 py-2 group"
                   >
                     <div className="flex items-center gap-2">
                       {/* Order number */}
-                      <span className="flex items-center justify-center w-6 h-6 rounded-md bg-white/[0.04] text-[10px] font-bold text-slate-500 shrink-0">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-md bg-white/5 text-[10px] font-bold text-slate-500 shrink-0">
                         {index + 1}
                       </span>
 
@@ -1416,7 +1509,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <button
                           type="button"
                           onClick={() => labelEditIndex === index ? commitLabelEdit(index) : startLabelEdit(index)}
-                          className={`p-1 rounded hover:bg-white/[0.06] transition-colors ${labelEditIndex === index ? 'text-violet-400' : 'text-slate-500 hover:text-slate-300'}`}
+                          className={`p-1 rounded hover:bg-white/5 transition-colors ${labelEditIndex === index ? 'text-violet-400' : 'text-slate-500 hover:text-slate-300'}`}
                           title={stack.label ? 'Edit label' : 'Add label'}
                         >
                           <Palette size={11} />
@@ -1424,7 +1517,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <button
                           type="button"
                           onClick={() => startEdit(index)}
-                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300"
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300"
                           title="Rename"
                         >
                           <Pencil size={11} />
@@ -1433,7 +1526,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           type="button"
                           onClick={() => moveStack(index, 'up')}
                           disabled={index === 0}
-                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 disabled:opacity-20"
                           title="Move up"
                         >
                           <ChevronUp size={12} />
@@ -1442,7 +1535,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           type="button"
                           onClick={() => moveStack(index, 'down')}
                           disabled={index === stacks.length - 1}
-                          className="p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 disabled:opacity-20"
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 disabled:opacity-20"
                           title="Move down"
                         >
                           <ChevronDown size={12} />
@@ -1540,7 +1633,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
               <div className="space-y-4">
                 {/* Admin Account */}
-                <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Shield size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Admin Account</h3>
@@ -1557,14 +1650,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* Server Config — grouped by category */}
-                <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Settings size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Server Identity</h3>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['SERVER_NAME', 'TZ', 'PROXY_DOMAIN'].map((key) => (
-                      <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
                         <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                       </div>
@@ -1572,14 +1665,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   </div>
                 </div>
 
-                <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <FolderOpen size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Storage & Permissions</h3>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['APP_DATA_DIR', 'PUID', 'PGID'].map((key) => (
-                      <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
                         <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                       </div>
@@ -1589,12 +1682,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* Advanced sections — only show if values differ from defaults */}
                 {envVars.NTFY_URL && (
-                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                  <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Bell size={14} className="text-amber-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Notifications</h3>
                     </div>
-                    <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                    <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                       <span className="text-[10px] text-slate-500 shrink-0">NTFY_URL</span>
                       <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars.NTFY_URL}</span>
                     </div>
@@ -1605,14 +1698,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   const startupDefaults: Record<string, string> = { LOG_LEVEL: 'INFO', CONTINUE_ON_FAILURE: 'true', SKIP_HEALTHCHECK_WAIT: 'false', SERVICE_START_DELAY: '5', DOCKER_TIMEOUT: '300', ENABLE_POST_STARTUP_HEALTH_CHECK: 'true' }
                   const changed = Object.entries(startupDefaults).filter(([k, v]) => envVars[k] && envVars[k] !== v)
                   return changed.length > 0 ? (
-                    <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                    <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <Zap size={14} className="text-cyan-400" />
                         <h3 className="text-xs font-semibold text-slate-300">Startup & Health</h3>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {changed.map(([key]) => (
-                          <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                          <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                             <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
                             <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                           </div>
@@ -1623,14 +1716,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 })()}
 
                 {(envVars.BACKUP_SOURCE_DIR || envVars.BACKUP_DEST_DIR) && (
-                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                  <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <HardDrive size={14} className="text-violet-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Backup</h3>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
                       {['BACKUP_SOURCE_DIR', 'BACKUP_DEST_DIR'].filter((k) => envVars[k]).map((key) => (
-                        <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div key={key} className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">{key}</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars[key]}</span>
                         </div>
@@ -1641,38 +1734,38 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* Dashboard Preferences (only if non-default) */}
                 {(prefTheme !== 'dark' || prefSessionMinutes !== 240 || prefAutoLock !== 0 || prefAppName !== 'DCS Manager' || prefAppSubtitle !== 'Docker Compose Skeleton') && (
-                  <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                  <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Palette size={14} className="text-cyan-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Dashboard</h3>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {prefTheme !== 'dark' && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">Theme</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefTheme}</span>
                         </div>
                       )}
                       {prefSessionMinutes !== 240 && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">Session</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefSessionMinutes === 0 ? 'Indefinite' : `${prefSessionMinutes / 60}h`}</span>
                         </div>
                       )}
                       {prefAutoLock !== 0 && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">Auto-Lock</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAutoLock}min</span>
                         </div>
                       )}
                       {prefAppName !== 'DCS Manager' && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">App Name</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAppName}</span>
                         </div>
                       )}
                       {prefAppSubtitle !== 'Docker Compose Skeleton' && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500 shrink-0">Subtitle</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAppSubtitle}</span>
                         </div>
@@ -1682,7 +1775,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 )}
 
                 {/* HTTPS & Reverse Proxy */}
-                <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/[0.06]'}`}>
+                <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/5'}`}>
                   <div className="flex items-center gap-2 mb-3">
                     <Shield size={14} className={enableTraefik ? 'text-emerald-400' : 'text-slate-500'} />
                     <h3 className="text-xs font-semibold text-slate-300">HTTPS & Reverse Proxy</h3>
@@ -1693,20 +1786,20 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <span className="text-[10px] text-emerald-400 font-medium">Traefik Enabled</span>
                         <span className="text-[10px] text-emerald-400">✓</span>
                       </div>
-                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Domain</span>
                         <span className="text-[10px] font-mono text-slate-300">{envVars.PROXY_DOMAIN}</span>
                       </div>
-                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">ACME Email</span>
                         <span className="text-[10px] font-mono text-slate-300">{traefikEmail}</span>
                       </div>
-                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Docker Socket Proxy</span>
                         <span className="text-[10px] text-slate-300">{includeDockerSocket ? 'Included' : 'Excluded'}</span>
                       </div>
                       {cfDnsToken && (
-                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.02]">
+                        <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                           <span className="text-[10px] text-slate-500">Cloudflare DNS</span>
                           <span className="text-[10px] text-slate-300">Configured</span>
                         </div>
@@ -1718,7 +1811,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 </div>
 
                 {/* Stack Order */}
-                <div className="bg-slate-800/40 border border-white/[0.06] rounded-xl p-4">
+                <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Layers size={14} className="text-emerald-400" />
                     <h3 className="text-xs font-semibold text-slate-300">Startup Order ({stacks.length} stacks)</h3>
@@ -1726,7 +1819,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <div className="space-y-1">
                     {stacks.map((stack, i) => (
                       <div key={stack.name} className="flex items-center gap-2 py-1">
-                        <span className="w-5 h-5 flex items-center justify-center rounded bg-white/[0.04] text-[9px] font-bold text-slate-500">
+                        <span className="w-5 h-5 flex items-center justify-center rounded bg-white/5 text-[9px] font-bold text-slate-500">
                           {i + 1}
                         </span>
                         <span className="text-xs font-mono text-slate-300">{stack.name}</span>
@@ -1745,13 +1838,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           )}
 
           {/* ── Navigation buttons ── */}
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/[0.06]">
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
             {step > 1 ? (
               <button
                 type="button"
                 onClick={handleBack}
                 disabled={loading || completing}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors disabled:opacity-30"
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors disabled:opacity-30"
               >
                 <ArrowLeft size={14} />
                 Back

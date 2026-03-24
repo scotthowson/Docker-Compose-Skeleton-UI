@@ -346,8 +346,8 @@ export default function Terminal() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
-        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/[0.06]">
-          <TerminalSquare size={28} className="text-slate-600" />
+        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/5">
+          <TerminalSquare size={28} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to use the terminal</p>
       </div>
@@ -358,8 +358,8 @@ export default function Terminal() {
   if (authChecking) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] gap-3">
-        <RefreshCw size={20} className="text-slate-600 animate-spin" />
-        <p className="text-xs text-slate-600">Verifying terminal session...</p>
+        <RefreshCw size={20} className="text-slate-500 animate-spin" />
+        <p className="text-xs text-slate-500">Verifying terminal session...</p>
       </div>
     )
   }
@@ -400,7 +400,7 @@ export default function Terminal() {
           onClick={handleLock}
           className="
             flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
-            bg-slate-800/60 border border-white/[0.06]
+            bg-slate-800/60 border border-white/5
             text-slate-400 hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5
             transition-all duration-150
           "
@@ -413,7 +413,7 @@ export default function Terminal() {
 
       {/* Quick command buttons */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold mr-1">Quick:</span>
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mr-1">Quick:</span>
         {quickCommands.map((qc) => (
           <button
             key={qc.cmd}
@@ -421,7 +421,7 @@ export default function Terminal() {
             title={qc.tip}
             className="
               px-2.5 py-1 rounded-lg text-[11px] font-mono
-              bg-slate-800/60 border border-white/[0.06]
+              bg-slate-800/60 border border-white/5
               text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20 hover:bg-emerald-500/5
               transition-all duration-150
             "
@@ -435,7 +435,7 @@ export default function Terminal() {
           onClick={() => setEntries([])}
           className="
             ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px]
-            bg-slate-800/60 border border-white/[0.06]
+            bg-slate-800/60 border border-white/5
             text-slate-500 hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5
             transition-all duration-150
           "
@@ -452,7 +452,7 @@ export default function Terminal() {
         onClick={() => inputRef.current?.focus()}
         className="
           flex-1 overflow-y-auto rounded-xl
-          bg-slate-950 border border-white/[0.06]
+          bg-slate-950 border border-white/5
           shadow-[inset_0_1px_0_0_rgba(16,185,129,0.06)]
           font-mono text-sm
           scrollbar-thin
@@ -461,13 +461,13 @@ export default function Terminal() {
       >
         {/* Welcome message when empty */}
         {entries.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-700">
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
             <TerminalSquare size={32} strokeWidth={1.2} />
             <p className="text-xs">Terminal ready. Type a command or use a quick button above.</p>
             <p className="text-[10px] text-slate-800">
-              Use <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] text-slate-600">Up</kbd> / <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] text-slate-600">Down</kbd> for history
+              Use <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Up</kbd> / <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Down</kbd> for history
               &nbsp;&middot;&nbsp;
-              <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] text-slate-600">Ctrl+L</kbd> to clear
+              <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Ctrl+L</kbd> to clear
             </p>
           </div>
         )}
@@ -481,7 +481,7 @@ export default function Terminal() {
                 <span className="text-emerald-500 select-none shrink-0">
                   {terminalUser}@{hostname}
                 </span>
-                <span className="text-slate-600 select-none">:</span>
+                <span className="text-slate-500 select-none">:</span>
                 <span className="text-cyan-400 select-none">{shortenCwd(entry.cwd, terminalUser)}</span>
                 <span className="text-slate-500 select-none mx-1">$</span>
                 <span className="text-slate-200">{entry.command}</span>
@@ -489,7 +489,7 @@ export default function Terminal() {
                 {/* Exit code + copy button */}
                 <div className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   {/* Timestamp */}
-                  <span className="text-[9px] text-slate-700 flex items-center gap-1">
+                  <span className="text-[9px] text-slate-500 flex items-center gap-1">
                     <Clock size={8} />
                     {new Date(entry.timestamp).toLocaleTimeString()}
                   </span>
@@ -508,7 +508,7 @@ export default function Terminal() {
                   {/* Copy button */}
                   <button
                     onClick={(e) => { e.stopPropagation(); handleCopyOutput(idx) }}
-                    className="p-1 rounded hover:bg-white/[0.06] text-slate-600 hover:text-slate-300 transition-colors"
+                    className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
                     title="Copy output"
                   >
                     {copiedIndex === idx
@@ -538,7 +538,7 @@ export default function Terminal() {
               <span className="text-emerald-500 select-none shrink-0">
                 {terminalUser}@{hostname}
               </span>
-              <span className="text-slate-600 select-none">:</span>
+              <span className="text-slate-500 select-none">:</span>
               <span className="text-cyan-400 select-none">{displayCwd}</span>
               <span className="text-slate-500 select-none mx-1">$</span>
               <span className="text-emerald-400 animate-pulse">&#9610;</span>
@@ -551,13 +551,13 @@ export default function Terminal() {
       <div className={`
         flex items-center gap-0 rounded-xl bg-slate-950 border px-3 py-2.5 font-mono text-sm
         transition-colors duration-200
-        ${loading ? 'border-emerald-500/20 shadow-[0_0_8px_0_rgba(16,185,129,0.06)]' : 'border-white/[0.06] focus-within:border-emerald-500/30'}
+        ${loading ? 'border-emerald-500/20 shadow-[0_0_8px_0_rgba(16,185,129,0.06)]' : 'border-white/5 focus-within:border-emerald-500/30'}
       `}>
         {/* Prompt prefix */}
         <span className="text-emerald-500 select-none shrink-0">
           {terminalUser}@{hostname}
         </span>
-        <span className="text-slate-600 select-none">:</span>
+        <span className="text-slate-500 select-none">:</span>
         <span className="text-cyan-400 select-none">{displayCwd}</span>
         <span className="text-slate-500 select-none mx-1">$</span>
 
@@ -601,12 +601,12 @@ export default function Terminal() {
       {/* History count footer */}
       {history.length > 0 && (
         <div className="flex items-center justify-between px-1">
-          <span className="text-[10px] text-slate-700">
+          <span className="text-[10px] text-slate-500">
             {history.length} command{history.length !== 1 ? 's' : ''} in history
           </span>
           <button
             onClick={() => { setHistory([]); localStorage.removeItem('terminal-history') }}
-            className="text-[10px] text-slate-700 hover:text-rose-400 transition-colors"
+            className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors"
           >
             Clear history
           </button>

@@ -121,11 +121,11 @@ function FactorBar({ label, value, detail }: { label: string; value: number; det
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-slate-500 w-[52px] shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
         <div className={`h-full rounded-full ${color} transition-all duration-700`} style={{ width: `${value}%` }} />
       </div>
       <span className="text-[11px] text-slate-400 w-6 text-right tabular-nums font-medium">{value}</span>
-      {detail && <span className="text-[9px] text-slate-600 w-14 text-right truncate">{detail}</span>}
+      {detail && <span className="text-[9px] text-slate-500 w-14 text-right truncate">{detail}</span>}
     </div>
   )
 }
@@ -174,7 +174,7 @@ function ContainerRow({ container }: { container: HealthContainer }) {
             {container.health}
           </span>
         )}
-        <span className={`text-[10px] ${isRunning ? 'text-slate-500' : 'text-slate-600'}`}>
+        <span className={`text-[10px] ${isRunning ? 'text-slate-500' : 'text-slate-500'}`}>
           {container.state}
         </span>
       </div>
@@ -212,7 +212,7 @@ export default function HealthSummary() {
   // Skeleton
   if (!report && isConnected) {
     return (
-      <div className="glass-card p-4 md:p-5 animate-pulse">
+      <div className="glass-card p-4 md:p-6 animate-pulse">
         <div className="h-4 w-32 rounded bg-slate-700/50 mb-4" />
         <div className="flex items-center gap-4">
           <div className="w-24 h-24 rounded-full bg-slate-800/40 shrink-0" />
@@ -251,7 +251,7 @@ export default function HealthSummary() {
   const runningCount = containers.filter((c) => c.state === 'running').length
 
   return (
-    <div className={`glass-card glass-hover gradient-border p-4 md:p-5 animate-fade-in flex flex-col ${config.glow}`}>
+    <div className={`glass-card glass-hover gradient-border p-4 md:p-6 animate-fade-in flex flex-col ${config.glow}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -310,12 +310,12 @@ export default function HealthSummary() {
 
       {/* Container list — always visible, fills remaining height */}
       {containers.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-white/[0.04] flex-1 min-h-0 flex flex-col">
+        <div className="mt-3 pt-3 border-t border-white/[0.03] flex-1 min-h-0 flex flex-col">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               Containers
             </span>
-            <span className="text-[10px] text-slate-600 tabular-nums">
+            <span className="text-[10px] text-slate-500 tabular-nums">
               {runningCount}/{containers.length} running
             </span>
           </div>
@@ -348,7 +348,7 @@ function DetailCard({ icon, label, value, color }: { icon: React.ReactNode; labe
         {icon}
       </div>
       <p className={`text-xs font-semibold ${color}`}>{value}</p>
-      <p className="text-[8px] text-slate-600 uppercase tracking-wider">{label}</p>
+      <p className="text-[8px] text-slate-500 uppercase tracking-wider">{label}</p>
     </div>
   )
 }
@@ -362,7 +362,7 @@ function StatPill({ icon, label, value, color }: { icon: React.ReactNode; label:
     <div className="inline-flex items-center gap-1 rounded-md bg-slate-800/40 px-2 py-1 border border-white/[0.03]">
       <span className={`${color} opacity-70`}>{icon}</span>
       <span className={`text-[11px] font-semibold ${color}`}>{value}</span>
-      <span className="text-[9px] text-slate-600 uppercase">{label}</span>
+      <span className="text-[9px] text-slate-500 uppercase">{label}</span>
     </div>
   )
 }

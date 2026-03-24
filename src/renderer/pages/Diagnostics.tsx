@@ -7,7 +7,7 @@ import {
   Shield, Activity, Cpu, MemoryStick, Box, HardDrive, Network,
   AlertTriangle, CheckCircle, XCircle, BarChart3, RefreshCw,
   Zap, TrendingUp, Server, Play, Square, RotateCw, Wrench, Loader2, Power,
-  Lock, Trash2, RotateCcw,
+  Lock, Trash2, RotateCcw, ExternalLink,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { usePolling } from '../hooks/usePolling'
@@ -150,7 +150,7 @@ function SemiGauge({
   const color = gaugeColor(clamped)
 
   return (
-    <div className="flex flex-col items-center bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl px-5 py-5 hover:border-white/[0.1] transition-all duration-300">
+    <div className="flex flex-col items-center glass border border-white/5 rounded-xl px-5 py-5 hover:border-white/10 transition-all duration-300">
       <div className="relative mb-2">
         <svg width={120} height={68} viewBox="0 0 120 68">
           <defs>
@@ -200,8 +200,8 @@ function SemiGauge({
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-2.5 mb-4">
-      <span className="text-slate-500">{icon}</span>
-      <h3 className="text-sm font-semibold uppercase tracking-wider"><span className="text-gradient">{title}</span></h3>
+      {icon}
+      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</h3>
       <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
     </div>
   )
@@ -216,7 +216,7 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
 
   if (containers.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8 text-slate-600 text-xs">
+      <div className="flex items-center justify-center py-8 text-slate-500 text-xs">
         No containers detected
       </div>
     )
@@ -262,7 +262,7 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
         })}
       </div>
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/[0.04]">
+      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/[0.03]">
         {[
           { label: 'Healthy', color: 'bg-emerald-500' },
           { label: 'Starting', color: 'bg-amber-500/80' },
@@ -297,7 +297,7 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
   const total = images.length
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center py-6 text-slate-600 text-xs">
+      <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
         No images found
       </div>
     )
@@ -333,7 +333,7 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
             <span className={`text-xs font-bold tabular-nums ${seg.textColor}`}>
               {seg.count}
             </span>
-            <span className="text-[10px] text-slate-600">
+            <span className="text-[10px] text-slate-500">
               ({pct(seg.count, total)}%)
             </span>
           </div>
@@ -378,7 +378,7 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
 
   if (portEntries.length === 0) {
     return (
-      <div className="flex items-center justify-center py-6 text-slate-600 text-xs">
+      <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
         No port mappings detected
       </div>
     )
@@ -388,20 +388,25 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/[0.06]">
+          <tr className="border-b border-white/5">
             <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Host Port</th>
             <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container Port</th>
             <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Protocol</th>
             <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/[0.04]">
+        <tbody className="divide-y divide-white/[0.03]">
           {portEntries.slice(0, 20).map((entry, idx) => (
-            <tr key={idx} className="hover:bg-white/[0.02] transition-colors duration-150">
+            <tr key={idx} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
               <td className="px-3 py-2">
-                <span className="inline-flex items-center rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-medium text-cyan-400">
+                <button
+                  onClick={() => window.open(`http://${window.location.hostname}:${entry.host}`, '_blank')}
+                  className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-medium text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors cursor-pointer"
+                  title={`Open http://${window.location.hostname}:${entry.host}`}
+                >
                   :{entry.host}
-                </span>
+                  <ExternalLink size={9} className="opacity-0 group-hover/port:opacity-100 transition-opacity" />
+                </button>
               </td>
               <td className="px-3 py-2 font-mono text-xs text-slate-300">{entry.container_port}</td>
               <td className="px-3 py-2">
@@ -413,7 +418,7 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
         </tbody>
       </table>
       {portEntries.length > 20 && (
-        <div className="text-center py-2 text-[10px] text-slate-600">
+        <div className="text-center py-2 text-[10px] text-slate-500">
           +{portEntries.length - 20} more port mappings
         </div>
       )}
@@ -452,7 +457,7 @@ function EventFrequencyChart({ events }: { events: EventEntry[] }) {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8 text-slate-600 text-xs">
+      <div className="flex items-center justify-center py-8 text-slate-500 text-xs">
         No events to chart
       </div>
     )
@@ -503,7 +508,7 @@ function EventFrequencyChart({ events }: { events: EventEntry[] }) {
 function NetworkTopology({ networks }: { networks: NetworkInfo[] }) {
   if (networks.length === 0) {
     return (
-      <div className="flex items-center justify-center py-6 text-slate-600 text-xs">
+      <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
         No networks found
       </div>
     )
@@ -514,7 +519,7 @@ function NetworkTopology({ networks }: { networks: NetworkInfo[] }) {
       {networks.map((net, idx) => (
         <div
           key={net.id}
-          className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 hover:border-white/[0.1] transition-all duration-300 group animate-fade-in"
+          className="glass border border-white/5 rounded-xl p-4 hover:border-white/10 transition-all duration-300 group animate-fade-in"
           style={{ animationDelay: `${idx * 60}ms` }}
         >
           <div className="flex items-center gap-2 mb-3">
@@ -785,7 +790,7 @@ function ServerControlCard() {
               disabled={isDisabled}
               className={`
                 group relative flex flex-col items-center gap-2.5 rounded-xl p-5
-                bg-white/[0.02] border border-white/[0.06]
+                bg-white/[0.03] border border-white/5
                 ${action.bgHover}
                 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
               `}
@@ -804,7 +809,7 @@ function ServerControlCard() {
               </div>
               <div className="text-center">
                 <p className="text-xs font-semibold text-slate-200">{action.label}</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">{action.desc}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{action.desc}</p>
               </div>
             </button>
           )
@@ -819,7 +824,7 @@ function ServerControlCard() {
             border transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
             ${maintenanceMode
               ? 'bg-violet-500/10 border-violet-500/25 ring-1 ring-violet-500/20'
-              : 'bg-white/[0.02] border-white/[0.06] hover:bg-violet-500/10 hover:border-violet-500/25'
+              : 'bg-white/[0.03] border-white/5 hover:bg-violet-500/10 hover:border-violet-500/25'
             }
           `}
         >
@@ -835,7 +840,7 @@ function ServerControlCard() {
           </div>
           <div className="text-center">
             <p className="text-xs font-semibold text-slate-200">Maintenance</p>
-            <p className="text-[10px] text-slate-600 mt-0.5">
+            <p className="text-[10px] text-slate-500 mt-0.5">
               {maintenanceMode ? 'Mode active' : 'Toggle mode'}
             </p>
           </div>
@@ -1141,7 +1146,7 @@ function FactoryResetCard() {
         <div>
           <label className="block text-[10px] font-medium text-slate-500 mb-1">Current Password</label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
             <input
               type="password"
               value={confirmPassword}
@@ -1183,7 +1188,7 @@ function FactoryResetCard() {
 
       {/* Compose reset toggle (full reset only) */}
       {isFullReset && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5">
           <div>
             <p className="text-[11px] font-medium text-slate-300">Reset Compose Files</p>
             <p className="text-[10px] text-slate-500">Restore compose files and stack categories to defaults</p>
@@ -1268,7 +1273,7 @@ function DisconnectedHero() {
         <div className="absolute bottom-1/3 right-1/3 w-64 h-64 rounded-full bg-cyan-500/[0.03] blur-3xl animate-breathe" style={{ animationDelay: '3s' }} />
       </div>
       <div className="relative mb-6">
-        <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-white/[0.06] flex items-center justify-center">
+        <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center">
           <Shield size={32} className="text-slate-500" />
         </div>
       </div>
@@ -1458,13 +1463,14 @@ export default function Diagnostics() {
       <DisconnectedBanner />
       {/* ── Page header ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between animate-fade-in">
-        <div>
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient">Diagnostics</span>
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Deep-insight system health, resource usage, and alerts
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-rose-500/20 border border-white/5">
+            <Shield className="w-6 h-6 text-violet-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Diagnostics</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Deep-insight system health, resource usage, and alerts</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {isConnected && (
@@ -1507,7 +1513,7 @@ export default function Diagnostics() {
 
             {/* Health Score Ring */}
             <div className="lg:col-span-4">
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center h-full relative overflow-hidden">
+              <div className="glass border border-white/5 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center h-full relative overflow-hidden">
                 {/* Ambient glow behind ring */}
                 <div className="absolute inset-0 pointer-events-none">
                   <div
@@ -1534,7 +1540,7 @@ export default function Diagnostics() {
                           return (
                             <div key={key} className="text-center">
                               <p className={`text-xs font-bold tabular-nums ${color}`}>{f.score}</p>
-                              <p className="text-[8px] text-slate-600 uppercase tracking-wider">{key}</p>
+                              <p className="text-[8px] text-slate-500 uppercase tracking-wider">{key}</p>
                             </div>
                           )
                         })}
@@ -1542,7 +1548,7 @@ export default function Diagnostics() {
                     )}
                   </div>
                 )}
-                <p className="text-[11px] text-slate-600 mt-4 text-center max-w-[200px]">
+                <p className="text-[11px] text-slate-500 mt-4 text-center max-w-[200px]">
                   Calculated from container health, image freshness, memory, and CPU load
                 </p>
               </div>
@@ -1550,7 +1556,7 @@ export default function Diagnostics() {
 
             {/* Resource Gauges + Server Control */}
             <div className="lg:col-span-8 flex flex-col gap-3 md:gap-6">
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+              <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
                 <SectionHeader icon={<Activity size={14} />} title="Resource Gauges" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
                   <SemiGauge
@@ -1576,13 +1582,13 @@ export default function Diagnostics() {
                 </div>
               </div>
               {isAdmin && (
-                <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+                <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
                   <SectionHeader icon={<Power size={14} />} title="Server Control" />
                   <ServerControlCard />
                 </div>
               )}
               {isAdmin && (
-                <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/10 rounded-xl p-4 md:p-6">
+                <div className="glass border border-rose-500/10 rounded-xl p-4 md:p-6">
                   <SectionHeader icon={<Trash2 size={14} />} title="Factory Reset" />
                   <FactoryResetCard />
                 </div>
@@ -1596,13 +1602,13 @@ export default function Diagnostics() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
 
             {/* Container Health Matrix */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<Box size={14} />} title="Container Health Matrix" />
               <ContainerHealthMatrix containers={containers} />
             </div>
 
             {/* Image Freshness Breakdown */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<HardDrive size={14} />} title="Image Freshness" />
               <ImageFreshnessBar images={images} />
             </div>
@@ -1614,13 +1620,13 @@ export default function Diagnostics() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
 
             {/* Port Allocation Map */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<TrendingUp size={14} />} title="Port Allocation Map" />
               <PortAllocationMap containers={containers} />
             </div>
 
             {/* Event Frequency */}
-            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
               <SectionHeader icon={<BarChart3 size={14} />} title="Event Frequency" />
               <EventFrequencyChart events={events} />
             </div>
@@ -1629,7 +1635,7 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 4: Network Topology                                  */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+          <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
             <SectionHeader icon={<Network size={14} />} title="Network Topology" />
             <NetworkTopology networks={networks} />
           </div>
@@ -1637,7 +1643,7 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 5: Alerts Panel                                      */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+          <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
             <SectionHeader icon={<AlertTriangle size={14} />} title="Active Alerts" />
             <AlertsPanel
               containers={containers}

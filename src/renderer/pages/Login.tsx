@@ -6,13 +6,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Shield, User, Lock, Eye, EyeOff, ArrowRight, Globe,
   Layers, Loader2, AlertCircle, Sparkles, Clock, KeyRound, UserPlus,
-  Wifi, WifiOff,
+  Wifi, WifiOff, X,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
-import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus } from '../api/endpoints'
+import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus, totpValidate } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
@@ -51,10 +51,23 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [registerError, setRegisterError] = useState<string | null>(null)
+  const [showTotpInput, setShowTotpInput] = useState(false)
+  const [totpToken, setTotpToken] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [totpError, setTotpError] = useState('')
+  const [totpSubmitting, setTotpSubmitting] = useState(false)
   // Read the current URL from settings (always fresh) rather than apiClient (may be stale)
   const settingsServerUrl = useSettingsStore((s) => s.serverUrl)
   const [serverUrl, setServerUrlLocal] = useState(settingsServerUrl || apiClient.getBaseUrl())
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
+    const reason = sessionStorage.getItem('logout-reason')
+    if (reason === 'session-expired') {
+      sessionStorage.removeItem('logout-reason')
+      return true
+    }
+    return false
+  })
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // When we already have a configured server URL (e.g. returning from logout),
@@ -323,6 +336,12 @@ export default function Login() {
           if (loginRes.role) setUserRole(loginRes.role, user)
           return true
         }
+        // Check if 2FA is required
+        if ((loginRes as Record<string, unknown>).requires_totp && (loginRes as Record<string, unknown>).totp_token) {
+          setTotpToken((loginRes as Record<string, unknown>).totp_token as string)
+          setShowTotpInput(true)
+          return false // Don't complete login yet — need TOTP code
+        }
         setServerAuthError('Server authentication failed')
         return false
       } catch (err) {
@@ -409,12 +428,14 @@ export default function Login() {
         if (res.role) setUserRole(res.role, username.trim())
 
         // Persist session — use dynamic duration from settings
+        // SECURITY: Do NOT store the API token in auth-session (it's already in api-auth-token)
+        // Storing it in two places doubles the attack surface for token theft.
         const durationMs = sessionDurationMinutes <= 0 ? 0 : sessionDurationMinutes * 60 * 1000
         sessionStorage.setItem('currentUser', res.username)
         const session = {
           username: res.username,
           expiresAt: durationMs === 0 ? 0 : Date.now() + durationMs,
-          token: res.token,
+          token: 'redacted', // Session validation uses api-auth-token, not this field
         }
         localStorage.setItem('auth-session', JSON.stringify(session))
 
@@ -439,6 +460,41 @@ export default function Login() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Handle TOTP code submission (second step of 2FA login)
+  const handleTotpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (totpSubmitting || totpCode.length !== 6) return
+    setTotpSubmitting(true)
+    setTotpError('')
+    try {
+      const res = await totpValidate(totpToken, totpCode)
+      if (res.success && res.token) {
+        setApiToken(res.token)
+        if (res.role) setUserRole(res.role as 'admin' | 'user', res.username || username)
+        setShowTotpInput(false)
+        setTotpCode('')
+
+        // Persist session
+        const durationMs = sessionDurationMinutes <= 0 ? 0 : sessionDurationMinutes * 60 * 1000
+        sessionStorage.setItem('currentUser', res.username || username)
+        localStorage.setItem('auth-session', JSON.stringify({
+          username: res.username || username,
+          expiresAt: durationMs === 0 ? 0 : Date.now() + durationMs,
+          token: 'redacted',
+        }))
+
+        await login(username, password, rememberMe)
+        useSettingsStore.getState().updateSetting('lastUsername', username.trim())
+        useAuthStore.setState({ isAuthenticated: true, currentUser: res.username || username, hasAccount: true })
+      } else {
+        setTotpError('Invalid code')
+      }
+    } catch (err) {
+      setTotpError(err instanceof Error ? err.message : 'Verification failed')
+    }
+    setTotpSubmitting(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -595,7 +651,7 @@ export default function Login() {
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
                   <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       type="url"
                       value={serverUrl}
@@ -621,7 +677,7 @@ export default function Login() {
                     connStatus === 'ok' ? 'text-emerald-400/80'
                     : connStatus === 'fail' ? 'text-rose-400/80'
                     : connStatus === 'testing' ? 'text-cyan-400/80'
-                    : 'text-slate-600'
+                    : 'text-slate-500'
                   }`}>
                     {connStatus === 'ok' ? 'Connected'
                     : connStatus === 'fail' ? 'Server unreachable — check address and ensure API is running'
@@ -684,7 +740,7 @@ export default function Login() {
               </div>
 
               {/* Connected server display */}
-              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2 mb-6">
                 <div className="flex items-center gap-2 min-w-0">
                   <Wifi size={12} className="text-emerald-400 shrink-0" />
                   <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
@@ -711,7 +767,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="setup-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="setup-username"
                       type="text"
@@ -734,7 +790,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="setup-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="setup-password"
                       type={showPassword ? 'text' : 'password'}
@@ -754,12 +810,12 @@ export default function Login() {
                       tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-600 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1">
                     Min 8 characters, must include an uppercase letter and a number
                   </p>
                 </div>
@@ -768,7 +824,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="setup-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="setup-confirm-password"
                       type={showPassword ? 'text' : 'password'}
@@ -826,11 +882,73 @@ export default function Login() {
             </>
           )}
 
+          {/* ── TOTP 2FA Input ── */}
+          {showTotpInput && (
+            <div key="totp-mode" className="animate-fade-in">
+              <div className="mb-6 text-center">
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/20 flex items-center justify-center">
+                  <Shield size={24} className="text-violet-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-100">Two-Factor Authentication</h2>
+                <p className="text-xs text-slate-500 mt-1">Enter the 6-digit code from your authenticator app</p>
+              </div>
+              <form onSubmit={handleTotpSubmit} className="space-y-4">
+                <div className="flex justify-center">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={(e) => { setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setTotpError('') }}
+                    placeholder="000000"
+                    autoFocus
+                    autoComplete="one-time-code"
+                    className="
+                      w-48 text-center text-2xl font-mono tracking-[0.5em]
+                      px-4 py-3 bg-white/5 border border-white/10 rounded-lg
+                      text-slate-200 placeholder-slate-700
+                      focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20
+                      transition-all duration-300
+                    "
+                  />
+                </div>
+                {totpError && (
+                  <div className="flex items-center gap-2 justify-center rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
+                    <AlertCircle size={14} className="text-rose-400 shrink-0" />
+                    <p className="text-xs text-rose-300">{totpError}</p>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={totpSubmitting || totpCode.length !== 6}
+                  className="
+                    flex items-center justify-center gap-2 w-full py-3 rounded-lg
+                    text-sm font-semibold bg-violet-500 text-white
+                    hover:bg-violet-400 shadow-lg shadow-violet-500/25
+                    transition-all duration-200
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  {totpSubmitting ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                  {totpSubmitting ? 'Verifying...' : 'Verify Code'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowTotpInput(false); setTotpCode(''); setTotpError(''); setTotpToken('') }}
+                  className="w-full py-2 text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                >
+                  Back to login
+                </button>
+              </form>
+            </div>
+          )}
+
           {/* ── Sign In mode ── */}
-          {!isSetup && mode === 'login' && (
+          {!isSetup && mode === 'login' && !showTotpInput && (
             <div key="login-mode" className="animate-fade-in">
               {/* Connected server display */}
-              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2 mb-6">
                 <div className="flex items-center gap-2 min-w-0">
                   <Wifi size={12} className="text-emerald-400 shrink-0" />
                   <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
@@ -843,6 +961,20 @@ export default function Login() {
                   Change
                 </button>
               </div>
+
+              {/* Session expired notice */}
+              {sessionExpiredNotice && (
+                <div className="flex items-center gap-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-3 mb-4 animate-fade-in">
+                  <Clock size={15} className="text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-300">Session Expired</p>
+                    <p className="text-[10px] text-amber-400/70 mt-0.5">Your session has expired. Please sign in again to continue.</p>
+                  </div>
+                  <button onClick={() => setSessionExpiredNotice(false)} className="p-1 rounded text-amber-500/50 hover:text-amber-400 transition-colors shrink-0 ml-auto">
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
 
               {/* Header */}
               <div className="mb-6">
@@ -857,7 +989,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="signin-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="signin-username"
                       type="text"
@@ -880,7 +1012,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="signin-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="signin-password"
                       type={showPassword ? 'text' : 'password'}
@@ -900,7 +1032,7 @@ export default function Login() {
                       tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -981,7 +1113,7 @@ export default function Login() {
           {!isSetup && mode === 'register' && (
             <div key="register-mode" className="animate-fade-in">
               {/* Connected server display */}
-              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 mb-6">
+              <div className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2 mb-6">
                 <div className="flex items-center gap-2 min-w-0">
                   <Wifi size={12} className="text-emerald-400 shrink-0" />
                   <span className="text-xs text-slate-400 font-mono truncate">{serverUrl}</span>
@@ -1019,7 +1151,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="register-invite" className="block text-xs font-medium text-slate-400 mb-1.5">Invite Code</label>
                   <div className="relative">
-                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="register-invite"
                       type="text"
@@ -1042,7 +1174,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="register-username" className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="register-username"
                       type="text"
@@ -1064,7 +1196,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="register-password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="register-password"
                       type={showPassword ? 'text' : 'password'}
@@ -1084,12 +1216,12 @@ export default function Login() {
                       tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-600 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1">
                     Min 8 characters, must include an uppercase letter and a number
                   </p>
                 </div>
@@ -1122,7 +1254,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="register-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
                       id="register-confirm-password"
                       type={showPassword ? 'text' : 'password'}
@@ -1197,8 +1329,8 @@ export default function Login() {
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-2 mt-6">
-          <Shield size={12} className="text-slate-600" />
-          <p className="text-[10px] text-slate-600">
+          <Shield size={12} className="text-slate-500" />
+          <p className="text-[10px] text-slate-500">
             {!connected
               ? 'Secure connection to your DCS API server'
               : !isSetup && mode === 'register'

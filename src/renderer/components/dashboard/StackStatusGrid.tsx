@@ -17,10 +17,10 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
         <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">Stacks</h3>
+          <ServerOff size={14} className="text-slate-500" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Stacks</h3>
         </div>
-        <p className="text-xs text-slate-600">Not connected</p>
+        <p className="text-xs text-slate-500">Not connected</p>
       </div>
     )
   }
@@ -66,7 +66,7 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
 
   return (
     <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/[0.1] transition-colors"
+      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
       onClick={() => setCurrentPage('stacks')}
     >
       <div className="flex items-center justify-between mb-3">
@@ -80,7 +80,7 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
         {list.map((s) => (
           <div
             key={s.name}
-            className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5 hover:bg-white/[0.05] transition-colors"
+            className="rounded-lg bg-white/[0.03] border border-white/5 p-2.5 hover:bg-white/5 transition-colors"
           >
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} />

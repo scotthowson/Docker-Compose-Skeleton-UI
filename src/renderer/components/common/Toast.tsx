@@ -12,6 +12,7 @@ import React, {
   useEffect,
 } from 'react'
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,8 +106,11 @@ function ToastItem({
   const [expanded, setExpanded] = useState(false)
   const [exiting, setExiting] = useState(false)
   const [progress, setProgress] = useState(100)
+  const [paused, setPaused] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const elapsedRef = useRef(0)
+  const lastTickRef = useRef(Date.now())
   const duration = toast.duration ?? (toast.type === 'error' ? 6000 : toast.type === 'success' ? 3000 : 4000)
 
   const dismiss = useCallback(() => {
@@ -114,21 +118,45 @@ function ToastItem({
     setTimeout(() => onDismiss(toast.id), 250)
   }, [toast.id, onDismiss])
 
+  // Pause/resume on hover
+  const handleMouseEnter = useCallback(() => {
+    setPaused(true)
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    if (progressRef.current) { clearInterval(progressRef.current); progressRef.current = null }
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    if (duration <= 0) return
+    setPaused(false)
+    const remaining = duration - elapsedRef.current
+    if (remaining <= 0) { dismiss(); return }
+
+    lastTickRef.current = Date.now()
+    progressRef.current = setInterval(() => {
+      const now = Date.now()
+      elapsedRef.current += now - lastTickRef.current
+      lastTickRef.current = now
+      const pct = Math.max(0, 100 - (elapsedRef.current / duration) * 100)
+      setProgress(pct)
+      if (pct <= 0 && progressRef.current) clearInterval(progressRef.current)
+    }, 30)
+
+    timerRef.current = setTimeout(dismiss, remaining)
+  }, [duration, dismiss])
+
   useEffect(() => {
     if (duration <= 0) return
 
-    // Progress bar animation
-    const startTime = Date.now()
+    lastTickRef.current = Date.now()
     progressRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime
-      const remaining = Math.max(0, 100 - (elapsed / duration) * 100)
+      const now = Date.now()
+      elapsedRef.current += now - lastTickRef.current
+      lastTickRef.current = now
+      const remaining = Math.max(0, 100 - (elapsedRef.current / duration) * 100)
       setProgress(remaining)
-      if (remaining <= 0 && progressRef.current) {
-        clearInterval(progressRef.current)
-      }
+      if (remaining <= 0 && progressRef.current) clearInterval(progressRef.current)
     }, 30)
 
-    // Auto-dismiss
     timerRef.current = setTimeout(dismiss, duration)
 
     return () => {
@@ -156,6 +184,8 @@ function ToastItem({
       style={{
         animation: exiting ? undefined : 'toastSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Content */}
       <div className="flex items-start gap-3 px-4 py-3.5">
@@ -192,7 +222,7 @@ function ToastItem({
         {/* Dismiss */}
         <button
           onClick={dismiss}
-          className="shrink-0 p-1 rounded-md text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150 mt-0.5"
+          className="shrink-0 p-1 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all duration-150 mt-0.5"
           aria-label="Dismiss"
         >
           <X size={13} />
@@ -201,7 +231,7 @@ function ToastItem({
 
       {/* Progress bar */}
       {duration > 0 && (
-        <div className="h-[2px] w-full bg-white/[0.04]">
+        <div className="h-[2px] w-full bg-white/5">
           <div
             className={`h-full ${progressColor} opacity-60 transition-none`}
             style={{ width: `${progress}%` }}
@@ -238,6 +268,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = `toast-${++idCounter}-${Date.now()}`
     const newToast: Toast = { ...toast, id }
     setToasts((prev) => [...prev, newToast])
+
+    // Also push to notification center so users can review missed toasts
+    try {
+      const titleMap: Record<string, string> = {
+        success: 'Success',
+        error: 'Error',
+        warning: 'Warning',
+        info: 'Info',
+      }
+      useNotificationStore.getState().addNotification({
+        type: toast.type,
+        title: titleMap[toast.type] || 'Notification',
+        message: toast.message,
+        persist: toast.type === 'error' || toast.type === 'warning',
+      })
+    } catch {
+      // Notification store may not be initialized during early startup
+    }
+
     return id
   }, [])
 

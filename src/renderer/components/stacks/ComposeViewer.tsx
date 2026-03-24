@@ -722,11 +722,11 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
       lines: DiffLine[],
       side: 'left' | 'right',
     ) => (
-      <div className={`min-w-0 flex flex-col ${side === 'left' ? 'border-r border-white/[0.06]' : ''}`}>
-        <div className="px-4 py-2 text-[10px] uppercase tracking-wider border-b border-white/[0.06] bg-slate-900/50 font-sans font-semibold flex items-center gap-2 shrink-0">
+      <div className={`min-w-0 flex flex-col ${side === 'left' ? 'border-r border-white/5' : ''}`}>
+        <div className="px-4 py-2 text-[10px] uppercase tracking-wider border-b border-white/5 bg-slate-900/50 font-sans font-semibold flex items-center gap-2 shrink-0">
           <span className={`w-1.5 h-1.5 rounded-full ${side === 'left' ? 'bg-rose-400/60' : 'bg-emerald-400/60'}`} />
           <span className="text-slate-400">{side === 'left' ? 'Original' : 'Edited'}</span>
-          <span className="text-[9px] text-slate-600 ml-auto tabular-nums">
+          <span className="text-[9px] text-slate-500 ml-auto tabular-nums">
             {lines.filter(l => l.type === (side === 'left' ? 'removed' : 'added')).length} {side === 'left' ? 'removed' : 'added'}
           </span>
         </div>
@@ -743,7 +743,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                     ? side === 'left' ? 'bg-rose-500/[0.08]' : 'bg-emerald-500/[0.08]'
                     : isPlaceholder
                       ? 'bg-slate-900/40'
-                      : 'hover:bg-white/[0.02]'
+                      : 'hover:bg-white/[0.03]'
                   }
                 `}
               >
@@ -809,7 +809,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
       return (
         <div className={`flex overflow-y-auto max-h-[80vh] scrollbar-thin bg-slate-950`}>
           {/* Line number gutter with diagnostic markers */}
-          <div className={`shrink-0 select-none border-r border-white/[0.06] bg-slate-950 sticky left-0`} aria-hidden="true">
+          <div className={`shrink-0 select-none border-r border-white/5 bg-slate-950 sticky left-0`} aria-hidden="true">
             <div className="h-4" />
             {envEditLines.map((_, idx) => {
               const diags = envLineDiagnostics.get(idx + 1)
@@ -824,7 +824,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                         {idx + 1}
                       </span>
                       <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
                           {diags.map((d, di) => (
                             <div key={di} className="flex items-start gap-2">
                               <span className={`shrink-0 mt-0.5 ${
@@ -834,7 +834,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                               </span>
                               <div>
                                 <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
                               </div>
                             </div>
                           ))}
@@ -899,8 +899,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               <div
                 key={idx}
                 className={`flex px-5 ${diags
-                  ? highestSeverity === 'error' ? 'bg-rose-500/[0.03]' : highestSeverity === 'warning' ? 'bg-amber-500/[0.02]' : 'hover:bg-white/[0.02]'
-                  : 'hover:bg-white/[0.02]'
+                  ? highestSeverity === 'error' ? 'bg-rose-500/[0.03]' : highestSeverity === 'warning' ? 'bg-amber-500/[0.02]' : 'hover:bg-white/[0.03]'
+                  : 'hover:bg-white/[0.03]'
                 }`}
               >
                 <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-6 relative`}>
@@ -912,7 +912,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                         {idx + 1}
                       </span>
                       <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
                           {diags.map((d, di) => (
                             <div key={di} className="flex items-start gap-2">
                               <span className={`shrink-0 mt-0.5 ${
@@ -922,7 +922,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                               </span>
                               <div>
                                 <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
                               </div>
                             </div>
                           ))}
@@ -930,7 +930,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       </div>
                     </span>
                   ) : (
-                    <span className="text-slate-600">{idx + 1}</span>
+                    <span className="text-slate-500">{idx + 1}</span>
                   )}
                 </span>
                 <span className="flex-1 py-[1px] whitespace-pre overflow-x-auto">
@@ -958,7 +958,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
       return (
         <div className={`flex overflow-y-auto max-h-[80vh] scrollbar-thin bg-slate-950`}>
           {/* Line number gutter with diagnostic markers */}
-          <div className={`shrink-0 select-none border-r border-white/[0.06] bg-slate-950 sticky left-0`} aria-hidden="true">
+          <div className={`shrink-0 select-none border-r border-white/5 bg-slate-950 sticky left-0`} aria-hidden="true">
             {/* Top padding matching textarea py-4 */}
             <div className="h-4" />
             {editLines.map((_, idx) => {
@@ -974,7 +974,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                         {idx + 1}
                       </span>
                       <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
                           {diags.map((d, di) => (
                             <div key={di} className="flex items-start gap-2">
                               <span className={`shrink-0 mt-0.5 ${
@@ -985,7 +985,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                               <div>
                                 <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
                                 {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
-                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
                               </div>
                             </div>
                           ))}
@@ -1040,8 +1040,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                           ? 'border-l-2 border-l-rose-400 bg-rose-500/[0.04]'
                           : highestSeverity === 'warning'
                             ? 'border-l-2 border-l-amber-400 bg-amber-500/[0.03]'
-                            : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.02]'
-                        : 'hover:bg-white/[0.02]'
+                            : 'border-l-2 border-l-cyan-400/50 hover:bg-white/[0.03]'
+                        : 'hover:bg-white/[0.03]'
                   }
                 `}
               >
@@ -1056,7 +1056,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       </span>
                       {/* Diagnostic tooltip */}
                       <div className="absolute left-full top-0 ml-1 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '320px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
                           {diags.map((d, di) => (
                             <div key={di} className="flex items-start gap-2">
                               <span className={`shrink-0 mt-0.5 ${
@@ -1067,7 +1067,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                               <div>
                                 <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
                                 {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
-                                <span className="text-[9px] text-slate-600 font-mono">{d.rule}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
                               </div>
                             </div>
                           ))}
@@ -1075,7 +1075,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       </div>
                     </span>
                   ) : (
-                    <span className="text-slate-600">{idx + 1}</span>
+                    <span className="text-slate-500">{idx + 1}</span>
                   )}
                 </span>
 
@@ -1122,7 +1122,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               ? 'border-amber-500/15'
               : composeDiagnostics.length === 0 && envDiagnostics.length === 0
                 ? 'border-emerald-500/10'
-                : 'border-white/[0.06]'
+                : 'border-white/5'
           }
         `}
         role="dialog"
@@ -1130,7 +1130,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         aria-labelledby="compose-viewer-title"
       >
         {/* ---- Header ---- */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/20 shrink-0">
               {activeTab === 'compose' ? (
@@ -1218,7 +1218,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                     transition-colors duration-150
                     ${editMode
                       ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={editMode ? 'Switch to view mode' : 'Switch to edit mode'}
@@ -1239,7 +1239,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       transition-colors duration-150
                       ${showDiff
                         ? 'text-violet-400 bg-violet-500/10 ring-1 ring-violet-500/20'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Toggle diff view"
@@ -1261,8 +1261,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       text-xs font-medium
                       transition-colors duration-150
                       ${validating
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        ? 'text-slate-500 cursor-not-allowed'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Validate compose file"
@@ -1288,7 +1288,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       text-xs font-medium
                       transition-colors duration-150
                       ${!validationResult?.valid || saving
-                        ? 'text-slate-600 cursor-not-allowed'
+                        ? 'text-slate-500 cursor-not-allowed'
                         : 'text-emerald-400 hover:bg-emerald-500/10'
                       }
                     `}
@@ -1321,7 +1321,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       transition-colors duration-150
                       ${searchOpen
                         ? 'text-cyan-400 bg-cyan-500/10'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }
                     `}
                     title="Search (Ctrl+F)"
@@ -1340,7 +1340,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                     transition-colors duration-150
                     ${copied
                       ? 'text-emerald-400 bg-emerald-500/10'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={copied ? 'Copied!' : 'Copy to clipboard'}
@@ -1375,10 +1375,10 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                     text-xs font-medium
                     transition-colors duration-150
                     ${envLoading || envError !== null
-                      ? 'text-slate-600 cursor-not-allowed'
+                      ? 'text-slate-500 cursor-not-allowed'
                       : envEditMode
                         ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                     }
                   `}
                   title={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
@@ -1399,7 +1399,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                       text-xs font-medium
                       transition-colors duration-150
                       ${envSaving
-                        ? 'text-slate-600 cursor-not-allowed'
+                        ? 'text-slate-500 cursor-not-allowed'
                         : 'text-emerald-400 hover:bg-emerald-500/10'
                       }
                     `}
@@ -1424,7 +1424,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 flex items-center justify-center
                 w-8 h-8 rounded-lg
                 text-slate-500 hover:text-slate-300
-                hover:bg-white/[0.06]
+                hover:bg-white/5
                 transition-colors duration-150
               "
               aria-label="Close viewer"
@@ -1437,7 +1437,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         {/* ---- Validation result bar ---- */}
         {activeTab === 'compose' && editMode && validationResult && (
           <div className={`
-            flex items-start gap-2 px-5 py-2.5 border-b border-white/[0.06] shrink-0 text-xs
+            flex items-start gap-2 px-5 py-2.5 border-b border-white/5 shrink-0 text-xs
             ${validationResult.valid
               ? 'bg-emerald-500/[0.06] text-emerald-400'
               : 'bg-rose-500/[0.06] text-rose-400'
@@ -1456,7 +1456,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
 
         {/* ---- Search bar (compose view mode only) ---- */}
         {activeTab === 'compose' && !editMode && searchOpen && (
-          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/[0.06] bg-slate-900/50 shrink-0">
+          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/5 bg-slate-900/50 shrink-0">
             <Search size={14} className="text-slate-500 shrink-0" />
             <input
               ref={searchInputRef}
@@ -1487,7 +1487,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                   }
                   className="
                     flex items-center justify-center w-6 h-6 rounded
-                    text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]
+                    text-slate-500 hover:text-slate-300 hover:bg-white/5
                     text-xs transition-colors
                   "
                   aria-label="Previous match"
@@ -1500,7 +1500,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                   }
                   className="
                     flex items-center justify-center w-6 h-6 rounded
-                    text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]
+                    text-slate-500 hover:text-slate-300 hover:bg-white/5
                     text-xs transition-colors
                   "
                   aria-label="Next match"
@@ -1516,7 +1516,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               }}
               className="
                 flex items-center justify-center w-6 h-6 rounded
-                text-slate-500 hover:text-slate-300 hover:bg-white/[0.06]
+                text-slate-500 hover:text-slate-300 hover:bg-white/5
                 transition-colors shrink-0
               "
               aria-label="Close search"
@@ -1531,7 +1531,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
 
         {/* ---- Diagnostics summary bar (hidden when compose-linter plugin is disabled) ---- */}
         {linterPluginEnabled && (
-        <div className="flex items-center gap-3 px-5 py-2 border-t border-white/[0.06] bg-slate-900/60 shrink-0">
+        <div className="flex items-center gap-3 px-5 py-2 border-t border-white/5 bg-slate-900/60 shrink-0">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Lint</span>
           {(activeTab === 'compose' ? composeDiagnostics.length : envDiagnostics.length) === 0 ? (
             <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400 neon-emerald">
@@ -1564,8 +1564,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         )}
 
         {/* ---- Footer ---- */}
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.06] shrink-0">
-          <span className="text-[11px] text-slate-600 font-mono">
+        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/5 shrink-0">
+          <span className="text-[11px] text-slate-500 font-mono">
             {activeTab === 'compose'
               ? `${editMode ? editContent.split('\n').length : lines.length} line${(editMode ? editContent.split('\n').length : lines.length) !== 1 ? 's' : ''}`
               : envContent !== null
@@ -1584,11 +1584,11 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 EDITING
               </span>
             )}
-            <span className="text-[11px] text-slate-600">
+            <span className="text-[11px] text-slate-500">
               {activeTab === 'compose' ? 'YAML' : 'ENV'}
             </span>
             <span className="text-[10px] text-slate-700">
-              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-500 font-mono text-[9px]">Esc</kbd> to close
             </span>
           </div>
         </div>

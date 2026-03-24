@@ -115,7 +115,7 @@ export function StatusBar() {
         <div className="flex items-center gap-2.5">
           <span className="flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-            <span className={isConnected ? 'text-slate-400' : 'text-slate-600'}>
+            <span className={isConnected ? 'text-slate-400' : 'text-slate-500'}>
               {isConnected ? 'Connected' : connectionStatus}
             </span>
           </span>
@@ -139,13 +139,13 @@ export function StatusBar() {
           )}
 
           <span className="text-white/[0.06]">|</span>
-          <button onClick={nav('uptime')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">
+          <button onClick={nav('uptime')} className="flex items-center gap-1 text-slate-500 hover:text-slate-400 transition-colors duration-200 cursor-pointer">
             <Clock size={9} />
             Uptime: <span className="text-slate-400">{uptime}</span>
           </button>
 
           <span className="text-white/[0.06]">|</span>
-          <span className="text-slate-600">
+          <span className="text-slate-500">
             {appVersion && <><span className="text-slate-500">v{appVersion}</span> · </>}
             API <span className="text-slate-500">v{apiVersion}</span>
           </span>
@@ -153,10 +153,10 @@ export function StatusBar() {
           {currentUser && (
             <>
               <span className="text-white/[0.06]">|</span>
-              <span className="flex items-center gap-1 text-slate-600">
+              <span className="flex items-center gap-1 text-slate-500">
                 <User size={9} />
                 <span className="text-slate-400">{currentUser}</span>
-                {sessionDuration && <span className="text-slate-600">· {sessionDuration}</span>}
+                {sessionDuration && <span className="text-slate-500">· {sessionDuration}</span>}
               </span>
             </>
           )}
@@ -166,7 +166,7 @@ export function StatusBar() {
         <div className="flex items-center gap-2.5">
           {cpuCount > 0 && (
             <>
-              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"><Cpu size={9} /> CPU</button>
+              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-500 hover:text-slate-400 transition-colors duration-200 cursor-pointer"><Cpu size={9} /> CPU</button>
               <button onClick={nav('trends')} className="flex items-center gap-1.5 cursor-pointer">
                 <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <div className={`h-full rounded-full progress-bar ${cpuPct > 80 ? 'bg-rose-400' : cpuPct > 60 ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${cpuPct}%` }} />
@@ -178,13 +178,13 @@ export function StatusBar() {
           )}
           {memTotal > 0 && (
             <>
-              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"><MemoryStick size={9} /> RAM</button>
+              <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-500 hover:text-slate-400 transition-colors duration-200 cursor-pointer"><MemoryStick size={9} /> RAM</button>
               <button onClick={nav('trends')} className="cursor-pointer"><MemoryBar used={memUsed} total={memTotal} /></button>
               <span className="text-white/[0.06]">|</span>
             </>
           )}
 
-          <button onClick={nav('containers')} className="flex items-center gap-1 text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">
+          <button onClick={nav('containers')} className="flex items-center gap-1 text-slate-500 hover:text-slate-400 transition-colors duration-200 cursor-pointer">
             <Container size={9} />
             <span className="text-emerald-400/80">{containersRunning}</span>
             <span className="text-slate-700">/</span>
@@ -194,7 +194,7 @@ export function StatusBar() {
           {lastRefreshAgo && (
             <>
               <span className="text-white/[0.06]">|</span>
-              <span className="flex items-center gap-1 text-slate-600">
+              <span className="flex items-center gap-1 text-slate-500">
                 <Wifi size={9} className="text-emerald-500/60" />
                 <span className="text-slate-500">{lastRefreshAgo}</span>
                 {latencyMs != null && (
@@ -218,7 +218,7 @@ export function StatusBar() {
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-              <span className={isConnected ? 'text-slate-400' : 'text-slate-600'}>
+              <span className={isConnected ? 'text-slate-400' : 'text-slate-500'}>
                 {isConnected ? 'Connected' : connectionStatus}
               </span>
             </span>
@@ -246,21 +246,21 @@ export function StatusBar() {
         {/* Row 2: containers + uptime + last refresh */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-slate-600">
+            <span className="flex items-center gap-1 text-slate-500">
               <Container size={8} />
               <span className="text-emerald-400/80">{containersRunning}</span>
               <span className="text-slate-700">/</span>
               <span className="text-slate-400">{containersTotal}</span>
             </span>
             <span className="text-white/[0.06]">|</span>
-            <span className="flex items-center gap-1 text-slate-600">
+            <span className="flex items-center gap-1 text-slate-500">
               <Clock size={8} />
               <span className="text-slate-400">{uptime}</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             {lastRefreshAgo && (
-              <span className="flex items-center gap-1 text-slate-600">
+              <span className="flex items-center gap-1 text-slate-500">
                 <Wifi size={8} className="text-emerald-500/60" />
                 <span className="text-slate-500">{lastRefreshAgo}</span>
                 {latencyMs != null && (
@@ -270,7 +270,7 @@ export function StatusBar() {
                 )}
               </span>
             )}
-            <span className="text-slate-600">
+            <span className="text-slate-500">
               {appVersion && <><span className="text-slate-500">v{appVersion}</span> · </>}
               v{apiVersion}
             </span>

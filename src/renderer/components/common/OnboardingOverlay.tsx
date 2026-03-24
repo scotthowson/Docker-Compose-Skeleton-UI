@@ -92,10 +92,8 @@ export default function OnboardingOverlay() {
   const [visible, setVisible] = useState(false)
   const [step, setStep] = useState(0)
 
-  useEffect(() => {
-    const done = localStorage.getItem(STORAGE_KEY)
-    if (!done) setVisible(true)
-  }, [])
+  // Don't auto-show — only show via 'show-onboarding' event
+  // (triggered after setup wizard or from Settings "Show Onboarding" button)
 
   // Listen for re-show event (from Settings page)
   useEffect(() => {
@@ -147,7 +145,7 @@ export default function OnboardingOverlay() {
       />
 
       {/* Card */}
-      <div className="relative w-full max-w-lg bg-slate-900/80 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/60 animate-scale-in overflow-hidden">
+      <div className="relative w-full max-w-lg bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/60 animate-scale-in overflow-hidden">
         {/* Decorative gradient bar */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
 
@@ -224,7 +222,7 @@ export default function OnboardingOverlay() {
             disabled={step === 0}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
               step === 0
-                ? 'text-slate-600 cursor-not-allowed'
+                ? 'text-slate-500 cursor-not-allowed'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >

@@ -20,6 +20,7 @@ import {
   CheckSquare,
   Square as SquareIcon,
   Play,
+  RefreshCw,
   RotateCw,
   X,
   Minus,
@@ -74,9 +75,10 @@ interface ContainerListProps {
   selectedName: string | null
   onSelect: (name: string) => void
   isAdmin?: boolean
+  onRefresh?: () => void
 }
 
-const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, isAdmin = false }) => {
+const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, isAdmin = false, onRefresh }) => {
   const containers = useContainerStore((s) => s.containers)
   const loading = useContainerStore((s) => s.loading)
   const favorites = useContainerStore((s) => s.favorites)
@@ -208,7 +210,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   const pausedCount = containers.filter((c) => c.state.toLowerCase() === 'paused').length
 
   const SortIcon: React.FC<{ columnKey: SortKey }> = ({ columnKey }) => {
-    if (sort.key !== columnKey) return <ChevronsUpDown className="h-3 w-3 text-slate-600" />
+    if (sort.key !== columnKey) return <ChevronsUpDown className="h-3 w-3 text-slate-500" />
     return sort.direction === 'asc'
       ? <ChevronUp className="h-3 w-3 text-emerald-400" />
       : <ChevronDown className="h-3 w-3 text-emerald-400" />
@@ -217,7 +219,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   const favSet = new Set(favorites)
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5 animate-in">
+    <div className="flex flex-col gap-4 md:gap-5 animate-fade-in">
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between">
         <div>
@@ -225,7 +227,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             <h1 className="text-xl md:text-2xl font-bold text-white">Containers</h1>
             <span className="text-xs md:text-sm text-slate-400 mt-0.5">
               <span className="text-emerald-400 font-semibold">{runningCount} running</span>
-              <span className="mx-1.5 text-slate-600">&middot;</span>
+              <span className="mx-1.5 text-slate-500">&middot;</span>
               <span>{containers.length} total</span>
             </span>
           </div>
@@ -233,22 +235,34 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             Manage and monitor all Docker containers
           </p>
         </div>
-        {isAdmin && (
-          <button
-            onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
-            className={`
-              flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
-              border transition-all duration-200
-              ${batchMode
-                ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
-                : 'bg-white/[0.04] border-white/[0.06] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200'
-              }
-            `}
-          >
-            <CheckSquare size={14} />
-            <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white/5 border border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 press"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
+              className={`
+                flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
+                border transition-all duration-200
+                ${batchMode
+                  ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
+                  : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
+                }
+              `}
+            >
+              <CheckSquare size={14} />
+              <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ---- Batch Action Bar ---- */}
@@ -284,7 +298,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
 
       {/* ---- Batch Results ---- */}
       {batchResults && (
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 animate-fade-in">
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Batch Results</p>
             <button onClick={() => setBatchResults(null)} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={14} /></button>
@@ -311,7 +325,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
       </div>
 
       {/* ---- Filter tabs ---- */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none bg-white/[0.02] border border-white/[0.05] rounded-xl p-1">
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none bg-white/[0.03] border border-white/[0.05] rounded-xl p-1">
         {(['all', 'running', 'stopped', 'paused'] as const).map((filterVal) => {
           const labelMap = { all: 'All', running: 'Running', stopped: 'Stopped', paused: 'Paused' }
           const countMap = { all: containers.length, running: runningCount, stopped: stoppedCount, paused: pausedCount }
@@ -326,12 +340,12 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                 transition-all duration-200
                 ${filter === filterVal
                   ? `${activeBgMap[filterVal]} ${colorMap[filterVal]}`
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                 }
               `}
             >
               {labelMap[filterVal]}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filter === filterVal ? 'bg-white/10' : 'bg-white/[0.04]'}`}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filter === filterVal ? 'bg-white/10' : 'bg-white/5'}`}>
                 {countMap[filterVal]}
               </span>
             </button>
@@ -349,9 +363,9 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           placeholder="Search containers..."
           className="
             w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
-            bg-white/[0.04] border border-white/[0.08]
+            bg-white/5 border border-white/10
             text-slate-200 placeholder-slate-500
-            focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30
+            focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30
             transition-all duration-200
           "
         />
@@ -367,12 +381,12 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
         {loading && containers.length === 0 ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-20 border border-white/[0.04]" />
+              <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-20 border border-white/[0.03]" />
             ))}
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16">
-            <Box className="h-8 w-8 text-slate-600" />
+            <Box className="h-8 w-8 text-slate-500" />
             <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
           </div>
         ) : (
@@ -398,7 +412,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-white/5">
                 {batchMode && (
                   <th className="px-3 py-3 w-10">
                     <button
@@ -441,7 +455,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                   {[...Array(5)].map((_, i) => (
                     <tr key={i}>
                       <td colSpan={COLUMNS.length + 3} className="py-1.5 px-3">
-                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.04]" />
+                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.03]" />
                       </td>
                     </tr>
                   ))}
@@ -450,7 +464,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                 <tr>
                   <td colSpan={COLUMNS.length + 3} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <Box className="h-8 w-8 text-slate-600" />
+                      <Box className="h-8 w-8 text-slate-500" />
                       <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
                     </div>
                   </td>

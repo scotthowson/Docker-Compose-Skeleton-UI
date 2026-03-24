@@ -38,6 +38,7 @@ import {
   Globe2,
   Store,
   Sparkles,
+  Network,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -47,7 +48,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery } from '../api/endpoints'
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus } from '../api/endpoints'
 import type {
   TemplateInfo,
   TemplateDetailResponse,
@@ -252,13 +253,113 @@ function lintCompose(compose: string): LintWarning[] {
 // Deploy Modal
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Traefik route generation helper
+// ---------------------------------------------------------------------------
+
+function generateRouteYaml(serviceName: string, containerName: string, containerPort: string, domain: string): string {
+  const routeId = serviceName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+  const protocol = ['443', '9443', '8443'].includes(containerPort) ? 'https' : 'http'
+  return `# Auto-generated Traefik route for: ${serviceName}
+# Edit the subdomain or middlewares as needed.
+
+http:
+  routers:
+    ${routeId}-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(\`${serviceName}.${domain}\`)"
+      service: "${routeId}"
+      middlewares:
+        - "traefik-chain"
+        - "compress-gzip"
+      tls:
+        certResolver: "letsencrypt"
+
+  services:
+    ${routeId}:
+      loadBalancer:
+        servers:
+          - url: "${protocol}://${containerName}:${containerPort}"`
+}
+
+/** Parse services with ports from a compose file for route generation */
+function parseServicesWithPorts(compose: string): { name: string; containerName: string; port: string }[] {
+  const results: { name: string; containerName: string; port: string }[] = []
+  const lines = compose.split('\n')
+  let currentService = ''
+  let inPorts = false
+  let containerName = ''
+  let indent = 0
+
+  for (const line of lines) {
+    // Detect top-level service (2-space indent, ends with colon)
+    const svcMatch = line.match(/^  ([a-zA-Z_-][a-zA-Z0-9_-]*):\s*$/)
+    if (svcMatch) {
+      currentService = svcMatch[1]
+      containerName = ''
+      inPorts = false
+      indent = 0
+      continue
+    }
+
+    if (!currentService) continue
+
+    // Detect next top-level key (end of service block)
+    if (/^  [a-zA-Z_-]/.test(line) && !line.startsWith('    ')) {
+      currentService = ''
+      continue
+    }
+    if (/^[a-zA-Z]/.test(line)) {
+      currentService = ''
+      continue
+    }
+
+    // container_name
+    const cnMatch = line.match(/container_name:\s*(.+)/)
+    if (cnMatch && currentService) {
+      containerName = cnMatch[1].trim()
+    }
+
+    // ports section
+    if (/^\s+ports:\s*$/.test(line) && currentService) {
+      inPorts = true
+      indent = line.search(/\S/)
+      continue
+    }
+
+    // Port entry
+    if (inPorts && currentService) {
+      const portMatch = line.match(/^\s+-\s+"?([^"]+)"?/)
+      if (portMatch) {
+        // Resolve ${VAR:-default} patterns to defaults before splitting
+        const portMapping = portMatch[1].replace(/\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}/g, '$1').replace(/\$\{[A-Za-z_][A-Za-z0-9_]*\}/g, '')
+        const parts = portMapping.split(':')
+        const containerPort = (parts.length >= 2 ? parts[parts.length - 1] : parts[0]).replace(/\/.*/, '')
+        results.push({
+          name: currentService,
+          containerName: containerName || currentService,
+          port: containerPort,
+        })
+        inPorts = false // Only take the first port
+        continue
+      }
+      // End of ports section
+      if (line.trim() && !line.match(/^\s+-/)) {
+        inPorts = false
+      }
+    }
+  }
+  return results
+}
+
 interface DeployModalProps {
   template: TemplateInfo
   detail: TemplateDetailResponse | null
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[]) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -282,6 +383,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [confirming, setConfirming] = useState(false)
   // F2: Custom dropdown open state
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  // F4: Local deploying state (stays true through wait period, unlike parent prop)
+  const [localDeploying, setLocalDeploying] = useState(false)
+  const [deployStep, setDeployStep] = useState(0)
   // F4: Success result
   const [deployResult, setDeployResult] = useState<TemplateDeployResponse | null>(null)
   // F4: Undeploy loading
@@ -303,6 +407,53 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     }
     return disabled
   })
+
+  // Traefik route editing state
+  const [traefikActive, setTraefikActive] = useState(false)
+  const [traefikDomain, setTraefikDomain] = useState('')
+  const [enableRouting, setEnableRouting] = useState(true)
+  const [showRoutes, setShowRoutes] = useState(false)
+  const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
+  const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
+  // Per-service subdomain + enabled state
+  const [routeServices, setRouteServices] = useState<{ name: string; containerName: string; port: string; subdomain: string; enabled: boolean }[]>([])
+
+  // Fetch Traefik status on mount (skip for traefik template itself)
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  useEffect(() => {
+    if (!isConnected || template.name === 'traefik') return
+    fetchTraefikStatus()
+      .then((res) => {
+        setTraefikActive(res.active)
+        setTraefikDomain(res.domain || '')
+      })
+      .catch(() => {})
+  }, [isConnected, template.name])
+
+  // Parse services with ports when compose detail loads
+  useEffect(() => {
+    if (!traefikActive || !traefikDomain || traefikDomain === 'example.com' || !detail?.compose) return
+    const services = parseServicesWithPorts(detail.compose)
+    setRouteServices(services.map((svc) => ({
+      ...svc,
+      subdomain: svc.name,
+      enabled: true,
+    })))
+  }, [traefikActive, traefikDomain, detail])
+
+  // Generate route YAML from subdomain state (reactive)
+  useEffect(() => {
+    if (!enableRouting || routeServices.length === 0 || !traefikDomain) {
+      setCustomRoutes({})
+      return
+    }
+    const routes: Record<string, string> = {}
+    for (const svc of routeServices) {
+      if (!svc.enabled) continue
+      routes[svc.name] = generateRouteYaml(svc.subdomain, svc.containerName, svc.port, traefikDomain)
+    }
+    setCustomRoutes(routes)
+  }, [enableRouting, routeServices, traefikDomain])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -363,12 +514,27 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       setConfirming(true)
       return
     }
+    setLocalDeploying(true)
+    setDeployStep(1) // Merging compose
     const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
-    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude)
+    const routes = traefikActive && enableRouting && Object.keys(customRoutes).length > 0 ? customRoutes : undefined
+    await new Promise((r) => setTimeout(r, 400))
+    setDeployStep(2) // Sending to server
+    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes)
     if (result) {
+      if (autoStart && result.started) {
+        setDeployStep(3) // Pulling images
+        await new Promise((r) => setTimeout(r, 1500))
+        setDeployStep(4) // Starting containers
+        await new Promise((r) => setTimeout(r, 2000))
+        setDeployStep(5) // Verifying health
+        await new Promise((r) => setTimeout(r, 1000))
+      }
       setDeployResult(result)
     }
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices])
+    setDeployStep(0)
+    setLocalDeploying(false)
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, customRoutes])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -406,35 +572,79 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       {/* Backdrop click to close */}
-      <div className="absolute inset-0" onClick={deploying ? undefined : onClose} />
+      <div className="absolute inset-0" onClick={localDeploying ? undefined : onClose} />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+      <div className="relative w-full max-w-2xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${deployResult ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-emerald-500/15 border border-emerald-500/20'}`}>
-              {deployResult ? <CheckCircle size={16} className="text-emerald-400" /> : <Rocket size={16} className="text-emerald-400" />}
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${deployResult ? 'bg-emerald-500/20 border border-emerald-500/30' : localDeploying ? 'bg-cyan-500/20 border border-cyan-500/30' : 'bg-emerald-500/15 border border-emerald-500/20'}`}>
+              {deployResult ? <CheckCircle size={16} className="text-emerald-400" /> : localDeploying ? <Loader2 size={16} className="text-cyan-400 animate-spin" /> : <Rocket size={16} className="text-emerald-400" />}
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-slate-200 truncate">
-                {deployResult ? 'Deploy Successful' : `Deploy: ${template.name}`}
+                {deployResult ? 'Deploy Successful' : localDeploying ? 'Deploying...' : `Deploy: ${template.name}`}
               </h3>
               <p className="text-[11px] text-slate-500 truncate">
-                {deployResult ? `Merged into ${deployResult.target_stack}` : template.description}
+                {deployResult ? `Merged into ${deployResult.target_stack}` : localDeploying ? 'Creating and starting containers' : template.description}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors shrink-0 ml-2"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0 ml-2"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* F4: Success state */}
-        {deployResult ? (
+        {/* Deploying progress state */}
+        {localDeploying && !deployResult ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-12 gap-5 animate-fade-in">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                <Loader2 size={32} className="text-cyan-400 animate-spin" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center animate-pulse">
+                <Package size={10} className="text-emerald-400" />
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-slate-200">Deploying {template.name}</p>
+              <p className="text-xs text-slate-400 mt-1">into {targetStack}</p>
+            </div>
+            {/* Step progress */}
+            <div className="w-full max-w-xs space-y-2">
+              {[
+                { step: 1, label: 'Merging compose file' },
+                { step: 2, label: 'Sending to server' },
+                ...(autoStart ? [
+                  { step: 3, label: 'Pulling image & creating container' },
+                  { step: 4, label: 'Starting container' },
+                  { step: 5, label: 'Verifying health' },
+                ] : []),
+              ].map(({ step, label }) => {
+                const isActive = deployStep === step
+                const isDone = deployStep > step
+                return (
+                  <div key={step} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-cyan-500/10 border border-cyan-500/15' : isDone ? 'bg-emerald-500/5' : 'opacity-40'}`}>
+                    <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                      {isDone ? (
+                        <CheckCircle size={14} className="text-emerald-400" />
+                      ) : isActive ? (
+                        <Loader2 size={14} className="text-cyan-400 animate-spin" />
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-slate-600" />
+                      )}
+                    </div>
+                    <span className={`text-xs ${isActive ? 'text-cyan-300 font-medium' : isDone ? 'text-emerald-400' : 'text-slate-500'}`}>{label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : deployResult ? (
           <>
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
               <div className="flex flex-col items-center text-center py-4 gap-3">
@@ -459,13 +669,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   </div>
                 )}
                 {deployResult.backup_file && (
-                  <p className="text-[10px] text-slate-600 mt-2">
+                  <p className="text-[10px] text-slate-500 mt-2">
                     Backup: <span className="font-mono">{deployResult.backup_file}</span>
                   </p>
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
               <button
                 onClick={onClose}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
@@ -480,6 +690,15 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 >
                   {undeploying ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
                   Undo Deploy
+                </button>
+              )}
+              {deployResult.services_added?.length === 1 && (
+                <button
+                  onClick={() => { onClose(); setCurrentPage('containers', { focusContainer: deployResult.services_added![0] }) }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all duration-200 press"
+                >
+                  <Package size={13} />
+                  View Container
                 </button>
               )}
               <button
@@ -504,7 +723,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   <button
                     type="button"
                     onClick={() => setDropdownOpen((prev) => !prev)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors text-left"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors text-left"
                   >
                     {targetStack ? (
                       <span className="flex items-center gap-2 min-w-0">
@@ -525,12 +744,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <ChevronDown size={14} className={`text-slate-500 transition-transform duration-150 shrink-0 ml-2 ${dropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
                   {dropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg bg-slate-800 border border-white/[0.08] shadow-xl shadow-black/30 scrollbar-thin">
+                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg bg-slate-800 border border-white/10 shadow-xl shadow-black/30 scrollbar-thin">
                       {stacks.map((s) => (
                         <button
                           key={s.name}
                           onClick={() => { setTargetStack(s.name); setDropdownOpen(false); setConfirming(false) }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/[0.06] transition-colors ${s.name === targetStack ? 'bg-white/[0.04]' : ''}`}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors ${s.name === targetStack ? 'bg-white/5' : ''}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                           <span className="font-mono text-slate-200 truncate flex-1">{s.name}</span>
@@ -598,7 +817,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                   {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
                                 </div>
                                 {v.description && <p className="text-[10px] text-slate-500 mt-0.5">{v.description}</p>}
-                                <p className="text-[10px] text-slate-600 font-mono mt-0.5">{v.name}</p>
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5">{v.name}</p>
                               </div>
                               <button
                                 type="button"
@@ -624,7 +843,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                               value={value}
                               onChange={(e) => handleVariableChange(v.name, e.target.value)}
                               placeholder={v.defaultValue || v.name}
-                              className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                             />
                           </div>
                         )
@@ -692,6 +911,92 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 </div>
               )}
 
+              {/* Traefik Routing (when Traefik is active and services have ports) */}
+              {traefikActive && traefikDomain && traefikDomain !== 'example.com' && routeServices.length > 0 && (
+                <div className="rounded-lg border border-emerald-500/15 overflow-hidden">
+                  {/* Master toggle + header */}
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-emerald-500/5">
+                    <button
+                      onClick={() => setShowRoutes((prev) => !prev)}
+                      className="flex items-center gap-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${showRoutes ? '' : '-rotate-90'}`} />
+                      <Network size={13} />
+                      HTTPS Routing
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500">{enableRouting ? `${routeServices.filter((s) => s.enabled).length} route${routeServices.filter((s) => s.enabled).length !== 1 ? 's' : ''}` : 'Off'}</span>
+                      <button
+                        type="button"
+                        onClick={() => setEnableRouting(!enableRouting)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableRouting ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableRouting ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {showRoutes && enableRouting && (
+                    <div className="px-3 py-3 space-y-2 animate-fade-in border-t border-emerald-500/10">
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Each service with ports gets an HTTPS route via Traefik. Edit subdomains or disable services you don't want exposed.
+                      </p>
+
+                      {/* Per-service subdomain rows */}
+                      {routeServices.map((svc, idx) => (
+                        <div key={svc.name} className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all ${svc.enabled ? 'border-white/5 bg-white/[0.03]' : 'border-white/[0.03] opacity-50'}`}>
+                          <button
+                            type="button"
+                            onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, enabled: !s.enabled } : s))}
+                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${svc.enabled ? 'bg-emerald-500/30 border-emerald-500/40 text-emerald-400' : 'border-white/10'}`}
+                          >
+                            {svc.enabled && <CheckCircle size={10} />}
+                          </button>
+                          <input
+                            type="text"
+                            value={svc.subdomain}
+                            onChange={(e) => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } : s))}
+                            disabled={!svc.enabled}
+                            className="w-24 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/40 disabled:opacity-50 transition-all"
+                          />
+                          <span className="text-[10px] text-slate-500">.{traefikDomain}</span>
+                          <span className="text-[10px] text-slate-500 ml-auto">:{svc.port}</span>
+                          <span className="text-[10px] text-slate-500 truncate max-w-[80px]" title={svc.containerName}>{svc.containerName}</span>
+                        </div>
+                      ))}
+
+                      {/* Advanced: raw YAML toggle */}
+                      <button
+                        onClick={() => setShowAdvancedRoutes((prev) => !prev)}
+                        className="flex items-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 transition-colors mt-1"
+                      >
+                        <ChevronDown size={10} className={`transition-transform duration-200 ${showAdvancedRoutes ? '' : '-rotate-90'}`} />
+                        Advanced: Edit raw YAML
+                      </button>
+                      {showAdvancedRoutes && (
+                        <div className="space-y-2 animate-fade-in">
+                          {Object.entries(customRoutes).map(([svcName, routeYaml]) => (
+                            <div key={svcName} className="rounded-lg border border-white/5 overflow-hidden">
+                              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03]">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                <span className="text-[10px] font-semibold text-slate-400">{svcName}.{traefikDomain}</span>
+                              </div>
+                              <textarea
+                                value={routeYaml}
+                                onChange={(e) => setCustomRoutes((prev) => ({ ...prev, [svcName]: e.target.value }))}
+                                rows={Math.min(routeYaml.split('\n').length + 1, 16)}
+                                spellCheck={false}
+                                className="w-full bg-slate-950 text-[10px] font-mono text-slate-300 p-3 border-0 focus:outline-none focus:ring-0 resize-y scrollbar-thin leading-relaxed"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Compose preview (collapsible) */}
               <div>
                 <button
@@ -709,14 +1014,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   <div className="mt-2">
                     {detailLoading ? (
                       <div className="flex items-center justify-center py-8 bg-slate-950 rounded-lg">
-                        <Loader2 size={18} className="animate-spin text-slate-600" />
+                        <Loader2 size={18} className="animate-spin text-slate-500" />
                       </div>
                     ) : detail?.compose ? (
                       <pre className="bg-slate-950 rounded-lg p-3 text-[11px] font-mono text-slate-400 overflow-x-auto max-h-64 scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
                         {detail.compose}
                       </pre>
                     ) : (
-                      <div className="bg-slate-950 rounded-lg p-3 text-xs text-slate-600 italic">
+                      <div className="bg-slate-950 rounded-lg p-3 text-xs text-slate-500 italic">
                         No compose content available
                       </div>
                     )}
@@ -886,7 +1191,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <div key={e.key} className="flex items-center gap-2 text-[10px]">
                               <span className="text-emerald-500 font-bold">+</span>
                               <code className="font-mono text-cyan-400">{e.key}</code>
-                              <span className="text-slate-600">=</span>
+                              <span className="text-slate-500">=</span>
                               <code className="font-mono text-slate-400 truncate">{e.value}</code>
                             </div>
                           ))}
@@ -903,7 +1208,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <div key={e.key} className="flex items-center gap-2 text-[10px]">
                               <span className="text-amber-500 font-bold">~</span>
                               <code className="font-mono text-amber-400">{e.key}</code>
-                              <span className="text-slate-600">=</span>
+                              <span className="text-slate-500">=</span>
                               <code className="font-mono text-slate-500 truncate">{e.current_value}</code>
                             </div>
                           ))}
@@ -967,7 +1272,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
               <button
                 onClick={() => { if (confirming) { setConfirming(false) } else { onClose() } }}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
@@ -1059,9 +1364,9 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-lg ${mode === 'create' ? 'bg-emerald-500/15 border-emerald-500/20' : 'bg-cyan-500/15 border-cyan-500/20'} border flex items-center justify-center shrink-0`}>
               {mode === 'create' ? <Plus size={16} className="text-emerald-400" /> : <Pencil size={16} className="text-cyan-400" />}
@@ -1071,7 +1376,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <p className="text-[10px] text-slate-500">Define a reusable stack template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -1079,7 +1384,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
         {/* Content */}
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {/* Name + metadata row */}
-          <div className="px-4 md:px-5 py-4 space-y-3 border-b border-white/[0.06]">
+          <div className="px-4 md:px-5 py-4 space-y-3 border-b border-white/5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Template Name *</label>
@@ -1088,7 +1393,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                   onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'))}
                   placeholder="my-template"
                   disabled={mode === 'edit'}
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors disabled:opacity-50 font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors disabled:opacity-50 font-mono"
                 />
               </div>
               <div>
@@ -1097,7 +1402,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="My Template"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors"
                 />
               </div>
             </div>
@@ -1108,7 +1413,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Brief description..."
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors"
                 />
               </div>
               <div>
@@ -1121,7 +1426,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                     const suggested = CATEGORY_TO_STACK[cat]
                     if (suggested) setTargetStack(suggested)
                   }}
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
                 >
                   <option value="databases">Databases</option>
                   <option value="media">Media</option>
@@ -1140,14 +1445,14 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <select
                 value={targetStack}
                 onChange={(e) => setTargetStack(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
+                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
               >
                 <option value="">None (user selects at deploy time)</option>
                 {stacks.map((s) => (
                   <option key={s.name} value={s.name}>{s.name}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-slate-600 mt-1">Stack where this template's services will be merged when deployed</p>
+              <p className="text-[10px] text-slate-500 mt-1">Stack where this template's services will be merged when deployed</p>
             </div>
           </div>
 
@@ -1157,7 +1462,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-t-lg text-[11px] font-medium transition-colors ${activeTab === tab ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08] border-b-transparent' : 'text-slate-500 hover:text-slate-400'}`}
+                className={`px-3 py-1.5 rounded-t-lg text-[11px] font-medium transition-colors ${activeTab === tab ? 'bg-white/[0.06] text-slate-200 border border-white/10 border-b-transparent' : 'text-slate-500 hover:text-slate-400'}`}
               >
                 {tab === 'compose' ? 'docker-compose.yml' : tab === 'env' ? '.env' : 'Variables'}
               </button>
@@ -1170,7 +1475,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                 value={compose}
                 onChange={(e) => setCompose(e.target.value)}
                 spellCheck={false}
-                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
+                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="services:&#10;  app:&#10;    image: example:latest"
               />
             )}
@@ -1179,42 +1484,42 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                 value={env}
                 onChange={(e) => setEnv(e.target.value)}
                 spellCheck={false}
-                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
+                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="# Environment variables for this template"
               />
             )}
             {activeTab === 'meta' && (() => {
               const parsedVars = parseComposeVariables(compose)
               return (
-                <div className="rounded-lg bg-slate-950/60 border border-white/[0.06] p-4 space-y-3">
+                <div className="rounded-lg bg-slate-950/60 border border-white/5 p-4 space-y-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
                     Detected Variables ({parsedVars.length})
                   </p>
                   {parsedVars.length === 0 ? (
-                    <div className="text-xs text-slate-600 py-4 text-center">
+                    <div className="text-xs text-slate-500 py-4 text-center">
                       <p>No custom variables detected in compose file.</p>
-                      <p className="mt-1">Use <code className="text-slate-400 bg-white/[0.04] px-1 py-0.5 rounded">${'${VAR_NAME:-default}'}</code> placeholders to add them.</p>
+                      <p className="mt-1">Use <code className="text-slate-400 bg-white/5 px-1 py-0.5 rounded">${'${VAR_NAME:-default}'}</code> placeholders to add them.</p>
                     </div>
                   ) : (
                     <div className="space-y-1.5">
                       {parsedVars.map((v) => {
                         const isBool = v.defaultValue === 'true' || v.defaultValue === 'false'
                         return (
-                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.02]">
+                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.03]">
                             <code className="text-[11px] font-mono text-emerald-400 min-w-[140px]">{v.name}</code>
                             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isBool ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'bg-slate-500/10 text-slate-500 border border-slate-500/15'}`}>
                               {isBool ? 'toggle' : 'text'}
                             </span>
-                            <span className="text-[10px] text-slate-600">default:</span>
+                            <span className="text-[10px] text-slate-500">default:</span>
                             <code className="text-[11px] font-mono text-slate-400 flex-1 truncate">
-                              {v.defaultValue || <span className="text-slate-600 italic">none</span>}
+                              {v.defaultValue || <span className="text-slate-500 italic">none</span>}
                             </code>
                           </div>
                         )
                       })}
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-600 mt-2">
+                  <p className="text-[10px] text-slate-500 mt-2">
                     Standard variables (<code className="text-slate-500">TZ</code>, <code className="text-slate-500">PUID</code>, <code className="text-slate-500">PGID</code>, <code className="text-slate-500">APP_DATA_DIR</code>) are inherited from root .env and excluded above.
                   </p>
                 </div>
@@ -1224,8 +1529,8 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-3 border-t border-white/[0.06] shrink-0">
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+        <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-3 border-t border-white/5 shrink-0">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
             Cancel
           </button>
           <button
@@ -1332,9 +1637,9 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center">
               <Link size={16} className="text-violet-400" />
@@ -1365,7 +1670,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                   value={url}
                   onChange={(e) => { setUrl(e.target.value); if (compose) { setCompose(''); setFetchedUrl('') } }}
                   placeholder="https://github.com/user/repo/blob/main/compose.yaml"
-                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
+                  className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
                   autoFocus
                 />
                 <button
@@ -1393,7 +1698,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                 value={name}
                 onChange={(e) => { setName(e.target.value); setNameManual(true) }}
                 placeholder="auto-detected"
-                className="w-full px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
+                className="w-full px-3 py-2.5 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors font-mono"
               />
             </div>
           </div>
@@ -1402,7 +1707,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           {hasFetched && (
             <>
               {/* Tab bar */}
-              <div className="flex items-center gap-1 border-b border-white/[0.06] -mb-1">
+              <div className="flex items-center gap-1 border-b border-white/5 -mb-1">
                 <button
                   onClick={() => setActiveTab('compose')}
                   className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
@@ -1437,11 +1742,11 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                     value={compose}
                     onChange={(e) => setCompose(e.target.value)}
                     spellCheck={false}
-                    className="w-full h-64 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/[0.06] text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-violet-500/20 resize-none scrollbar-thin"
+                    className="w-full h-64 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-violet-500/20 resize-none scrollbar-thin"
                     placeholder={'services:\n  app:\n    image: example:latest'}
                   />
                   <div className="absolute top-2 right-2 flex items-center gap-1">
-                    <span className="text-[9px] text-slate-600 bg-slate-800/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
                       {compose.split('\n').length} lines
                     </span>
                     {fetchedUrl && (
@@ -1455,12 +1760,12 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
               {/* Variables panel */}
               {activeTab === 'env' && (
-                <div className="rounded-lg bg-slate-950/60 border border-white/[0.06] p-4 space-y-3">
+                <div className="rounded-lg bg-slate-950/60 border border-white/5 p-4 space-y-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
                     Detected Variables ({detectedVars.length})
                   </p>
                   {detectedVars.length === 0 ? (
-                    <div className="text-xs text-slate-600 py-6 text-center">
+                    <div className="text-xs text-slate-500 py-6 text-center">
                       <p>No custom variables detected in this compose file.</p>
                       <p className="mt-1 text-[10px]">
                         Standard variables (<code className="text-slate-500">TZ</code>, <code className="text-slate-500">PUID</code>, <code className="text-slate-500">PGID</code>, <code className="text-slate-500">APP_DATA_DIR</code>) are inherited from root .env and excluded.
@@ -1471,21 +1776,21 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                       {detectedVars.map((v) => {
                         const isBool = v.defaultValue === 'true' || v.defaultValue === 'false'
                         return (
-                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.02]">
+                          <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.03]">
                             <code className="text-[11px] font-mono text-violet-400 min-w-[140px]">{v.name}</code>
                             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isBool ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'bg-slate-500/10 text-slate-500 border border-slate-500/15'}`}>
                               {isBool ? 'toggle' : 'text'}
                             </span>
-                            <span className="text-[10px] text-slate-600 shrink-0">default:</span>
+                            <span className="text-[10px] text-slate-500 shrink-0">default:</span>
                             <code className="text-[11px] font-mono text-slate-400 flex-1 truncate">
-                              {v.defaultValue || <span className="text-slate-600 italic">none</span>}
+                              {v.defaultValue || <span className="text-slate-500 italic">none</span>}
                             </code>
                           </div>
                         )
                       })}
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-600 mt-2">
+                  <p className="text-[10px] text-slate-500 mt-2">
                     These variables will be configurable when deploying this template. Values shown above are defaults from the compose file.
                   </p>
                 </div>
@@ -1495,9 +1800,9 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
           {/* Supported sources hint — only when no preview */}
           {!hasFetched && (
-            <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
+            <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
               <p className="text-[10px] text-slate-500 font-semibold mb-1.5">Supported Sources</p>
-              <div className="space-y-1 text-[10px] text-slate-600">
+              <div className="space-y-1 text-[10px] text-slate-500">
                 <p>• GitHub blob or raw URLs (auto-converted)</p>
                 <p>• GitLab raw file URLs</p>
                 <p>• Any direct link to a docker-compose YAML file</p>
@@ -1507,8 +1812,8 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06] shrink-0">
-          <div className="text-[10px] text-slate-600">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-white/5 shrink-0">
+          <div className="text-[10px] text-slate-500">
             {hasFetched && fetchedUrl && (
               <span className="flex items-center gap-1">
                 <ExternalLink size={10} />
@@ -1585,7 +1890,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-slate-600" />
+        <Loader2 size={24} className="animate-spin text-slate-500" />
       </div>
     )
   }
@@ -1593,9 +1898,9 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
   if (gallery.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <Store size={24} className="text-slate-600" />
+        <Store size={24} className="text-slate-500" />
         <p className="text-sm text-slate-500">No gallery templates available</p>
-        <p className="text-xs text-slate-600">Add templates to .config/template-gallery.json</p>
+        <p className="text-xs text-slate-500">Add templates to .config/template-gallery.json</p>
       </div>
     )
   }
@@ -1612,7 +1917,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 capitalize ${
                 category === cat
                   ? 'bg-violet-500/15 text-violet-400 border-violet-500/30'
-                  : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.06]'
+                  : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/5'
               }`}
             >
               {cat}
@@ -1620,13 +1925,13 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
           ))}
         </div>
         <div className="relative flex-1 min-w-0 md:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search gallery..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
           />
         </div>
       </div>
@@ -1641,7 +1946,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
           return (
             <div
               key={t.name}
-              className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 flex flex-col gap-2.5 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-200 group"
+              className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 flex flex-col gap-2.5 hover:border-white/10 hover:bg-white/[0.03] transition-all duration-200 group"
             >
               <div className="flex items-center justify-between">
                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${colors.badge}`}>
@@ -1649,7 +1954,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
                   {t.category}
                 </span>
                 {t.services.length > 0 && (
-                  <span className="text-[9px] text-slate-600">{t.services.length} service{t.services.length > 1 ? 's' : ''}</span>
+                  <span className="text-[9px] text-slate-500">{t.services.length} service{t.services.length > 1 ? 's' : ''}</span>
                 )}
               </div>
               <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{t.name}</h4>
@@ -1657,7 +1962,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
               {t.services.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {t.services.slice(0, 4).map((svc) => (
-                    <span key={svc} className="px-1.5 py-0.5 rounded text-[9px] bg-white/[0.04] text-slate-500">{svc}</span>
+                    <span key={svc} className="px-1.5 py-0.5 rounded text-[9px] bg-white/5 text-slate-500">{svc}</span>
                   ))}
                 </div>
               )}
@@ -1705,7 +2010,7 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
   const colors = getCategoryColors(template.category)
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 flex flex-col gap-3 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-200 group">
+    <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6 flex flex-col gap-3 hover:border-white/10 hover:bg-white/[0.03] transition-all duration-200 group">
       {/* Top row: category badge + deploy status + actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -1729,21 +2034,21 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <button
             onClick={(e) => { e.stopPropagation(); onExport(template) }}
-            className="p-1 rounded text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+            className="p-1 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
             title="Export template"
           >
             <Download size={11} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onEdit(template) }}
-            className="p-1 rounded text-slate-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+            className="p-1 rounded text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
             title="Edit template"
           >
             <Pencil size={11} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(template) }}
-            className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
             title="Delete template"
           >
             <Trash2 size={11} />
@@ -1763,7 +2068,7 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
 
       {/* F6: Deployed-to indicator */}
       {deployStatus && deployStatus.state !== 'none' && deployStatus.targetStack && (
-        <p className="text-[10px] text-slate-600">
+        <p className="text-[10px] text-slate-500">
           Deployed to: <span className="font-mono text-slate-500">{deployStatus.targetStack}</span>
         </p>
       )}
@@ -1774,13 +2079,13 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
           {template.tags.slice(0, 5).map((tag) => (
             <span
               key={tag}
-              className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/[0.04] text-slate-500 border border-white/[0.04]"
+              className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/5 text-slate-500 border border-white/[0.03]"
             >
               {tag}
             </span>
           ))}
           {template.tags.length > 5 && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-600">
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-500">
               +{template.tags.length - 5}
             </span>
           )}
@@ -1935,15 +2240,17 @@ export default function Templates() {
     return result
   }, [historyData])
 
-  // Set of template__stack keys that have already been undeployed
-  const alreadyUndeployed = useMemo(() => {
-    const set = new Set<string>()
+  // For each deploy entry, check if the MOST RECENT action for that template+stack is an undeploy.
+  // History is newest-first. Walk through and record the latest action per template+stack.
+  const latestActionMap = useMemo(() => {
+    const map = new Map<string, string>()
     for (const entry of historyData) {
-      if (entry.action === 'undeploy') {
-        set.add(`${entry.template}__${entry.target_stack}`)
+      const key = `${entry.template}__${entry.target_stack}`
+      if (!map.has(key)) {
+        map.set(key, entry.action) // First occurrence = most recent
       }
     }
-    return set
+    return map
   }, [historyData])
 
   const templates = data?.templates ?? []
@@ -1983,7 +2290,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[]): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -1993,6 +2300,7 @@ export default function Templates() {
           auto_start: autoStart,
           replace_services: true,
           exclude_services: excludeServices,
+          custom_routes: customRoutes,
         })
         if (res.success) {
           refresh()
@@ -2215,8 +2523,8 @@ export default function Templates() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <Package size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <Package size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to browse templates</p>
       </div>
@@ -2247,13 +2555,13 @@ export default function Templates() {
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Tab switcher */}
-          <div className="flex items-center rounded-lg border border-white/[0.06] overflow-hidden mr-1">
+          <div className="flex items-center rounded-lg border border-white/5 overflow-hidden mr-1">
             <button
               onClick={() => setActiveTab('templates')}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'templates'
                   ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
               }`}
             >
               My Templates
@@ -2263,7 +2571,7 @@ export default function Templates() {
               className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
                 activeTab === 'gallery'
                   ? 'bg-violet-500/15 text-violet-400'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
               }`}
             >
               <Store size={12} />
@@ -2290,7 +2598,7 @@ export default function Templates() {
           {isAdmin && (
             <button
               onClick={handleImportTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 press"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
               title="Import template from JSON file"
             >
               <Upload size={13} />
@@ -2302,7 +2610,7 @@ export default function Templates() {
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               showHistory
                 ? 'bg-violet-500/15 text-violet-400 border-violet-500/25 hover:bg-violet-500/25'
-                : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.08]'
+                : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
             }`}
           >
             <History size={13} />
@@ -2311,7 +2619,7 @@ export default function Templates() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -2320,12 +2628,12 @@ export default function Templates() {
 
       {/* F3: Deploy History Panel */}
       {showHistory && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 animate-fade-in">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <History size={14} className="text-violet-400" />
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
-              <span className="text-[10px] text-slate-600">{deduplicatedHistory.length} events</span>
+              <span className="text-[10px] text-slate-500">{deduplicatedHistory.length} events</span>
             </div>
             <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
               <X size={14} />
@@ -2333,15 +2641,15 @@ export default function Templates() {
           </div>
           {historyLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 size={18} className="animate-spin text-slate-600" />
+              <Loader2 size={18} className="animate-spin text-slate-500" />
             </div>
           ) : deduplicatedHistory.length === 0 ? (
-            <p className="text-xs text-slate-600 text-center py-6">No deployment history yet</p>
+            <p className="text-xs text-slate-500 text-center py-6">No deployment history yet</p>
           ) : (
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.06]">
+                  <tr className="border-b border-white/5">
                     <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Time</th>
                     <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Action</th>
                     <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Template</th>
@@ -2352,7 +2660,7 @@ export default function Templates() {
                 </thead>
                 <tbody>
                   {deduplicatedHistory.slice(0, 20).map((entry) => (
-                    <tr key={entry.id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                    <tr key={entry.id} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
                       <td className="py-2 px-2 text-slate-500 whitespace-nowrap">
                         {new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
@@ -2370,12 +2678,12 @@ export default function Templates() {
                       <td className="py-2 px-2">
                         <div className="flex flex-wrap gap-1">
                           {entry.services.map((svc) => (
-                            <span key={svc} className="px-1 py-0.5 rounded text-[9px] bg-white/[0.04] text-slate-500">{svc}</span>
+                            <span key={svc} className="px-1 py-0.5 rounded text-[9px] bg-white/5 text-slate-500">{svc}</span>
                           ))}
                         </div>
                       </td>
                       <td className="py-2 px-2 text-right">
-                        {isAdmin && entry.action === 'deploy' && !alreadyUndeployed.has(`${entry.template}__${entry.target_stack}`) && (
+                        {isAdmin && entry.action === 'deploy' && latestActionMap.get(`${entry.template}__${entry.target_stack}`) !== 'undeploy' && (
                           <button
                             onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
@@ -2413,7 +2721,7 @@ export default function Templates() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 ${
                       isActive
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                        : 'bg-white/[0.04] text-slate-400 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-300'
+                        : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/5 hover:text-slate-300'
                     }`}
                   >
                     <CatIcon size={13} />
@@ -2425,13 +2733,13 @@ export default function Templates() {
 
             {/* Search bar */}
             <div className="relative flex-1 min-w-0 md:max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search templates..."
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
               />
             </div>
           </div>
@@ -2439,15 +2747,15 @@ export default function Templates() {
           {/* Loading */}
           {loading && !data && (
             <div className="flex items-center justify-center py-20">
-              <Loader2 size={24} className="animate-spin text-slate-600" />
+              <Loader2 size={24} className="animate-spin text-slate-500" />
             </div>
           )}
 
           {/* Empty state */}
           {data && templates.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-                <Package size={22} className="text-slate-600" />
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+                <Package size={22} className="text-slate-500" />
               </div>
               <p className="text-sm text-slate-500 text-center max-w-md">
                 No templates available. Import templates or create them in the{' '}
@@ -2462,8 +2770,8 @@ export default function Templates() {
           {/* Filtered empty state */}
           {data && templates.length > 0 && filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-                <Search size={22} className="text-slate-600" />
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+                <Search size={22} className="text-slate-500" />
               </div>
               <p className="text-sm text-slate-500">No templates match your filter</p>
               <button
@@ -2497,21 +2805,21 @@ export default function Templates() {
               onClick={handleOpenCreate}
               className="
                 group relative flex flex-col items-center justify-center
-                min-h-[200px] rounded-xl border-2 border-dashed
-                border-white/[0.12] hover:border-emerald-500/40
-                bg-slate-800/40 hover:bg-emerald-500/[0.06]
+                min-h-[200px] rounded-xl border border-dashed
+                border-white/10 hover:border-emerald-500/30
+                bg-white/[0.02] hover:bg-emerald-500/[0.04]
                 transition-all duration-300 cursor-pointer
               "
             >
               <div className="
-                flex items-center justify-center w-14 h-14 rounded-2xl
-                bg-slate-700/30 group-hover:bg-emerald-500/15
-                ring-1 ring-white/[0.1] group-hover:ring-emerald-500/30
+                flex items-center justify-center w-12 h-12 rounded-xl
+                bg-white/5 group-hover:bg-emerald-500/15
+                border border-white/5 group-hover:border-emerald-500/20
                 transition-all duration-300 mb-3
               ">
-                <Plus className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 transition-colors duration-300" />
+                <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
               </div>
-              <span className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors duration-300">
+              <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
                 Create Template
               </span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">

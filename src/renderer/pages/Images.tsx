@@ -28,6 +28,7 @@ import {
   X,
   Globe,
   RefreshCw,
+  Image,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
@@ -222,14 +223,19 @@ const Images: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
       <DisconnectedBanner />
-      <div className="flex flex-col gap-5 animate-in">
+      <div className="flex flex-col gap-5 animate-fade-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Track Docker image freshness and staleness
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-rose-500/20 border border-violet-500/10 flex items-center justify-center">
+              <Image className="w-5 h-5 text-violet-400" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
+              <p className="text-sm text-slate-400">
+                Track Docker image freshness and staleness
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center flex-wrap gap-2 sm:gap-3">
@@ -250,7 +256,7 @@ const Images: React.FC = () => {
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
                 batchMode
                   ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                  : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.08]'
+                  : 'bg-white/5 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10'
               }`}
             >
               <ListChecks className="h-3.5 w-3.5" />
@@ -283,7 +289,7 @@ const Images: React.FC = () => {
           )}
 
           {/* View toggle */}
-          <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-white/5 border border-white/5 rounded-lg p-1 select-none">
             <button
               onClick={() => setViewMode('table')}
               className={`
@@ -319,13 +325,13 @@ const Images: React.FC = () => {
         </div>
 
         {/* ---- Tab Toggle (Library / Docker Hub Search) ---- */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/[0.06] self-start">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/5 self-start">
           <button
             onClick={() => setActiveTab('library')}
             className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
               activeTab === 'library'
                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-white/[0.04] border border-transparent'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-white/5 border border-transparent'
             }`}
           >
             <HardDrive size={13} />
@@ -336,7 +342,7 @@ const Images: React.FC = () => {
             className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
               activeTab === 'search'
                 ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 shadow-sm'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-white/[0.04] border border-transparent'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-white/5 border border-transparent'
             }`}
           >
             <Globe size={13} />
@@ -356,9 +362,9 @@ const Images: React.FC = () => {
             placeholder="Search images by repository, tag, or ID..."
             className="
               w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
-              bg-white/[0.04] border border-white/[0.08]
+              bg-white/5 border border-white/10
               text-slate-200 placeholder-slate-500
-              focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30
+              focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30
               transition-all duration-200
             "
           />
@@ -376,10 +382,10 @@ const Images: React.FC = () => {
               {selectedImages.size} selected
             </span>
             <div className="flex items-center gap-2 ml-auto">
-              <button onClick={handleSelectAll} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all">
+              <button onClick={handleSelectAll} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
                 Select All
               </button>
-              <button onClick={handleClearSelection} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all">
+              <button onClick={handleClearSelection} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
                 Clear
               </button>
               {isAdmin && (
@@ -397,7 +403,7 @@ const Images: React.FC = () => {
         )}
 
         {/* ---- Summary stat cards ---- */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-children">
           <SummaryCard
             icon={<HardDrive className="h-4 w-4 text-cyan-400" />}
             label="Total Images"
@@ -436,7 +442,7 @@ const Images: React.FC = () => {
             {filteredImages.length === 0 ? (
               <div className="col-span-full py-16 text-center">
                 <div className="flex flex-col items-center gap-3">
-                  <HardDrive className="h-8 w-8 text-slate-600" />
+                  <HardDrive className="h-8 w-8 text-slate-500" />
                   <span className="text-sm text-slate-500">
                     {searchQuery ? 'No images match your search.' : 'No images found.'}
                   </span>
@@ -464,7 +470,7 @@ const Images: React.FC = () => {
                   value={hubSearchQuery}
                   onChange={(e) => setHubSearchQuery(e.target.value)}
                   placeholder="Search Docker Hub for images (e.g. nginx, postgres, redis)..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/[0.04] border border-white/[0.08] text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/30 transition-all duration-200"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 focus:border-cyan-500/30 transition-all duration-200"
                 />
                 {hubSearchQuery && (
                   <button
@@ -489,15 +495,15 @@ const Images: React.FC = () => {
             {/* Loading */}
             {hubSearchLoading && (
               <div className="flex items-center justify-center py-16">
-                <Loader2 size={24} className="animate-spin text-slate-600" />
+                <Loader2 size={24} className="animate-spin text-slate-500" />
               </div>
             )}
 
             {/* No results */}
             {!hubSearchLoading && hubSearched && hubSearchResults.length === 0 && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-12 flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-                  <Search size={22} className="text-slate-600" />
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-12 flex flex-col items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+                  <Search size={22} className="text-slate-500" />
                 </div>
                 <p className="text-sm text-slate-500">No images found for &quot;{hubSearchQuery}&quot;</p>
               </div>
@@ -505,12 +511,12 @@ const Images: React.FC = () => {
 
             {/* Initial state */}
             {!hubSearchLoading && !hubSearched && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-12 flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
+              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-12 flex flex-col items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
                   <Globe size={22} className="text-cyan-500/60" />
                 </div>
                 <p className="text-sm text-slate-400">Search Docker Hub for container images</p>
-                <p className="text-xs text-slate-600">Find official and community images to pull</p>
+                <p className="text-xs text-slate-500">Find official and community images to pull</p>
               </div>
             )}
 
@@ -523,7 +529,7 @@ const Images: React.FC = () => {
                 {hubSearchResults.map((result, idx) => (
                   <div
                     key={`${result.name}-${idx}`}
-                    className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 hover:border-white/[0.1] hover:bg-slate-900/80 transition-all duration-200 animate-fade-in"
+                    className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 hover:border-white/10 hover:bg-slate-900/80 transition-all duration-200 animate-fade-in"
                     style={{ animationDelay: `${Math.min(idx * 40, 400)}ms` }}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -597,7 +603,7 @@ const GLOW_MAP: Record<string, string> = {
 }
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ icon, label, value, color }) => (
-  <div className={`glass-subtle p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
+  <div className={`glass p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
     <div className="flex-shrink-0">{icon}</div>
     <div>
       <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>

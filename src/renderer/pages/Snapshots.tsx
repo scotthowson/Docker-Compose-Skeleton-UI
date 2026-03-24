@@ -16,6 +16,12 @@ import {
   Server,
   AlertTriangle,
   Plus,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  Settings2,
+  FolderTree,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -84,6 +90,7 @@ interface SnapshotCardProps {
   onDownload: (s: SnapshotEntry) => void
   onRestore: (s: SnapshotEntry) => void
   onDelete: (s: SnapshotEntry) => void
+  downloading: boolean
   restoreTarget: SnapshotEntry | null
   restoreConfirmText: string
   onRestoreConfirmChange: (v: string) => void
@@ -101,6 +108,7 @@ function SnapshotCard({
   onDownload,
   onRestore,
   onDelete,
+  downloading,
   restoreTarget,
   restoreConfirmText,
   onRestoreConfirmChange,
@@ -117,7 +125,7 @@ function SnapshotCard({
   const isDeleteTarget = deleteTarget?.filename === snapshot.filename
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in glass-hover">
+    <div className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in glass-hover">
       {/* Top row: filename + badges */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -161,7 +169,7 @@ function SnapshotCard({
           <HardDrive size={12} />
           <span>{snapshot.size}</span>
         </div>
-        <span className="hidden md:inline text-slate-600">
+        <span className="hidden md:inline text-slate-500">
           {formatSnapshotDate(snapshot.timestamp, snapshot.epoch)}
         </span>
       </div>
@@ -170,17 +178,19 @@ function SnapshotCard({
       <div className="flex items-center gap-2 mt-4">
         <button
           onClick={() => onDownload(snapshot)}
+          disabled={downloading}
           className="
             inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5
             text-xs font-medium
             text-cyan-400 bg-cyan-500/10 border border-cyan-500/20
             hover:bg-cyan-500/20 hover:border-cyan-500/30
+            disabled:opacity-50 disabled:cursor-not-allowed
             transition-all duration-200 press
           "
           title="Download"
         >
-          <Download size={13} />
-          <span className="hidden md:inline">Download</span>
+          {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+          <span className="hidden md:inline">{downloading ? 'Downloading' : 'Download'}</span>
         </button>
         <button
           onClick={() => onRestore(snapshot)}
@@ -248,9 +258,9 @@ function SnapshotCard({
               disabled={restoreLoading}
               className="
                 w-full px-3 py-2 rounded-lg text-sm font-mono
-                bg-white/[0.04] border border-white/[0.08]
+                bg-white/5 border border-white/10
                 text-slate-200 placeholder-slate-600
-                focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/30
+                focus:outline-none focus:ring-1 focus:ring-rose-500/30 focus:border-rose-500/30
                 disabled:opacity-50
                 transition-all duration-200
               "
@@ -282,8 +292,8 @@ function SnapshotCard({
               disabled={restoreLoading}
               className="
                 rounded-lg px-4 py-2 text-xs font-medium
-                text-slate-400 bg-white/[0.04] border border-white/[0.06]
-                hover:bg-white/[0.08] hover:text-slate-300
+                text-slate-400 bg-white/5 border border-white/5
+                hover:bg-white/10 hover:text-slate-300
                 disabled:opacity-50
                 transition-all duration-200
               "
@@ -296,7 +306,7 @@ function SnapshotCard({
 
       {/* Inline Delete Confirmation */}
       {isDeleteTarget && (
-        <div className="mt-4 rounded-lg bg-slate-800/60 border border-white/[0.08] p-4 animate-fade-in">
+        <div className="mt-4 rounded-lg bg-slate-800/60 border border-white/10 p-4 animate-fade-in">
           <p className="text-sm text-slate-300 mb-3">
             Are you sure you want to delete this snapshot?
           </p>
@@ -324,8 +334,8 @@ function SnapshotCard({
               disabled={deleteLoading}
               className="
                 rounded-lg px-4 py-2 text-xs font-medium
-                text-slate-400 bg-white/[0.04] border border-white/[0.06]
-                hover:bg-white/[0.08] hover:text-slate-300
+                text-slate-400 bg-white/5 border border-white/5
+                hover:bg-white/10 hover:text-slate-300
                 disabled:opacity-50
                 transition-all duration-200
               "
@@ -338,6 +348,75 @@ function SnapshotCard({
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Guide Sections
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_GUIDE_SECTIONS = [
+  {
+    title: 'What Gets Captured',
+    icon: Camera,
+    content: `Snapshots capture DCS configuration state:
+
+• .config/              Framework settings
+• .env                  Root environment config
+• Stacks/*/             docker-compose.yml + .env
+• .api-auth/            User accounts (not tokens)
+• .templates/           Service templates
+
+Snapshots are lightweight configuration-only
+archives — they do NOT include Docker images,
+volumes, or container data.`,
+  },
+  {
+    title: 'Creating Snapshots',
+    icon: Plus,
+    content: `Click "New Snapshot" and optionally add a label.
+
+Labels help identify snapshots later:
+  "before-migration"
+  "working-config-march"
+  "pre-traefik-update"
+
+Snapshots are stored as .tar.gz archives in
+the .snapshots/ directory on your server.`,
+  },
+  {
+    title: 'Restoring Snapshots',
+    icon: RotateCw,
+    content: `To restore a snapshot:
+
+1. Click "Restore" on the snapshot card
+2. Type RESTORE to confirm
+3. Wait for extraction to complete
+
+IMPORTANT:
+• Restoring overwrites current config files
+• Stacks are NOT automatically restarted
+• Auth tokens are preserved (not overwritten)
+
+Create a new snapshot before restoring an
+older one so you can revert if needed.`,
+  },
+  {
+    title: 'Snapshots vs Backups',
+    icon: Archive,
+    content: `Snapshots and Backups serve different purposes:
+
+Snapshots (this page)
+  • Config-only (compose files, .env, settings)
+  • Stored locally in .snapshots/
+  • Quick to create and restore
+  • Best for: config versioning, quick saves
+
+Backups (Backup & Restore page)
+  • Full directory backup via rsync + tar
+  • Stored in configurable BACKUP_DEST_DIR
+  • Includes application data directory
+  • Best for: disaster recovery, migration`,
+  },
+]
 
 // ---------------------------------------------------------------------------
 // Main Component
@@ -360,6 +439,10 @@ export default function Snapshots() {
   // ---- Delete state ----
   const [deleteTarget, setDeleteTarget] = useState<SnapshotEntry | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // ---- Guide state ----
+  const [showGuide, setShowGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
   // Close topmost confirm on Escape
   useEffect(() => {
@@ -417,13 +500,37 @@ export default function Snapshots() {
     }
   }, [createLabel, addToast, refresh])
 
+  const [downloadingMap, setDownloadingMap] = useState<Record<string, boolean>>({})
+
   const handleDownload = useCallback(
-    (snapshot: SnapshotEntry) => {
-      const baseUrl = apiClient.getBaseUrl()
-      const url = `${baseUrl}/snapshots/${encodeURIComponent(snapshot.filename)}/download`
-      window.open(url, '_blank')
+    async (snapshot: SnapshotEntry) => {
+      setDownloadingMap((prev) => ({ ...prev, [snapshot.filename]: true }))
+      try {
+        const baseUrl = apiClient.getBaseUrl()
+        const url = `${baseUrl}/snapshots/${encodeURIComponent(snapshot.filename)}/download`
+        const token = apiClient.getAuthToken()
+        const res = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+        const blob = await res.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = snapshot.filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(blobUrl)
+        addToast({ type: 'success', message: `Downloaded ${snapshot.filename}` })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Download failed'
+        addToast({ type: 'error', message })
+      } finally {
+        setDownloadingMap((prev) => ({ ...prev, [snapshot.filename]: false }))
+      }
     },
-    [],
+    [addToast],
   )
 
   const handleRestoreInit = useCallback((snapshot: SnapshotEntry) => {
@@ -523,8 +630,8 @@ export default function Snapshots() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <Camera size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <Camera size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to manage snapshots</p>
       </div>
@@ -549,9 +656,23 @@ export default function Snapshots() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              setShowGuide((prev) => !prev)
+              if (showGuide) setExpandedGuide(null)
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
+              showGuide
+                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20'
+                : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
+            }`}
+          >
+            <BookOpen size={13} />
+            <span className="hidden sm:inline">Guide</span>
+          </button>
+          <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
@@ -559,8 +680,52 @@ export default function Snapshots() {
         </div>
       </div>
 
+      {/* Guide Panel */}
+      {showGuide && (
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-cyan-500/10">
+              <BookOpen size={18} className="text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">Snapshot Guide</h3>
+              <p className="text-xs text-slate-500">Learn how snapshots work</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {SNAPSHOT_GUIDE_SECTIONS.map((section, idx) => {
+              const Icon = section.icon
+              const isExpanded = expandedGuide === idx
+              return (
+                <div key={idx} className="rounded-lg border border-white/[0.03] overflow-hidden">
+                  <button
+                    onClick={() => setExpandedGuide(isExpanded ? null : idx)}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left hover:bg-white/[0.03] transition-all duration-200"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown size={14} className="text-slate-500 shrink-0" />
+                    ) : (
+                      <ChevronRight size={14} className="text-slate-500 shrink-0" />
+                    )}
+                    <Icon size={14} className="text-emerald-400 shrink-0" />
+                    <span className="text-sm font-medium text-slate-300">{section.title}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-3.5 pb-3.5 pt-1 animate-fade-in">
+                      <pre className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap font-sans pl-[3.25rem]">
+                        {section.content}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Create Snapshot */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+      <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
@@ -599,7 +764,7 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }
               }}
-              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm bg-white/[0.04] border border-white/[0.08] text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-50 transition-all duration-200"
+              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-50 transition-all duration-200"
               autoFocus
             />
             <div className="flex items-center gap-2">
@@ -621,7 +786,7 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }}
                 disabled={creating}
-                className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-400 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 disabled:opacity-50 transition-all duration-200"
+                className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 hover:text-slate-300 disabled:opacity-50 transition-all duration-200"
               >
                 Cancel
               </button>
@@ -644,7 +809,7 @@ export default function Snapshots() {
 
         {/* Loading state */}
         {loading && snapshots.length === 0 && (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 md:p-12 text-center">
+          <div className="glass border border-white/5 rounded-xl p-8 md:p-12 text-center">
             <Loader2 size={24} className="text-slate-500 animate-spin mx-auto mb-3" />
             <p className="text-sm text-slate-500">Loading snapshots...</p>
           </div>
@@ -652,12 +817,12 @@ export default function Snapshots() {
 
         {/* Empty state */}
         {!loading && snapshots.length === 0 && (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 md:p-12 text-center">
+          <div className="glass border border-white/5 rounded-xl p-8 md:p-12 text-center">
             <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-800/80 mx-auto mb-4">
-              <Camera size={28} className="text-slate-600" />
+              <Camera size={28} className="text-slate-500" />
             </div>
             <p className="text-sm text-slate-400 font-medium">No snapshots yet</p>
-            <p className="text-xs text-slate-600 mt-1.5 max-w-xs mx-auto leading-relaxed">
+            <p className="text-xs text-slate-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
               Create your first snapshot to backup your DCS configuration.
             </p>
             <button
@@ -680,6 +845,7 @@ export default function Snapshots() {
                 onDownload={handleDownload}
                 onRestore={handleRestoreInit}
                 onDelete={handleDeleteInit}
+                downloading={downloadingMap[snapshot.filename] ?? false}
                 restoreTarget={restoreTarget}
                 restoreConfirmText={restoreConfirmText}
                 onRestoreConfirmChange={setRestoreConfirmText}

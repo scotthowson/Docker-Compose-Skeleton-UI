@@ -8,6 +8,7 @@ import {
   CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
   AlertTriangle, Box, Layers, HardDrive, Bell, Archive,
   X, History, CheckCircle, XCircle, ChevronDown, ChevronUp,
+  BookOpen, ChevronRight, Terminal,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -112,6 +113,62 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`
 }
 
+const AUTOMATION_GUIDE_SECTIONS = [
+  {
+    title: 'Schedule-Based Rules',
+    icon: CalendarClock,
+    content: `Schedule rules use cron expressions to run actions
+at specific intervals. Common patterns:
+
+* * * * *      Every minute
+0 * * * *      Every hour
+0 0 * * *      Daily at midnight
+0 0 * * 0      Weekly on Sunday
+0 */6 * * *    Every 6 hours
+0 3 * * *      Daily at 3 AM
+
+Fields: minute hour day-of-month month day-of-week`,
+  },
+  {
+    title: 'Condition-Based Rules',
+    icon: AlertTriangle,
+    content: `Condition rules trigger when a monitored state
+changes. Available conditions:
+
+container_unhealthy   Container fails health check
+high_cpu              CPU usage exceeds threshold
+disk_full             Disk usage exceeds threshold
+
+DCS evaluates conditions during each health check
+cycle and fires the action when matched.`,
+  },
+  {
+    title: 'Available Actions',
+    icon: Zap,
+    content: `stack_start          Start a specific stack
+stack_stop           Stop a specific stack
+stack_restart        Restart a specific stack
+container_restart    Restart a specific container
+docker_prune         Run Docker system prune
+backup_trigger       Trigger a configuration backup
+notification_send    Send a notification alert
+
+Set target to * to apply to all, or specify
+a stack/container name.`,
+  },
+  {
+    title: 'Example: Nightly Cleanup',
+    icon: Terminal,
+    content: `Name:        "Nightly Docker Prune"
+Trigger:     Schedule → 0 3 * * *
+Action:      Docker Prune
+Target:      *
+
+This runs docker system prune at 3 AM every night,
+removing unused containers, images, and networks.`,
+  },
+]
+
 // ---------------------------------------------------------------------------
 // Automations Page
 // ---------------------------------------------------------------------------
@@ -136,6 +193,10 @@ export default function Automations() {
 
   // Toggle loading state
   const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  // Guide panel state
+  const [showGuide, setShowGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
   // History panel state
   const [historyRuleId, setHistoryRuleId] = useState<string | null>(null)
@@ -276,8 +337,8 @@ export default function Automations() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <Zap size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <Zap size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to manage automations</p>
       </div>
@@ -314,9 +375,16 @@ export default function Automations() {
             Add Automation
           </button>
           <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200"
+          >
+            <BookOpen size={13} />
+            <span className="hidden sm:inline">Guide</span>
+          </button>
+          <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -327,7 +395,7 @@ export default function Automations() {
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {/* Total */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
           <div className="flex items-center gap-2 mb-1">
             <Layers size={14} className="text-slate-400" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Rules</span>
@@ -336,7 +404,7 @@ export default function Automations() {
         </div>
 
         {/* Active */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
           <div className="flex items-center gap-2 mb-1">
             <Zap size={14} className="text-emerald-400" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Active</span>
@@ -345,7 +413,7 @@ export default function Automations() {
         </div>
 
         {/* Scheduled */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
           <div className="flex items-center gap-2 mb-1">
             <CalendarClock size={14} className="text-cyan-400" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Scheduled</span>
@@ -354,7 +422,7 @@ export default function Automations() {
         </div>
 
         {/* Condition-based */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle size={14} className="text-amber-400" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Condition</span>
@@ -363,18 +431,65 @@ export default function Automations() {
         </div>
       </div>
 
+      {/* Automation Guide (collapsible) */}
+      {showGuide && (
+        <div className="glass rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen size={16} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-white">Automation Guide</h2>
+            </div>
+            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <X size={14} className="text-slate-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-slate-400 mb-4">
+              Automations let you schedule recurring Docker operations or react to system conditions automatically.
+              Create rules with cron schedules or condition triggers to run actions on your stacks and containers.
+            </p>
+            {AUTOMATION_GUIDE_SECTIONS.map((section, i) => {
+              const isExpanded = expandedGuide === i
+              const Icon = section.icon
+              return (
+                <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedGuide(isExpanded ? null : i)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                  >
+                    <Icon size={14} className="text-amber-400 shrink-0" />
+                    <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
+                    {isExpanded
+                      ? <ChevronDown size={14} className="text-slate-500" />
+                      : <ChevronRight size={14} className="text-slate-500" />
+                    }
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 animate-fade-in">
+                      <pre className="bg-slate-950/60 border border-white/[0.03] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
+                        {section.content}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Loading */}
       {loading && !data && (
         <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-slate-600" />
+          <Loader2 size={24} className="animate-spin text-slate-500" />
         </div>
       )}
 
       {/* Empty state */}
       {data && automations.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-            <Zap size={22} className="text-slate-600" />
+          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+            <Zap size={22} className="text-slate-500" />
           </div>
           <p className="text-sm text-slate-500 text-center max-w-sm">
             No automation rules configured. Create your first rule to automate Docker operations.
@@ -395,10 +510,10 @@ export default function Automations() {
           {automations.map((rule) => (
             <div
               key={rule.id}
-              className={`bg-slate-900/60 backdrop-blur-md border rounded-xl p-4 md:p-6 transition-colors ${
+              className={`glass border rounded-xl p-4 md:p-6 transition-colors ${
                 rule.enabled
-                  ? 'border-white/[0.06]'
-                  : 'border-white/[0.04] opacity-60'
+                  ? 'border-white/5'
+                  : 'border-white/[0.03] opacity-60'
               }`}
             >
               {/* Top row: name + toggle */}
@@ -418,7 +533,7 @@ export default function Automations() {
                   ) : rule.enabled ? (
                     <ToggleRight size={24} className="text-emerald-400" />
                   ) : (
-                    <ToggleLeft size={24} className="text-slate-600" />
+                    <ToggleLeft size={24} className="text-slate-500" />
                   )}
                 </button>
               </div>
@@ -449,7 +564,7 @@ export default function Automations() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs mb-3">
                 {/* Trigger value */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-600 shrink-0 w-16">Trigger:</span>
+                  <span className="text-slate-500 shrink-0 w-16">Trigger:</span>
                   {rule.trigger_type === 'schedule' ? (
                     <code className="font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/15 text-[11px]">
                       {rule.trigger_value}
@@ -461,28 +576,28 @@ export default function Automations() {
 
                 {/* Action target */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-600 shrink-0 w-16">Target:</span>
+                  <span className="text-slate-500 shrink-0 w-16">Target:</span>
                   <span className="text-slate-300 font-mono text-[11px]">{rule.action_target || '*'}</span>
                 </div>
 
                 {/* Last run */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-600 shrink-0 w-16">Last run:</span>
+                  <span className="text-slate-500 shrink-0 w-16">Last run:</span>
                   <span className="text-slate-400 flex items-center gap-1">
-                    <Clock size={11} className="text-slate-600" />
+                    <Clock size={11} className="text-slate-500" />
                     {relativeTime(rule.last_run)}
                   </span>
                 </div>
 
                 {/* Run count */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-600 shrink-0 w-16">Runs:</span>
+                  <span className="text-slate-500 shrink-0 w-16">Runs:</span>
                   <span className="text-slate-400">{rule.run_count}</span>
                 </div>
               </div>
 
               {/* Actions row */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.04]">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.03]">
                 {/* History button */}
                 <button
                   onClick={() => openHistory(rule)}
@@ -512,7 +627,7 @@ export default function Automations() {
                 ) : (
                   <button
                     onClick={() => setConfirmDeleteId(rule.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                   >
                     <Trash2 size={11} />
                     Delete
@@ -532,9 +647,9 @@ export default function Automations() {
       {/* ------------------------------------------------------------------- */}
       {historyRuleId && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+          <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
                 <History size={16} className="text-cyan-400" />
                 <div>
@@ -544,7 +659,7 @@ export default function Automations() {
               </div>
               <button
                 onClick={closeHistory}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -554,15 +669,15 @@ export default function Automations() {
             <div className="flex-1 overflow-y-auto p-5 space-y-2">
               {historyLoading && (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 size={20} className="animate-spin text-slate-600" />
+                  <Loader2 size={20} className="animate-spin text-slate-500" />
                 </div>
               )}
 
               {!historyLoading && historyEntries.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <History size={24} className="text-slate-700" />
+                  <History size={24} className="text-slate-500" />
                   <p className="text-xs text-slate-500">No run history yet</p>
-                  <p className="text-[10px] text-slate-600 text-center max-w-xs">
+                  <p className="text-[10px] text-slate-500 text-center max-w-xs">
                     History entries will appear here once this automation rule has been triggered.
                   </p>
                 </div>
@@ -583,7 +698,7 @@ export default function Automations() {
                     })
 
                     return (
-                      <div key={idx} className="rounded-lg border border-white/[0.04] overflow-hidden">
+                      <div key={idx} className="rounded-lg border border-white/[0.03] overflow-hidden">
                         <button
                           onClick={() => setExpandedHistoryIdx(isExpanded ? null : idx)}
                           className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
@@ -616,16 +731,16 @@ export default function Automations() {
 
                           {/* Expand chevron */}
                           {isExpanded ? (
-                            <ChevronUp size={12} className="text-slate-600 shrink-0" />
+                            <ChevronUp size={12} className="text-slate-500 shrink-0" />
                           ) : (
-                            <ChevronDown size={12} className="text-slate-600 shrink-0" />
+                            <ChevronDown size={12} className="text-slate-500 shrink-0" />
                           )}
                         </button>
 
                         {/* Expanded output log */}
                         {isExpanded && entry.message && (
                           <div className="px-3 pb-3 pt-0">
-                            <pre className="text-[11px] text-slate-400 font-mono bg-slate-950/60 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap border border-white/[0.04] max-h-48 overflow-y-auto scrollbar-thin">
+                            <pre className="text-[11px] text-slate-400 font-mono bg-slate-950/60 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap border border-white/[0.03] max-h-48 overflow-y-auto scrollbar-thin">
                               {entry.message}
                             </pre>
                           </div>
@@ -638,13 +753,13 @@ export default function Automations() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-between px-5 py-3 border-t border-white/5 shrink-0">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] text-slate-600">
+                <span className="text-[10px] text-slate-500">
                   {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
                 </span>
-                <span className="text-[10px] text-slate-700">
-                  Press <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
+                <span className="text-[10px] text-slate-500">
+                  Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
                 </span>
               </div>
               <button
@@ -661,16 +776,16 @@ export default function Automations() {
 
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+          <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
                 <Zap size={16} className="text-amber-400" />
                 <h3 className="text-sm font-semibold text-slate-200">New Automation Rule</h3>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -688,7 +803,7 @@ export default function Automations() {
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. Nightly backup"
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
 
@@ -697,7 +812,7 @@ export default function Automations() {
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
                   Trigger Type
                 </label>
-                <div className="flex rounded-lg bg-white/[0.03] border border-white/[0.06] p-0.5">
+                <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
                   <button
                     onClick={() => setFormTriggerType('schedule')}
                     className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
@@ -734,7 +849,7 @@ export default function Automations() {
                     value={formCron}
                     onChange={(e) => setFormCron(e.target.value)}
                     placeholder="* * * * *"
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors mb-2"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors mb-2"
                   />
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
                     Quick Presets
@@ -747,7 +862,7 @@ export default function Automations() {
                         className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${
                           formCron === p.cron
                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                            : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-400'
+                            : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5 hover:text-slate-400'
                         }`}
                       >
                         {p.label}
@@ -766,7 +881,7 @@ export default function Automations() {
                   <select
                     value={formCondition}
                     onChange={(e) => setFormCondition(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c.value} value={c.value} className="bg-slate-900 text-slate-200">
@@ -785,7 +900,7 @@ export default function Automations() {
                 <select
                   value={formActionType}
                   onChange={(e) => setFormActionType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
                 >
                   {ACTION_TYPES.map((a) => (
                     <option key={a.value} value={a.value} className="bg-slate-900 text-slate-200">
@@ -805,18 +920,18 @@ export default function Automations() {
                   value={formActionTarget}
                   onChange={(e) => setFormActionTarget(e.target.value)}
                   placeholder='Stack name, container name, or "*" for all'
-                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
                 />
-                <p className="text-[10px] text-slate-600 mt-1">
+                <p className="text-[10px] text-slate-500 mt-1">
                   Leave empty or use "*" to target all stacks/containers.
                 </p>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06] shrink-0">
-              <span className="text-[10px] text-slate-700">
-                Press <kbd className="px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
+            <div className="flex items-center justify-between px-5 py-4 border-t border-white/5 shrink-0">
+              <span className="text-[10px] text-slate-500">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
               </span>
               <div className="flex items-center gap-2">
                 <button

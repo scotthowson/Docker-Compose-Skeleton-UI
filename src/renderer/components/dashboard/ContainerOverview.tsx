@@ -139,7 +139,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
           <Box size={14} className="text-cyan-400" />
           Containers
         </h3>
-        <span className="text-[11px] text-slate-600">
+        <span className="text-[11px] text-slate-500 tabular-nums">
           <span className="text-emerald-400 neon-emerald">{running.length}</span>
           <span className="text-slate-700 mx-0.5">/</span>
           {containers.length}
@@ -183,7 +183,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
           return (
             <div
               key={container.name}
-              className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-white/[0.02] transition-colors group"
+              className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-white/[0.03] transition-colors group"
             >
               {/* Status dot */}
               <span className={`h-2 w-2 rounded-full ${statusDot(container.state)} shrink-0`} />
@@ -202,7 +202,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
 
               {/* Uptime */}
               {container.state === 'running' && container.uptime_seconds > 0 && (
-                <span className="text-[10px] text-slate-600 tabular-nums shrink-0">
+                <span className="text-[10px] text-slate-500 tabular-nums shrink-0">
                   {formatUptime(container.uptime_seconds)}
                 </span>
               )}

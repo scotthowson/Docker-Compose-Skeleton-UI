@@ -98,7 +98,7 @@ function NotificationCard({
       onClick={handleClick}
       className={`
         group relative flex items-start gap-3 px-4 py-3
-        border-b border-white/[0.04]
+        border-b border-white/[0.03]
         transition-all duration-200
         ${notification.action ? 'cursor-pointer' : 'cursor-default'}
         ${notification.read ? 'opacity-60' : ''}
@@ -128,7 +128,7 @@ function NotificationCard({
             }}
             className="
               flex-shrink-0 opacity-0 group-hover:opacity-100
-              p-0.5 rounded text-slate-600 hover:text-rose-400
+              p-0.5 rounded text-slate-500 hover:text-rose-400
               transition-all duration-150
             "
             title="Remove notification"
@@ -140,7 +140,7 @@ function NotificationCard({
           {notification.message}
         </p>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="flex items-center gap-1 text-[10px] text-slate-600">
+          <span className="flex items-center gap-1 text-[10px] text-slate-500">
             <Clock size={9} />
             {relativeTime(notification.timestamp)}
           </span>
@@ -288,7 +288,7 @@ export function NotificationDrawer() {
           ref={panelRef}
           className={`
             absolute top-0 right-0 h-full w-[380px] max-w-[calc(100vw-2rem)]
-            bg-slate-950 border-l border-white/[0.06]
+            bg-slate-950 border-l border-white/5
             flex flex-col
             transition-transform duration-300 ease-out
             ${drawerOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -300,7 +300,7 @@ export function NotificationDrawer() {
           }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/5 shrink-0">
             <div className="flex items-center gap-2.5">
               <h2 className="text-sm font-semibold text-slate-200">Notifications</h2>
               {unreadCount > 0 && (
@@ -324,7 +324,7 @@ export function NotificationDrawer() {
                   transition-all duration-150
                   ${showPrefs
                     ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'text-slate-500 hover:bg-white/[0.06] hover:text-slate-300'
+                    : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                   }
                 `}
                 title="Notification preferences"
@@ -339,7 +339,7 @@ export function NotificationDrawer() {
                   className="
                     flex items-center gap-1 px-2 py-1 rounded-md
                     text-[10px] font-medium text-slate-500
-                    hover:bg-white/[0.05] hover:text-slate-300
+                    hover:bg-white/5 hover:text-slate-300
                     transition-all duration-150
                   "
                   title="Mark all as read"
@@ -370,7 +370,7 @@ export function NotificationDrawer() {
                 onClick={() => setDrawerOpen(false)}
                 className="
                   flex items-center justify-center w-7 h-7 rounded-lg
-                  text-slate-500 hover:bg-white/[0.06] hover:text-slate-300
+                  text-slate-500 hover:bg-white/5 hover:text-slate-300
                   transition-all duration-150 ml-1
                 "
                 title="Close"
@@ -382,7 +382,7 @@ export function NotificationDrawer() {
 
           {/* Preferences Panel */}
           {showPrefs && (
-            <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.01] shrink-0 animate-fade-in">
+            <div className="px-4 py-3 border-b border-white/5 bg-white/[0.01] shrink-0 animate-fade-in">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
                 Alert Preferences
               </p>
@@ -418,7 +418,7 @@ export function NotificationDrawer() {
           )}
 
           {/* Filter Tabs */}
-          <div className="flex items-center gap-1 px-4 py-2 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-white/5 shrink-0">
             {filterTabs.map((tab) => {
               const count = tabCounts[tab.id]
               const isActive = activeFilter === tab.id
@@ -430,7 +430,7 @@ export function NotificationDrawer() {
                     flex items-center gap-1.5 px-2.5 py-1 rounded-md
                     text-[11px] font-medium transition-all duration-150
                     ${isActive
-                      ? 'bg-white/[0.06] text-slate-200 border border-white/[0.08]'
+                      ? 'bg-white/[0.06] text-slate-200 border border-white/10'
                       : 'text-slate-500 hover:text-slate-300 border border-transparent'
                     }
                   `}
@@ -439,7 +439,7 @@ export function NotificationDrawer() {
                   {count > 0 && (
                     <span className={`
                       text-[9px] rounded-full px-1.5 py-0.5 font-bold
-                      ${isActive ? 'bg-white/[0.08] text-slate-300' : 'bg-white/[0.04] text-slate-600'}
+                      ${isActive ? 'bg-white/[0.08] text-slate-300' : 'bg-white/5 text-slate-500'}
                     `}>
                       {count}
                     </span>
@@ -453,14 +453,14 @@ export function NotificationDrawer() {
           <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
             {filteredNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-                <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-                  <BellOff size={24} className="text-slate-600" />
+                <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/5">
+                  <BellOff size={24} className="text-slate-500" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-400">
                     {activeFilter === 'all' ? 'No notifications yet' : `No ${currentFilter.label.toLowerCase()}`}
                   </p>
-                  <p className="text-[11px] text-slate-600 mt-1">
+                  <p className="text-[11px] text-slate-500 mt-1">
                     {activeFilter === 'all'
                       ? 'Notifications from your Docker services will appear here'
                       : 'Try checking another filter tab'}
@@ -480,8 +480,8 @@ export function NotificationDrawer() {
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-white/[0.06] shrink-0">
-              <p className="text-[10px] text-slate-600 text-center">
+            <div className="px-4 py-2.5 border-t border-white/5 shrink-0">
+              <p className="text-[10px] text-slate-500 text-center">
                 {activeFilter === 'all'
                   ? `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}`
                   : `${filteredNotifications.length} of ${notifications.length}`}

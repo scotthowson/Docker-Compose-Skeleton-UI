@@ -219,7 +219,7 @@ export default function EventFeed() {
           <div className="flex flex-col items-center justify-center py-16 text-slate-500">
             <Radio size={32} className="mb-3 opacity-40" />
             <p className="text-sm">No events yet</p>
-            <p className="text-xs mt-1 text-slate-600">
+            <p className="text-xs mt-1 text-slate-500">
               {sseConnected
                 ? 'Waiting for server events...'
                 : 'SSE is disconnected — events will appear once reconnected'}
@@ -231,7 +231,7 @@ export default function EventFeed() {
             return (
               <div
                 key={`${event.timestamp}-${idx}`}
-                className="glass-card rounded-xl p-4 border border-white/5 hover:border-white/10 transition-colors"
+                className="glass rounded-xl border border-white/5 p-4 hover:border-white/10 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-xs text-slate-500 font-mono tabular-nums">

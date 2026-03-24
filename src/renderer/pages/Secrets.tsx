@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { KeyRound, Plus, Trash2, Search, Shield, Eye, EyeOff, AlertTriangle, X, Loader2, RefreshCw } from 'lucide-react'
+import { KeyRound, Plus, Trash2, Search, Shield, Eye, EyeOff, AlertTriangle, X, Loader2, RefreshCw, BookOpen, Lock, FileKey, Terminal, ChevronDown, ChevronRight } from 'lucide-react'
 import { useSecretsStore } from '../stores/secretsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -14,6 +14,8 @@ export default function Secrets() {
   const [showValue, setShowValue] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [keyError, setKeyError] = useState('')
+  const [showGuide, setShowGuide] = useState(false)
+  const [guideSection, setGuideSection] = useState<number | null>(null)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
 
   useEffect(() => { if (isConnected) fetchSecrets() }, [fetchSecrets, isConnected])
@@ -60,18 +62,106 @@ export default function Secrets() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => fetchSecrets()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
-          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors press">
-            <Plus className="w-4 h-4" /> Add Secret
+          <button onClick={() => fetchSecrets()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
+          <button onClick={() => setShowGuide(!showGuide)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-all">
+            <BookOpen size={14} />
+            <span className="hidden sm:inline">Usage Guide</span>
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press">
+            <Plus size={14} /> Add Secret
           </button>
         </div>
       </div>
 
-      {/* Info Banner */}
-      <div className="glass-subtle rounded-xl p-4 flex items-start gap-3 border border-amber-500/20">
-        <Shield className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-        <p className="text-sm text-slate-300">Secret values are encrypted at rest using AES-256-CBC and are never transmitted after being stored. You can only overwrite or delete secrets — not read them back.</p>
-      </div>
+      {/* Secrets Usage Guide (collapsible) */}
+      {showGuide && (
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield size={16} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-white">Secrets Manager Guide</h2>
+            </div>
+            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <X size={14} className="text-slate-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-slate-400 mb-4">
+              Encrypted key-value storage using <code className="text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded text-xs">AES-256-CBC</code>.
+              Values are encrypted at rest and <span className="text-amber-400 font-medium">write-only</span> — you can set or delete secrets, but never read them back.
+            </p>
+
+            {/* How it works */}
+            <div className="border border-white/[0.03] rounded-lg overflow-hidden">
+              <button
+                onClick={() => setGuideSection(guideSection === 0 ? null : 0)}
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+              >
+                {guideSection === 0 ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                <Lock size={14} className="text-amber-400" />
+                <span className="text-xs font-medium text-slate-200">How Encryption Works</span>
+              </button>
+              {guideSection === 0 && (
+                <div className="px-4 pb-3 text-[11px] text-slate-400 space-y-1.5 border-t border-white/[0.03] pt-3 ml-8">
+                  <p>Each secret is individually encrypted using <span className="text-slate-300">AES-256-CBC</span> with a server-generated master key.</p>
+                  <p>The master key is stored at <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.secrets/.master-key</code> with <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">chmod 700</code> permissions.</p>
+                  <p>Encrypted values are stored as <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.enc</code> files in the <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.secrets/</code> directory.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Common uses */}
+            <div className="border border-white/[0.03] rounded-lg overflow-hidden">
+              <button
+                onClick={() => setGuideSection(guideSection === 1 ? null : 1)}
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+              >
+                {guideSection === 1 ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                <FileKey size={14} className="text-cyan-400" />
+                <span className="text-xs font-medium text-slate-200">Common Uses</span>
+              </button>
+              {guideSection === 1 && (
+                <div className="px-4 pb-3 text-[11px] text-slate-400 space-y-1.5 border-t border-white/[0.03] pt-3 ml-8">
+                  <p>Store sensitive values that your containers need but shouldn't be in compose files or .env:</p>
+                  <ul className="space-y-1 list-disc list-inside text-slate-500">
+                    <li>API keys (Cloudflare, SendGrid, Stripe)</li>
+                    <li>Database passwords (MySQL root, PostgreSQL admin)</li>
+                    <li>OAuth client secrets</li>
+                    <li>TLS certificate private keys</li>
+                    <li>Webhook signing secrets</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Usage in compose */}
+            <div className="border border-white/[0.03] rounded-lg overflow-hidden">
+              <button
+                onClick={() => setGuideSection(guideSection === 2 ? null : 2)}
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+              >
+                {guideSection === 2 ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                <Terminal size={14} className="text-emerald-400" />
+                <span className="text-xs font-medium text-slate-200">Reference in Compose Files</span>
+              </button>
+              {guideSection === 2 && (
+                <div className="px-4 pb-3 text-[11px] text-slate-400 space-y-2 border-t border-white/[0.03] pt-3 ml-8">
+                  <p>Reference secrets in your compose environment variables:</p>
+                  <div className="bg-slate-950/60 rounded-lg p-3 font-mono text-[10px] space-y-1 border border-white/5">
+                    <p className="text-slate-500"># docker-compose.yml</p>
+                    <p className="text-slate-400">services:</p>
+                    <p className="text-slate-400">{'  '}my-app:</p>
+                    <p className="text-slate-400">{'    '}environment:</p>
+                    <p className="text-slate-300">{'      '}- DB_PASSWORD=<span className="text-amber-400">{'${SECRETS.DB_PASSWORD}'}</span></p>
+                    <p className="text-slate-300">{'      '}- API_KEY=<span className="text-amber-400">{'${SECRETS.STRIPE_KEY}'}</span></p>
+                  </div>
+                  <p className="text-slate-500 mt-1">DCS resolves these at deploy time — the actual values never appear in your compose files.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">
@@ -84,7 +174,7 @@ export default function Secrets() {
         )}
       </div>
 
-      {error && <div className="glass-subtle rounded-lg p-3 text-rose-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
+      {error && <div className="glass rounded-lg p-3 text-rose-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
 
       {/* Secret Cards */}
       {loading ? (
@@ -93,7 +183,7 @@ export default function Secrets() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="glass rounded-xl p-12 text-center">
-          <KeyRound className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <KeyRound className="w-12 h-12 text-slate-500 mx-auto mb-3" />
           <p className="text-slate-400">{search ? 'No secrets match your search' : 'No secrets stored yet'}</p>
           <p className="text-sm text-slate-500 mt-1">Add your first secret to get started</p>
         </div>
@@ -140,8 +230,8 @@ export default function Secrets() {
               {keyError && <p className="text-sm text-rose-400">{keyError}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5 transition-colors">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save
+                <button type="submit" disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Save
                 </button>
               </div>
             </form>

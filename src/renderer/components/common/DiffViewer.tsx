@@ -94,7 +94,7 @@ const markerMap: Record<DiffLineType, string> = {
 const markerColor: Record<DiffLineType, string> = {
   add: 'text-emerald-400',
   del: 'text-rose-400',
-  same: 'text-slate-600',
+  same: 'text-slate-500',
 }
 
 // ---------------------------------------------------------------------------
@@ -213,10 +213,10 @@ export default function DiffViewer({
             <tbody>
               {lines.map((line, idx) => (
                 <tr key={idx} className={lineStyles[line.type]}>
-                  <td className="text-slate-600 text-xs w-10 text-right pr-1 select-none align-top py-px">
+                  <td className="text-slate-500 text-xs w-10 text-right pr-1 select-none align-top py-px">
                     {line.oldNum ?? ''}
                   </td>
-                  <td className="text-slate-600 text-xs w-10 text-right pr-2 select-none align-top py-px">
+                  <td className="text-slate-500 text-xs w-10 text-right pr-2 select-none align-top py-px">
                     {line.newNum ?? ''}
                   </td>
                   <td className={`w-4 text-center select-none align-top py-px ${markerColor[line.type]}`}>
@@ -240,7 +240,7 @@ export default function DiffViewer({
                       key={idx}
                       className={line ? lineStyles[line.type === 'add' ? 'same' : line.type] : ''}
                     >
-                      <td className="text-slate-600 text-xs w-10 text-right pr-2 select-none align-top py-px">
+                      <td className="text-slate-500 text-xs w-10 text-right pr-2 select-none align-top py-px">
                         {line?.oldNum ?? ''}
                       </td>
                       <td className="text-slate-200 whitespace-pre py-px pr-4">
@@ -261,7 +261,7 @@ export default function DiffViewer({
                       key={idx}
                       className={line ? lineStyles[line.type === 'del' ? 'same' : line.type] : ''}
                     >
-                      <td className="text-slate-600 text-xs w-10 text-right pr-2 select-none align-top py-px">
+                      <td className="text-slate-500 text-xs w-10 text-right pr-2 select-none align-top py-px">
                         {line?.newNum ?? ''}
                       </td>
                       <td className="text-slate-200 whitespace-pre py-px pr-4">

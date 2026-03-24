@@ -78,19 +78,19 @@ function EnvTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/[0.06]">
-            <th className="text-right px-4 py-2.5 text-[10px] font-medium text-slate-600 uppercase tracking-wider w-14">
+          <tr className="border-b border-white/5">
+            <th className="text-right px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider w-14">
               Line
             </th>
-            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-600 uppercase tracking-wider">
+            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">
               Key
             </th>
-            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-600 uppercase tracking-wider">
+            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">
               Value
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/[0.04]">
+        <tbody className="divide-y divide-white/[0.03]">
           {variables.map((v) => {
             const sensitive = isSensitive(v.key)
             const isRevealed = revealed.has(v.key)
@@ -99,15 +99,15 @@ function EnvTable({
             return (
               <tr
                 key={`${v.line}-${v.key}`}
-                className="group hover:bg-white/[0.02] transition-colors duration-100"
+                className="group hover:bg-white/[0.03] transition-colors duration-100"
               >
-                <td className="text-right px-4 py-2 text-xs text-slate-600 font-mono tabular-nums">
+                <td className="text-right px-4 py-2 text-xs text-slate-500 font-mono tabular-nums">
                   {v.line}
                 </td>
                 <td className="px-4 py-2 font-mono text-xs text-cyan-400 whitespace-nowrap">
                   {v.key}
                   {v.comment && (
-                    <span className="ml-2 text-slate-600 italic text-[10px] font-sans">
+                    <span className="ml-2 text-slate-500 italic text-[10px] font-sans">
                       {v.comment}
                     </span>
                   )}
@@ -119,12 +119,12 @@ function EnvTable({
                         sensitive && !isRevealed ? 'text-slate-500' : 'text-emerald-400'
                       }`}
                     >
-                      {displayValue || <span className="text-slate-600 italic">(empty)</span>}
+                      {displayValue || <span className="text-slate-500 italic">(empty)</span>}
                     </span>
                     {sensitive && (
                       <button
                         onClick={() => toggleReveal(v.key)}
-                        className="shrink-0 p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                        className="shrink-0 p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
                         title={isRevealed ? 'Hide value' : 'Reveal value'}
                       >
                         <Eye size={12} />
@@ -158,16 +158,16 @@ function RawEditor({
   const lineCount = lines.length
 
   return (
-    <div className="relative flex rounded-lg border border-white/[0.06] bg-slate-900/50 overflow-hidden focus-within:border-emerald-500/40 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
+    <div className="relative flex rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden focus-within:border-emerald-500/40 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
       {/* Line numbers gutter */}
       <div
-        className="shrink-0 select-none py-3 pr-2 text-right border-r border-white/[0.06] bg-slate-950/30"
+        className="shrink-0 select-none py-3 pr-2 text-right border-r border-white/5 bg-slate-950/30"
         aria-hidden="true"
       >
         {Array.from({ length: lineCount }, (_, i) => (
           <div
             key={i}
-            className="px-3 text-[11px] leading-[1.625rem] text-slate-600 font-mono tabular-nums"
+            className="px-3 text-[11px] leading-[1.625rem] text-slate-500 font-mono tabular-nums"
           >
             {i + 1}
           </div>
@@ -406,15 +406,13 @@ export default function Environment() {
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
-            <FileCode size={20} className="text-emerald-400" />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5">
+            <FileCode size={24} className="text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Environment Variables</span></h2>
-            <p className="mt-0.5 text-sm text-slate-500">
-              Manage root and per-stack .env configuration
-            </p>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Environment Variables</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Manage root and per-stack .env configuration</p>
           </div>
         </div>
         <button
@@ -448,7 +446,7 @@ export default function Environment() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-white/[0.03] backdrop-blur-lg rounded-xl p-1 border border-white/[0.06]">
+      <div className="flex gap-1 bg-white/[0.03] backdrop-blur-lg rounded-xl p-1 border border-white/5">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
           return (
@@ -461,8 +459,8 @@ export default function Environment() {
                 transition-all duration-200
                 ${
                   isActive
-                    ? 'bg-white/[0.08] text-slate-100 shadow-sm border border-white/[0.08]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
+                    ? 'bg-white/10 text-slate-100 shadow-sm border border-white/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
                 }
               `}
             >
@@ -481,13 +479,13 @@ export default function Environment() {
           {/* Toolbar */}
           <div className="flex items-center justify-between">
             {/* View mode toggle */}
-            <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/[0.06] p-1">
+            <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/5 p-1">
               <button
                 onClick={() => setViewMode('table')}
                 className={`
                   flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
                   ${viewMode === 'table'
-                    ? 'bg-white/[0.08] text-slate-100 border border-white/[0.08]'
+                    ? 'bg-white/10 text-slate-100 border border-white/10'
                     : 'text-slate-500 hover:text-slate-300 border border-transparent'
                   }
                 `}
@@ -500,7 +498,7 @@ export default function Environment() {
                 className={`
                   flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
                   ${viewMode === 'raw'
-                    ? 'bg-white/[0.08] text-slate-100 border border-white/[0.08]'
+                    ? 'bg-white/10 text-slate-100 border border-white/10'
                     : 'text-slate-500 hover:text-slate-300 border border-transparent'
                   }
                 `}
@@ -558,7 +556,7 @@ export default function Environment() {
 
           {/* Loading */}
           {rootLoading && !rootEnvData && (
-            <div className="glass-subtle rounded-xl p-8 text-center">
+            <div className="glass rounded-xl border border-white/5 p-8 text-center">
               <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
               <span className="text-sm text-slate-500">Loading environment variables...</span>
             </div>
@@ -566,7 +564,7 @@ export default function Environment() {
 
           {/* Content */}
           {rootEnvData && (
-            <div className="glass-subtle rounded-xl overflow-hidden">
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
               {viewMode === 'table' ? (
                 <EnvTable variables={rootEnvData.variables} />
               ) : (
@@ -582,8 +580,8 @@ export default function Environment() {
               )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
-                <span className="text-[11px] text-slate-600 font-mono">
+              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
+                <span className="text-[11px] text-slate-500 font-mono">
                   {rootEnvData.variables.length} variable{rootEnvData.variables.length !== 1 ? 's' : ''}
                 </span>
                 {rootHasChanges && (
@@ -612,7 +610,7 @@ export default function Environment() {
                 disabled={stacksLoading && stacks.length === 0}
                 className="
                   w-full appearance-none
-                  rounded-lg bg-white/[0.03] border border-white/[0.08]
+                  rounded-lg bg-white/[0.03] border border-white/10
                   px-4 py-2.5 pr-10
                   text-sm text-slate-200
                   font-medium
@@ -641,13 +639,13 @@ export default function Environment() {
             {selectedStack && (
               <div className="flex items-center gap-2">
                 {/* View mode toggle */}
-                <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/[0.06] p-1">
+                <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/5 p-1">
                   <button
                     onClick={() => setStackViewMode('table')}
                     className={`
                       flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
                       ${stackViewMode === 'table'
-                        ? 'bg-white/[0.08] text-slate-100 border border-white/[0.08]'
+                        ? 'bg-white/10 text-slate-100 border border-white/10'
                         : 'text-slate-500 hover:text-slate-300 border border-transparent'
                       }
                     `}
@@ -660,7 +658,7 @@ export default function Environment() {
                     className={`
                       flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
                       ${stackViewMode === 'raw'
-                        ? 'bg-white/[0.08] text-slate-100 border border-white/[0.08]'
+                        ? 'bg-white/10 text-slate-100 border border-white/10'
                         : 'text-slate-500 hover:text-slate-300 border border-transparent'
                       }
                     `}
@@ -696,8 +694,8 @@ export default function Environment() {
 
           {/* No stack selected */}
           {!selectedStack && (
-            <div className="glass-subtle rounded-xl p-12 text-center">
-              <FileCode size={32} className="text-slate-600 mx-auto mb-3" />
+            <div className="glass rounded-xl border border-white/5 p-12 text-center">
+              <FileCode size={32} className="text-slate-500 mx-auto mb-3" />
               <p className="text-sm text-slate-400">
                 Select a stack from the dropdown to view its environment variables
               </p>
@@ -706,7 +704,7 @@ export default function Environment() {
 
           {/* Loading stack env */}
           {selectedStack && stackEnvLoading && (
-            <div className="glass-subtle rounded-xl p-8 text-center">
+            <div className="glass rounded-xl border border-white/5 p-8 text-center">
               <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
               <span className="text-sm text-slate-500">Loading stack environment...</span>
             </div>
@@ -714,7 +712,7 @@ export default function Environment() {
 
           {/* No .env file */}
           {selectedStack && !stackEnvLoading && stackEnvEmpty && (
-            <div className="glass-subtle rounded-xl p-12 text-center">
+            <div className="glass rounded-xl border border-white/5 p-12 text-center">
               <AlertTriangle size={28} className="text-amber-500 mx-auto mb-3" />
               <p className="text-sm text-slate-300 font-medium mb-1">No .env file</p>
               <p className="text-xs text-slate-500">
@@ -725,7 +723,7 @@ export default function Environment() {
 
           {/* Stack env content */}
           {selectedStack && !stackEnvLoading && stackEnvData && !stackEnvEmpty && (
-            <div className="glass-subtle rounded-xl overflow-hidden">
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
               {stackViewMode === 'table' ? (
                 <EnvTable variables={stackEnvData.variables} />
               ) : (
@@ -738,8 +736,8 @@ export default function Environment() {
               )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
-                <span className="text-[11px] text-slate-600 font-mono">
+              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
+                <span className="text-[11px] text-slate-500 font-mono">
                   {stackEnvData.variables.length} variable{stackEnvData.variables.length !== 1 ? 's' : ''}
                   {' '}&middot; {selectedStack}
                 </span>

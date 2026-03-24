@@ -309,7 +309,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="hidden sm:inline">Back</span>
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/[0.04] border border-white/[0.06] ml-1">Esc</kbd>
+          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
         </button>
         <div className="flex-1 min-w-0">
           {renameMode ? (
@@ -347,7 +347,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               {isAdmin && (
                 <button
                   onClick={() => { setRenameMode(true); setRenameTo(stackName) }}
-                  className="p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
                   title="Rename stack"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -416,7 +416,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 border transition-all duration-200
                 ${
                   isRunning || isActionLoading
-                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
                     : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30'
                 }
               `}
@@ -438,7 +438,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 border transition-all duration-200
                 ${
                   !isRunning || isActionLoading
-                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
                     : 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30'
                 }
               `}
@@ -460,7 +460,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 border transition-all duration-200
                 ${
                   !isRunning || isActionLoading
-                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
                     : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30'
                 }
               `}
@@ -483,7 +483,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                   border transition-all duration-200
                   ${
                     isActionLoading
-                      ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                      ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
                       : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30'
                   }
                 `}
@@ -506,7 +506,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 border transition-all duration-200
                 ${
                   composeLoading
-                    ? 'bg-white/[0.02] text-slate-600 border-white/[0.04] cursor-not-allowed'
+                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
                     : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30'
                 }
               `}
@@ -545,7 +545,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       {/* Clone modal */}
       {showCloneModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCloneModal(false)}>
-          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/[0.08] shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
                 <Copy size={14} className="text-cyan-400" />
@@ -563,13 +563,13 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 onKeyDown={(e) => e.key === 'Enter' && handleClone()}
                 placeholder="my-stack-copy"
                 autoFocus
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white font-mono placeholder-slate-500 border border-white/[0.06] focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
               />
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCloneModal(false)}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-300 hover:bg-white/[0.08] transition-all"
+                className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-300 hover:bg-white/10 transition-all"
               >
                 Cancel
               </button>
@@ -638,7 +638,7 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
   if (containers.length === 0) {
     return (
       <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
-        <Box className="w-8 h-8 text-slate-600 mb-2" />
+        <Box className="w-8 h-8 text-slate-500 mb-2" />
         <p className="text-sm text-slate-500">No containers in this stack</p>
       </div>
     )
@@ -649,7 +649,7 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
       <div className="overflow-x-auto scrollbar-thin">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-white/[0.06]">
+            <tr className="border-b border-white/5">
               <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Name
               </th>
@@ -673,7 +673,7 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.04]">
+          <tbody className="divide-y divide-white/[0.03]">
             {containers.map((c) => {
               const health = healthIndicator(c.health)
               const HealthIcon = health.icon
@@ -710,7 +710,7 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <Clock className="w-3 h-3 text-slate-600" />
+                      <Clock className="w-3 h-3 text-slate-500" />
                       {c.state.toLowerCase() === 'running'
                         ? formatUptime(c.uptime_seconds)
                         : '--'}
@@ -730,13 +730,13 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
                         ))}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-600">--</span>
+                      <span className="text-xs text-slate-500">--</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`text-xs font-mono ${
-                        c.restart_count > 0 ? 'text-amber-400' : 'text-slate-600'
+                        c.restart_count > 0 ? 'text-amber-400' : 'text-slate-500'
                       }`}
                     >
                       {c.restart_count}
@@ -756,7 +756,7 @@ function ServicesList({ services }: { services: string[] }) {
   if (services.length === 0) {
     return (
       <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
-        <Server className="w-8 h-8 text-slate-600 mb-2" />
+        <Server className="w-8 h-8 text-slate-500 mb-2" />
         <p className="text-sm text-slate-500">No services defined</p>
       </div>
     )
@@ -768,7 +768,7 @@ function ServicesList({ services }: { services: string[] }) {
         {services.map((service) => (
           <div
             key={service}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] transition-all"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/[0.03] border border-white/5 hover:bg-white/5 transition-all"
           >
             <div className="flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500/10 ring-1 ring-emerald-500/20">
               <ChevronDown className="w-3.5 h-3.5 text-emerald-400 rotate-[-90deg]" />
@@ -795,7 +795,7 @@ function LogViewer({
   return (
     <div className="glass overflow-hidden">
       {/* Log header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
           <span className="text-xs font-medium text-slate-400">Stack Logs</span>
@@ -803,7 +803,7 @@ function LogViewer({
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/[0.06] hover:border-white/15 transition-all"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/15 transition-all"
         >
           <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -831,14 +831,14 @@ function LogViewer({
                         : 'text-slate-400'
                 }`}
               >
-                <span className="text-slate-600 select-none mr-3">{String(i + 1).padStart(3, ' ')}</span>
+                <span className="text-slate-500 select-none mr-3">{String(i + 1).padStart(3, ' ')}</span>
                 {line}
               </div>
             ))}
             <div ref={logEndRef} />
           </>
         ) : (
-          <div className="text-center text-slate-600 py-8">No logs available</div>
+          <div className="text-center text-slate-500 py-8">No logs available</div>
         )}
       </div>
     </div>

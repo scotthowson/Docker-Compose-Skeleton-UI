@@ -3,7 +3,7 @@
 // =============================================================================
 
 import React, { useRef, useEffect, useState } from 'react'
-import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown } from 'lucide-react'
+import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown, Settings2 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchEvents, fetchVersion,
@@ -34,6 +34,8 @@ import MaintenanceSummary from '../components/dashboard/MaintenanceSummary'
 import NotificationStatus from '../components/dashboard/NotificationStatus'
 import ActiveAutomations from '../components/dashboard/ActiveAutomations'
 import PersistentTrends from '../components/dashboard/PersistentTrends'
+import DashboardGrid from '../components/dashboard/DashboardGrid'
+import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useStackStore } from '../stores/stackStore'
 import { useToast } from '../components/common/Toast'
@@ -65,7 +67,7 @@ function DisconnectedHero() {
       {/* Main illustration */}
       <div className="relative mb-8 w-40 h-40 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-40 h-40 rounded-full border border-white/[0.04] animate-spin-slow" />
+          <div className="w-40 h-40 rounded-full border border-white/[0.03] animate-spin-slow" />
         </div>
         <div className="absolute inset-[-16px] flex items-center justify-center">
           <div className="w-[calc(100%+32px)] h-[calc(100%+32px)] rounded-full border border-dashed border-white/[0.03]" style={{ animation: 'spin 20s linear infinite reverse' }} />
@@ -194,6 +196,9 @@ export default function Dashboard() {
       }, 800)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dashboard layout editor
+  const dashLayout = useDashboardLayout()
 
   // Poll success/error callbacks for connection health monitoring
   const onPollSuccess = React.useCallback(() => {
@@ -410,9 +415,16 @@ export default function Dashboard() {
     onError: onPollError,
   })
 
-  // Show disconnected hero when not connected AND no cached data
+  // Show disconnected hero ONLY when not connected AND we've NEVER had data.
+  // Once data has loaded, keep showing cards even during brief disconnects
+  // to prevent the jarring flash between "Connecting..." and cards.
+  const [everConnected, setEverConnected] = React.useState(false)
+  React.useEffect(() => {
+    if (isConnected) setEverConnected(true)
+  }, [isConnected])
+
   const hasNoData = !systemStatus && !healthReport && events.length === 0
-  const showDisconnected = !isConnected && hasNoData
+  const showDisconnected = !isConnected && !everConnected && hasNoData
 
   return (
     <div className="space-y-3 md:space-y-6">
@@ -422,13 +434,23 @@ export default function Dashboard() {
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">
             <span className="text-gradient neon-emerald">Dashboard</span>
           </h1>
-          <p className="mt-1 text-xs md:text-sm text-slate-500">
+          <p className="mt-0.5 text-xs md:text-sm text-slate-500">
             {systemStatus
               ? <><span className="text-slate-400">{systemStatus.hostname}</span>{' \u2014 uptime '}{formatUptime(systemStatus.uptime_seconds)}</>
               : 'Overview of your Docker environment'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {isConnected && !dashLayout.editMode && (
+            <button
+              onClick={dashLayout.enterEditMode}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/20 transition-all"
+              title="Customize dashboard layout"
+            >
+              <Settings2 size={12} />
+              Edit
+            </button>
+          )}
           {isConnected && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
               <Wifi size={13} className="text-emerald-400" />
@@ -441,66 +463,36 @@ export default function Dashboard() {
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
-        <div className="space-y-3 md:space-y-5">
-          {/* Overview Cards — always visible */}
-          <OverviewCards />
+        <>
 
-          {/* Stacks */}
-          <DashboardSection label="Stacks" storageKey="stacks">
-            <StackStatusGrid stacks={stacksPoll.data?.stacks ?? null} error={stacksPoll.error} onRetry={stacksPoll.refresh} />
-          </DashboardSection>
-
-          {/* Health & Resources */}
-          <DashboardSection label="Health & Resources" storageKey="health-resources">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-              <HealthSummary />
-              <ResourceChart history={resourceHistoryRef.current} />
-            </div>
-          </DashboardSection>
-
-          {/* Infrastructure */}
-          <DashboardSection label="Infrastructure" storageKey="infrastructure">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-              <ContainerOverview containers={containers} />
-              <ServerInfo />
-              <DiskMonitor disks={disks} />
-            </div>
-          </DashboardSection>
-
-          {/* Trends & Consumers */}
-          <DashboardSection label="Trends" storageKey="trends">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-              <PersistentTrends data={trendsPoll.data ?? null} error={trendsPoll.error} onRetry={trendsPoll.refresh} />
-              <TopResourceConsumers />
-            </div>
-          </DashboardSection>
-
-          {/* Updates & Backup */}
-          <DashboardSection label="Updates & Backup" storageKey="updates-backup">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-2">
-              <ImageUpdateAlert data={imageUpdatesPoll.data ?? null} error={imageUpdatesPoll.error} onRetry={imageUpdatesPoll.refresh} />
-              <BackupStatusCard data={backupStatusPoll.data ?? null} error={backupStatusPoll.error} onRetry={backupStatusPoll.refresh} />
-            </div>
-          </DashboardSection>
-
-          {/* Monitoring */}
-          <DashboardSection label="Monitoring" storageKey="monitoring">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-              <LogHealthSummary data={logStatsPoll.data ?? null} error={logStatsPoll.error} onRetry={logStatsPoll.refresh} />
-              <MaintenanceSummary data={maintenancePoll.data ?? null} error={maintenancePoll.error} onRetry={maintenancePoll.refresh} />
-              <NotificationStatus data={notifHistoryPoll.data ?? null} error={notifHistoryPoll.error} onRetry={notifHistoryPoll.refresh} />
-            </div>
-          </DashboardSection>
-
-          {/* Automation & Actions */}
-          <DashboardSection label="Automation & Actions" storageKey="automation-actions">
-            <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3">
-              <ActiveAutomations data={automationsPoll.data ?? null} error={automationsPoll.error} onRetry={automationsPoll.refresh} />
-              <RecentEvents />
-              <QuickActions />
-            </div>
-          </DashboardSection>
-        </div>
+          <DashboardGrid
+            cards={dashLayout.allCards}
+            editMode={dashLayout.editMode}
+            onToggleCard={dashLayout.toggleCard}
+            onResizeCard={dashLayout.resizeCard}
+            onMoveCard={dashLayout.moveCard}
+            onExitEdit={dashLayout.exitEditMode}
+            labels={dashLayout.labels}
+            onDiscardEdit={dashLayout.discardEdit}
+            onResetLayout={dashLayout.resetLayout}
+            onAddSpecial={dashLayout.addSpecial}
+            onAddPluginCard={dashLayout.addPluginCard}
+            onSetLabel={dashLayout.setLabel}
+            cardProps={{
+              'stack-grid': { stacks: stacksPoll.data?.stacks ?? null, error: stacksPoll.error, onRetry: stacksPoll.refresh },
+              'resource-chart': { history: resourceHistoryRef.current },
+              'container-overview': { containers },
+              'disk-monitor': { disks },
+              'trends': { data: trendsPoll.data ?? null, error: trendsPoll.error, onRetry: trendsPoll.refresh },
+              'image-updates': { data: imageUpdatesPoll.data ?? null, error: imageUpdatesPoll.error, onRetry: imageUpdatesPoll.refresh },
+              'backup-status': { data: backupStatusPoll.data ?? null, error: backupStatusPoll.error, onRetry: backupStatusPoll.refresh },
+              'log-health': { data: logStatsPoll.data ?? null, error: logStatsPoll.error, onRetry: logStatsPoll.refresh },
+              'maintenance': { data: maintenancePoll.data ?? null, error: maintenancePoll.error, onRetry: maintenancePoll.refresh },
+              'notifications': { data: notifHistoryPoll.data ?? null, error: notifHistoryPoll.error, onRetry: notifHistoryPoll.refresh },
+              'automations': { data: automationsPoll.data ?? null, error: automationsPoll.error, onRetry: automationsPoll.refresh },
+            }}
+          />
+        </>
       )}
     </div>
   )
@@ -533,9 +525,9 @@ function DashboardSection({ label, storageKey, children }: {
       >
         <ChevronDown
           size={14}
-          className={`text-slate-600 group-hover:text-slate-400 transition-all duration-200 ${collapsed ? '-rotate-90' : ''}`}
+          className={`text-slate-500 group-hover:text-slate-400 transition-all duration-200 ${collapsed ? '-rotate-90' : ''}`}
         />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 group-hover:text-slate-400 transition-colors">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 group-hover:text-slate-400 transition-colors">
           {label}
         </span>
       </button>

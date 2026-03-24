@@ -104,7 +104,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
 
       {/* Image ID (short) */}
       <div className="flex items-center gap-1.5">
-        <Hash className="h-3 w-3 text-slate-600" />
+        <Hash className="h-3 w-3 text-slate-500" />
         <span className="text-xs font-mono text-slate-500">
           {image.id.length > 19 ? image.id.slice(0, 19) : image.id}
         </span>
@@ -127,13 +127,13 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
       </div>
 
       {/* Footer: size + created */}
-      <div className="flex items-center justify-between pt-1 border-t border-white/[0.04]">
+      <div className="flex items-center justify-between pt-1 border-t border-white/[0.03]">
         <div className="flex items-center gap-1">
-          <HardDrive className="h-3 w-3 text-slate-600" />
+          <HardDrive className="h-3 w-3 text-slate-500" />
           <span className="text-xs text-slate-400">{image.size}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3 text-slate-600" />
+          <Clock className="h-3 w-3 text-slate-500" />
           <span className="text-xs text-slate-500" title={image.created}>
             {image.created}
           </span>

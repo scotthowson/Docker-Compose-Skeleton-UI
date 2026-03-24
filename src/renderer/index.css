@@ -143,6 +143,8 @@
     border-color: #e2e8f0;
   }
 
+  .light .border-white\/5,
+  .light .border-white\/\[0\.03\],
   .light .border-white\/\[0\.04\],
   .light .border-white\/\[0\.05\],
   .light .border-white\/\[0\.06\],
@@ -152,6 +154,12 @@
   .light .border-white\/\[0\.12\],
   .light .border-white\/\[0\.15\] {
     border-color: #cbd5e1 !important;
+  }
+
+  /* Hover borders */
+  .light .hover\:border-white\/10:hover,
+  .light .hover\:border-white\/\[0\.15\]:hover {
+    border-color: #94a3b8 !important;
   }
 
   /* Dividers */
@@ -176,6 +184,17 @@
   .light .bg-white\/\[0\.06\],
   .light .bg-white\/\[0\.08\] {
     background-color: rgba(241,245,249,0.7) !important;
+  }
+
+  /* Hover backgrounds */
+  .light .hover\:bg-white\/5:hover,
+  .light .hover\:bg-white\/\[0\.03\]:hover {
+    background-color: rgba(0,0,0,0.04) !important;
+  }
+
+  .light .hover\:bg-white\/10:hover,
+  .light .hover\:bg-white\/\[0\.08\]:hover {
+    background-color: rgba(0,0,0,0.07) !important;
   }
 
   .light .bg-slate-900\/60,
@@ -497,6 +516,206 @@
     background-color: #f1f5f9 !important;
   }
 
+  /* ── New border patterns (from polish session) ────────────── */
+  .light .border-white\/5 {
+    border-color: #cbd5e1 !important;
+  }
+
+  .light .border-white\/\[0\.03\] {
+    border-color: #e2e8f0 !important;
+  }
+
+  .light .divide-white\/\[0\.03\] > :not([hidden]) ~ :not([hidden]) {
+    border-color: #e2e8f0 !important;
+  }
+
+  .light .hover\:border-white\/10:hover {
+    border-color: #94a3b8 !important;
+  }
+
+  /* ── New background patterns ─────────────────────────────── */
+  .light .bg-white\/10,
+  .light .hover\:bg-white\/10:hover {
+    background-color: rgba(226,232,240,0.8) !important;
+  }
+
+  .light .bg-white\/\[0\.02\],
+  .light .hover\:bg-white\/\[0\.02\]:hover {
+    background-color: rgba(241,245,249,0.5) !important;
+  }
+
+  .light .bg-white\/\[0\.03\] {
+    background-color: rgba(241,245,249,0.6) !important;
+  }
+
+  /* ── Gradient icon boxes (adapt from dark translucent to light) */
+  .light [class*="bg-gradient-to-br"][class*="from-"] {
+    opacity: 0.9;
+  }
+
+  /* ── Blue accent (missing from original) ─────────────────── */
+  .light .text-blue-400 { color: #2563eb !important; }
+  .light .bg-blue-500\/10,
+  .light .bg-blue-500\/15 {
+    background-color: rgba(37,99,235,0.08) !important;
+  }
+
+  /* ── Colored borders for icon boxes ──────────────────────── */
+  .light .border-emerald-500\/10 { border-color: rgba(5,150,105,0.15) !important; }
+  .light .border-cyan-500\/10 { border-color: rgba(8,145,178,0.15) !important; }
+  .light .border-violet-500\/10 { border-color: rgba(124,58,237,0.15) !important; }
+  .light .border-blue-500\/10 { border-color: rgba(37,99,235,0.15) !important; }
+  .light .border-amber-500\/10 { border-color: rgba(217,119,6,0.15) !important; }
+  .light .border-rose-500\/10 { border-color: rgba(225,29,72,0.15) !important; }
+
+  .light .border-emerald-500\/15 { border-color: rgba(5,150,105,0.2) !important; }
+  .light .border-cyan-500\/15 { border-color: rgba(8,145,178,0.2) !important; }
+  .light .border-violet-500\/15 { border-color: rgba(124,58,237,0.2) !important; }
+  .light .border-amber-500\/15 { border-color: rgba(217,119,6,0.2) !important; }
+  .light .border-rose-500\/15 { border-color: rgba(225,29,72,0.2) !important; }
+  .light .border-emerald-500\/20 { border-color: rgba(5,150,105,0.25) !important; }
+  .light .border-cyan-500\/20 { border-color: rgba(8,145,178,0.25) !important; }
+  .light .border-violet-500\/20 { border-color: rgba(124,58,237,0.25) !important; }
+  .light .border-amber-500\/20 { border-color: rgba(217,119,6,0.25) !important; }
+  .light .border-rose-500\/20 { border-color: rgba(225,29,72,0.25) !important; }
+
+  /* ── Colored translucent BG for icon boxes & badges ──────── */
+  .light .bg-emerald-500\/5 { background-color: rgba(5,150,105,0.05) !important; }
+  .light .bg-cyan-500\/5 { background-color: rgba(8,145,178,0.05) !important; }
+  .light .bg-violet-500\/5 { background-color: rgba(124,58,237,0.05) !important; }
+  .light .bg-amber-500\/5 { background-color: rgba(217,119,6,0.05) !important; }
+  .light .bg-rose-500\/5 { background-color: rgba(225,29,72,0.05) !important; }
+
+  .light .bg-emerald-500\/\[0\.06\] { background-color: rgba(5,150,105,0.06) !important; }
+  .light .bg-amber-500\/\[0\.06\] { background-color: rgba(217,119,6,0.06) !important; }
+
+  .light .bg-emerald-500\/20 { background-color: rgba(5,150,105,0.12) !important; }
+  .light .bg-cyan-500\/20 { background-color: rgba(8,145,178,0.12) !important; }
+  .light .bg-violet-500\/20 { background-color: rgba(124,58,237,0.12) !important; }
+  .light .bg-amber-500\/20 { background-color: rgba(217,119,6,0.12) !important; }
+  .light .bg-rose-500\/20 { background-color: rgba(225,29,72,0.12) !important; }
+  .light .bg-blue-500\/20 { background-color: rgba(37,99,235,0.12) !important; }
+
+  /* ── Hover shadows (lighter for light mode) ──────────────── */
+  .light .hover\:shadow-lg:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04) !important;
+  }
+
+  .light .hover\:shadow-black\/20:hover,
+  .light .shadow-black\/20 {
+    --tw-shadow-color: rgba(0,0,0,0.08) !important;
+  }
+
+  .light .shadow-lg {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important;
+  }
+
+  .light .shadow-emerald-500\/20 {
+    --tw-shadow-color: rgba(5,150,105,0.15) !important;
+  }
+
+  .light .shadow-emerald-500\/25 {
+    --tw-shadow-color: rgba(5,150,105,0.15) !important;
+  }
+
+  /* ── Neon text effects (tone down for light) ─────────────── */
+  .light .neon-emerald { text-shadow: none !important; }
+  .light .neon-cyan { text-shadow: none !important; }
+  .light .neon-rose { text-shadow: none !important; }
+  .light .neon-amber { text-shadow: none !important; }
+
+  /* ── Skeleton loading animation ──────────────────────────── */
+  .light .skeleton {
+    background: linear-gradient(90deg, #e2e8f0, #f1f5f9, #e2e8f0) !important;
+    background-size: 200% 100% !important;
+  }
+
+  /* ── Toast component ─────────────────────────────────────── */
+  .light .bg-slate-900\/80 {
+    background-color: rgba(255,255,255,0.95) !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  .light .shadow-black\/40 {
+    --tw-shadow-color: rgba(0,0,0,0.08) !important;
+  }
+
+  /* ── Modal dark backgrounds ──────────────────────────────── */
+  .light .bg-slate-900\/95 {
+    background-color: rgba(255,255,255,0.97) !important;
+  }
+
+  .light .bg-black\/70 {
+    background-color: rgba(15,23,42,0.20) !important;
+  }
+
+  /* ── Notification drawer ─────────────────────────────────── */
+  .light .bg-slate-900\/98 {
+    background-color: rgba(255,255,255,0.98) !important;
+  }
+
+  /* ── Guide collapsible pre blocks ────────────────────────── */
+  .light .bg-slate-950\/60 {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  /* ── Colored background hover states ─────────────────────── */
+  .light .hover\:bg-emerald-500\/20:hover { background-color: rgba(5,150,105,0.15) !important; }
+  .light .hover\:bg-emerald-500\/25:hover { background-color: rgba(5,150,105,0.18) !important; }
+  .light .hover\:bg-emerald-500\/30:hover { background-color: rgba(5,150,105,0.20) !important; }
+  .light .hover\:bg-cyan-500\/20:hover { background-color: rgba(8,145,178,0.15) !important; }
+  .light .hover\:bg-rose-500\/20:hover { background-color: rgba(225,29,72,0.12) !important; }
+  .light .hover\:bg-rose-500\/25:hover { background-color: rgba(225,29,72,0.15) !important; }
+  .light .hover\:bg-amber-500\/25:hover { background-color: rgba(217,119,6,0.15) !important; }
+  .light .hover\:bg-violet-500\/25:hover { background-color: rgba(124,58,237,0.15) !important; }
+
+  /* ── Colored border hover states ─────────────────────────── */
+  .light .hover\:border-emerald-500\/30:hover { border-color: rgba(5,150,105,0.3) !important; }
+  .light .hover\:border-cyan-500\/30:hover { border-color: rgba(8,145,178,0.3) !important; }
+  .light .hover\:border-cyan-500\/20:hover { border-color: rgba(8,145,178,0.25) !important; }
+  .light .hover\:border-rose-500\/30:hover { border-color: rgba(225,29,72,0.3) !important; }
+
+  /* ── Gradient border animation ───────────────────────────── */
+  .light .gradient-border::before {
+    opacity: 0.3 !important;
+  }
+
+  /* ── Text selection ──────────────────────────────────────── */
+  .light ::selection {
+    background-color: rgba(5,150,105,0.2);
+    color: #0f172a;
+  }
+
+  /* ── Log viewer (keep dark for readability) ──────────────── */
+  .light .font-mono.text-slate-400,
+  .light pre .text-slate-400 {
+    color: #475569 !important;
+  }
+
+  /* ── Backdrop blur intensity ─────────────────────────────── */
+  .light .backdrop-blur-2xl {
+    backdrop-filter: blur(20px) saturate(1.2) !important;
+  }
+
+  .light .backdrop-blur-xl {
+    backdrop-filter: blur(16px) saturate(1.1) !important;
+  }
+
+  /* ── Animate pulse (softer for light) ────────────────────── */
+  .light .animate-pulse {
+    animation-duration: 2.5s;
+  }
+
+  /* ── Focus rings ─────────────────────────────────────────── */
+  .light .focus\:ring-emerald-500\/20:focus {
+    --tw-ring-color: rgba(5,150,105,0.25) !important;
+  }
+
+  .light .focus\:border-emerald-500\/50:focus {
+    border-color: rgba(5,150,105,0.5) !important;
+  }
+
   /* ══════════════════════════════════════════════════════════════
      END LIGHT MODE
      ══════════════════════════════════════════════════════════════ */
@@ -544,7 +763,7 @@
   }
 
   .glass-subtle {
-    @apply bg-white/[0.03] backdrop-blur-lg border border-white/[0.06] rounded-xl;
+    @apply bg-white/[0.03] backdrop-blur-lg border border-white/5 rounded-xl;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
   }
 
@@ -559,7 +778,7 @@
   }
 
   .glass-card {
-    @apply bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-xl;
+    @apply bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-xl;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -1065,5 +1284,23 @@
 
   .mobile-compact {
     padding: 0.75rem !important;
+  }
+}
+
+/* ── Dashboard Grid ─────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .dashboard-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    min-height: auto !important;
+  }
+  .dashboard-grid > * {
+    position: relative !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+    height: auto !important;
+    max-height: 400px;
+    overflow-y: auto;
   }
 }

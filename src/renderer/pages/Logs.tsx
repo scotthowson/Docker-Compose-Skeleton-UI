@@ -32,7 +32,7 @@ const levelColors: Record<string, { text: string; bg: string; border: string }> 
   WARNING: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   ERROR: { text: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
   DEBUG: { text: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20' },
-  CRITICAL: { text: 'text-rose-500', bg: 'bg-rose-500/15', border: 'border-rose-500/30' },
+  CRITICAL: { text: 'text-rose-500', bg: 'bg-rose-500/15', border: 'border-rose-500/20' },
   TIMING: { text: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
   STEP: { text: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
   FOCUS: { text: 'text-amber-300', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
@@ -272,15 +272,14 @@ export default function Logs() {
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Log Viewer</span></h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {logFile ? (
-              <span className="font-mono text-xs">{logFile}</span>
-            ) : (
-              'Application log output'
-            )}
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
+            <ScrollText className="w-6 h-6 text-amber-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Log Viewer</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Framework logs, filtering, and search</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Stats toggle */}
@@ -347,8 +346,8 @@ export default function Logs() {
 
       {/* Stats panel (collapsible) */}
       {showStats && (
-        <div className="glass-subtle rounded-xl overflow-hidden shrink-0 animate-fade-in">
-          <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2">
+        <div className="glass rounded-xl border border-white/5 overflow-hidden shrink-0 animate-fade-in">
+          <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2">
             <BarChart3 size={16} className="text-violet-400" />
             <h3 className="text-sm font-semibold text-slate-200">Log Statistics</h3>
             {statsLoading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" />}
@@ -446,7 +445,7 @@ export default function Logs() {
 
       {/* Error state */}
       {error && (
-        <div className="glass rounded-xl p-4 border-rose-500/30 shrink-0">
+        <div className="glass rounded-xl p-4 border border-rose-500/20 shrink-0">
           <p className="text-sm text-rose-400">Failed to fetch logs: {error.message}</p>
         </div>
       )}
@@ -460,7 +459,7 @@ export default function Logs() {
             text-xs font-medium border transition-all duration-200
             ${activeTab === 'logs'
               ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
             }
           `}
         >
@@ -474,7 +473,7 @@ export default function Logs() {
             text-xs font-medium border transition-all duration-200
             ${activeTab === 'live'
               ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
             }
           `}
         >
@@ -488,7 +487,7 @@ export default function Logs() {
             text-xs font-medium border transition-all duration-200
             ${activeTab === 'archives'
               ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
             }
           `}
         >
@@ -515,7 +514,7 @@ export default function Logs() {
                 className="
                   w-full rounded-lg pl-9 pr-4 py-2
                   text-sm text-slate-200 placeholder-slate-600
-                  bg-slate-900/60 border border-white/[0.08]
+                  bg-slate-900/60 border border-white/10
                   focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
                   transition-all duration-200
                 "
@@ -530,7 +529,7 @@ export default function Logs() {
                 className="
                   appearance-none rounded-lg pl-3 pr-8 py-2
                   text-xs font-medium text-slate-300
-                  bg-slate-900/60 border border-white/[0.08]
+                  bg-slate-900/60 border border-white/10
                   focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
                   transition-all duration-200 cursor-pointer
                 "
@@ -550,7 +549,7 @@ export default function Logs() {
                 text-xs font-medium border transition-all duration-200
                 ${showFilters || activeLevels.size > 0
                   ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                  : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+                  : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
                 }
               `}
             >
@@ -583,7 +582,7 @@ export default function Logs() {
                 ${
                   autoScroll
                     ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                    : 'text-slate-400 bg-white/5 border-white/[0.08] hover:bg-white/[0.08]'
+                    : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
                 }
               `}
               title={autoScroll ? 'Auto-scroll is ON' : 'Auto-scroll is OFF'}
@@ -596,7 +595,7 @@ export default function Logs() {
           {/* Level filter chips */}
           {showFilters && (
             <div className="flex items-center gap-2 flex-wrap shrink-0 animate-fade-in">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Filter by level:</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filter by level:</span>
               {LOG_LEVELS.filter((l) => (levelCounts[l] ?? 0) > 0).map((level) => {
                 const active = activeLevels.has(level)
                 const colors = levelColors[level]
@@ -609,7 +608,7 @@ export default function Logs() {
                       text-[11px] font-medium border transition-all duration-200
                       ${active
                         ? `${colors.text} ${colors.bg} ${colors.border}`
-                        : 'text-slate-500 bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]'
+                        : 'text-slate-500 bg-white/[0.03] border-white/5 hover:bg-white/5'
                       }
                     `}
                   >
@@ -636,8 +635,8 @@ export default function Logs() {
           )}
 
           {/* Log output area */}
-          <div className="glass-subtle rounded-xl overflow-hidden flex-1 min-h-0 flex flex-col">
-            <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2 shrink-0">
+          <div className="glass rounded-xl border border-white/5 overflow-hidden flex-1 min-h-0 flex flex-col">
+            <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
               <ScrollText size={16} className="text-emerald-400" />
               <h3 className="text-sm font-semibold text-slate-200">Output</h3>
               {loading && (
@@ -650,22 +649,22 @@ export default function Logs() {
               onScroll={handleScroll}
               className="
                 flex-1 overflow-auto p-4
-                bg-slate-950 border-t border-white/[0.04]
+                bg-slate-950 border-t border-white/[0.03]
                 text-xs leading-relaxed
                 font-mono
                 scrollbar-thin select-text
               "
             >
               {loading && filteredLines.length === 0 && (
-                <span className="text-slate-600">Loading logs...</span>
+                <span className="text-slate-500">Loading logs...</span>
               )}
               {!loading && filteredLines.length === 0 && (
-                <span className="text-slate-600">
+                <span className="text-slate-500">
                   {hasFilters ? 'No lines match your filters.' : 'No log data available.'}
                 </span>
               )}
               {filteredLines.map((line, idx) => (
-                <div key={idx} className={`${getLineColorClass(line)} hover:bg-white/[0.02] px-1 -mx-1 rounded`}>
+                <div key={idx} className={`${getLineColorClass(line)} hover:bg-white/[0.03] px-1 -mx-1 rounded`}>
                   {line}
                 </div>
               ))}
@@ -687,8 +686,8 @@ export default function Logs() {
       {/* ARCHIVES TAB */}
       {/* ================================================================= */}
       {activeTab === 'archives' && (
-        <div className="glass-subtle rounded-xl overflow-hidden flex-1 min-h-0 flex flex-col">
-          <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2 shrink-0">
+        <div className="glass rounded-xl border border-white/5 overflow-hidden flex-1 min-h-0 flex flex-col">
+          <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
             <Archive size={16} className="text-emerald-400" />
             <h3 className="text-sm font-semibold text-slate-200">Archived Logs</h3>
             {archives && (
@@ -730,7 +729,7 @@ export default function Logs() {
             {archives && archives.archives.length > 0 && (
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-left">
+                  <tr className="border-b border-white/5 text-left">
                     <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filename</th>
                     <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Size</th>
                     <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date</th>
@@ -740,7 +739,7 @@ export default function Logs() {
                   {archives.archives.map((archive) => (
                     <tr
                       key={archive.filename}
-                      className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+                      className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors"
                     >
                       <td className="px-5 py-3">
                         <span className="font-mono text-slate-300">{archive.filename}</span>

@@ -72,7 +72,7 @@ function DiskRow({ disk, label, onLabelChange }: {
   const displayName = label || disk.mount
 
   return (
-    <div className="group rounded-lg bg-slate-800/30 border border-white/[0.03] hover:border-white/[0.06] p-3.5 transition-all duration-200">
+    <div className="group rounded-lg bg-slate-800/30 border border-white/[0.03] hover:border-white/5 p-3.5 transition-all duration-200">
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <HardDrive size={14} className={percentTextColor(pct)} />
@@ -104,7 +104,7 @@ function DiskRow({ disk, label, onLabelChange }: {
               )}
               <button
                 onClick={() => { setEditValue(label); setEditing(true) }}
-                className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-400 transition-opacity"
                 title="Rename"
               >
                 <Pencil size={10} />
@@ -142,7 +142,7 @@ function DiskRow({ disk, label, onLabelChange }: {
           <span className="text-slate-200">{disk.used}</span>
           <span className="text-slate-500">/</span>
           <span className="text-slate-400">{disk.total}</span>
-          <span className="text-slate-600">|</span>
+          <span className="text-slate-500">|</span>
           <span className="text-slate-400">{disk.available} free</span>
         </div>
 
@@ -162,7 +162,7 @@ function DiskRow({ disk, label, onLabelChange }: {
 
       {/* Device path */}
       {label && (
-        <div className="mt-1 text-[10px] text-slate-600 font-mono truncate" title={disk.device}>
+        <div className="mt-1 text-[10px] text-slate-500 font-mono truncate" title={disk.device}>
           {disk.mount}
         </div>
       )}
@@ -232,7 +232,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
                 )}
                 <button
                   onClick={() => { setEditValue(label); setEditing(true) }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-400 transition-opacity"
                   title="Rename"
                 >
                   <Pencil size={10} />
@@ -265,7 +265,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
             <span className="text-slate-200">{serverDisk.used}</span>
             <span className="text-slate-500">/</span>
             <span className="text-slate-400">{serverDisk.total}</span>
-            <span className="text-slate-600">|</span>
+            <span className="text-slate-500">|</span>
             <span className="text-slate-400">{serverDisk.available} free</span>
           </div>
           <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden">
@@ -277,7 +277,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
           <span>{serverDisk.available} free</span>
         </div>
         {label && (
-          <div className="mt-1 text-[10px] text-slate-600 font-mono truncate" title={serverDisk.device}>{custom.mount}</div>
+          <div className="mt-1 text-[10px] text-slate-500 font-mono truncate" title={serverDisk.device}>{custom.mount}</div>
         )}
       </div>
     )
@@ -313,7 +313,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
               </span>
               <button
                 onClick={() => { setEditValue(label); setEditing(true) }}
-                className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-400 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-400 transition-opacity"
                 title="Rename"
               >
                 <Pencil size={10} />
@@ -322,7 +322,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 text-[10px] text-slate-600">
+      <div className="flex items-center gap-2 text-[10px] text-slate-500">
         <span className="font-mono">{custom.mount}</span>
         <span className="text-slate-700">—</span>
         <span className="italic">Not mounted or no data from server</span>
@@ -382,7 +382,7 @@ export default function DiskMonitor({ disks }: { disks: DiskInfo[] }) {
           <HardDrive size={14} className="text-cyan-400" />
           Disk Usage
         </h3>
-        <span className="text-[11px] text-slate-600">
+        <span className="text-[11px] text-slate-500">
           {totalMounts} mount{totalMounts !== 1 ? 's' : ''}
           {customDisks.length > 0 && (
             <span className="text-violet-400/50 ml-1">({customDisks.length} custom)</span>

@@ -92,7 +92,6 @@ const navItems: NavItem[] = [
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
   { id: 'logs', label: 'Logs', icon: ScrollText, section: 'system' },
   { id: 'environment', label: 'Environment', icon: FileCode, section: 'system' },
-  { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
   { id: 'diagnostics', label: 'Diagnostics', icon: Shield, section: 'system' },
   { id: 'system', label: 'System', icon: Monitor, section: 'system' },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
@@ -104,6 +103,7 @@ const navItems: NavItem[] = [
   { id: 'automations', label: 'Automations', icon: Bot, section: 'system' },
   { id: 'snapshots', label: 'Snapshots', icon: Camera, section: 'system' },
   { id: 'export', label: 'Export', icon: Download, section: 'system' },
+  { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]
 
@@ -225,13 +225,13 @@ export function Sidebar() {
       className={`
         relative flex flex-col h-full
         bg-slate-900/60 backdrop-blur-2xl
-        border-r border-white/[0.06]
+        border-r border-white/5
         transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
         ${sidebarCollapsed ? 'w-[52px] md:w-[68px]' : 'w-[220px]'}
       `}
     >
       {/* Brand area */}
-      <div className="flex items-center gap-3 px-2 md:px-4 h-11 md:h-14 border-b border-white/[0.06] shrink-0">
+      <div className="flex items-center gap-3 px-2 md:px-4 h-11 md:h-14 border-b border-white/5 shrink-0">
         <div className="relative flex items-center justify-center w-9 h-9 rounded-xl shrink-0 border accent-text" style={{ backgroundColor: 'rgb(var(--color-accent) / 0.1)', borderColor: 'rgb(var(--color-accent) / 0.1)' }}>
           <Container size={18} strokeWidth={2.2} />
           <div className="absolute inset-0 rounded-xl blur-sm" style={{ backgroundColor: 'rgb(var(--color-accent) / 0.05)' }} />
@@ -245,14 +245,14 @@ export function Sidebar() {
             <span className="text-sm font-bold tracking-wide text-gradient neon-emerald whitespace-nowrap">
               {projectName}
             </span>
-            <p className="text-[10px] text-slate-600 -mt-0.5 whitespace-nowrap">{projectSubtitle}</p>
+            <p className="text-[10px] text-slate-500 -mt-0.5 whitespace-nowrap">{projectSubtitle}</p>
           </div>
         )}
       </div>
 
       {/* Server Switcher */}
       {!sidebarCollapsed && (
-        <div className="px-2 py-2 border-b border-white/[0.06]">
+        <div className="px-2 py-2 border-b border-white/5">
           <ServerSwitcher />
         </div>
       )}
@@ -278,11 +278,11 @@ export function Sidebar() {
         </div>
 
         {/* Divider */}
-        <div className={`my-3 mx-3 border-t border-white/[0.04] ${sidebarCollapsed ? 'mx-1' : ''}`} />
+        <div className={`my-3 mx-3 border-t border-white/[0.03] ${sidebarCollapsed ? 'mx-1' : ''}`} />
 
         {/* System section */}
         {!sidebarCollapsed && (
-          <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+          <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             System
           </p>
         )}
@@ -304,14 +304,14 @@ export function Sidebar() {
       </nav>
 
       {/* Collapse toggle */}
-      <div className="shrink-0 border-t border-white/[0.06] p-2">
+      <div className="shrink-0 border-t border-white/5 p-2">
         <button
           onClick={toggleSidebar}
           className="
             flex items-center justify-center w-full
             rounded-lg p-2.5
             text-slate-500 hover:text-slate-300
-            hover:bg-white/[0.06]
+            hover:bg-white/5
             transition-all duration-200
             no-drag press
           "
@@ -364,7 +364,7 @@ function NavButton({
         ${
           isActive
             ? 'accent-bg-subtle accent-text'
-            : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-300'
+            : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
         }
       `}
     >
@@ -386,7 +386,7 @@ function NavButton({
         className={`shrink-0 transition-all duration-200 ${
           isActive
             ? 'accent-text accent-glow'
-            : 'text-slate-600 group-hover:text-slate-400'
+            : 'text-slate-500 group-hover:text-slate-400'
         }`}
       />
 

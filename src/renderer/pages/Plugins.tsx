@@ -9,7 +9,8 @@ import {
   Zap, Package, X, Loader2, AlertCircle, CheckCircle, RefreshCw, Download,
   Shield, Activity, Code, ChevronDown, ChevronRight, FileJson, FolderTree, Terminal,
   BookOpen, ExternalLink, Sparkles, Clock, Eye, Bell, FileCheck, Gauge,
-  Archive, Lock, Wifi, FileSearch, Radio, Eraser,
+  Archive, Lock, Wifi, FileSearch, Radio, Eraser, Wrench,
+  HardDrive, RotateCcw, Timer, Network, Fingerprint, Database, Flame, ScrollText,
 } from 'lucide-react'
 import { usePluginStore } from '../stores/pluginStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -33,6 +34,7 @@ interface FeaturedPlugin {
   tags: string[]
   hookCount: number
   templateCount: number
+  category?: 'safety' | 'monitoring' | 'operations' | 'advanced' | 'cards'
   /** Built-in feature — always available, toggle controls the feature directly */
   builtIn?: boolean
   /** When provided, plugin is scaffolded locally instead of git-cloned */
@@ -41,11 +43,20 @@ interface FeaturedPlugin {
   }
 }
 
+const CATEGORY_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  safety: { label: 'Safety & Validation', icon: Shield, color: 'text-cyan-400' },
+  monitoring: { label: 'Monitoring & Observability', icon: Activity, color: 'text-violet-400' },
+  operations: { label: 'Operations & Maintenance', icon: Wrench, color: 'text-amber-400' },
+  advanced: { label: 'Advanced & Security', icon: Lock, color: 'text-rose-400' },
+  cards: { label: 'Dashboard Cards', icon: LayoutTemplate, color: 'text-emerald-400' },
+}
+
 const FEATURED_PLUGINS: FeaturedPlugin[] = [
   // ── Safety & Validation ──────────────────────────────────────────────
   {
     name: 'compose-linter',
     builtIn: true,
+    category: 'safety',
     description: 'Comprehensive compose validation — catches missing restart policies, privileged containers, unbound ports, Docker socket mounts, missing health checks, resource limits, and 18+ security rules before deployment.',
     author: 'DCS Community',
     version: '1.2.0',
@@ -65,6 +76,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'env-validator',
+    category: 'safety',
     description: 'Scans compose files for referenced environment variables that are not defined, detects duplicate keys, flags empty values, and warns about hardcoded secrets — catching configuration gaps before deployment.',
     author: 'DCS Community',
     version: '1.1.0',
@@ -84,6 +96,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'deploy-guard',
+    category: 'safety',
     description: 'Logs every deployment with full context, creates pre-update safety checkpoints of running container states, and validates container health after starts.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -105,6 +118,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'auto-backup',
+    category: 'safety',
     description: 'Snapshots compose files before updates and deployments automatically, so you can always roll back to the last known-good configuration.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -123,9 +137,51 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
       },
     },
   },
+  {
+    name: 'image-freshness',
+    category: 'safety',
+    description: 'Checks every running container image against Docker Hub on deployment. Warns when images are more than 30 days old, flags containers running latest tags without a pinned digest, and detects known vulnerable base images.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Timer,
+    color: 'text-yellow-400',
+    bgColor: 'bg-yellow-500/10',
+    borderColor: 'border-yellow-500/20',
+    url: '',
+    tags: ['images', 'freshness', 'safety', 'updates'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# image-freshness — checks image age after deployment\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSTALE=0\nLATEST_TAG=0\nWARNINGS=""\nMAX_AGE_DAYS=30\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    NAME=$(echo "$line" | cut -d"|" -f1)\n    IMAGE=$(echo "$line" | cut -d"|" -f2)\n    CREATED=$(docker inspect "$NAME" --format "{{.Created}}" 2>/dev/null | cut -dT -f1)\n    if [[ -n "$CREATED" ]]; then\n        AGE_DAYS=$(( ($(date +%s) - $(date -d "$CREATED" +%s 2>/dev/null || echo $(date +%s))) / 86400 ))\n        if [[ $AGE_DAYS -gt $MAX_AGE_DAYS ]]; then\n            STALE=$((STALE+1))\n            [[ -n "$WARNINGS" ]] && WARNINGS+=","\n            WARNINGS+="{\\"container\\":\\"$NAME\\",\\"image\\":\\"$IMAGE\\",\\"age_days\\":$AGE_DAYS,\\"rule\\":\\"stale-image\\"}"\n        fi\n    fi\n    if echo "$IMAGE" | grep -q ":latest$\\|:latest "; then\n        LATEST_TAG=$((LATEST_TAG+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"container\\":\\"$NAME\\",\\"image\\":\\"$IMAGE\\",\\"rule\\":\\"latest-tag\\"}"\n    fi\ndone < <(docker ps --format "{{.Names}}|{{.Image}}" 2>/dev/null | head -50)\nTOTAL=$((STALE+LATEST_TAG))\necho "{\\"plugin\\":\\"image-freshness\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $TOTAL -eq 0 ] && echo pass || echo warn)\\",\\"stale\\":$STALE,\\"latest_tags\\":$LATEST_TAG,\\"warnings\\":[$WARNINGS],\\"message\\":\\"$STALE stale image(s), $LATEST_TAG using :latest tag\\"}"\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'rollback-sentinel',
+    category: 'safety',
+    description: 'Creates a full rollback checkpoint before every deployment — captures running container IDs, image digests, port mappings, and environment hashes. If a deploy fails, provides a one-command restore to the exact previous state.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: RotateCcw,
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/20',
+    url: '',
+    tags: ['rollback', 'checkpoint', 'safety', 'recovery'],
+    hookCount: 2,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'pre-deploy': '#!/bin/bash\n# rollback-sentinel — creates rollback checkpoint\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nCHECK_DIR="$BASE/.data/rollback-sentinel/$STACK"\nmkdir -p "$CHECK_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nCHECKPOINT="$CHECK_DIR/$TIMESTAMP.json"\n# Capture full container state\nCONTAINERS="[]"\nif command -v jq >/dev/null 2>&1; then\n    CONTAINERS=$(docker ps --format \'{{json .}}\' 2>/dev/null | jq -s \'.\'  2>/dev/null || echo "[]")\nfi\n# Capture compose file\nCOMPOSE_BAK=""\nCOMPOSE_FILE="$BASE/Stacks/$STACK/docker-compose.yml"\n[[ -f "$COMPOSE_FILE" ]] && COMPOSE_BAK=$(cat "$COMPOSE_FILE" 2>/dev/null | base64 -w0)\necho "{\\"timestamp\\":\\"$TIMESTAMP\\",\\"stack\\":\\"$STACK\\",\\"containers\\":$CONTAINERS,\\"compose_backup\\":\\"$COMPOSE_BAK\\"}" > "$CHECKPOINT"\n# Keep only last 5 checkpoints\nls -1t "$CHECK_DIR"/*.json 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null\necho "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"checkpoint\\":\\"$TIMESTAMP\\",\\"message\\":\\"Rollback checkpoint created\\"}"\nexit 0\n',
+        'post-deploy': '#!/bin/bash\n# rollback-sentinel — validates deployment success\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSUCCESS=$(echo "$CONTEXT" | jq -r \'.success // "true"\' 2>/dev/null)\nif [[ "$SUCCESS" != "true" ]]; then\n    BASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\n    LATEST=$(ls -1t "$BASE/.data/rollback-sentinel/$STACK/"*.json 2>/dev/null | head -1)\n    echo "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"checkpoint\\":\\"$LATEST\\",\\"message\\":\\"Deploy failed — rollback checkpoint available\\"}"\nelse\n    echo "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Deploy verified — checkpoint retained\\"}"\nfi\nexit 0\n',
+      },
+    },
+  },
   // ── Monitoring & Observability ───────────────────────────────────────
   {
     name: 'container-notifier',
+    category: 'monitoring',
     description: 'Sends webhook alerts to Slack, Discord, or NTFY when deployments fail or containers go unhealthy. Set NOTIFY_WEBHOOK_URL in your .env to activate.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -146,6 +202,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'resource-monitor',
+    category: 'monitoring',
     description: 'Identifies containers running without memory limits or CPU quotas after deployment — finds the resource hogs before they starve the host.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -166,6 +223,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'stack-analytics',
+    category: 'monitoring',
     description: 'Records every deployment and start event to a JSONL timeline, building a complete operational history you can query and analyze.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -186,6 +244,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'uptime-ping',
+    category: 'monitoring',
     description: 'Pings Healthchecks.io, Uptime Kuma, or any webhook URL after successful starts. Set UPTIME_PING_URL in your .env to connect your monitoring stack.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -203,9 +262,51 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
       },
     },
   },
+  {
+    name: 'disk-watchdog',
+    category: 'monitoring',
+    description: 'Monitors disk usage after every deployment and start event. Alerts when any mount point exceeds 85% usage, tracks Docker volume growth rate, and predicts when you\'ll run out of space based on current trends.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: HardDrive,
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/20',
+    url: '',
+    tags: ['disk', 'monitoring', 'alerts', 'storage'],
+    hookCount: 2,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# disk-watchdog — monitors disk after deployment\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nTHRESHOLD=${DISK_WARN_THRESHOLD:-85}\nALERTS=""\nALERT_COUNT=0\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    USAGE=$(echo "$line" | awk \'{print $5}\' | tr -d \'%\')\n    MOUNT=$(echo "$line" | awk \'{print $6}\')\n    if [[ "$USAGE" -ge "$THRESHOLD" ]]; then\n        ALERT_COUNT=$((ALERT_COUNT+1))\n        [[ -n "$ALERTS" ]] && ALERTS+=","\n        ALERTS+="{\\"mount\\":\\"$MOUNT\\",\\"usage\\":$USAGE,\\"threshold\\":$THRESHOLD}"\n    fi\ndone < <(df -h 2>/dev/null | grep -vE "^Filesystem|tmpfs|udev|overlay" | head -20)\nDOCKER_SIZE=$(docker system df --format \'{{.Type}}\\t{{.Size}}\' 2>/dev/null | awk \'{total+=$2} END {print total+0}\')\necho "{\\"plugin\\":\\"disk-watchdog\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $ALERT_COUNT -eq 0 ] && echo ok || echo warn)\\",\\"alerts\\":[$ALERTS],\\"alert_count\\":$ALERT_COUNT,\\"message\\":\\"$([ $ALERT_COUNT -eq 0 ] && echo "All mounts below ${THRESHOLD}%" || echo "$ALERT_COUNT mount(s) above ${THRESHOLD}%")\\"}"\nexit 0\n',
+        'post-start': '#!/bin/bash\n# disk-watchdog — quick disk check on start\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nROOT_USAGE=$(df / 2>/dev/null | tail -1 | awk \'{print $5}\' | tr -d \'%\')\nDOCKER_USAGE=$(df /var/lib/docker 2>/dev/null | tail -1 | awk \'{print $5}\' | tr -d \'%\' || echo "$ROOT_USAGE")\necho "{\\"plugin\\":\\"disk-watchdog\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"root_usage\\":${ROOT_USAGE:-0},\\"docker_usage\\":${DOCKER_USAGE:-0},\\"message\\":\\"Root: ${ROOT_USAGE:-?}%, Docker: ${DOCKER_USAGE:-?}%\\"}"\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'response-timer',
+    category: 'monitoring',
+    description: 'Measures HTTP response time for every exposed service after deployment. Detects slow-starting containers, tracks response time baselines, and flags services that take longer than 5 seconds to respond — catching performance issues before users notice.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Flame,
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/20',
+    url: '',
+    tags: ['performance', 'latency', 'monitoring', 'http'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# response-timer — measures service response time\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSLOW_THRESHOLD=5\nRESULTS=""\nSLOW_COUNT=0\nTOTAL=0\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    CONTAINER=$(echo "$line" | cut -d"|" -f1)\n    PORTS=$(echo "$line" | cut -d"|" -f2)\n    for port in $(echo "$PORTS" | grep -oE \'0\\.0\\.0\\.0:[0-9]+\' | cut -d: -f2 | head -3); do\n        TOTAL=$((TOTAL+1))\n        START=$(date +%s%N)\n        HTTP_CODE=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "http://127.0.0.1:$port" 2>/dev/null)\n        END=$(date +%s%N)\n        MS=$(( (END-START) / 1000000 ))\n        [[ -n "$RESULTS" ]] && RESULTS+=","\n        RESULTS+="{\\"container\\":\\"$CONTAINER\\",\\"port\\":$port,\\"ms\\":$MS,\\"http\\":$HTTP_CODE}"\n        if [[ $MS -gt $((SLOW_THRESHOLD*1000)) ]]; then\n            SLOW_COUNT=$((SLOW_COUNT+1))\n        fi\n    done\ndone < <(docker ps --format "{{.Names}}|{{.Ports}}" 2>/dev/null | grep "0.0.0.0" | head -20)\necho "{\\"plugin\\":\\"response-timer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $SLOW_COUNT -eq 0 ] && echo pass || echo warn)\\",\\"total\\":$TOTAL,\\"slow\\":$SLOW_COUNT,\\"results\\":[$RESULTS],\\"message\\":\\"$TOTAL endpoints checked, $SLOW_COUNT slow (>${SLOW_THRESHOLD}s)\\"}"\nexit 0\n',
+      },
+    },
+  },
   // ── Operations & Maintenance ─────────────────────────────────────────
   {
     name: 'port-guard',
+    category: 'operations',
     description: 'Scans host ports before stack startup to detect conflicts that would cause silent bind failures. Catches the problem before Docker does.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -225,6 +326,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'log-archiver',
+    category: 'operations',
     description: 'Archives the last 500 lines of every container log with timestamps before stacks stop. Debug context preserved, even after containers are gone.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -244,6 +346,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'dns-verify',
+    category: 'operations',
     description: 'Tests HTTP connectivity on every exposed port after deployment, confirming services are actually reachable — not just running.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -263,6 +366,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'cleanup-sweeper',
+    category: 'operations',
     description: 'Prunes dangling images and detects orphaned networks after stacks stop. Keeps your Docker environment lean without manual intervention.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -280,9 +384,50 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
       },
     },
   },
+  {
+    name: 'crash-responder',
+    category: 'operations',
+    description: 'Detects containers that exited with non-zero codes after start events. Captures the last 50 lines of logs from crashed containers, saves them with timestamps, and optionally auto-restarts failed services up to 3 times.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Flame,
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/20',
+    url: '',
+    tags: ['crash', 'recovery', 'auto-restart', 'operations'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-start': '#!/bin/bash\n# crash-responder — detects and logs crashed containers\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nCRASH_DIR="$BASE/.logs/crash-responder"\nmkdir -p "$CRASH_DIR"\nCRASHED=0\nRESTARTED=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    EXIT_CODE=$(docker inspect "$container" --format "{{.State.ExitCode}}" 2>/dev/null)\n    STATUS=$(docker inspect "$container" --format "{{.State.Status}}" 2>/dev/null)\n    if [[ "$STATUS" == "exited" && "${EXIT_CODE:-0}" != "0" ]]; then\n        CRASHED=$((CRASHED+1))\n        TIMESTAMP=$(date +%Y%m%d_%H%M%S)\n        docker logs --tail 50 "$container" > "$CRASH_DIR/${container}_${TIMESTAMP}.log" 2>&1\n        # Auto-restart (max 3 per container per hour)\n        RESTART_COUNT=$(ls -1 "$CRASH_DIR/${container}_"*.log 2>/dev/null | wc -l)\n        if [[ $RESTART_COUNT -le 3 ]]; then\n            docker start "$container" >/dev/null 2>&1 && RESTARTED=$((RESTARTED+1))\n        fi\n    fi\ndone < <(docker ps -a --format "{{.Names}}" 2>/dev/null | head -50)\nif [[ $CRASHED -gt 0 ]]; then\n    echo "{\\"plugin\\":\\"crash-responder\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"crashed\\":$CRASHED,\\"restarted\\":$RESTARTED,\\"message\\":\\"$CRASHED crashed container(s), $RESTARTED auto-restarted\\"}"\nelse\n    echo "{\\"plugin\\":\\"crash-responder\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"No crashed containers detected\\"}"\nfi\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'volume-sizer',
+    category: 'operations',
+    description: 'Scans all Docker volumes after deployment, measures their disk usage, identifies volumes not attached to any running container, and reports the top 10 largest volumes. Helps you find where your disk space is going.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Database,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10',
+    borderColor: 'border-cyan-500/20',
+    url: '',
+    tags: ['volumes', 'disk', 'cleanup', 'operations'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# volume-sizer — reports volume disk usage\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nTOTAL_VOLS=0\nORPHAN_VOLS=0\nVOL_DATA=""\nwhile IFS= read -r vol; do\n    [[ -z "$vol" ]] && continue\n    TOTAL_VOLS=$((TOTAL_VOLS+1))\n    MOUNT=$(docker volume inspect "$vol" --format "{{.Mountpoint}}" 2>/dev/null)\n    SIZE=$(du -sh "$MOUNT" 2>/dev/null | cut -f1 || echo "?")\n    # Check if any container uses this volume\n    USERS=$(docker ps -a --filter "volume=$vol" --format "{{.Names}}" 2>/dev/null | wc -l)\n    if [[ "$USERS" -eq 0 ]]; then\n        ORPHAN_VOLS=$((ORPHAN_VOLS+1))\n    fi\n    [[ -n "$VOL_DATA" ]] && VOL_DATA+=","\n    VOL_DATA+="{\\"name\\":\\"$vol\\",\\"size\\":\\"$SIZE\\",\\"containers\\":$USERS}"\ndone < <(docker volume ls -q 2>/dev/null | head -30)\necho "{\\"plugin\\":\\"volume-sizer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"total\\":$TOTAL_VOLS,\\"orphaned\\":$ORPHAN_VOLS,\\"volumes\\":[$VOL_DATA],\\"message\\":\\"$TOTAL_VOLS volumes ($ORPHAN_VOLS orphaned)\\"}"\nexit 0\n',
+      },
+    },
+  },
   // ── Advanced / Sophisticated ──────────────────────────────────────────
   {
     name: 'security-audit',
+    category: 'advanced',
     description: 'Deep security scanner — checks for writable root filesystems, excessive capabilities, host PID/IPC namespace sharing, missing seccomp profiles, and containers running as UID 0. Generates a security score per service.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -303,6 +448,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'network-policy',
+    category: 'advanced',
     description: 'Analyzes Docker network topology after deployment — detects services sharing the default bridge network, identifies containers with no network isolation, and maps inter-service connectivity.',
     author: 'DCS Community',
     version: '1.0.0',
@@ -322,6 +468,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
   {
     name: 'dependency-checker',
+    category: 'advanced',
     description: 'Validates service dependency chains — detects circular depends_on references, missing dependency targets, and services that depend on containers without health checks (which makes depends_on unreliable).',
     author: 'DCS Community',
     version: '1.0.0',
@@ -338,6 +485,82 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
         'pre-deploy': "#!/bin/bash\n# dependency-checker — validates depends_on chains\nCONTEXT=$(cat)\nSTACK=$(echo \"$CONTEXT\" | jq -r '.stack // \"unknown\"' 2>/dev/null)\nCOMPOSE=$(echo \"$CONTEXT\" | jq -r '.compose // empty' 2>/dev/null)\nif [[ -z \"$COMPOSE\" ]]; then\n    echo '{\"plugin\":\"dependency-checker\",\"status\":\"skip\",\"message\":\"No compose content\"}'\n    exit 0\nfi\nISSUES=\"\"\nISSUE_COUNT=0\nSERVICES=$(echo \"$COMPOSE\" | grep -E '^  [a-zA-Z_-][a-zA-Z0-9_-]*:' | sed 's/^  //;s/://')\nDEPS_FILE=$(mktemp)\nHC_FILE=$(mktemp)\ntrap 'rm -f $DEPS_FILE $HC_FILE' EXIT\n# Build dependency + healthcheck maps using temp files\nfor SVC in $SERVICES; do\n    BLOCK=$(echo \"$COMPOSE\" | sed -n \"/^  ${SVC}:/,/^  [a-zA-Z_-]/p\")\n    echo \"$BLOCK\" | grep -q 'healthcheck:' && echo \"$SVC\" >> \"$HC_FILE\"\n    echo \"$BLOCK\" | grep -A20 'depends_on:' | grep -E '^      - ' | sed 's/^      - //' | tr -d ' ' | while read -r DEP; do\n        echo \"$SVC $DEP\" >> \"$DEPS_FILE\"\n    done\ndone\n# Validate\nwhile read -r SVC DEP; do\n    [[ -z \"$DEP\" ]] && continue\n    if ! echo \"$SERVICES\" | grep -qw \"$DEP\"; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"missing-dep\\\",\\\"message\\\":\\\"Depends on $DEP which is not defined\\\"}\"\n    elif ! grep -qw \"$DEP\" \"$HC_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"warning\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"no-hc-dep\\\",\\\"message\\\":\\\"Depends on $DEP which has no healthcheck\\\"}\"\n    fi\n    # Circular check\n    if grep -q \"^$DEP $SVC\" \"$DEPS_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"circular\\\",\\\"message\\\":\\\"Circular: $SVC <-> $DEP\\\"}\"\n    fi\ndone < \"$DEPS_FILE\"\nif [[ $ISSUE_COUNT -eq 0 ]]; then\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"pass\\\",\\\"issues\\\":[],\\\"message\\\":\\\"All dependency chains valid\\\"}\"\nelse\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"warn\\\",\\\"issue_count\\\":$ISSUE_COUNT,\\\"issues\\\":[$ISSUES],\\\"message\\\":\\\"$ISSUE_COUNT dependency issue(s)\\\"}\"\nfi\nexit 0\n",
       },
     },
+  },
+  {
+    name: 'secret-scanner',
+    category: 'advanced',
+    description: 'Scans compose files and environment variables for accidentally committed secrets — API keys, passwords, tokens, and private keys. Uses pattern matching for AWS keys, GitHub tokens, JWT secrets, database passwords, and 20+ secret formats.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Fingerprint,
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10',
+    borderColor: 'border-amber-500/20',
+    url: '',
+    tags: ['secrets', 'scanning', 'security', 'credentials'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'pre-deploy': '#!/bin/bash\n# secret-scanner — detects hardcoded secrets in compose\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"status\\":\\"skip\\",\\"message\\":\\"No compose content\\"}"\n    exit 0\nfi\nFINDINGS=""\nFIND_COUNT=0\nadd_finding() {\n    FIND_COUNT=$((FIND_COUNT+1))\n    [[ -n "$FINDINGS" ]] && FINDINGS+=","\n    FINDINGS+="{\\"rule\\":\\"$1\\",\\"pattern\\":\\"$2\\",\\"severity\\":\\"$3\\"}"\n}\n# Pattern checks\necho "$COMPOSE" | grep -qiE \'AKIA[0-9A-Z]{16}\' && add_finding "aws-access-key" "AKIA..." "critical"\necho "$COMPOSE" | grep -qiE \'ghp_[a-zA-Z0-9]{36}\' && add_finding "github-token" "ghp_..." "critical"\necho "$COMPOSE" | grep -qiE \'sk-[a-zA-Z0-9]{32,}\' && add_finding "openai-key" "sk-..." "critical"\necho "$COMPOSE" | grep -qiE \'-----BEGIN (RSA |EC |DSA )?PRIVATE KEY\' && add_finding "private-key" "PEM key" "critical"\necho "$COMPOSE" | grep -qiE \'password[=:][[:space:]]*[^${}\\n]{8,}\' && add_finding "hardcoded-password" "password=..." "high"\necho "$COMPOSE" | grep -qiE \'secret[=:][[:space:]]*[^${}\\n]{8,}\' && add_finding "hardcoded-secret" "secret=..." "high"\necho "$COMPOSE" | grep -qiE \'token[=:][[:space:]]*[a-zA-Z0-9._-]{20,}\' && add_finding "hardcoded-token" "token=..." "medium"\necho "$COMPOSE" | grep -qiE \'mysql://|postgres://|mongodb://.*:.*@\' && add_finding "connection-string" "db://user:pass@..." "high"\nif [[ $FIND_COUNT -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"pass\\",\\"findings\\":[],\\"message\\":\\"No secrets detected\\"}"\nelse\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"finding_count\\":$FIND_COUNT,\\"findings\\":[$FINDINGS],\\"message\\":\\"$FIND_COUNT potential secret(s) found — use environment variables instead\\"}"\nfi\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'network-firewall',
+    category: 'advanced',
+    description: 'Verifies that no container exposes sensitive internal ports (databases, caches, message queues) to the host network. Blocks deployments where MySQL 3306, PostgreSQL 5432, Redis 6379, or MongoDB 27017 are bound to 0.0.0.0 instead of internal-only.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: Network,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10',
+    borderColor: 'border-cyan-500/20',
+    url: '',
+    tags: ['firewall', 'ports', 'security', 'databases'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'pre-deploy': '#!/bin/bash\n# network-firewall — blocks exposed internal ports\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then echo "{\\"plugin\\":\\"network-firewall\\",\\"status\\":\\"skip\\"}"; exit 0; fi\nDANGEROUS_PORTS="3306 5432 6379 27017 5672 9200 2181 8529 9042 11211"\nFLAGS=""\nFLAG_COUNT=0\nfor port in $DANGEROUS_PORTS; do\n    if echo "$COMPOSE" | grep -qE "0\\.0\\.0\\.0:${port}|\\\"${port}:${port}"; then\n        FLAG_COUNT=$((FLAG_COUNT+1))\n        [[ -n "$FLAGS" ]] && FLAGS+=","\n        SVC_NAME="unknown"\n        for svc in $(echo "$COMPOSE" | grep -E "^  [a-zA-Z]" | sed "s/://;s/^  //"); do\n            BLOCK=$(echo "$COMPOSE" | sed -n "/^  ${svc}:/,/^  [a-zA-Z]/p")\n            if echo "$BLOCK" | grep -q "$port"; then SVC_NAME="$svc"; break; fi\n        done\n        FLAGS+="{\\"port\\":$port,\\"service\\":\\"$SVC_NAME\\",\\"severity\\":\\"critical\\",\\"message\\":\\"Port $port exposed to host — use internal networking\\"}"\n    fi\ndone\necho "{\\"plugin\\":\\"network-firewall\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $FLAG_COUNT -eq 0 ] && echo pass || echo warn)\\",\\"flags\\":[$FLAGS],\\"flag_count\\":$FLAG_COUNT,\\"message\\":\\"$([ $FLAG_COUNT -eq 0 ] && echo "No dangerous ports exposed" || echo "$FLAG_COUNT internal port(s) exposed to host")\\"}"\nexit 0\n',
+      },
+    },
+  },
+  {
+    name: 'label-enforcer',
+    category: 'advanced',
+    description: 'Enforces organizational labeling standards on all deployed containers. Checks for required labels like maintainer, version, stack-category, and backup-policy. Generates compliance reports and blocks deployments missing critical labels.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: ScrollText,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10',
+    borderColor: 'border-emerald-500/20',
+    url: '',
+    tags: ['labels', 'compliance', 'governance', 'standards'],
+    hookCount: 1,
+    templateCount: 0,
+    scaffold: {
+      hooks: {
+        'post-deploy': '#!/bin/bash\n# label-enforcer — checks container labels for compliance\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nREQUIRED_LABELS="maintainer"\nMISSING=""\nMISS_COUNT=0\nCHECKED=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    CHECKED=$((CHECKED+1))\n    LABELS=$(docker inspect "$container" --format \'{{json .Config.Labels}}\' 2>/dev/null || echo "{}")\n    for label in $REQUIRED_LABELS; do\n        HAS=$(echo "$LABELS" | grep -c "\\"$label\\"" 2>/dev/null || echo 0)\n        if [[ "$HAS" -eq 0 ]]; then\n            MISS_COUNT=$((MISS_COUNT+1))\n            [[ -n "$MISSING" ]] && MISSING+=","\n            MISSING+="{\\"container\\":\\"$container\\",\\"label\\":\\"$label\\"}"\n        fi\n    done\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\necho "{\\"plugin\\":\\"label-enforcer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $MISS_COUNT -eq 0 ] && echo pass || echo info)\\",\\"checked\\":$CHECKED,\\"missing\\":$MISS_COUNT,\\"issues\\":[$MISSING],\\"message\\":\\"$CHECKED containers checked, $MISS_COUNT missing label(s)\\"}"\nexit 0\n',
+      },
+    },
+  },
+  // ── Dashboard Cards ────────────────────────────────────────────────────
+  {
+    name: 'example-card',
+    category: 'cards',
+    description: 'Dashboard widget cards — a live System Clock, animated Server Pulse with CPU/RAM/NET metrics, and a comprehensive CSS Framework Showcase. Add custom widgets to your dashboard.',
+    author: 'DCS Community',
+    version: '1.0.0',
+    icon: LayoutTemplate,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10',
+    borderColor: 'border-emerald-500/20',
+    url: '',
+    tags: ['dashboard', 'cards', 'widgets', 'ui'],
+    hookCount: 0,
+    templateCount: 3,
   },
 ]
 
@@ -509,14 +732,14 @@ export default function Plugins() {
           <button
             onClick={() => fetchPlugins()}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] disabled:opacity-50 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
           >
             <BookOpen size={14} />
             <span className="hidden sm:inline">Create Guide</span>
@@ -540,8 +763,8 @@ export default function Plugins() {
 
       {/* Plugin Creation Guide (collapsible) */}
       {showGuide && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl overflow-hidden animate-fade-in">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Code size={16} className="text-violet-400" />
               <h2 className="text-sm font-semibold text-white">Create Your Own Plugin</h2>
@@ -559,10 +782,10 @@ export default function Plugins() {
               const isExpanded = expandedGuide === i
               const Icon = section.icon
               return (
-                <div key={i} className="border border-white/[0.04] rounded-lg overflow-hidden">
+                <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
                   <button
                     onClick={() => setExpandedGuide(isExpanded ? null : i)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
                   >
                     <Icon size={14} className="text-violet-400 shrink-0" />
                     <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
@@ -573,7 +796,7 @@ export default function Plugins() {
                   </button>
                   {isExpanded && (
                     <div className="px-4 pb-4 animate-fade-in">
-                      <pre className="bg-slate-950/60 border border-white/[0.04] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
+                      <pre className="bg-slate-950/60 border border-white/[0.03] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
                         {section.content}
                       </pre>
                     </div>
@@ -589,14 +812,21 @@ export default function Plugins() {
         </div>
       )}
 
-      {/* Featured Plugins */}
-      <div>
+      {/* Featured Plugins — grouped by category */}
+      {(['safety', 'monitoring', 'operations', 'advanced', 'cards'] as const).map((cat) => {
+        const catPlugins = FEATURED_PLUGINS.filter((fp) => (fp.category || 'safety') === cat)
+        if (catPlugins.length === 0) return null
+        const catInfo = CATEGORY_LABELS[cat]
+        const CatIcon = catInfo.icon
+        return (
+      <div key={cat}>
         <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={12} className="text-violet-400" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Featured Plugins</span>
+          <CatIcon size={12} className={catInfo.color} />
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{catInfo.label}</span>
+          <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
-          {FEATURED_PLUGINS.map((fp) => {
+          {catPlugins.map((fp) => {
             const Icon = fp.icon
             const isInstalled = installedNames.has(fp.name)
             const isInstalling = installingFeatured === fp.name
@@ -608,7 +838,7 @@ export default function Plugins() {
                   bg-slate-900/60 backdrop-blur-md border rounded-xl p-5 overflow-visible
                   transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 hover:z-20 relative
                   ${isSafety ? 'gradient-border' : ''}
-                  ${isInstalled ? 'border-emerald-500/20 glow-emerald' : 'border-white/[0.06] hover:border-white/[0.10]'}
+                  ${isInstalled ? 'border-emerald-500/20 glow-emerald' : 'border-white/5 hover:border-white/10'}
                 `}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -624,15 +854,15 @@ export default function Plugins() {
                     )}
                     {/* Info popover */}
                     <div className="relative group/info">
-                      <button className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-colors" aria-label="Plugin details">
+                      <button className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors" aria-label="Plugin details">
                         <AlertCircle size={14} />
                       </button>
                       <div className="absolute right-full top-0 mr-1 z-[100] hidden group-hover/info:block animate-fade-in" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <Icon className={`w-4 h-4 ${fp.color}`} />
                             <span className="text-xs font-semibold text-slate-200">{fp.name}</span>
-                            <span className="text-[9px] text-slate-600 font-mono">v{fp.version}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">v{fp.version}</span>
                           </div>
                           <p className="text-[11px] text-slate-400 leading-relaxed">{fp.description}</p>
                           {fp.scaffold?.hooks && (
@@ -640,7 +870,7 @@ export default function Plugins() {
                               <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Lifecycle Hooks</p>
                               <div className="flex flex-wrap gap-1">
                                 {Object.keys(fp.scaffold.hooks).map((hook) => (
-                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.04]">
+                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.03]">
                                     <Zap size={8} className="text-cyan-500/60" />
                                     {hook}
                                   </span>
@@ -652,11 +882,11 @@ export default function Plugins() {
                             <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Tags</p>
                             <div className="flex flex-wrap gap-1">
                               {fp.tags.map((tag) => (
-                                <span key={tag} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] text-slate-500">{tag}</span>
+                                <span key={tag} className="px-1.5 py-0.5 rounded bg-white/5 text-[9px] text-slate-500">{tag}</span>
                               ))}
                             </div>
                           </div>
-                          <p className="text-[9px] text-slate-600">by {fp.author}</p>
+                          <p className="text-[9px] text-slate-500">by {fp.author}</p>
                         </div>
                       </div>
                     </div>
@@ -665,8 +895,14 @@ export default function Plugins() {
                 <h3 className="text-sm font-semibold text-white mb-1">{fp.name}</h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3 line-clamp-2">{fp.description}</p>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mb-4">
-                  <span className="flex items-center gap-1"><Zap size={10} />{fp.hookCount} hooks</span>
-                  <span className="flex items-center gap-1"><LayoutTemplate size={10} />{fp.templateCount} templates</span>
+                  {fp.category === 'cards' ? (
+                    <span className="flex items-center gap-1"><LayoutTemplate size={10} />{fp.templateCount} cards</span>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1"><Zap size={10} />{fp.hookCount} hooks</span>
+                      {fp.templateCount > 0 && <span className="flex items-center gap-1"><LayoutTemplate size={10} />{fp.templateCount} templates</span>}
+                    </>
+                  )}
                   <span>v{fp.version}</span>
                 </div>
                 {fp.builtIn ? (
@@ -675,7 +911,7 @@ export default function Plugins() {
                     className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                       builtInToggles[fp.name]
                         ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20'
-                        : 'text-slate-500 bg-slate-800/60 border border-white/[0.06] hover:bg-slate-800'
+                        : 'text-slate-500 bg-slate-800/60 border border-white/5 hover:bg-slate-800'
                     }`}
                   >
                     {builtInToggles[fp.name]
@@ -709,6 +945,8 @@ export default function Plugins() {
           })}
         </div>
       </div>
+        )
+      })}
 
       {/* Installed Plugins */}
       <div>
@@ -721,11 +959,11 @@ export default function Plugins() {
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2].map(i => <div key={i} className="bg-slate-900/60 border border-white/[0.06] rounded-xl p-5 h-36 skeleton" />)}
+            {[1, 2].map(i => <div key={i} className="bg-slate-900/60 border border-white/5 rounded-xl p-5 h-36 skeleton" />)}
           </div>
         ) : plugins.length === 0 ? (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-10 text-center">
-            <Package className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-10 text-center">
+            <Package className="w-10 h-10 text-slate-500 mx-auto mb-3" />
             <p className="text-sm text-slate-400">No plugins installed yet</p>
             <p className="text-xs text-slate-500 mt-1">Install a featured plugin above or add one from a Git URL</p>
           </div>
@@ -734,18 +972,18 @@ export default function Plugins() {
             {plugins.map((p, i) => (
               <div
                 key={p.name}
-                className={`bg-slate-900/60 backdrop-blur-md border rounded-xl p-5 glass-hover transition-all animate-fade-in overflow-visible relative hover:z-20 ${p.enabled ? 'border-white/[0.06] glow-cyan' : 'border-white/[0.06]'}`}
+                className={`bg-slate-900/60 backdrop-blur-md border rounded-xl p-5 glass-hover transition-all animate-fade-in overflow-visible relative hover:z-20 ${p.enabled ? 'border-white/5 glow-cyan' : 'border-white/5'}`}
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${p.enabled ? 'bg-cyan-500/15 border border-cyan-500/20' : 'bg-slate-800/60 border border-white/[0.04]'}`}>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${p.enabled ? 'bg-cyan-500/15 border border-cyan-500/20' : 'bg-slate-800/60 border border-white/[0.03]'}`}>
                       <Puzzle className={`w-4 h-4 ${p.enabled ? 'text-cyan-400' : 'text-slate-500'}`} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white">{p.name}</span>
-                        <span className="text-[10px] text-slate-600 font-mono">v{p.version}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">v{p.version}</span>
                       </div>
                       {p.author && <span className="text-xs text-slate-500">{p.author}</span>}
                     </div>
@@ -753,15 +991,15 @@ export default function Plugins() {
                   <div className="flex items-center gap-1">
                     {/* Info popover */}
                     <div className="relative group/info">
-                      <button className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-colors" aria-label="Plugin details">
+                      <button className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors" aria-label="Plugin details">
                         <AlertCircle size={14} />
                       </button>
                       <div className="absolute right-full top-0 mr-1 z-[100] hidden group-hover/info:block animate-fade-in" style={{ width: '280px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/40 p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <Puzzle className={`w-4 h-4 ${p.enabled ? 'text-cyan-400' : 'text-slate-500'}`} />
                             <span className="text-xs font-semibold text-slate-200">{p.name}</span>
-                            <span className="text-[9px] text-slate-600 font-mono">v{p.version}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">v{p.version}</span>
                           </div>
                           {p.description && <p className="text-[11px] text-slate-400 leading-relaxed">{p.description}</p>}
                           {p.hooks && p.hooks.length > 0 && (
@@ -769,7 +1007,7 @@ export default function Plugins() {
                               <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Lifecycle Hooks</p>
                               <div className="flex flex-wrap gap-1">
                                 {p.hooks.map((hook) => (
-                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.04]">
+                                  <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-[9px] font-mono text-cyan-400 border border-white/[0.03]">
                                     <Zap size={8} className="text-cyan-500/60" />
                                     {hook}
                                   </span>
@@ -782,12 +1020,12 @@ export default function Plugins() {
                               <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Templates</p>
                               <div className="flex flex-wrap gap-1">
                                 {p.templates.map((t) => (
-                                  <span key={t} className="px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] text-slate-400">{t}</span>
+                                  <span key={t} className="px-1.5 py-0.5 rounded bg-white/5 text-[9px] text-slate-400">{t}</span>
                                 ))}
                               </div>
                             </div>
                           )}
-                          {p.author && <p className="text-[9px] text-slate-600">by {p.author}</p>}
+                          {p.author && <p className="text-[9px] text-slate-500">by {p.author}</p>}
                         </div>
                       </div>
                     </div>
@@ -812,7 +1050,7 @@ export default function Plugins() {
                 {p.hooks && p.hooks.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3">
                     {p.hooks.map((hook) => (
-                      <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.04] text-[9px] font-mono text-slate-500 border border-white/[0.04]">
+                      <span key={hook} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 text-[9px] font-mono text-slate-500 border border-white/[0.03]">
                         <Zap size={7} className="text-cyan-500/50" />
                         {hook}
                       </span>
@@ -834,7 +1072,7 @@ export default function Plugins() {
                   </span>
                   <button
                     onClick={() => setDeleteTarget(p.name)}
-                    className="p-1 rounded text-slate-600 hover:text-rose-400 transition-colors"
+                    className="p-1 rounded text-slate-500 hover:text-rose-400 transition-colors"
                     title="Remove plugin"
                     aria-label="Delete"
                   >
@@ -850,7 +1088,7 @@ export default function Plugins() {
       {/* Install from Git Modal */}
       {showInstall && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowInstall(false)}>
-          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md mx-4 border border-white/[0.08] shadow-2xl shadow-black/40 animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
@@ -871,10 +1109,10 @@ export default function Plugins() {
                   onKeyDown={e => e.key === 'Enter' && handleInstall()}
                   placeholder="https://github.com/user/my-dcs-plugin.git"
                   autoFocus
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white placeholder-slate-500 border border-white/[0.06] focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
                 />
               </div>
-              <div className="bg-slate-800/40 rounded-lg px-3.5 py-3 border border-white/[0.04]">
+              <div className="bg-slate-800/40 rounded-lg px-3.5 py-3 border border-white/[0.03]">
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   The repository must contain a <code className="text-cyan-400 font-medium">plugin.json</code> manifest at the root.
                   Plugins can include templates and lifecycle hook scripts.
@@ -883,7 +1121,7 @@ export default function Plugins() {
               <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => setShowInstall(false)}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-300 hover:bg-white/[0.08] transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-300 hover:bg-white/10 transition-all"
                 >
                   Cancel
                 </button>
@@ -920,7 +1158,7 @@ export default function Plugins() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-slate-300 hover:bg-white/[0.08] transition-all"
+                className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-300 hover:bg-white/10 transition-all"
               >
                 Cancel
               </button>

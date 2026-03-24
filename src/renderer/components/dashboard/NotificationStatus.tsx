@@ -29,10 +29,10 @@ export default function NotificationStatus({ data, error, onRetry, collapsible =
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
         <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">Notifications</h3>
+          <ServerOff size={14} className="text-slate-500" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Notifications</h3>
         </div>
-        <p className="text-xs text-slate-600">Not connected</p>
+        <p className="text-xs text-slate-500">Not connected</p>
       </div>
     )
   }
@@ -86,7 +86,7 @@ export default function NotificationStatus({ data, error, onRetry, collapsible =
 
   return (
     <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/[0.1] transition-colors"
+      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
       onClick={collapsible ? undefined : () => setCurrentPage('notifications')}
     >
       <div
@@ -118,7 +118,7 @@ export default function NotificationStatus({ data, error, onRetry, collapsible =
               {recent.map((h, i) => {
                 const ok = h.status_code >= 200 && h.status_code < 300
                 return (
-                  <div key={i} className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.04] px-2.5 py-1.5">
+                  <div key={i} className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.03] px-2.5 py-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
                         h.type === 'error' ? 'bg-rose-500/10 text-rose-400'

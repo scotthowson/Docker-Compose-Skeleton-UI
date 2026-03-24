@@ -170,7 +170,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
   // Sort indicator
   const SortIcon: React.FC<{ columnKey: SortKey }> = ({ columnKey }) => {
     if (sort.key !== columnKey) {
-      return <ChevronsUpDown className="h-3 w-3 text-slate-600" />
+      return <ChevronsUpDown className="h-3 w-3 text-slate-500" />
     }
     return sort.direction === 'asc' ? (
       <ChevronUp className="h-3 w-3 text-emerald-400" />
@@ -185,7 +185,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
   return (
     <div className="flex flex-col gap-4">
       {/* ---- Filter tabs ---- */}
-      <div className="flex items-center gap-1 border-b border-white/[0.06]">
+      <div className="flex items-center gap-1 border-b border-white/5 select-none">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -205,7 +205,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
               {tab.label}
               <span
                 className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-white/10' : 'bg-white/[0.04]'
+                  isActive ? 'bg-white/10' : 'bg-white/5'
                 }`}
               >
                 {tabCounts[tab.key]}
@@ -220,7 +220,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-white/5">
                 {batchMode && (
                   <th className="px-4 py-3 w-10"></th>
                 )}
@@ -248,7 +248,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                   {[...Array(5)].map((_, i) => (
                     <tr key={i}>
                       <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-1.5 px-3">
-                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.04]" />
+                        <div className="animate-pulse bg-slate-800/40 rounded-lg h-10 border border-white/[0.03]" />
                       </td>
                     </tr>
                   ))}
@@ -257,7 +257,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                 <tr>
                   <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <HardDrive className="h-8 w-8 text-slate-600" />
+                      <HardDrive className="h-8 w-8 text-slate-500" />
                       <span className="text-sm text-slate-500">
                         {activeTab !== 'all'
                           ? `No ${activeTab} images found.`
@@ -275,7 +275,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                     <tr
                       key={`${image.id}-${idx}`}
                       onClick={() => batchMode && onToggleImage?.(image.id)}
-                      className={`group border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors ${
+                      className={`group border-b border-white/[0.03] hover:bg-white/5 transition-colors ${
                         batchMode ? 'cursor-pointer' : ''
                       } ${batchMode && selectedImages?.has(image.id) ? 'bg-emerald-500/[0.06]' : ''}`}
                     >
@@ -348,7 +348,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                               : 'text-slate-300'
                           }`}
                         >
-                          {image.age_days}
+                          <span className="tabular-nums">{image.age_days}</span>
                         </span>
                       </td>
 

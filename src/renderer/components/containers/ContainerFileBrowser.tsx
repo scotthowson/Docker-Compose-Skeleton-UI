@@ -142,7 +142,7 @@ function SkeletonRows({ count = 8 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <tr key={i} className="border-b border-white/[0.04]">
+        <tr key={i} className="border-b border-white/[0.03]">
           <td className="px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="h-4 w-4 rounded bg-white/[0.06] animate-pulse" />
@@ -153,16 +153,16 @@ function SkeletonRows({ count = 8 }: { count?: number }) {
             </div>
           </td>
           <td className="px-4 py-3">
-            <div className="h-3 w-12 rounded bg-white/[0.04] animate-pulse" />
+            <div className="h-3 w-12 rounded bg-white/5 animate-pulse" />
           </td>
           <td className="px-4 py-3">
-            <div className="h-3 w-14 rounded bg-white/[0.04] animate-pulse" />
+            <div className="h-3 w-14 rounded bg-white/5 animate-pulse" />
           </td>
           <td className="px-4 py-3 hidden md:table-cell">
-            <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+            <div className="h-3 w-20 rounded bg-white/5 animate-pulse" />
           </td>
           <td className="px-4 py-3 hidden lg:table-cell">
-            <div className="h-3 w-28 rounded bg-white/[0.04] animate-pulse" />
+            <div className="h-3 w-28 rounded bg-white/5 animate-pulse" />
           </td>
         </tr>
       ))}
@@ -282,7 +282,7 @@ function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerPr
         aria-labelledby="file-viewer-title"
       >
         {/* Title bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <FileIcon entry={{ name: fileName, type: 'file', size: 0, permissions: '', modified: '' }} />
             <div className="min-w-0">
@@ -332,7 +332,7 @@ function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerPr
                 flex items-center justify-center
                 w-8 h-8 rounded-lg
                 text-slate-500 hover:text-slate-300
-                hover:bg-white/[0.06]
+                hover:bg-white/5
                 transition-colors duration-150
               "
               aria-label="Close file viewer"
@@ -472,11 +472,11 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
   return (
     <>
       <section className="animate-fade-in">
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] rounded-xl overflow-hidden">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-xl overflow-hidden">
           {/* Header with collapse toggle */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center gap-2 w-full px-5 py-4 hover:bg-white/[0.02] transition-colors"
+            className="flex items-center gap-2 w-full px-5 py-4 hover:bg-white/[0.03] transition-colors"
           >
             <FolderOpen className="h-4 w-4 text-emerald-400" />
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
@@ -500,8 +500,8 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
                   className="
                     flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
                     text-xs font-medium
-                    bg-white/[0.04] border border-white/[0.06]
-                    text-slate-400 hover:text-white hover:bg-white/[0.08]
+                    bg-white/5 border border-white/5
+                    text-slate-400 hover:text-white hover:bg-white/10
                     transition-all duration-200
                     disabled:opacity-30 disabled:cursor-not-allowed
                   "
@@ -518,7 +518,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
                     return (
                       <React.Fragment key={crumb.path}>
                         {idx > 0 && (
-                          <ChevronRight className="h-3 w-3 text-slate-600 flex-shrink-0" />
+                          <ChevronRight className="h-3 w-3 text-slate-500 flex-shrink-0" />
                         )}
                         <button
                           onClick={() => !isLast && navigateTo(crumb.path)}
@@ -528,7 +528,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
                             transition-colors duration-150
                             ${isLast
                               ? 'text-slate-200 font-semibold cursor-default'
-                              : 'text-slate-500 hover:text-emerald-400 hover:bg-white/[0.04]'
+                              : 'text-slate-500 hover:text-emerald-400 hover:bg-white/5'
                             }
                           `}
                           title={crumb.path}
@@ -547,8 +547,8 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
                   className="
                     flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
                     text-xs font-medium
-                    bg-white/[0.04] border border-white/[0.06]
-                    text-slate-400 hover:text-white hover:bg-white/[0.08]
+                    bg-white/5 border border-white/5
+                    text-slate-400 hover:text-white hover:bg-white/10
                     transition-all duration-200
                     disabled:opacity-30
                   "
@@ -581,10 +581,10 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
               )}
 
               {/* File listing table */}
-              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.03]">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-white/[0.06]">
+                    <tr className="border-b border-white/5">
                       <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">
                         Name
                       </th>
@@ -607,7 +607,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
 
                     {!loading && !error && sortedEntries.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="text-center py-12 text-slate-600">
+                        <td colSpan={5} className="text-center py-12 text-slate-500">
                           <div className="flex flex-col items-center gap-2">
                             <FolderOpen className="h-8 w-8 text-slate-700" />
                             <span>This directory is empty.</span>
@@ -622,7 +622,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
                           key={entry.name}
                           onClick={() => handleEntryClick(entry)}
                           className={`
-                            border-b border-white/[0.04]
+                            border-b border-white/[0.03]
                             hover:bg-white/[0.03]
                             cursor-pointer
                             transition-colors duration-150
@@ -684,7 +684,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
 
               {/* Footer info: entry count */}
               {!loading && !error && entries.length > 0 && (
-                <div className="flex items-center justify-between text-[10px] text-slate-600 px-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 px-1">
                   <span>
                     {sortedEntries.filter((e) => e.type === 'directory').length} directories,{' '}
                     {sortedEntries.filter((e) => e.type !== 'directory').length} files

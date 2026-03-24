@@ -2,13 +2,14 @@
 // Containers — Container management page
 // =============================================================================
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useContainerStore } from '../stores/containerStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useApi } from '../hooks/useApi'
 import { fetchContainers } from '../api/endpoints'
+import { Box, RefreshCw, Loader2 } from 'lucide-react'
 import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
@@ -19,29 +20,14 @@ const CONTAINER_POLL_INTERVAL = 10_000
 const Containers: React.FC = () => {
   const setContainers = useContainerStore((s) => s.setContainers)
   const setLoading = useContainerStore((s) => s.setLoading)
+  const loading = useContainerStore((s) => s.loading)
   const containers = useContainerStore((s) => s.containers)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
-
-  // React to navigation payloads: resetView (sidebar re-click) or focusContainer (from Stacks)
-  // Only consume if the payload has keys relevant to THIS page
-  useEffect(() => {
-    if (!navigationPayload) return
-    const payload = useSettingsStore.getState().navigationPayload
-    if (!payload) return
-
-    if (payload.focusContainer || payload.resetView) {
-      useSettingsStore.getState().consumeNavigationPayload()
-      if (payload.resetView) {
-        setSelectedName(null)
-      } else if (payload.focusContainer && typeof payload.focusContainer === 'string') {
-        setSelectedName(payload.focusContainer)
-      }
-    }
-  }, [navigationPayload])
+  const pendingFocusRef = useRef<string | null>(null)
 
   // Fetch containers via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
@@ -56,19 +42,63 @@ const Containers: React.FC = () => {
     enabled: isConnected,
   })
 
+  // React to navigation payloads: resetView (sidebar re-click) or focusContainer (from Stacks)
+  useEffect(() => {
+    if (!navigationPayload) return
+    const payload = useSettingsStore.getState().navigationPayload
+    if (!payload) return
+
+    if (payload.focusContainer || payload.resetView) {
+      useSettingsStore.getState().consumeNavigationPayload()
+      if (payload.resetView) {
+        setSelectedName(null)
+        pendingFocusRef.current = null
+      } else if (payload.focusContainer && typeof payload.focusContainer === 'string') {
+        setSelectedName(payload.focusContainer)
+        pendingFocusRef.current = payload.focusContainer
+        refresh()
+      }
+    }
+  }, [navigationPayload, refresh])
+
   // Find the currently selected container info
   const selectedContainer = useMemo(
-    () => containers.find((c) => c.name === selectedName) ?? null,
+    () => containers.find((c) => c.name === selectedName || c.name.toLowerCase() === selectedName?.toLowerCase()) ?? null,
     [containers, selectedName],
   )
 
+  // Retry counter for pending focus
+  const retryCountRef = useRef(0)
+
   // When a name is selected but the container vanishes from the list, deselect.
-  // Only deselect AFTER containers have loaded (not during initial load when list is empty).
+  // If we're waiting for a just-deployed container, keep retrying.
   useEffect(() => {
-    if (selectedName && !selectedContainer && containers.length > 0) {
-      setSelectedName(null)
+    // Container found — clear pending state
+    if (selectedContainer && pendingFocusRef.current) {
+      pendingFocusRef.current = null
+      retryCountRef.current = 0
+      return
     }
-  }, [selectedName, selectedContainer, containers.length])
+
+    if (selectedName && !selectedContainer && containers.length > 0) {
+      if (pendingFocusRef.current) {
+        // Still waiting — retry every 2 seconds, give up after 10 tries (20s)
+        if (retryCountRef.current >= 10) {
+          pendingFocusRef.current = null
+          retryCountRef.current = 0
+          setSelectedName(null)
+          return
+        }
+        const timer = setTimeout(() => {
+          retryCountRef.current++
+          refresh()
+        }, 2000)
+        return () => clearTimeout(timer)
+      } else {
+        setSelectedName(null)
+      }
+    }
+  }, [selectedName, selectedContainer, containers, refresh])
 
   const handleSelect = useCallback((name: string) => {
     setSelectedName(name)
@@ -107,18 +137,30 @@ const Containers: React.FC = () => {
       {selectedName && selectedContainer ? (
         <ErrorBoundary key={selectedName} fallbackMessage="Failed to render container details">
           <ContainerDetail
-            containerName={selectedName}
+            containerName={selectedContainer.name}
             containerInfo={selectedContainer}
             onBack={handleBack}
             onRefreshList={refresh}
             isAdmin={isAdmin}
           />
         </ErrorBoundary>
+      ) : selectedName && !selectedContainer && pendingFocusRef.current ? (
+        /* Waiting for just-deployed container to appear */
+        <div className="flex flex-col items-center justify-center py-24 gap-4 animate-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+            <Loader2 size={28} className="text-cyan-400 animate-spin" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-slate-200">Loading {selectedName}</p>
+            <p className="text-xs text-slate-400 mt-1">Container is starting up — this may take a moment</p>
+          </div>
+        </div>
       ) : (
         <ContainerList
           selectedName={selectedName}
           onSelect={handleSelect}
           isAdmin={isAdmin}
+          onRefresh={refresh}
         />
       )}
     </div>

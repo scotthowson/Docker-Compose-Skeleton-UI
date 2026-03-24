@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Lock } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Header } from './components/layout/Header'
 import { pageTitles } from './constants/pageTitles'
@@ -108,6 +108,10 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [isLocked, setIsLocked] = useState(false)
+  const [lockPassword, setLockPassword] = useState('')
+  const [lockError, setLockError] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
 
   // Smooth logout transition: brief fade-to-dark before Login mounts.
   // useLayoutEffect fires synchronously BEFORE the browser paints, so
@@ -265,7 +269,7 @@ export default function App() {
     document.title = `${title} — DCS Manager`
   }, [currentPage])
 
-  // Custom CSS injection
+  // Custom CSS injection — with security sanitization
   useEffect(() => {
     let styleEl = document.getElementById('custom-user-css') as HTMLStyleElement | null
     if (!styleEl) {
@@ -273,27 +277,83 @@ export default function App() {
       styleEl.id = 'custom-user-css'
       document.head.appendChild(styleEl)
     }
-    styleEl.textContent = customCSS || ''
+    // SECURITY: Strip dangerous CSS that could exfiltrate data or load external resources
+    // @import can load external stylesheets, url() can make external requests,
+    // expression() is IE-specific JS execution, -moz-binding is Firefox XBL execution
+    let sanitized = customCSS || ''
+    sanitized = sanitized.replace(/@import\b[^;]*/gi, '/* @import blocked */')
+    sanitized = sanitized.replace(/expression\s*\(/gi, '/* expression blocked */(')
+    sanitized = sanitized.replace(/-moz-binding\s*:/gi, '/* -moz-binding blocked */:')
+    sanitized = sanitized.replace(/javascript\s*:/gi, '/* javascript: blocked */:')
+    // Block url() with external schemes (allow data: for inline images)
+    sanitized = sanitized.replace(/url\s*\(\s*(['"]?)\s*https?:/gi, 'url($1data:blocked')
+    styleEl.textContent = sanitized
     return () => {
       // Don't remove on cleanup — persist across re-renders
     }
   }, [customCSS])
 
-  // Auto-lock after inactivity
+  // Session expiry checker — forces logout when session expires
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const checkExpiry = () => {
+      try {
+        const raw = localStorage.getItem('auth-session')
+        if (!raw) return
+        const session = JSON.parse(raw)
+        // expiresAt === 0 means indefinite — skip
+        if (session.expiresAt && session.expiresAt !== 0 && Date.now() > session.expiresAt) {
+          sessionStorage.setItem('logout-reason', 'session-expired')
+          logout()
+        }
+      } catch { /* ignore */ }
+    }
+    // Check every 30 seconds
+    const interval = setInterval(checkExpiry, 30000)
+    return () => clearInterval(interval)
+  }, [isAuthenticated, logout])
+
+  // Auto-lock after inactivity — shows lock screen instead of full logout
   const resetAutoLock = useCallback(() => {
     if (autoLockTimerRef.current) {
       clearTimeout(autoLockTimerRef.current)
       autoLockTimerRef.current = null
     }
-    if (autoLockMinutes > 0 && isAuthenticated) {
+    if (autoLockMinutes > 0 && isAuthenticated && !isLocked) {
       autoLockTimerRef.current = setTimeout(() => {
-        logout()
+        setIsLocked(true)
+        setLockPassword('')
+        setLockError('')
       }, autoLockMinutes * 60 * 1000)
     }
-  }, [autoLockMinutes, isAuthenticated, logout])
+  }, [autoLockMinutes, isAuthenticated, isLocked])
+
+  // Unlock handler — verifies password locally
+  const handleUnlock = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!lockPassword.trim() || unlocking) return
+    setUnlocking(true)
+    setLockError('')
+    try {
+      const { login, currentUser } = useAuthStore.getState()
+      if (!currentUser) { setLockError('No active session'); setUnlocking(false); return }
+      const ok = await login(currentUser, lockPassword, true)
+      if (ok) {
+        setIsLocked(false)
+        setLockPassword('')
+        setLockError('')
+        resetAutoLock()
+      } else {
+        setLockError('Incorrect password')
+      }
+    } catch {
+      setLockError('Verification failed')
+    }
+    setUnlocking(false)
+  }, [lockPassword, unlocking, resetAutoLock])
 
   useEffect(() => {
-    if (!isAuthenticated || autoLockMinutes <= 0) return
+    if (!isAuthenticated || autoLockMinutes <= 0 || isLocked) return
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'] as const
     const handler = () => resetAutoLock()
     for (const evt of events) window.addEventListener(evt, handler, { passive: true })
@@ -302,7 +362,14 @@ export default function App() {
       for (const evt of events) window.removeEventListener(evt, handler)
       if (autoLockTimerRef.current) clearTimeout(autoLockTimerRef.current)
     }
-  }, [isAuthenticated, autoLockMinutes, resetAutoLock])
+  }, [isAuthenticated, autoLockMinutes, resetAutoLock, isLocked])
+
+  // Listen for manual lock from header dropdown
+  useEffect(() => {
+    const handler = () => { setIsLocked(true); setLockPassword(''); setLockError('') }
+    window.addEventListener('dcs-lock-screen', handler)
+    return () => window.removeEventListener('dcs-lock-screen', handler)
+  }, [])
 
   // Smooth page transition: fade out, swap component, fade in
   useEffect(() => {
@@ -429,7 +496,7 @@ export default function App() {
     <ToastProvider>
       <div
         className="h-screen flex flex-col bg-slate-950 overflow-hidden theme-bg safe-area-top safe-area-bottom"
-        style={backgroundImage ? {
+        style={backgroundImage && /^(https?:|data:image\/|\/|\.\/)/i.test(backgroundImage) ? {
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
@@ -439,6 +506,50 @@ export default function App() {
         {/* Background overlay for readability when using bg image */}
         {backgroundImage && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm z-0" />
+        )}
+
+        {/* Lock screen overlay — preserves app state, just requires password to continue */}
+        {isLocked && (
+          <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-slate-950/95 backdrop-blur-xl animate-fade-in">
+            <div className="w-full max-w-sm mx-4">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center">
+                  <Lock size={28} className="text-amber-400" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-100">Session Locked</h2>
+                <p className="text-sm text-slate-500 mt-1">Locked due to inactivity. Enter your password to continue.</p>
+              </div>
+              <form onSubmit={handleUnlock} className="space-y-4">
+                <div className="relative">
+                  <input
+                    type="password"
+                    value={lockPassword}
+                    onChange={(e) => { setLockPassword(e.target.value); setLockError('') }}
+                    placeholder="Enter password"
+                    autoFocus
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                  />
+                </div>
+                {lockError && (
+                  <p className="text-xs text-rose-400 text-center">{lockError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={unlocking || !lockPassword.trim()}
+                  className="w-full py-3 rounded-lg text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {unlocking ? 'Verifying...' : 'Unlock'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsLocked(false); logout() }}
+                  className="w-full py-2 text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                >
+                  Sign out instead
+                </button>
+              </form>
+            </div>
+          </div>
         )}
 
         {/* Onboarding overlay (self-managing visibility via localStorage) */}

@@ -101,7 +101,7 @@ function StatCard({ icon, label, value, subValue, color, delay }: StatCardProps)
 
   return (
     <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-3 md:p-4 animate-fade-in"
+      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-3 md:p-4 animate-fade-in hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-center gap-2.5 mb-2">
@@ -112,7 +112,7 @@ function StatCard({ icon, label, value, subValue, color, delay }: StatCardProps)
       </div>
       <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{value}</p>
       {subValue && (
-        <p className="text-[10px] text-slate-600 mt-0.5">{subValue}</p>
+        <p className="text-[10px] text-slate-500 mt-0.5">{subValue}</p>
       )}
     </div>
   )
@@ -154,7 +154,7 @@ function ChartCard({
 
   return (
     <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4 md:p-6 animate-fade-in gradient-border"
+      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 animate-fade-in gradient-border hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200"
       style={{ animationDelay: `${delay}ms` }}
     >
       {/* Chart header */}
@@ -164,10 +164,10 @@ function ChartCard({
           <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-slate-600">
+          <span className="text-[10px] text-slate-500">
             Avg: <span className="text-slate-400 font-medium tabular-nums">{avg.toFixed(1)}{unit}</span>
           </span>
-          <span className="text-[10px] text-slate-600">
+          <span className="text-[10px] text-slate-500">
             Peak: <span className="text-slate-400 font-medium tabular-nums">{peak.toFixed(1)}{unit}</span>
           </span>
         </div>
@@ -371,8 +371,8 @@ export default function Trends() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <WifiOff size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to view resource trends</p>
       </div>
@@ -395,7 +395,7 @@ export default function Trends() {
             <TrendingUp size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">Resource Trends</h2>
+            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Resource Trends</span></h2>
             <p className="text-xs text-slate-500">
               {pointCount > 0
                 ? `${pointCount} data point${pointCount === 1 ? '' : 's'} \u00b7 ${TIME_RANGES.find((r) => r.id === range)?.label ?? range}`
@@ -429,7 +429,7 @@ export default function Trends() {
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               autoRefresh
                 ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/25'
-                : 'bg-white/[0.04] text-slate-500 border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-400'
+                : 'bg-white/5 text-slate-500 border-white/5 hover:bg-white/10 hover:text-slate-400'
             }`}
             title={autoRefresh ? 'Auto-refresh enabled (1 min)' : 'Auto-refresh disabled'}
           >
@@ -441,7 +441,7 @@ export default function Trends() {
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
@@ -453,7 +453,7 @@ export default function Trends() {
       {/* Time range selector                                                */}
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center gap-3">
-        <div className="flex rounded-lg bg-white/[0.03] border border-white/[0.06] p-0.5">
+        <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
           {TIME_RANGES.map((tr) => (
             <button
               key={tr.id}
@@ -464,7 +464,7 @@ export default function Trends() {
                   : 'text-slate-500 hover:text-slate-400'
               }`}
             >
-              <Clock size={12} className={range === tr.id ? 'text-emerald-400' : 'text-slate-600'} />
+              <Clock size={12} className={range === tr.id ? 'text-emerald-400' : 'text-slate-500'} />
               <span className="hidden sm:inline">{tr.label}</span>
               <span className="sm:hidden">{tr.shortLabel}</span>
             </button>
@@ -475,7 +475,7 @@ export default function Trends() {
         {isAdmin && (
           <button
             onClick={openAlertConfig}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] hover:text-slate-300 transition-all duration-200 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 hover:text-slate-300 transition-all duration-200 press"
             title="Configure alert thresholds"
           >
             <Settings2 size={13} />
@@ -485,7 +485,7 @@ export default function Trends() {
 
         {/* Subtle connection indicator */}
         {autoRefresh && (
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-40" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -498,7 +498,7 @@ export default function Trends() {
       {/* ----------------------------------------------------------------- */}
       {/* Summary stats row                                                  */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 stagger-children">
         <StatCard
           icon={<Cpu size={14} />}
           label="Current CPU"
@@ -549,10 +549,10 @@ export default function Trends() {
         <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/15 rounded-xl p-6 text-center animate-fade-in">
           <Activity size={28} className="text-rose-500/40 mx-auto mb-3" />
           <p className="text-sm text-slate-400 mb-1">Failed to load trend data</p>
-          <p className="text-xs text-slate-600 mb-4">{error.message}</p>
+          <p className="text-xs text-slate-500 mb-4">{error.message}</p>
           <button
             onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
           >
             <RefreshCw size={13} />
             Retry
@@ -564,12 +564,12 @@ export default function Trends() {
       {/* Empty state                                                        */}
       {/* ----------------------------------------------------------------- */}
       {data && chartData.length === 0 && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-8 md:p-12 text-center animate-fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
-            <BarChart3 size={24} className="text-slate-600" />
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-8 md:p-12 text-center animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center mx-auto mb-4">
+            <BarChart3 size={24} className="text-slate-500" />
           </div>
           <p className="text-sm text-slate-400 font-medium mb-1.5">No trend data yet</p>
-          <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
+          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
             Metrics are collected every minute via cron. Data will appear here once the first snapshots are recorded. You can also manually capture a snapshot above.
           </p>
           {isAdmin && (
@@ -640,16 +640,16 @@ export default function Trends() {
       {/* ------------------------------------------------------------------- */}
       {showAlertConfig && editThresholds && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+          <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
                 <Settings2 size={16} className="text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Alert Thresholds</h3>
               </div>
               <button
                 onClick={() => setShowAlertConfig(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -695,7 +695,7 @@ export default function Trends() {
                 </div>
               </div>
 
-              <div className="border-t border-white/[0.04]" />
+              <div className="border-t border-white/[0.03]" />
 
               {/* Memory */}
               <div>
@@ -735,7 +735,7 @@ export default function Trends() {
                 </div>
               </div>
 
-              <div className="border-t border-white/[0.04]" />
+              <div className="border-t border-white/[0.03]" />
 
               {/* Disk */}
               <div>
@@ -777,7 +777,7 @@ export default function Trends() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06] shrink-0">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5 shrink-0">
               <button
                 onClick={() => setShowAlertConfig(false)}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"

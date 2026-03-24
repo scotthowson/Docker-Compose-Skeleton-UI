@@ -232,6 +232,13 @@ function parsePortMappings(portsStr: string): PortMapping[] {
 
       return { bindAddress, hostPort, containerPort, protocol, raw }
     })
+    // Deduplicate: IPv6 [::] entries duplicate IPv4 0.0.0.0 entries — keep only one per hostPort
+    .filter((port, idx, arr) => {
+      if (port.bindAddress === '[::]' || port.bindAddress === '::') {
+        return !arr.some((other, otherIdx) => otherIdx !== idx && other.hostPort === port.hostPort && other.bindAddress !== '[::]' && other.bindAddress !== '::')
+      }
+      return true
+    })
 }
 
 /**
@@ -760,13 +767,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             className="
               flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm flex-shrink-0
               text-slate-400 hover:text-white
-              bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
+              bg-white/5 hover:bg-white/10 border border-white/5
               transition-all duration-200 press
             "
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Back</span>
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/[0.04] border border-white/[0.06] ml-1">Esc</kbd>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
           </button>
 
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
@@ -1073,7 +1080,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container Logs" />
             <div className="flex items-center gap-2">
               {/* Live / Snapshot toggle */}
-              <div className="flex rounded-md bg-white/[0.03] border border-white/[0.06] p-0.5">
+              <div className="flex rounded-md bg-white/[0.03] border border-white/5 p-0.5">
                 <button
                   onClick={() => setLiveLogsMode(false)}
                   className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${!liveLogsMode ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
@@ -1139,7 +1146,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         <SectionHeader icon={<Info className="h-4 w-4 text-emerald-400" />} title="Container Info" />
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl mt-3 overflow-hidden">
           {/* Image header */}
-          <div className="px-5 py-4 border-b border-white/[0.04]">
+          <div className="px-5 py-4 border-b border-white/[0.03]">
             {(() => {
               const img = splitImageTag(containerInfo.image)
               return (
@@ -1211,11 +1218,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             const ips = parseIpAddresses(detail?.ip_addresses)
             if (ips.length === 0) return null
             return (
-              <div className="px-5 py-3 border-t border-white/[0.04]">
+              <div className="px-5 py-3 border-t border-white/[0.03]">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-2">IP Addresses</span>
                 <div className="flex flex-wrap gap-2">
                   {ips.map((entry, idx) => (
-                    <div key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                    <div key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/5">
                       <Network className="h-3 w-3 text-purple-400 flex-shrink-0" />
                       <span className="text-[10px] text-slate-500">{entry.network}</span>
                       <span className="text-xs font-mono text-cyan-400">{entry.ip}</span>
@@ -1272,10 +1279,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 No process information available.
               </div>
             ) : (
-              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+              <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.03]">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-white/[0.06]">
+                    <tr className="border-b border-white/5">
                       <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">PID</th>
                       <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">User</th>
                       <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">CPU%</th>
@@ -1287,7 +1294,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     {processes.map((proc, idx) => (
                       <tr
                         key={`${proc.pid}-${idx}`}
-                        className={`border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${
+                        className={`border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors ${
                           idx % 2 === 0 ? 'bg-white/[0.01]' : 'bg-transparent'
                         }`}
                       >
@@ -1314,7 +1321,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
             <button
               onClick={() => setShowExec(!showExec)}
-              className="flex items-center gap-2 w-full p-5 hover:bg-white/[0.02] transition-colors"
+              className="flex items-center gap-2 w-full p-5 hover:bg-white/[0.03] transition-colors"
             >
               <Terminal className="h-4 w-4 text-emerald-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
@@ -1347,7 +1354,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       placeholder="ls -la /app"
                       className="
                         w-full pl-7 pr-4 py-2.5
-                        bg-slate-950 border border-white/[0.08] rounded-lg
+                        bg-slate-950 border border-white/10 rounded-lg
                         text-xs text-slate-200 placeholder-slate-600 font-mono
                         focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15
                         transition-all duration-200
@@ -1384,8 +1391,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                         onClick={() => setExecCommand(cmd)}
                         className="
                           px-2 py-0.5 rounded text-[10px] font-mono
-                          bg-white/[0.03] border border-white/[0.06] text-slate-400
-                          hover:bg-white/[0.06] hover:text-slate-200
+                          bg-white/[0.03] border border-white/5 text-slate-400
+                          hover:bg-white/5 hover:text-slate-200
                           transition-all duration-150 truncate max-w-[200px]
                         "
                         title={cmd}
@@ -1412,7 +1419,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       </span>
                     </div>
                     <pre className="
-                      bg-slate-950 border border-white/[0.06] rounded-lg p-4
+                      bg-slate-950 border border-white/5 rounded-lg p-4
                       text-[11px] text-slate-300 font-mono
                       max-h-[300px] overflow-auto scrollbar-thin
                       whitespace-pre-wrap break-all leading-relaxed
@@ -1460,7 +1467,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     onChange={(e) => setEnvSearch(e.target.value)}
                     className="
                       w-full pl-9 pr-4 py-2 rounded-lg text-xs font-mono
-                      bg-white/[0.03] border border-white/[0.06]
+                      bg-white/[0.03] border border-white/5
                       text-slate-300 placeholder-slate-600
                       focus:outline-none focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20
                       transition-all duration-200
@@ -1469,7 +1476,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 </div>
 
                 {/* Variable table */}
-                <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-lg border border-white/[0.04]">
+                <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-lg border border-white/[0.03]">
                   {filteredEnvEntries.length === 0 ? (
                     <div className="px-4 py-6 text-center text-xs text-slate-600">
                       No matching variables found.
@@ -1482,7 +1489,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                         <div
                           key={idx}
                           className={`flex items-center gap-3 px-4 py-2.5 animate-fade-in ${
-                            idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'
+                            idx % 2 === 0 ? 'bg-white/[0.03]' : 'bg-transparent'
                           }`}
                           style={{ animationDelay: `${idx * 0.02}s` }}
                         >
@@ -1505,7 +1512,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           {sensitive && (
                             <button
                               onClick={() => toggleSecret(entry.key)}
-                              className="flex-shrink-0 p-1 rounded hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 transition-colors"
+                              className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
                               title={revealed ? 'Hide value' : 'Reveal value'}
                             >
                               {revealed ? (
@@ -1544,8 +1551,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   key={idx}
                   className="
                     flex items-center gap-3 px-4 py-3 rounded-lg
-                    bg-white/[0.02] border border-white/[0.04]
-                    hover:bg-white/[0.04] transition-colors duration-200
+                    bg-white/[0.03] border border-white/[0.03]
+                    hover:bg-white/5 transition-colors duration-200
                     animate-fade-in
                   "
                   style={{ animationDelay: `${idx * 0.05}s` }}
@@ -1610,10 +1617,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               {portMappings.map((port, idx) => {
                 // Build a clickable URL from the host port
                 const portUrl = port.hostPort ? (() => {
-                  const host = port.bindAddress === '127.0.0.1' ? 'localhost'
-                    : (port.bindAddress === '0.0.0.0' || !port.bindAddress) ? window.location.hostname
-                    : port.bindAddress
-                  const proto = ['443', '8443'].includes(port.hostPort) ? 'https' : 'http'
+                  const addr = port.bindAddress || ''
+                  const host = addr === '127.0.0.1' ? 'localhost'
+                    : (addr === '0.0.0.0' || addr === '[::]' || addr === '::' || !addr) ? window.location.hostname
+                    : addr
+                  const proto = ['443', '8443', '9443'].includes(String(port.hostPort)) ? 'https' : 'http'
                   return `${proto}://${host}:${port.hostPort}`
                 })() : null
                 return (
@@ -1621,8 +1629,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   key={idx}
                   className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg
-                    bg-white/[0.02] border border-white/[0.04]
-                    hover:bg-white/[0.04] transition-colors duration-200
+                    bg-white/[0.03] border border-white/[0.03]
+                    hover:bg-white/5 transition-colors duration-200
                     animate-fade-in
                     ${portUrl ? 'cursor-pointer group' : ''}
                   `}

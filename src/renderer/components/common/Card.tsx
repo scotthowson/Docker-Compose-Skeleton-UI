@@ -40,7 +40,7 @@ export function Card({
         border border-white/10 rounded-xl
         ${paddingClasses[padding]}
         ${glowClasses[glow]}
-        ${hover ? 'hover:bg-white/[0.08] hover:border-white/[0.15] transition-all duration-200 cursor-pointer' : ''}
+        ${hover ? 'hover:bg-white/10 hover:border-white/[0.15] transition-all duration-200 cursor-pointer' : ''}
         ${className}
       `}
     >

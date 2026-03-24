@@ -15,6 +15,7 @@ import {
   Undo2,
   Check,
   AlertCircle,
+  AlertTriangle,
   Palette,
   Shield,
   Zap,
@@ -74,7 +75,7 @@ function ToggleRow({
   disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.04] last:border-b-0">
+    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
       <div className="flex-1 min-w-0 mr-4">
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -102,7 +103,7 @@ function SelectRow({
   disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.04] last:border-b-0">
+    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
       <div className="flex-1 min-w-0 mr-4">
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -111,7 +112,7 @@ function SelectRow({
         value={value}
         onChange={(e) => onChange(configKey, e.target.value)}
         disabled={disabled}
-        className="rounded-lg bg-slate-800 border border-white/10 px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-50"
+        className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>{opt}</option>
@@ -141,7 +142,7 @@ function TextRow({
   placeholder?: string
 }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.04] last:border-b-0">
+    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
       <div className="flex-1 min-w-0 mr-4">
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -155,7 +156,7 @@ function TextRow({
           onChange={(e) => onChange(configKey, e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
-          className="rounded-lg bg-slate-800 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-40 md:w-48 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
+          className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-40 md:w-48 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
         />
       )}
     </div>
@@ -182,7 +183,7 @@ function NumberRow({
   max?: number
 }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.04] last:border-b-0">
+    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
       <div className="flex-1 min-w-0 mr-4">
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -194,7 +195,7 @@ function NumberRow({
         disabled={disabled}
         min={min}
         max={max}
-        className="rounded-lg bg-slate-800 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-28 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-50"
+        className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-28 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
       />
     </div>
   )
@@ -213,15 +214,7 @@ interface GroupCardProps {
   storageKey?: string
 }
 
-const accentBorderMap: Record<string, string> = {
-  emerald: 'border-t-emerald-500',
-  cyan: 'border-t-cyan-500',
-  amber: 'border-t-amber-500',
-  rose: 'border-t-rose-500',
-  violet: 'border-t-violet-500',
-}
-
-function GroupCard({ icon, title, description, children, accentColor = 'emerald', storageKey }: GroupCardProps) {
+function GroupCard({ icon, title, description, children, storageKey }: GroupCardProps) {
   const key = storageKey || `cfg-card-${title.toLowerCase().replace(/\s+/g, '-')}`
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(key) === 'true' } catch { return false }
@@ -233,9 +226,9 @@ function GroupCard({ icon, title, description, children, accentColor = 'emerald'
   }
 
   return (
-    <div className={`glass-subtle rounded-xl overflow-hidden border-t-2 ${accentBorderMap[accentColor]}`}>
+    <div className="glass rounded-xl border border-white/5 overflow-hidden">
       <div
-        className="px-5 py-4 border-b border-white/[0.06] cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
+        className="px-5 py-4 border-b border-white/5 cursor-pointer select-none hover:bg-white/[0.03] transition-colors"
         onClick={toggle}
       >
         <div className="flex items-center justify-between">
@@ -268,6 +261,7 @@ type EditableConfig = Record<string, string | boolean | number>
 export default function Config() {
   const setStoreConfig = useConfigStore((s) => s.setConfig)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const connServerUrl = useConnectionStore((s) => s.serverUrl)
 
   const { data, loading, error, refresh } = usePolling<ServerConfig>(fetchConfig, 60000, {
     enabled: isConnected,
@@ -413,11 +407,14 @@ export default function Config() {
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Server Configuration</span></h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            View and edit the server's active configuration — changes are written to the root .env file
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5">
+            <Settings2 className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Server Configuration</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Environment variables, feature flags, and server settings</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && (
@@ -482,14 +479,14 @@ export default function Config() {
 
       {/* Error state */}
       {error && (
-        <div className="glass rounded-xl p-4 border-rose-500/30">
+        <div className="glass rounded-xl p-4 border border-rose-500/20">
           <p className="text-sm text-rose-400">Failed to fetch config: {error.message}</p>
         </div>
       )}
 
       {/* Loading placeholder */}
       {loading && !cfg && (
-        <div className="glass-subtle rounded-xl p-8 text-center">
+        <div className="glass rounded-xl border border-white/5 p-8 text-center">
           <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
           <span className="text-sm text-slate-500">Loading configuration...</span>
         </div>
@@ -723,9 +720,25 @@ export default function Config() {
             description="REST API server settings"
             accentColor="emerald"
           >
+            {/* Auto-detect: API is running since you're viewing this page */}
+            {isConnected && (
+              <div className="flex items-center justify-between rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[11px] text-emerald-400 font-medium">Connected</span>
+                  <span className="text-[10px] text-slate-400 font-mono ml-1">{(connServerUrl || '').replace(/^https?:\/\//, '')}</span>
+                </div>
+                {!cfg.api_enabled && (
+                  <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                    <AlertTriangle size={10} />
+                    Running manually
+                  </span>
+                )}
+              </div>
+            )}
             <ToggleRow
               label="API Enabled"
-              description="Enable or disable the REST API server"
+              description={isConnected && !cfg.api_enabled ? 'API is running manually — enable this to auto-start with ./start.sh' : 'Enable or disable the REST API server on startup'}
               configKey="API_ENABLED"
               value={Boolean(edits.API_ENABLED ?? cfg.api_enabled ?? true)}
               onChange={handleBoolChange}
@@ -745,7 +758,7 @@ export default function Config() {
               configKey="API_BIND"
               value={String(edits.API_BIND ?? cfg.api_bind)}
               onChange={handleStringChange}
-              placeholder="127.0.0.1"
+              placeholder="0.0.0.0"
             />
           </GroupCard>
 
@@ -756,7 +769,7 @@ export default function Config() {
             description="Configure NTFY push notification service"
             accentColor="amber"
           >
-            <div className="flex items-center gap-2 py-3 border-b border-white/[0.04]">
+            <div className="flex items-center gap-2 py-3 border-b border-white/[0.03]">
               <span className="text-sm font-medium text-slate-200">Status</span>
               <span className="ml-auto">
                 {cfg.ntfy_configured ? (
@@ -805,7 +818,7 @@ export default function Config() {
             description="Access control and safety settings"
             accentColor="rose"
           >
-            <div className="py-3 border-b border-white/[0.04]">
+            <div className="py-3 border-b border-white/[0.03]">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-sm font-medium text-slate-200">Config Protection</span>

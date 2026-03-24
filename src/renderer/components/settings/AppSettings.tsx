@@ -155,7 +155,7 @@ export default function AppSettingsForm() {
                     className="
                       w-20 rounded-lg px-3 py-1.5 text-right
                       text-sm text-slate-200 font-mono
-                      bg-slate-900/60 border border-white/[0.08]
+                      bg-slate-900/60 border border-white/10
                       focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
                       transition-all duration-200
                     "
@@ -182,7 +182,7 @@ export default function AppSettingsForm() {
                   [&::-webkit-slider-thumb]:cursor-pointer
                 "
               />
-              <div className="flex justify-between text-[10px] text-slate-600">
+              <div className="flex justify-between text-[10px] text-slate-500">
                 <span>{field.min}s</span>
                 <span>{field.max}s</span>
               </div>
@@ -223,7 +223,7 @@ export default function AppSettingsForm() {
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3 pt-2 border-t border-white/[0.06]">
+      <div className="flex items-center gap-3 pt-2 border-t border-white/5">
         <button
           onClick={handleSave}
           disabled={!dirty}
@@ -245,8 +245,8 @@ export default function AppSettingsForm() {
           className="
             flex items-center gap-2 rounded-lg px-4 py-2
             text-sm font-medium
-            text-slate-400 bg-white/5 border border-white/[0.08]
-            hover:bg-white/[0.08] hover:text-slate-300
+            text-slate-400 bg-white/5 border border-white/10
+            hover:bg-white/10 hover:text-slate-300
             transition-all duration-200
           "
         >

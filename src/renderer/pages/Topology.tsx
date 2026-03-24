@@ -271,11 +271,11 @@ function DetailPanel({
       onClick={onClose}
     >
       <div
-        className="w-full md:w-96 md:h-full md:max-h-screen bg-slate-900/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-white/[0.08] shadow-2xl shadow-black/40 animate-slide-up md:animate-fade-in overflow-y-auto scrollbar-thin"
+        className="w-full md:w-96 md:h-full md:max-h-screen bg-slate-900/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-white/10 shadow-2xl shadow-black/40 animate-slide-up md:animate-fade-in overflow-y-auto scrollbar-thin"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="flex items-center justify-center w-9 h-9 rounded-xl ring-1 shrink-0"
@@ -292,7 +292,7 @@ function DetailPanel({
           </div>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all shrink-0"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all shrink-0"
           >
             <X size={16} />
           </button>
@@ -301,33 +301,33 @@ function DetailPanel({
         {/* Body */}
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">State</p>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stroke }} />
                 <span className="text-sm font-medium text-slate-200 capitalize">{node.state}</span>
               </div>
             </div>
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Health</p>
               <span className="text-sm font-medium text-slate-200 capitalize">{node.health || 'N/A'}</span>
             </div>
           </div>
 
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+          <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Image</p>
             <p className="text-xs text-slate-300 font-mono break-all">{node.image}</p>
           </div>
 
           {node.stack && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Stack</p>
               <p className="text-sm text-slate-200">{node.stack}</p>
             </div>
           )}
 
           {node.ports && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ports</p>
               <div className="space-y-1.5">
                 {node.ports.split(' ').filter(Boolean).map((p, i) => {
@@ -355,7 +355,7 @@ function DetailPanel({
           )}
 
           {node.ip_addresses && node.ip_addresses.length > 0 && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
                 IP Addresses ({node.ip_addresses.length})
               </p>
@@ -363,7 +363,7 @@ function DetailPanel({
                 {node.ip_addresses.map((entry) => {
                   const c = netColor(entry.network, netNames)
                   return (
-                    <div key={entry.network} className="flex items-center justify-between rounded-lg bg-white/[0.02] px-2.5 py-1.5">
+                    <div key={entry.network} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
                       <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} />
                         {entry.network}
@@ -376,7 +376,7 @@ function DetailPanel({
             </div>
           )}
 
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
+          <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
               Networks ({node.networks.length})
             </p>
@@ -603,8 +603,8 @@ export default function Topology() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <Network size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <Network size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">Connect to a server to view network topology</p>
       </div>
@@ -638,7 +638,7 @@ export default function Topology() {
         <button
           onClick={refresh}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">Refresh</span>
@@ -652,7 +652,7 @@ export default function Topology() {
           { icon: Box, label: 'Containers', value: totalContainers, color: 'text-emerald-400' },
           { icon: Network, label: 'Networks', value: totalNetworks, color: 'text-cyan-400' },
         ].map((s) => (
-          <div key={s.label} className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-3 md:p-4">
+          <div key={s.label} className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-4">
             <div className="flex items-center gap-1.5 mb-1">
               <s.icon size={13} className={s.color} />
               <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider">{s.label}</span>
@@ -663,13 +663,13 @@ export default function Topology() {
       </div>
 
       {/* Canvas card */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-3 md:p-6">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-6">
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-3 md:mb-4">
           <div className="flex items-center gap-2">
             <Network size={15} className="text-cyan-400" />
             <h3 className="text-xs md:text-sm font-semibold text-slate-300">Topology Map</h3>
-            <span className="text-[10px] text-slate-600 ml-1">{Math.round(zoom * 100)}%</span>
+            <span className="text-[10px] text-slate-500 ml-1">{Math.round(zoom * 100)}%</span>
           </div>
           <div className="flex items-center gap-0.5">
             {[
@@ -680,7 +680,7 @@ export default function Topology() {
               <button
                 key={btn.title}
                 onClick={btn.fn}
-                className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all"
+                className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
                 title={btn.title}
               >
                 <btn.icon size={14} />
@@ -696,14 +696,14 @@ export default function Topology() {
           </div>
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-            <Network size={40} className="text-slate-700 mb-4" />
+            <Network size={40} className="text-slate-500 mb-4" />
             <p className="text-sm text-slate-400 mb-1">No containers running</p>
-            <p className="text-xs text-slate-600">Start some stacks to see the network topology.</p>
+            <p className="text-xs text-slate-500">Start some stacks to see the network topology.</p>
           </div>
         ) : layout ? (
           <div
             ref={containerRef}
-            className="relative overflow-hidden rounded-lg border border-white/[0.04] bg-slate-950/50"
+            className="relative overflow-hidden rounded-lg border border-white/[0.03] bg-slate-950/50"
             style={{
               height: 'clamp(300px, 55vh, 640px)',
               cursor: isPanning ? 'grabbing' : 'grab',
@@ -1322,16 +1322,16 @@ export default function Topology() {
         {/* Legend */}
         {!isEmpty && layout && (
           <div className="mt-3 md:mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 md:gap-x-4 md:gap-y-2">
-            <span className="text-[9px] md:text-[10px] text-slate-600 uppercase tracking-wider mr-1">Networks:</span>
+            <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider mr-1">Networks:</span>
             {layout.networks.map((n) => (
               <div key={n.network.name} className="flex items-center gap-1.5">
                 <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shrink-0" style={{ backgroundColor: n.color }} />
                 <span className="text-[10px] md:text-[11px] text-slate-400 font-mono">{n.network.name}</span>
-                <span className="text-[9px] md:text-[10px] text-slate-600">({n.network.container_count})</span>
+                <span className="text-[9px] md:text-[10px] text-slate-500">({n.network.container_count})</span>
               </div>
             ))}
 
-            <span className="text-[9px] md:text-[10px] text-slate-600 uppercase tracking-wider ml-2 md:ml-4 mr-1">Health:</span>
+            <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider ml-2 md:ml-4 mr-1">Health:</span>
             {[
               { label: 'Healthy', color: '#10b981' },
               { label: 'Running', color: '#06b6d4' },

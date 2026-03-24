@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import {
   Wrench, RefreshCw, Loader2, Trash2, RotateCcw, AlertTriangle,
   CheckCircle2, Box, Image, HardDrive, Network, FileText, Scissors,
+  BookOpen, ChevronRight, ChevronDown, X, Search,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
@@ -43,6 +44,90 @@ function parseSizeToMb(size: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Guide
+// ---------------------------------------------------------------------------
+
+const MAINTENANCE_GUIDE_SECTIONS = [
+  {
+    title: 'Safe Prune',
+    icon: Trash2,
+    content: `Removes stopped containers and unused networks.
+This is the safest cleanup option and won't
+remove any images or volumes.
+
+Command: docker system prune -f
+
+Safe to run regularly — it only cleans up
+resources that are already stopped or detached.`,
+  },
+  {
+    title: 'Image Prune',
+    icon: Image,
+    content: `Removes dangling images (untagged layers left
+over from builds and updates).
+
+Standard:   docker image prune -f
+Aggressive: docker image prune -af
+
+Aggressive mode removes ALL unused images, not
+just dangling ones. Configure with the
+AGGRESSIVE_IMAGE_PRUNE flag in your .env file.`,
+  },
+  {
+    title: 'Deep Prune',
+    icon: AlertTriangle,
+    content: `WARNING: Aggressive cleanup that removes:
+
+• ALL stopped containers
+• ALL unused networks
+• ALL dangling AND unreferenced images
+• ALL unused volumes
+• Build cache
+
+Command: docker system prune -af --volumes
+
+This can free significant disk space but may
+remove data you want to keep. Always backup
+important volumes before running deep prune.`,
+  },
+  {
+    title: 'Log Rotation',
+    icon: FileText,
+    content: `Archives the current DCS log file and starts fresh.
+
+Process:
+1. Compresses current log to logs/archive/
+2. Truncates the active log file
+3. Enforces retention (LOG_BACKUP_COUNT archives)
+
+Default retention: 12 archived logs
+Configure: LOG_BACKUP_COUNT in .env
+
+Does not affect Docker container logs — only
+the DCS framework operational log.`,
+  },
+  {
+    title: 'Orphan Detection',
+    icon: Search,
+    content: `Scans for unused Docker resources:
+
+Orphaned Containers
+  Exited containers no longer managed by any
+  stack's docker-compose.yml
+
+Dangling Images
+  Untagged image layers from builds/updates
+  that are no longer referenced
+
+Dangling Volumes
+  Named volumes not attached to any container
+
+Review orphans before pruning to ensure nothing
+important is accidentally removed.`,
+  },
+]
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -75,6 +160,8 @@ export default function Maintenance() {
   const [deepPruning, setDeepPruning] = useState(false)
   const [rotating, setRotating] = useState(false)
   const [showDeepPruneModal, setShowDeepPruneModal] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
   // Close topmost modal on Escape
   useEffect(() => {
@@ -191,7 +278,7 @@ export default function Maintenance() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
                 <AlertTriangle size={18} className="text-rose-400" />
               </div>
               <div>
@@ -245,26 +332,89 @@ export default function Maintenance() {
             Docker system maintenance and cleanup
           </p>
         </div>
-        <button
-          onClick={handleRefreshAll}
-          disabled={isAnyLoading}
-          className="
-            flex items-center gap-2 rounded-lg px-3.5 py-2
-            text-sm font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
-          "
-        >
-          <RefreshCw size={15} className={isAnyLoading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGuide((v) => !v)}
+            className={`
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium
+              border transition-all duration-200
+              ${showGuide
+                ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20'
+                : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
+              }
+            `}
+          >
+            <BookOpen size={15} />
+            Guide
+          </button>
+          <button
+            onClick={handleRefreshAll}
+            disabled={isAnyLoading}
+            className="
+              flex items-center gap-2 rounded-lg px-3.5 py-2
+              text-sm font-medium text-slate-300
+              bg-white/5 border border-white/10
+              hover:bg-white/10 hover:border-white/15
+              disabled:opacity-50 transition-all duration-200
+            "
+          >
+            <RefreshCw size={15} className={isAnyLoading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {/* Guide Panel */}
+      {showGuide && (
+        <div className="glass rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen size={16} className="text-cyan-400" />
+              <h2 className="text-sm font-semibold text-white">Maintenance Guide</h2>
+            </div>
+            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <X size={14} className="text-slate-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-slate-400 mb-4">
+              Maintenance tools help keep your Docker environment clean and efficient. Run cleanup operations regularly to reclaim disk space and remove orphaned resources.
+            </p>
+            {MAINTENANCE_GUIDE_SECTIONS.map((section, i) => {
+              const isExpanded = expandedGuide === i
+              const Icon = section.icon
+              return (
+                <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedGuide(isExpanded ? null : i)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                  >
+                    <Icon size={14} className="text-cyan-400 shrink-0" />
+                    <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
+                    {isExpanded
+                      ? <ChevronDown size={14} className="text-slate-500" />
+                      : <ChevronRight size={14} className="text-slate-500" />
+                    }
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 animate-fade-in">
+                      <pre className="bg-slate-950/60 border border-white/[0.03] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
+                        {section.content}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ================================================================== */}
       {/* 1. System Report */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/[0.06]">
+      <div className="glass rounded-xl p-5 border border-white/5">
         <h3 className="text-sm font-semibold text-slate-200 mb-3">System Report</h3>
 
         {reportLoading && !report ? (
@@ -276,7 +426,7 @@ export default function Maintenance() {
             {/* 2x4 stat grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* Containers */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Box size={12} className="text-cyan-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Containers</span>
@@ -295,7 +445,7 @@ export default function Maintenance() {
               </div>
 
               {/* Images */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Image size={12} className="text-violet-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Images</span>
@@ -317,7 +467,7 @@ export default function Maintenance() {
               </div>
 
               {/* Volumes */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <HardDrive size={12} className="text-amber-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Volumes</span>
@@ -339,7 +489,7 @@ export default function Maintenance() {
               </div>
 
               {/* Networks */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Network size={12} className="text-emerald-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Networks</span>
@@ -353,7 +503,7 @@ export default function Maintenance() {
               </div>
 
               {/* App Data Size */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 sm:col-span-2">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3 sm:col-span-2">
                 <div className="flex items-center gap-1.5 mb-2">
                   <HardDrive size={12} className="text-cyan-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">App Data</span>
@@ -362,7 +512,7 @@ export default function Maintenance() {
               </div>
 
               {/* Log Size */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 sm:col-span-2">
+              <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3 sm:col-span-2">
                 <div className="flex items-center gap-1.5 mb-2">
                   <FileText size={12} className="text-violet-400" />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Log Size</span>
@@ -377,7 +527,7 @@ export default function Maintenance() {
       {/* ================================================================== */}
       {/* 2. Orphan Detection */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/[0.06]">
+      <div className="glass rounded-xl p-5 border border-white/5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-200">Orphan Detection</h3>
           {!orphansLoading && orphans && allClean && (
@@ -404,15 +554,15 @@ export default function Maintenance() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
+                      <tr className="border-b border-white/5">
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Image</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
+                    <tbody className="divide-y divide-white/[0.03]">
                       {orphanContainers.map((c) => (
-                        <tr key={c.name} className="hover:bg-white/[0.02] transition-colors duration-150">
+                        <tr key={c.name} className="hover:bg-white/[0.03] transition-colors duration-150">
                           <td className="px-4 py-2 font-mono text-slate-200 text-xs">{c.name}</td>
                           <td className="px-4 py-2 font-mono text-slate-400 text-xs">{c.image}</td>
                           <td className="px-4 py-2">
@@ -438,15 +588,15 @@ export default function Maintenance() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
+                      <tr className="border-b border-white/5">
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">ID</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Size</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Created</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
+                    <tbody className="divide-y divide-white/[0.03]">
                       {danglingImages.map((img) => (
-                        <tr key={img.id} className="hover:bg-white/[0.02] transition-colors duration-150">
+                        <tr key={img.id} className="hover:bg-white/[0.03] transition-colors duration-150">
                           <td className="px-4 py-2 font-mono text-slate-200 text-xs">{img.id.slice(0, 12)}</td>
                           <td className="px-4 py-2 font-mono text-amber-400 text-xs">{img.size}</td>
                           <td className="px-4 py-2 text-slate-400 text-xs">{img.created}</td>
@@ -468,14 +618,14 @@ export default function Maintenance() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
+                      <tr className="border-b border-white/5">
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Driver</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
+                    <tbody className="divide-y divide-white/[0.03]">
                       {danglingVolumes.map((vol) => (
-                        <tr key={vol.name} className="hover:bg-white/[0.02] transition-colors duration-150">
+                        <tr key={vol.name} className="hover:bg-white/[0.03] transition-colors duration-150">
                           <td className="px-4 py-2 font-mono text-slate-200 text-xs">{vol.name}</td>
                           <td className="px-4 py-2">
                             <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
@@ -507,7 +657,7 @@ export default function Maintenance() {
       {/* ================================================================== */}
       {/* 3. Disk Analysis */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/[0.06]">
+      <div className="glass rounded-xl p-5 border border-white/5">
         <h3 className="text-sm font-semibold text-slate-200 mb-3">Disk Analysis</h3>
 
         {diskLoading && !disk ? (
@@ -556,7 +706,7 @@ export default function Maintenance() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
+                      <tr className="border-b border-white/5">
                         <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
                         <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
                         <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Active</th>
@@ -564,9 +714,9 @@ export default function Maintenance() {
                         <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Reclaimable</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
+                    <tbody className="divide-y divide-white/[0.03]">
                       {disk.docker_df.map((row) => (
-                        <tr key={row.type} className="hover:bg-white/[0.02] transition-colors duration-150">
+                        <tr key={row.type} className="hover:bg-white/[0.03] transition-colors duration-150">
                           <td className="px-4 py-2 text-slate-200 font-medium text-xs">{row.type}</td>
                           <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs">{row.total}</td>
                           <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs">{row.active}</td>
@@ -590,7 +740,7 @@ export default function Maintenance() {
       {/* ================================================================== */}
       {/* 4. Actions */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/[0.06]">
+      <div className="glass rounded-xl p-5 border border-white/5">
         <h3 className="text-sm font-semibold text-slate-200 mb-3">Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Safe Prune */}

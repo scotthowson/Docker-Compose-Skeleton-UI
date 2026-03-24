@@ -25,8 +25,8 @@ export function CopyButton({ text, className = '', size = 12 }: CopyButtonProps)
       className={`
         inline-flex items-center justify-center
         rounded p-0.5
-        text-slate-600 hover:text-slate-300
-        hover:bg-white/[0.06]
+        text-slate-500 hover:text-slate-300
+        hover:bg-white/5
         transition-all duration-150
         ${className}
       `}

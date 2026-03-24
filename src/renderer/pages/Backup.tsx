@@ -28,6 +28,10 @@ import {
   CheckCircle,
   X,
   Download,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  Layers,
 } from 'lucide-react'
 import type {
   BackupStatusResponse,
@@ -67,6 +71,70 @@ function formatDateString(dateStr: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
+const BACKUP_GUIDE_SECTIONS = [
+  {
+    title: 'What Gets Backed Up',
+    icon: Archive,
+    content: `Full backups capture your entire DCS directory:
+
+• docker-compose.yml    All stack compose files
+• .env files            Stack and root environment configs
+• .config/              DCS framework configuration
+• .api-auth/            User accounts and settings
+• .templates/           Custom service templates
+• .plugins/             Installed plugins
+
+Backups do NOT include Docker volumes or
+container data — only configuration files.
+Use Docker volume snapshots for data backup.`,
+  },
+  {
+    title: 'Configuration',
+    icon: Shield,
+    content: `Configure backup in your server's .env file:
+
+BACKUP_DEST_DIR="/path/to/backup/storage"
+BACKUP_SOURCE_DIR=""     # defaults to DCS root
+BACKUP_RETENTION_COUNT=5 # keep last 5 backups
+
+The destination must be a writable directory.
+Common choices:
+  /srv/backups        Local backup storage
+  /mnt/nas/backups    Network-attached storage
+  /mnt/usb/backups    External USB drive`,
+  },
+  {
+    title: 'Targeted Stack Backups',
+    icon: Layers,
+    content: `Targeted backups capture a single stack:
+
+1. Select the stack from the dropdown
+2. Click "Backup Stack"
+
+This creates a smaller archive containing only
+that stack's compose file, .env, and related
+configuration. Useful for quick saves before
+making changes to a specific stack.`,
+  },
+  {
+    title: 'Restoring from Backup',
+    icon: RotateCcw,
+    content: `To restore from a backup archive:
+
+1. Find the backup in the archives table
+2. Click "Restore" on the desired backup
+3. Type RESTORE to confirm
+4. Wait for the restore to complete
+
+IMPORTANT: Restoring overwrites current
+configuration files. It does NOT automatically
+restart stacks — do this manually after restore.
+
+Tip: Create a fresh backup before restoring
+an older one, so you can roll back if needed.`,
+  },
+]
+
 export default function Backup() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
@@ -78,6 +146,8 @@ export default function Backup() {
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null)
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [restoreLoading, setRestoreLoading] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
   // Close topmost modal on Escape
   useEffect(() => {
@@ -198,9 +268,9 @@ export default function Backup() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-24">
-        <Loader2 className="w-8 h-8 text-slate-600 animate-spin mb-4" />
+        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
         <p className="text-sm text-slate-500">Waiting for server connection...</p>
-        <p className="text-xs text-slate-600 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Ensure the Docker Compose Skeleton API server is running
         </p>
       </div>
@@ -210,7 +280,7 @@ export default function Backup() {
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6 animate-fade-in">
       <DisconnectedBanner />
-      <div className="flex flex-col gap-5 animate-in">
+      <div className="flex flex-col gap-5 animate-fade-in">
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between">
           <div>
@@ -219,27 +289,82 @@ export default function Backup() {
               Create, manage, and restore server backups
             </p>
           </div>
-          <button
-            onClick={refreshBackups}
-            disabled={backupsLoading}
-            className="
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-          >
-            <RotateCcw size={15} className={backupsLoading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowGuide(!showGuide)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15 transition-all duration-200"
+            >
+              <BookOpen size={15} />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+            <button
+              onClick={refreshBackups}
+              disabled={backupsLoading}
+              className="
+                flex items-center gap-2 rounded-lg px-3.5 py-2
+                text-sm font-medium text-slate-300
+                bg-white/5 border border-white/10
+                hover:bg-white/10 hover:border-white/15
+                disabled:opacity-50 transition-all duration-200
+              "
+            >
+              <RotateCcw size={15} className={backupsLoading ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
         </div>
+
+        {/* Backup Guide */}
+        {showGuide && (
+          <div className="glass rounded-xl overflow-hidden animate-fade-in">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-emerald-400" />
+                <h2 className="text-sm font-semibold text-white">Backup & Restore Guide</h2>
+              </div>
+              <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+                <X size={14} className="text-slate-400" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-slate-400 mb-4">
+                Backups create compressed archives of your DCS configuration. Use them to protect against accidental changes or migrate to a new server.
+              </p>
+              {BACKUP_GUIDE_SECTIONS.map((section, i) => {
+                const isExpanded = expandedGuide === i
+                const Icon = section.icon
+                return (
+                  <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setExpandedGuide(isExpanded ? null : i)}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                    >
+                      <Icon size={14} className="text-emerald-400 shrink-0" />
+                      <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
+                      {isExpanded
+                        ? <ChevronDown size={14} className="text-slate-500" />
+                        : <ChevronRight size={14} className="text-slate-500" />
+                      }
+                    </button>
+                    {isExpanded && (
+                      <div className="px-4 pb-4 animate-fade-in">
+                        <pre className="bg-slate-950/60 border border-white/[0.03] rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto scrollbar-thin whitespace-pre leading-relaxed">
+                          {section.content}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ================================================================= */}
         {/* Backup Status                                                     */}
         {/* ================================================================= */}
         <div className="glass rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
             <Shield size={16} className="text-cyan-400" />
             <h3 className="text-sm font-semibold text-slate-200">Backup Status</h3>
           </div>
@@ -390,7 +515,7 @@ export default function Backup() {
         {/* Trigger Backup                                                    */}
         {/* ================================================================= */}
         <div className="glass rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
             <Play size={16} className="text-emerald-400" />
             <h3 className="text-sm font-semibold text-slate-200">Trigger Backup</h3>
           </div>
@@ -411,19 +536,19 @@ export default function Backup() {
             {/* Config summary */}
             {configData && isConfigured && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                <div className="glass-subtle rounded-lg p-3">
+                <div className="glass border border-white/5 rounded-lg p-3">
                   <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Destination</p>
                   <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.destination}>
                     {configData.destination || 'N/A'}
                   </p>
                 </div>
-                <div className="glass-subtle rounded-lg p-3">
+                <div className="glass border border-white/5 rounded-lg p-3">
                   <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Source</p>
                   <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.source}>
                     {configData.source || 'N/A'}
                   </p>
                 </div>
-                <div className="glass-subtle rounded-lg p-3">
+                <div className="glass border border-white/5 rounded-lg p-3">
                   <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Retention</p>
                   <p className="mt-1 text-xs font-mono text-slate-300">
                     {configData.retention_count} backup{configData.retention_count !== 1 ? 's' : ''}
@@ -463,9 +588,9 @@ export default function Backup() {
                   disabled={!isConfigured}
                   className="
                     flex-1 rounded-lg px-3 py-2.5 text-sm
-                    bg-white/[0.04] border border-white/[0.08]
+                    bg-white/5 border border-white/10
                     text-slate-200
-                    focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30
+                    focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30
                     disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
                     appearance-none
@@ -494,8 +619,8 @@ export default function Backup() {
                   className="
                     flex items-center gap-2 rounded-lg px-4 py-2.5
                     text-sm font-medium text-slate-300
-                    bg-white/[0.04] border border-white/[0.08]
-                    hover:bg-white/[0.08] hover:border-white/[0.12]
+                    bg-white/5 border border-white/10
+                    hover:bg-white/10 hover:border-white/10
                     disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
                   "
@@ -511,8 +636,8 @@ export default function Backup() {
         {/* ================================================================= */}
         {/* Backup Archives                                                   */}
         {/* ================================================================= */}
-        <div className="glass-subtle rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="glass border border-white/5 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <HardDrive size={16} className="text-cyan-400" />
               Backup Archives
@@ -525,7 +650,7 @@ export default function Backup() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-white/5">
                   <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
                     Filename
                   </th>
@@ -540,14 +665,14 @@ export default function Backup() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04] stagger-children">
+              <tbody className="divide-y divide-white/[0.03] stagger-children">
                 {backups.length === 0 && !backupsLoading && (
                   <tr>
                     <td colSpan={4} className="px-5 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <Archive size={32} className="text-slate-700" />
+                        <Archive size={32} className="text-slate-500" />
                         <p className="text-sm text-slate-500">No backup archives found</p>
-                        <p className="text-xs text-slate-600">
+                        <p className="text-xs text-slate-500">
                           Trigger a backup above to create your first archive
                         </p>
                       </div>
@@ -629,9 +754,9 @@ export default function Backup() {
           />
 
           {/* Modal */}
-          <div className="relative w-full max-w-md mx-4 glass rounded-2xl border border-white/[0.08] shadow-2xl shadow-black/60">
+          <div className="relative w-full max-w-md mx-4 glass rounded-2xl border border-white/10 shadow-2xl shadow-black/60">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-rose-500/15">
                   <AlertTriangle size={18} className="text-rose-400" />
@@ -646,7 +771,7 @@ export default function Backup() {
                   }
                 }}
                 disabled={restoreLoading}
-                className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-50"
+                className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all duration-150 disabled:opacity-50"
               >
                 <X size={16} />
               </button>
@@ -665,7 +790,7 @@ export default function Backup() {
               </div>
 
               {/* Archive info */}
-              <div className="glass-subtle rounded-lg p-3.5">
+              <div className="glass border border-white/5 rounded-lg p-3.5">
                 <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-2">
                   Restoring from
                 </p>
@@ -693,9 +818,9 @@ export default function Backup() {
                   disabled={restoreLoading}
                   className="
                     w-full px-3.5 py-2.5 rounded-lg text-sm font-mono
-                    bg-white/[0.04] border border-white/[0.08]
+                    bg-white/5 border border-white/10
                     text-slate-200 placeholder-slate-600
-                    focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/30
+                    focus:outline-none focus:ring-1 focus:ring-rose-500/30 focus:border-rose-500/30
                     disabled:opacity-50
                     transition-all duration-200
                   "
@@ -705,7 +830,7 @@ export default function Backup() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/5">
               <button
                 onClick={() => {
                   setRestoreTarget(null)
@@ -714,8 +839,8 @@ export default function Backup() {
                 disabled={restoreLoading}
                 className="
                   px-4 py-2 rounded-lg text-sm font-medium
-                  text-slate-400 bg-white/[0.04] border border-white/[0.06]
-                  hover:bg-white/[0.08] hover:text-slate-300
+                  text-slate-400 bg-white/5 border border-white/5
+                  hover:bg-white/10 hover:text-slate-300
                   disabled:opacity-50
                   transition-all duration-200
                 "

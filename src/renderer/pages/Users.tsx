@@ -9,7 +9,9 @@ import {
   AlertTriangle, KeyRound, Mail,
 } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { Tooltip } from '../components/common/Tooltip'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   authListUsers, authListInvites, authCreateInvite, authRevokeUser,
@@ -59,6 +61,7 @@ function isExpired(dateStr: string): boolean {
 
 export default function Users() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const currentUser = useAuthStore((s) => s.currentUser)
   const { addToast } = useToast()
 
   const [users, setUsers] = useState<ApiUser[]>([])
@@ -143,7 +146,7 @@ export default function Users() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-24">
-        <Loader2 className="w-8 h-8 text-slate-600 animate-spin mb-4" />
+        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
         <p className="text-sm text-slate-500">Waiting for server connection...</p>
       </div>
     )
@@ -157,18 +160,19 @@ export default function Users() {
       <DisconnectedBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient">User Management</span>
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Manage registered users and invite codes
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-white/5">
+            <UsersIcon className="w-6 h-6 text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold"><span className="text-gradient">User Management</span></h1>
+            <p className="text-sm text-slate-400 mt-0.5">Manage registered users and invite codes</p>
+          </div>
         </div>
         <button
           onClick={fetchData}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -199,26 +203,26 @@ export default function Users() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
         {/* ---- Users List ---- */}
-        <div className="glass-card p-4 md:p-6">
+        <div className="glass rounded-xl border border-white/5 p-5">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <UsersIcon className="h-4 w-4 text-emerald-400" />
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Registered Users
               </h2>
-              <span className="text-xs text-slate-600">({users.length})</span>
+              <span className="text-xs text-slate-500">({users.length})</span>
             </div>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 text-slate-600 animate-spin" />
+              <Loader2 className="h-6 w-6 text-slate-500 animate-spin" />
             </div>
           ) : users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-600">
-              <UsersIcon className="h-8 w-8 mb-3 opacity-40" />
-              <p className="text-sm">No users registered yet</p>
-              <p className="text-xs text-slate-600 mt-1">Create an invite code to get started</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <UsersIcon className="h-8 w-8 mb-3 text-slate-500" />
+              <p className="text-sm text-slate-400 font-medium">No users registered yet</p>
+              <p className="text-xs text-slate-500 mt-1">Create an invite code to get started</p>
               <button
                 onClick={handleCreateInvite}
                 disabled={inviteLoading}
@@ -233,7 +237,7 @@ export default function Users() {
               {users.map((user) => (
                 <div
                   key={user.username}
-                  className="flex items-center justify-between rounded-lg bg-white/[0.02] border border-white/[0.04] px-4 py-3 hover:bg-white/[0.04] transition-colors"
+                  className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.03] px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`
@@ -258,7 +262,7 @@ export default function Users() {
                           {user.role === 'admin' ? <Shield className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
                           {user.role}
                         </span>
-                        <span className="text-[10px] text-slate-600 flex items-center gap-1">
+                        <span className="text-[10px] text-slate-500 flex items-center gap-1">
                           <Clock className="h-2.5 w-2.5" />
                           {timeAgo(user.created_at)}
                         </span>
@@ -266,8 +270,18 @@ export default function Users() {
                     </div>
                   </div>
 
-                  {/* Revoke button */}
-                  {showConfirmRevoke === user.username ? (
+                  {/* Revoke button — disabled for current user (cannot revoke own access) */}
+                  {user.username === currentUser ? (
+                    <Tooltip content="You cannot revoke your own account" position="bottom">
+                      <button
+                        disabled
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 bg-white/[0.03] border border-white/5 cursor-not-allowed"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Revoke
+                      </button>
+                    </Tooltip>
+                  ) : showConfirmRevoke === user.username ? (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleRevokeUser(user.username)}
@@ -300,7 +314,7 @@ export default function Users() {
         </div>
 
         {/* ---- Invite Codes ---- */}
-        <div className="glass-card p-4 md:p-6">
+        <div className="glass rounded-xl border border-white/5 p-5">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-cyan-400" />
@@ -311,14 +325,14 @@ export default function Users() {
           </div>
 
           {/* Create invite form */}
-          <div className="flex items-center gap-3 mb-5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+          <div className="flex items-center gap-3 mb-5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
             <div className="flex-1 flex items-center gap-2">
               <UserPlus className="h-4 w-4 text-cyan-400 flex-shrink-0" />
               <span className="text-xs text-slate-400">Generate new invite as:</span>
               <select
                 value={newInviteRole}
                 onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin')}
-                className="px-2 py-1 rounded-lg text-xs bg-white/[0.04] border border-white/[0.06] text-slate-300 focus:outline-none focus:border-cyan-500/30"
+                className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-cyan-500/30"
               >
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
@@ -337,7 +351,7 @@ export default function Users() {
           {/* Active invites */}
           {activeInvites.length > 0 && (
             <div className="mb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
                 Active ({activeInvites.length})
               </p>
               <div className="space-y-2">
@@ -356,7 +370,7 @@ export default function Users() {
           {/* Used invites */}
           {usedInvites.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
                 Used ({usedInvites.length})
               </p>
               <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin">
@@ -390,10 +404,10 @@ export default function Users() {
           )}
 
           {invites.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-600">
-              <KeyRound className="h-8 w-8 mb-3 opacity-40" />
-              <p className="text-sm">No invite codes yet</p>
-              <p className="text-xs text-slate-600 mt-1">Generate an invite to allow new user registration</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <KeyRound className="h-8 w-8 mb-3 text-slate-500" />
+              <p className="text-sm text-slate-400 font-medium">No invite codes yet</p>
+              <p className="text-xs text-slate-500 mt-1">Generate an invite to allow new user registration</p>
             </div>
           )}
         </div>
@@ -418,7 +432,7 @@ function SummaryCard({ icon, label, value, color }: {
     amber: 'glow-amber',
   }
   return (
-    <div className={`glass-card p-5 flex items-center gap-4 ${glowMap[color] ?? ''}`}>
+    <div className="glass rounded-xl border border-white/5 p-5 flex items-center gap-4">
       <div className="flex-shrink-0">{icon}</div>
       <div>
         <p className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</p>
@@ -440,7 +454,7 @@ function InviteCard({ invite, copiedCode, onCopy }: {
       flex items-center justify-between rounded-lg px-4 py-3 border transition-colors
       ${expired
         ? 'bg-rose-500/5 border-rose-500/10'
-        : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.04]'
+        : 'bg-white/[0.03] border-white/[0.03] hover:bg-white/5'
       }
     `}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -464,13 +478,13 @@ function InviteCard({ invite, copiedCode, onCopy }: {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-slate-600 flex items-center gap-1">
+        <span className="text-[10px] text-slate-500 flex items-center gap-1">
           <Clock className="h-2.5 w-2.5" />
           {formatDate(invite.expires_at)}
         </span>
         <button
           onClick={() => onCopy(invite.code)}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all"
+          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
           title="Copy invite code"
         >
           {copiedCode === invite.code

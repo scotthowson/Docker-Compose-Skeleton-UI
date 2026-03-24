@@ -857,9 +857,45 @@ export interface SystemUpdateApplyResponse {
 }
 
 export interface SystemUpdateRollbackResponse {
-  success: boolean
-  rolled_back_to: string
+  success?: boolean
+  rolled_back?: boolean
+  restored_version?: string
+  previous_version?: string
+  backup_tag?: string
+  branch?: string
   message?: string
+}
+
+export interface OsUpdateCheckResponse {
+  available: boolean
+  count: number
+  package_manager: string
+  packages: { package: string; version: string }[]
+  checked_as: string
+}
+
+export interface OsUpdateApplyResponse {
+  success: boolean
+  status?: string
+  package_manager: string
+  exit_code?: number
+  summary?: string
+  output?: string
+  applied_as?: string
+  message: string
+}
+
+export interface OsUpdateStatusResponse {
+  status: 'idle' | 'running' | 'complete'
+  success?: boolean
+  package_manager?: string
+  exit_code?: number
+  summary?: string
+  output?: string
+  applied_as?: string
+  message?: string
+  started_at?: string
+  completed_at?: string
 }
 
 export interface UIUpdateCheckResponse {
@@ -1907,3 +1943,54 @@ export interface ImagePullResponse {
   image: string
   message: string
 }
+
+// Dashboard Layout (24-column free-placement grid, 50px row height)
+export interface DashboardCard {
+  id: string
+  visible: boolean
+  x: number   // column start (0-based, 0-23)
+  y: number   // row start (0-based, each row = 50px)
+  w: number   // width in columns
+  h: number   // height in row units (× 50px)
+}
+
+export interface DashboardLayout {
+  cards: DashboardCard[]
+  labels: Record<string, string>  // card ID → custom title (for dividers)
+  version: number
+}
+
+// Keep DashboardCardSize for backwards compat with any references
+export type DashboardCardSize = 'small' | 'medium' | 'large' | 'full'
+
+// Plugin Cards
+export interface PluginCardMeta {
+  id: string
+  title: string
+  icon: string
+  defaultW: number
+  defaultH: number
+  description: string
+  plugin: string
+  author?: string
+  version?: string
+  // Size constraints (omit for free resizing)
+  minW?: number
+  minH?: number
+  maxW?: number
+  maxH?: number
+  // Behavior
+  isScrollable?: boolean
+  refreshInterval?: number
+  dataEndpoint?: string | null
+}
+
+export interface PluginCardsResponse {
+  cards: PluginCardMeta[]
+  total: number
+}
+
+export interface DashboardLayoutResponse {
+  layout: DashboardLayout
+}
+

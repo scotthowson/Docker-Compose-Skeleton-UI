@@ -53,18 +53,18 @@ export default function Schedules() {
           <div><h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Scheduled Operations</span></h1><p className="text-sm text-slate-400">Automated tasks on a schedule</p></div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => fetchSchedules()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
-          {isAdmin && <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 transition-colors press"><Plus className="w-4 h-4" /> Create Schedule</button>}
+          <button onClick={() => fetchSchedules()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
+          {isAdmin && <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"><Plus size={14} /> Create Schedule</button>}
         </div>
       </div>
 
-      {error && <div className="glass-subtle rounded-lg p-3 text-rose-400 text-sm">{error}</div>}
+      {error && <div className="glass rounded-lg p-3 text-rose-400 text-sm">{error}</div>}
 
       {loading ? (
         <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="glass rounded-xl p-4 h-16 skeleton" />)}</div>
       ) : schedules.length === 0 ? (
         <div className="glass rounded-xl p-12 text-center">
-          <CalendarClock className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <CalendarClock className="w-12 h-12 text-slate-500 mx-auto mb-3" />
           <p className="text-slate-400">No scheduled operations</p>
           <p className="text-sm text-slate-500 mt-1">Create a schedule to automate recurring tasks</p>
         </div>
@@ -113,7 +113,7 @@ export default function Schedules() {
                             {h.success ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                             <span className="text-slate-500">{new Date(h.timestamp).toLocaleString()}</span>
                             <span className="text-slate-400">{h.action}</span>
-                            <span className="text-slate-600">{h.duration_ms}ms</span>
+                            <span className="text-slate-500">{h.duration_ms}ms</span>
                           </div>
                         ))}
                       </div>
@@ -141,7 +141,7 @@ export default function Schedules() {
               <div><label className="block text-sm text-slate-400 mb-1">Target (optional)</label><input value={form.target} onChange={e => setForm({...form, target: e.target.value})} placeholder="Stack name or script path" className="w-full px-3 py-2 rounded-lg glass text-sm text-white placeholder-slate-500 border border-white/5 focus:border-emerald-500/50 focus:outline-none" /></div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5">Cancel</button>
-                <button type="submit" disabled={saving || !form.name} className="flex-1 px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create</button>
+                <button type="submit" disabled={saving || !form.name} className="flex-1 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 transition-all">{saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Create</button>
               </div>
             </form>
           </div>

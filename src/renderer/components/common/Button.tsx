@@ -22,7 +22,7 @@ const variantClasses: Record<string, string> = {
   `,
   secondary: `
     bg-white/5 text-slate-300 border border-white/10
-    hover:bg-white/[0.08] hover:border-white/[0.15] hover:text-slate-100
+    hover:bg-white/10 hover:border-white/[0.15] hover:text-slate-100
     active:bg-white/[0.12]
   `,
   danger: `
@@ -32,7 +32,7 @@ const variantClasses: Record<string, string> = {
   `,
   ghost: `
     bg-transparent text-slate-400 border border-transparent
-    hover:bg-white/[0.06] hover:text-slate-200
+    hover:bg-white/5 hover:text-slate-200
     active:bg-white/[0.10]
   `,
 }

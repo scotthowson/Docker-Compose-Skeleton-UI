@@ -82,12 +82,12 @@ function TableSkeleton({ lines = 5, className = '' }: { lines: number; className
   return (
     <div
       className={`
-        rounded-xl border border-white/[0.06] overflow-hidden
+        rounded-xl border border-white/5 overflow-hidden
         ${className}
       `}
     >
       {/* Table header */}
-      <div className="flex gap-4 px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
+      <div className="flex gap-4 px-4 py-3 bg-white/5 border-b border-white/5">
         <ShimmerBar className="h-3 w-24" />
         <ShimmerBar className="h-3 w-32" />
         <ShimmerBar className="h-3 w-20" />

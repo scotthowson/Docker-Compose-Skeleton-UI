@@ -170,7 +170,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
         className="
           relative w-full max-w-3xl mx-4
           bg-slate-900/95 backdrop-blur-2xl
-          border border-white/[0.08] rounded-2xl
+          border border-white/10 rounded-2xl
           shadow-2xl shadow-black/40
           overflow-hidden animate-scale-in
           flex flex-col
@@ -181,7 +181,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
         aria-labelledby="create-stack-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
               <Sparkles className="w-5 h-5 text-emerald-400" />
@@ -200,7 +200,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
             className="
               flex items-center justify-center w-9 h-9 rounded-lg
               text-slate-500 hover:text-slate-200
-              hover:bg-white/[0.06]
+              hover:bg-white/5
               transition-colors duration-150
             "
             aria-label="Close"
@@ -229,14 +229,14 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
               }}
               placeholder="my-new-stack"
               className="
-                w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl
+                w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl
                 text-sm text-slate-200 placeholder-slate-600 font-mono
                 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
                 transition-all duration-200
               "
             />
             <div className="flex items-center justify-between mt-2">
-              <p className="text-[10px] text-slate-600">
+              <p className="text-[10px] text-slate-500">
                 Use lowercase letters, numbers, and hyphens
               </p>
               {stackName && sanitizedName !== stackName.trim().toLowerCase() && (
@@ -253,14 +253,14 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
           </div>
 
           {/* Tab switcher */}
-          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded-lg p-1 w-fit">
+          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/5 rounded-lg p-1 w-fit">
             <button
               onClick={() => setActiveTab('compose')}
               className={`
                 flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150
                 ${activeTab === 'compose'
                   ? 'bg-white/[0.08] text-slate-200 ring-1 ring-white/[0.1]'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                 }
               `}
             >
@@ -273,7 +273,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
                 flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150
                 ${activeTab === 'env'
                   ? 'bg-white/[0.08] text-slate-200 ring-1 ring-white/[0.1]'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                 }
               `}
             >
@@ -283,9 +283,9 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
           </div>
 
           {/* Editor area */}
-          <div className="rounded-xl border border-white/[0.06] overflow-hidden bg-slate-950/60">
+          <div className="rounded-xl border border-white/5 overflow-hidden bg-slate-950/60">
             {/* Editor header */}
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06] bg-slate-900/40">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-slate-900/40">
               {activeTab === 'compose' ? (
                 <FileCode2 size={13} className="text-cyan-400" />
               ) : (
@@ -294,7 +294,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
               <span className="text-[11px] text-slate-400 font-mono">
                 {activeTab === 'compose' ? 'docker-compose.yml' : '.env'}
               </span>
-              <span className="ml-auto text-[10px] text-slate-600">
+              <span className="ml-auto text-[10px] text-slate-500">
                 {activeTab === 'compose' ? 'YAML' : 'ENV'}
               </span>
             </div>
@@ -324,11 +324,11 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
             />
 
             {/* Editor footer */}
-            <div className="flex items-center justify-between px-4 py-2 border-t border-white/[0.06] bg-slate-900/40">
-              <span className="text-[10px] text-slate-600 font-mono">
+            <div className="flex items-center justify-between px-4 py-2 border-t border-white/5 bg-slate-900/40">
+              <span className="text-[10px] text-slate-500 font-mono">
                 {(activeTab === 'compose' ? composeContent : envContent).split('\n').length} lines
               </span>
-              <span className="text-[10px] text-slate-600">
+              <span className="text-[10px] text-slate-500">
                 {activeTab === 'compose' ? 'YAML' : 'ENV'}
               </span>
             </div>
@@ -344,17 +344,17 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.06] shrink-0 bg-slate-900/50">
-          <p className="text-[11px] text-slate-600">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-slate-400 font-mono text-[10px]">Esc</kbd> to cancel
+        <div className="flex items-center justify-between px-6 py-4 border-t border-white/5 shrink-0 bg-slate-900/50">
+          <p className="text-[11px] text-slate-500">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-400 font-mono text-[10px]">Esc</kbd> to cancel
           </p>
           <div className="flex items-center gap-2.5">
             <button
               onClick={onClose}
               className="
                 px-4 py-2.5 text-sm text-slate-400 hover:text-slate-200
-                bg-white/[0.04] hover:bg-white/[0.08]
-                rounded-lg border border-white/[0.08]
+                bg-white/5 hover:bg-white/10
+                rounded-lg border border-white/10
                 transition-all duration-200
               "
             >

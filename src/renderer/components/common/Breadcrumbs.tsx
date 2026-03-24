@@ -36,7 +36,7 @@ export default function Breadcrumbs({ segments }: BreadcrumbsProps) {
 
         return (
           <span key={i} className="flex items-center gap-1">
-            {i === 0 && <Home size={11} className="text-slate-600 mr-0.5" />}
+            {i === 0 && <Home size={11} className="text-slate-500 mr-0.5" />}
             {isClickable ? (
               <button
                 onClick={() => setCurrentPage(crumb.page!)}

@@ -29,10 +29,10 @@ export default function LogHealthSummary({ data, error, onRetry, collapsible = f
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
         <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">Log Health</h3>
+          <ServerOff size={14} className="text-slate-500" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Log Health</h3>
         </div>
-        <p className="text-xs text-slate-600">Not connected</p>
+        <p className="text-xs text-slate-500">Not connected</p>
       </div>
     )
   }
@@ -79,7 +79,7 @@ export default function LogHealthSummary({ data, error, onRetry, collapsible = f
 
   return (
     <div
-      className={`glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/[0.1] transition-colors ${hasCritical ? 'border-rose-500/30' : ''}`}
+      className={`glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors ${hasCritical ? 'border-rose-500/30' : ''}`}
       onClick={collapsible ? undefined : () => setCurrentPage('logs')}
     >
       <div

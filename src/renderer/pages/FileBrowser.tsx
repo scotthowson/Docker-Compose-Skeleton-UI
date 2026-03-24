@@ -90,9 +90,9 @@ function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-      <div className="w-full max-w-6xl bg-slate-900 border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+      <div className="w-full max-w-6xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-cyan-400 shrink-0" />
             <div className="min-w-0">
@@ -102,7 +102,7 @@ function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors shrink-0"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
           >
             <X size={16} />
           </button>
@@ -112,7 +112,7 @@ function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
         <div className="flex-1 overflow-auto p-0">
           {isEmpty && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <FileText size={28} className="text-slate-600" />
+              <FileText size={28} className="text-slate-500" />
               <p className="text-sm text-slate-500">File is empty or binary content cannot be displayed</p>
             </div>
           )}
@@ -120,7 +120,7 @@ function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <AlertTriangle size={28} className="text-amber-500/60" />
               <p className="text-sm text-slate-500">File content is too large to display ({formatBytes(size)})</p>
-              <p className="text-xs text-slate-600">Only the retrieved portion is shown below</p>
+              <p className="text-xs text-slate-500">Only the retrieved portion is shown below</p>
             </div>
           )}
           {!isEmpty && (
@@ -311,8 +311,8 @@ export default function FileBrowser() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-600" />
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+          <WifiOff size={24} className="text-slate-500" />
         </div>
         <p className="text-sm text-slate-500">
           Connect to a server to browse container files
@@ -349,7 +349,7 @@ export default function FileBrowser() {
           <button
             onClick={handleRefresh}
             disabled={loading || !selectedContainer}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
@@ -371,7 +371,7 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       {/* Container selector                                                 */}
       {/* ----------------------------------------------------------------- */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl p-4">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4">
         <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 block font-semibold">
           Select Container
         </label>
@@ -381,7 +381,7 @@ export default function FileBrowser() {
             value={selectedContainer}
             onChange={(e) => handleContainerChange(e.target.value)}
             disabled={containersLoading}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+            className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
           >
             <option value="" className="bg-slate-900 text-slate-400">
               {containersLoading
@@ -413,8 +413,8 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       {!selectedContainer && (
         <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/[0.06] flex items-center justify-center">
-            <Search size={22} className="text-slate-600" />
+          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
+            <Search size={22} className="text-slate-500" />
           </div>
           <p className="text-sm text-slate-500 text-center max-w-sm">
             Select a running container above to browse its filesystem.
@@ -426,20 +426,20 @@ export default function FileBrowser() {
       {/* Breadcrumb path bar                                                */}
       {/* ----------------------------------------------------------------- */}
       {selectedContainer && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl px-4 py-3">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl px-4 py-3">
           <div className="flex items-center gap-1 flex-wrap text-xs">
             <FolderOpen size={14} className="text-cyan-400 shrink-0 mr-1" />
             {breadcrumbs.map((seg, i) => (
               <span key={seg.fullPath} className="flex items-center gap-1">
                 {i > 0 && (
-                  <ChevronRight size={12} className="text-slate-600" />
+                  <ChevronRight size={12} className="text-slate-500" />
                 )}
                 <button
                   onClick={() => navigateTo(seg.fullPath)}
                   className={`px-1.5 py-0.5 rounded transition-colors ${
                     i === breadcrumbs.length - 1
                       ? 'text-slate-200 font-medium bg-white/[0.06]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
                   {seg.name}
@@ -455,7 +455,7 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       {selectedContainer && loading && entries.length === 0 && !error && (
         <div className="flex items-center justify-center py-16 animate-fade-in">
-          <Loader2 size={24} className="animate-spin text-slate-600" />
+          <Loader2 size={24} className="animate-spin text-slate-500" />
         </div>
       )}
 
@@ -468,12 +468,12 @@ export default function FileBrowser() {
           <p className="text-sm text-slate-400 mb-1">
             Failed to browse files
           </p>
-          <p className="text-xs text-slate-600 mb-4 max-w-md mx-auto">
+          <p className="text-xs text-slate-500 mb-4 max-w-md mx-auto">
             {error}
           </p>
           <button
             onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08] transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
           >
             <RefreshCw size={13} />
             Retry
@@ -485,9 +485,9 @@ export default function FileBrowser() {
       {/* Directory listing table                                            */}
       {/* ----------------------------------------------------------------- */}
       {selectedContainer && !error && (entries.length > 0 || (!loading && entries.length === 0 && currentPath !== '/')) && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl overflow-hidden">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
           {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 border-b border-white/5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             <span className="w-5" />
             <span>Name</span>
             <span className="w-20 text-right">Size</span>
@@ -495,12 +495,12 @@ export default function FileBrowser() {
             <span className="w-32 text-right">Modified</span>
           </div>
 
-          <div className="divide-y divide-white/[0.04]">
+          <div className="divide-y divide-white/[0.03]">
             {/* Parent directory (..) */}
             {currentPath !== '/' && (
               <button
                 onClick={navigateUp}
-                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.02] transition-colors group"
+                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors group"
               >
                 <ArrowUp
                   size={16}
@@ -520,7 +520,7 @@ export default function FileBrowser() {
               <button
                 key={entry.name}
                 onClick={() => handleEntryClick(entry)}
-                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.02] transition-colors group"
+                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors group"
               >
                 {/* Icon */}
                 <span className="mt-0.5">
@@ -563,7 +563,7 @@ export default function FileBrowser() {
 
                 {/* Permissions */}
                 <span className="hidden sm:block w-24 text-center">
-                  <code className="text-[10px] text-slate-600 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">
+                  <code className="text-[10px] text-slate-500 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">
                     {entry.permissions}
                   </code>
                 </span>
@@ -579,15 +579,15 @@ export default function FileBrowser() {
           {/* Empty directory */}
           {sortedEntries.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <FolderOpen size={24} className="text-slate-600" />
+              <FolderOpen size={24} className="text-slate-500" />
               <p className="text-xs text-slate-500">Directory is empty</p>
             </div>
           )}
 
           {/* Loading indicator for subsequent fetches */}
           {loading && entries.length > 0 && (
-            <div className="flex items-center justify-center py-4 border-t border-white/[0.04]">
-              <Loader2 size={16} className="animate-spin text-slate-600" />
+            <div className="flex items-center justify-center py-4 border-t border-white/[0.03]">
+              <Loader2 size={16} className="animate-spin text-slate-500" />
               <span className="text-xs text-slate-500 ml-2">Loading...</span>
             </div>
           )}
@@ -602,9 +602,9 @@ export default function FileBrowser() {
         !loading &&
         entries.length === 0 &&
         currentPath === '/' && (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.06] rounded-xl overflow-hidden">
+          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
             <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <FolderOpen size={24} className="text-slate-600" />
+              <FolderOpen size={24} className="text-slate-500" />
               <p className="text-xs text-slate-500">
                 No entries found at root. The container may not support file
                 listing.

@@ -547,6 +547,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Stop heartbeat, reconnect timers, and all polling
     useConnectionStore.getState().disconnect()
 
+    // SECURITY: Clear API tokens from stored server profiles to prevent token reuse
+    try {
+      const raw = localStorage.getItem('dcs-servers')
+      if (raw) {
+        const data = JSON.parse(raw)
+        if (data?.servers) {
+          data.servers = data.servers.map((s: Record<string, unknown>) => ({ ...s, apiToken: null }))
+          localStorage.setItem('dcs-servers', JSON.stringify(data))
+        }
+      }
+    } catch { /* ignore parse errors */ }
+
     // ── ASYNC: best-effort server-side token invalidation ──
     // apiClient still has the token briefly for this call
     try {
@@ -618,6 +630,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!valid) {
       set({ error: 'Password is incorrect' })
       return false
+    }
+
+    // Prevent deleting the last admin account
+    // Role is stored per-user in localStorage, not on the account object
+    const deletingUsername = accounts[accountIdx].username
+    const deletingRole = getPersistedUserRole(deletingUsername) || determineDefaultRole(deletingUsername, accounts)
+    if (deletingRole === 'admin') {
+      const otherAdmins = accounts.filter((a, i) => {
+        if (i === accountIdx) return false
+        const role = getPersistedUserRole(a.username) || determineDefaultRole(a.username, accounts)
+        return role === 'admin'
+      })
+      if (otherAdmins.length === 0) {
+        set({ error: 'Cannot delete the only admin account. Create another admin first.' })
+        return false
+      }
     }
 
     accounts.splice(accountIdx, 1)

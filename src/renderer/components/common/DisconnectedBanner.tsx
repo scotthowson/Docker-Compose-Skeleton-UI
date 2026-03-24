@@ -30,7 +30,7 @@ export function DisconnectedBanner() {
         {!isRetrying && (
           <button
             onClick={connect}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/[0.08] text-slate-300 hover:bg-white/[0.1] transition-all press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/10 text-slate-300 hover:bg-white/[0.1] transition-all press"
           >
             <RefreshCw className="w-3 h-3" />
             Retry

@@ -91,6 +91,9 @@ import type {
   SnapshotRestoreResponse,
   ComposeHistoryResponse,
   ComposeVersionContentResponse,
+  DashboardLayout,
+  DashboardLayoutResponse,
+  PluginCardsResponse,
   ComposeRollbackResponse,
   TemplateListResponse,
   TemplateDetailResponse,
@@ -158,6 +161,9 @@ import type {
   SystemUpdateCheckResponse,
   SystemUpdateApplyResponse,
   SystemUpdateRollbackResponse,
+  OsUpdateCheckResponse,
+  OsUpdateApplyResponse,
+  OsUpdateStatusResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -544,6 +550,34 @@ export function authFactoryReset(opts: { confirm: string; reset_compose?: boolea
 }
 
 // ---------------------------------------------------------------------------
+// TOTP Two-Factor Authentication
+// ---------------------------------------------------------------------------
+
+export interface TotpSetupResponse { secret: string; uri: string; message: string }
+export interface TotpVerifyResponse { success: boolean; message: string }
+export interface TotpValidateResponse { success: boolean; token?: string; username?: string; role?: string }
+
+/** POST /auth/totp/setup — Generate TOTP secret and QR URI */
+export function totpSetup(): Promise<TotpSetupResponse> {
+  return apiClient.post<TotpSetupResponse>('/auth/totp/setup', {})
+}
+
+/** POST /auth/totp/verify — Verify code and enable 2FA */
+export function totpVerify(code: string): Promise<TotpVerifyResponse> {
+  return apiClient.post<TotpVerifyResponse>('/auth/totp/verify', { code })
+}
+
+/** POST /auth/totp/disable — Disable 2FA (requires password) */
+export function totpDisable(password: string): Promise<TotpVerifyResponse> {
+  return apiClient.post<TotpVerifyResponse>('/auth/totp/disable', { password })
+}
+
+/** POST /auth/totp/validate — Complete login with TOTP code (second step) */
+export function totpValidate(totpToken: string, code: string): Promise<TotpValidateResponse> {
+  return apiClient.post<TotpValidateResponse>('/auth/totp/validate', { totp_token: totpToken, code })
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1: Compose Editor & Stack Env
 // ---------------------------------------------------------------------------
 
@@ -923,6 +957,36 @@ export function fetchComposeVersionContent(name: string, versionId: string): Pro
   )
 }
 
+/** GET /settings/dashboard — Fetch user's dashboard layout */
+export function fetchDashboardLayout(): Promise<DashboardLayoutResponse> {
+  return apiClient.get<DashboardLayoutResponse>('/settings/dashboard')
+}
+
+/** POST /settings/dashboard — Save user's dashboard layout */
+export function saveDashboardLayout(layout: DashboardLayout): Promise<{ success: boolean }> {
+  return apiClient.post<{ success: boolean }>('/settings/dashboard', { layout })
+}
+
+/** GET /settings/profile — Fetch user's profile from server */
+export function fetchProfile(): Promise<{ profile: Record<string, unknown> | null }> {
+  return apiClient.get<{ profile: Record<string, unknown> | null }>('/settings/profile')
+}
+
+/** POST /settings/profile — Save user's profile to server */
+export function saveProfileToServer(profile: Record<string, unknown>): Promise<{ success: boolean }> {
+  return apiClient.post<{ success: boolean }>('/settings/profile', { profile })
+}
+
+/** GET /traefik/status — Check if Traefik is deployed and get domain */
+export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string }> {
+  return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
+}
+
+/** GET /plugins/cards — List all available plugin cards */
+export function fetchPluginCards(): Promise<PluginCardsResponse> {
+  return apiClient.get<PluginCardsResponse>('/plugins/cards')
+}
+
 /** POST /stacks/:name/compose/rollback — Rollback compose file */
 export function rollbackCompose(name: string, versionId: string): Promise<ComposeRollbackResponse> {
   return apiClient.post<ComposeRollbackResponse>(
@@ -948,6 +1012,7 @@ export function deployTemplate(name: string, opts: {
   auto_start?: boolean
   replace_services?: boolean
   exclude_services?: string[]
+  custom_routes?: Record<string, string>
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }
@@ -1327,10 +1392,25 @@ export function checkSystemUpdate(): Promise<SystemUpdateCheckResponse> {
 
 /** POST /system/update/apply — Apply DCS framework update (git pull --ff-only) */
 export function applySystemUpdate(): Promise<SystemUpdateApplyResponse> {
-  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: 'UPDATE' }, 120000)
+  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: 'true' }, 120000)
 }
 
 /** POST /system/update/rollback — Rollback to previous version */
 export function rollbackSystemUpdate(backupTag: string): Promise<SystemUpdateRollbackResponse> {
   return apiClient.post<SystemUpdateRollbackResponse>('/system/update/rollback', { backup_tag: backupTag })
+}
+
+/** POST /system/os-update/check — Check for available OS package updates */
+export function checkOsUpdates(terminalToken: string, password?: string): Promise<OsUpdateCheckResponse> {
+  return apiClient.post<OsUpdateCheckResponse>('/system/os-update/check', { terminal_token: terminalToken, ...(password ? { password } : {}) }, 120000)
+}
+
+/** POST /system/os-update/apply — Start OS package updates (background) */
+export function applyOsUpdates(terminalToken: string, password?: string): Promise<OsUpdateApplyResponse> {
+  return apiClient.post<OsUpdateApplyResponse>('/system/os-update/apply', { terminal_token: terminalToken, confirm: 'true', ...(password ? { password } : {}) }, 30000)
+}
+
+/** GET /system/os-update/status — Poll background OS update status */
+export function getOsUpdateStatus(): Promise<OsUpdateStatusResponse> {
+  return apiClient.get<OsUpdateStatusResponse>('/system/os-update/status')
 }
