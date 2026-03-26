@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DashboardCard, DashboardLayout } from '../../shared/types'
-import { getDefaultLayout, GRID_COLS } from '../components/dashboard/cardRegistry'
+import { getDefaultLayout, GRID_COLS, clampCardSize } from '../components/dashboard/cardRegistry'
 import { useAuthStore } from '../stores/authStore'
 
 const STORAGE_KEY_PREFIX = 'dashboard-layout-'
@@ -86,13 +86,13 @@ export function useDashboardLayout() {
     })
   }, [])
 
-  /** Get visible cards sorted by position (top-to-bottom, left-to-right) */
+  /** Get visible cards sorted by position (filter out malformed entries) */
   const visibleCards = layout.cards
-    .filter((c) => c.visible)
+    .filter((c) => c.id && c.visible)
     .sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
 
-  /** Get all cards sorted by position */
-  const allCards = [...layout.cards].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
+  /** Get all cards sorted by position (filter out malformed entries) */
+  const allCards = layout.cards.filter((c) => c.id).sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
 
   /** Save layout (to both localStorage and server) */
   const persistLayout = useCallback((newLayout: DashboardLayout) => {
@@ -124,8 +124,9 @@ export function useDashboardLayout() {
     return false
   }
 
-  /** Resize card — blocked if it would overlap another card */
-  const resizeCard = useCallback((id: string, w: number, h: number) => {
+  /** Resize card — enforces per-card min/max, blocked if it would overlap */
+  const resizeCard = useCallback((id: string, rawW: number, rawH: number) => {
+    const { w, h } = clampCardSize(id, rawW, rawH)
     setLayout((prev) => {
       const card = prev.cards.find((c) => c.id === id)
       if (!card) return prev

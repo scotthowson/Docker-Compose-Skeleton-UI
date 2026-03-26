@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DashboardCard } from '../../../shared/types'
-import { getCardEntry, clampW, clampH, H_UNIT, GRID_COLS } from './cardRegistry'
+import { getCardEntry, clampW, clampH, clampCardSize, getCardConstraints, H_UNIT, GRID_COLS } from './cardRegistry'
 
 import { fetchPluginCards } from '../../api/endpoints'
 import { apiClient } from '../../api/client'
@@ -166,7 +166,8 @@ export default function DashboardGrid({
       ev.preventDefault()
       const dw = Math.round((ev.clientX - startX) / colPx)
       const dh = Math.round((ev.clientY - startY) / H_UNIT)
-      onResizeCard(id, clampW(startW + dw), clampH(startH + dh))
+      const clamped = clampCardSize(id, startW + dw, startH + dh)
+      onResizeCard(id, clamped.w, clamped.h)
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove)
@@ -278,7 +279,7 @@ export default function DashboardGrid({
             }}
           />
         )}
-        {visibleCards.map((card) => {
+        {visibleCards.filter((c) => c.id).map((card) => {
           const isSpacer = card.id.startsWith('spacer-')
           const isDivider = card.id.startsWith('divider-')
           const isSpecial = isSpacer || isDivider
@@ -351,8 +352,8 @@ export default function DashboardGrid({
           // ── Plugin cards (sandboxed iframe via srcdoc) ──
           if (card.id.startsWith('plugin:')) {
             const parts = card.id.split(':')  // plugin:pluginName:cardName
-            const pluginName = parts[1]
-            const cardName = parts[2]
+            const pluginName = parts[1] || 'unknown'
+            const cardName = parts[2] || 'default'
             const pluginMeta = pluginCards.find((p) => p.id === card.id)
 
             return (
@@ -471,7 +472,7 @@ export default function DashboardGrid({
             <div className="space-y-2 max-h-[60vh] overflow-y-auto scrollbar-thin">
               {hiddenCards.length === 0 ? (
                 <p className="text-xs text-slate-500 text-center py-8">All cards are visible</p>
-              ) : hiddenCards.map((card) => {
+              ) : hiddenCards.filter((c) => c.id).map((card) => {
                 const entry = getCardEntry(card.id)
                 if (!entry) return null
                 const Icon = ICON_MAP[entry.iconName] || Box

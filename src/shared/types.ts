@@ -1994,3 +1994,8 @@ export interface DashboardLayoutResponse {
   layout: DashboardLayout
 }
 
+// TOTP Two-Factor Authentication
+export interface TotpSetupResponse { secret: string; uri: string; message: string }
+export interface TotpVerifyResponse { success: boolean; message: string }
+export interface TotpValidateResponse { success: boolean; token?: string; username?: string; role?: string }
+

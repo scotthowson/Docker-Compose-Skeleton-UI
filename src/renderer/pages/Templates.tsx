@@ -273,8 +273,7 @@ http:
       middlewares:
         - "traefik-chain"
         - "compress-gzip"
-      tls:
-        certResolver: "letsencrypt"
+      tls: {}
 
   services:
     ${routeId}:
@@ -359,7 +358,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -412,6 +411,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [traefikActive, setTraefikActive] = useState(false)
   const [traefikDomain, setTraefikDomain] = useState('')
   const [enableRouting, setEnableRouting] = useState(true)
+  const [connectProxy, setConnectProxy] = useState(true)
   const [showRoutes, setShowRoutes] = useState(false)
   const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
   const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
@@ -520,7 +520,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const routes = traefikActive && enableRouting && Object.keys(customRoutes).length > 0 ? customRoutes : undefined
     await new Promise((r) => setTimeout(r, 400))
     setDeployStep(2) // Sending to server
-    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes)
+    const proxyFlag = traefikActive && connectProxy ? true : undefined
+    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag)
     if (result) {
       if (autoStart && result.started) {
         setDeployStep(3) // Pulling images
@@ -534,7 +535,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     }
     setDeployStep(0)
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, customRoutes])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, customRoutes, connectProxy])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -934,6 +935,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableRouting ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Proxy Network Toggle */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-emerald-500/10 bg-emerald-500/[0.02]">
+                    <div className="flex items-center gap-2">
+                      <Network size={12} className="text-slate-500" />
+                      <span className="text-[11px] text-slate-400">Connect to <span className="text-emerald-400 font-medium">proxy</span> network</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConnectProxy(!connectProxy)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${connectProxy ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${connectProxy ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                    </button>
                   </div>
 
                   {showRoutes && enableRouting && (
@@ -2290,7 +2306,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -2301,6 +2317,7 @@ export default function Templates() {
           replace_services: true,
           exclude_services: excludeServices,
           custom_routes: customRoutes,
+          connect_proxy: connectProxy,
         })
         if (res.success) {
           refresh()

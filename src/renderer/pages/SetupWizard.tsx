@@ -211,6 +211,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [ddnsSubdomains, setDdnsSubdomains] = useState('@')
   const [ddnsInterval, setDdnsInterval] = useState(300)
 
+  // Authelia SSO configuration (requires Traefik)
+  const [enableAuthelia, setEnableAuthelia] = useState(false)
+  const [autheliaUser, setAutheliaUser] = useState('')
+  const [autheliaDisplay, setAutheliaDisplay] = useState('')
+  const [autheliaEmail, setAutheliaEmail] = useState('')
+  const [autheliaPassword, setAutheliaPassword] = useState('')
+
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
   const [prefSessionMinutes, setPrefSessionMinutes] = useState(240)
@@ -463,29 +470,50 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         stacks: stacks.map((s) => s.name),
       })
 
-      // 2. Mark setup as complete (blocks future setupConfigure calls)
-      await setupComplete()
-
-      // 3. Deploy Traefik if enabled (non-fatal — setup already succeeded)
-      if (enableTraefik && envVars.PROXY_DOMAIN && traefikEmail) {
+      // 2. Deploy Traefik BEFORE marking setup complete (needs setup mode for permissive CORS/auth)
+      if (enableTraefik && envVars.PROXY_DOMAIN) {
         try {
           await deployTemplate('traefik', {
             target_stack: 'networking-security',
             variables: {
               TRAEFIK_DOMAIN: envVars.PROXY_DOMAIN,
-              TRAEFIK_ACME_EMAIL: traefikEmail,
+              TRAEFIK_ACME_EMAIL: traefikEmail || `admin@${envVars.PROXY_DOMAIN}`,
               TRAEFIK_TRUSTED_LAN: traefikTrustedLan,
               ...(cfDnsToken ? { CF_DNS_API_TOKEN: cfDnsToken } : {}),
             },
             auto_start: true,
+            replace_services: true,
             exclude_services: includeDockerSocket ? [] : ['docker-socket-proxy'],
           })
-        } catch {
-          // Traefik deploy failed — user can deploy later from Templates page
+        } catch (err) {
+          console.error('[SetupWizard] Traefik deploy failed:', err)
         }
       }
 
-      // 3. Persist client-side dashboard preferences
+      // 3b. Deploy Authelia if enabled (non-fatal — requires Traefik)
+      if (enableAuthelia && enableTraefik && autheliaUser && autheliaPassword) {
+        try {
+          await deployTemplate('authelia', {
+            target_stack: 'networking-security',
+            variables: {
+              AUTHELIA_ADMIN_USER: autheliaUser,
+              AUTHELIA_ADMIN_DISPLAY: autheliaDisplay || autheliaUser,
+              AUTHELIA_ADMIN_EMAIL: autheliaEmail || `${autheliaUser}@${envVars.PROXY_DOMAIN || 'localhost'}`,
+              AUTHELIA_ADMIN_PASSWORD: autheliaPassword,
+            },
+            auto_start: true,
+            replace_services: true,
+            connect_proxy: true,
+          })
+        } catch (err) {
+          console.error('[SetupWizard] Authelia deploy failed:', err)
+        }
+      }
+
+      // 3. Mark setup as complete (AFTER template deploys so they run in setup mode)
+      await setupComplete()
+
+      // 4. Persist client-side dashboard preferences
       const settingsState = useSettingsStore.getState()
       settingsState.updateSetting('theme', prefTheme)
       settingsState.updateSetting('sessionDurationMinutes', prefSessionMinutes)
@@ -1359,6 +1387,90 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   )}
                 </div>
+
+                {/* ── Authelia SSO (requires Traefik) ── */}
+                {enableTraefik && (
+                  <div className={`border rounded-xl overflow-hidden transition-all ${enableAuthelia ? 'border-violet-500/20' : 'border-white/5'}`}>
+                    <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center">
+                          <Shield size={18} className="text-violet-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-200">Authelia SSO</p>
+                          <p className="text-[10px] text-slate-500">Single sign-on and 2FA for all your services</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {enableAuthelia && <span className="text-[9px] text-violet-400 font-medium">Enabled</span>}
+                        <button
+                          type="button"
+                          onClick={() => setEnableAuthelia(!enableAuthelia)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enableAuthelia ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    {enableAuthelia && (
+                      <div className="px-4 py-4 space-y-3 border-t border-white/5 animate-fade-in">
+                        <p className="text-[11px] text-slate-500">
+                          Authelia will protect your services with a login portal at <span className="text-violet-400 font-medium">auth.{envVars.PROXY_DOMAIN || 'yourdomain.com'}</span>
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-1 font-medium">Admin Username</label>
+                            <input
+                              type="text"
+                              value={autheliaUser}
+                              onChange={(e) => setAutheliaUser(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                              placeholder="admin"
+                              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-1 font-medium">Display Name</label>
+                            <input
+                              type="text"
+                              value={autheliaDisplay}
+                              onChange={(e) => setAutheliaDisplay(e.target.value)}
+                              placeholder="John Doe"
+                              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-1 font-medium">Email</label>
+                          <input
+                            type="email"
+                            value={autheliaEmail}
+                            onChange={(e) => setAutheliaEmail(e.target.value)}
+                            placeholder={`admin@${envVars.PROXY_DOMAIN || 'yourdomain.com'}`}
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-1 font-medium">Password</label>
+                          <input
+                            type="password"
+                            value={autheliaPassword}
+                            onChange={(e) => setAutheliaPassword(e.target.value)}
+                            placeholder="Minimum 8 characters"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                          />
+                        </div>
+                        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/10">
+                          <Shield size={12} className="text-violet-400 mt-0.5 shrink-0" />
+                          <p className="text-[10px] text-slate-500 leading-relaxed">
+                            Authelia uses <span className="text-violet-400">Redis</span> for sessions and <span className="text-violet-400">SQLite</span> for storage.
+                            Secrets are auto-generated. Password is hashed with Argon2id.
+                            After setup, enable per-service protection in your Traefik route files.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Dashboard Preferences (collapsible) ── */}
                 <div className="border border-white/5 rounded-xl overflow-hidden">

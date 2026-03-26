@@ -164,6 +164,9 @@ import type {
   OsUpdateCheckResponse,
   OsUpdateApplyResponse,
   OsUpdateStatusResponse,
+  TotpSetupResponse,
+  TotpVerifyResponse,
+  TotpValidateResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -552,10 +555,6 @@ export function authFactoryReset(opts: { confirm: string; reset_compose?: boolea
 // ---------------------------------------------------------------------------
 // TOTP Two-Factor Authentication
 // ---------------------------------------------------------------------------
-
-export interface TotpSetupResponse { secret: string; uri: string; message: string }
-export interface TotpVerifyResponse { success: boolean; message: string }
-export interface TotpValidateResponse { success: boolean; token?: string; username?: string; role?: string }
 
 /** POST /auth/totp/setup — Generate TOTP secret and QR URI */
 export function totpSetup(): Promise<TotpSetupResponse> {
@@ -1013,6 +1012,7 @@ export function deployTemplate(name: string, opts: {
   replace_services?: boolean
   exclude_services?: string[]
   custom_routes?: Record<string, string>
+  connect_proxy?: boolean
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }
@@ -1251,6 +1251,7 @@ export function scaffoldPlugin(definition: {
   author?: string
   manifest?: Record<string, unknown>
   hooks?: Record<string, string>
+  cards?: Record<string, { meta: Record<string, unknown>; html: string }>
 }): Promise<PluginInstallResponse> {
   return apiClient.post<PluginInstallResponse>('/plugins/scaffold', definition)
 }

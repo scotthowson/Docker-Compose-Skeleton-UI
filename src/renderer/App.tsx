@@ -337,7 +337,7 @@ export default function App() {
     try {
       const { login, currentUser } = useAuthStore.getState()
       if (!currentUser) { setLockError('No active session'); setUnlocking(false); return }
-      const ok = await login(currentUser, lockPassword, true)
+      const ok = await login(currentUser, lockPassword, true) // rememberMe — preserve session after unlock
       if (ok) {
         setIsLocked(false)
         setLockPassword('')
