@@ -250,14 +250,14 @@ export function startStack(name: string): Promise<StackActionResponse> {
 /** POST /stacks/:name/stop — Stop a stack */
 export function stopStack(name: string): Promise<StackActionResponse> {
   return apiClient.post<StackActionResponse>(
-    `/stacks/${encodeURIComponent(name)}/stop`,
+    `/stacks/${encodeURIComponent(name)}/stop`, undefined, 60000,
   )
 }
 
 /** POST /stacks/:name/restart — Restart a stack */
 export function restartStack(name: string): Promise<StackActionResponse> {
   return apiClient.post<StackActionResponse>(
-    `/stacks/${encodeURIComponent(name)}/restart`,
+    `/stacks/${encodeURIComponent(name)}/restart`, undefined, 90000,
   )
 }
 
