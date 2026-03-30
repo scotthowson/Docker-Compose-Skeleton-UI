@@ -1187,6 +1187,7 @@ export interface ImageCheckResponse {
   stale: number
   aging: number
   current: number
+  updates_available?: number
 }
 
 export interface ImageRegistryCheckResponse {

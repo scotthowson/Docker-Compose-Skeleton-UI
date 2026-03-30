@@ -285,8 +285,14 @@ export default function Updates() {
       current: data?.current ?? 0,
       aging: data?.aging ?? 0,
       stale: data?.stale ?? 0,
+      updates: data?.updates_available ?? images.filter((img) => img.update_available === true).length,
     }
-  }, [data])
+  }, [data, images])
+
+  const updatableImages = useMemo(
+    () => images.filter((img) => img.update_available === true),
+    [images],
+  )
 
   const staleImages = useMemo(
     () => images.filter((img) => img.staleness === 'stale'),
@@ -677,8 +683,8 @@ export default function Updates() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Update All Stale */}
-          {isAdmin && staleImages.length > 0 && (
+          {/* Update All — prioritizes images with confirmed registry updates */}
+          {isAdmin && (updatableImages.length > 0 || staleImages.length > 0) && (
             <button
               onClick={handleUpdateAllStale}
               disabled={bulkUpdating}
@@ -686,8 +692,8 @@ export default function Updates() {
                 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
                 border backdrop-blur-sm transition-all duration-200
                 ${bulkUpdating
-                  ? 'bg-rose-500/5 border-rose-500/10 text-rose-400/50 cursor-not-allowed'
-                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 press'
+                  ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400/50 cursor-not-allowed'
+                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
                 }
               `}
             >
@@ -696,7 +702,9 @@ export default function Updates() {
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              Update All Stale ({staleImages.length})
+              {updatableImages.length > 0
+                ? `Update All (${updatableImages.length})`
+                : `Update All Stale (${staleImages.length})`}
             </button>
           )}
 
@@ -724,7 +732,7 @@ export default function Updates() {
       </div>
 
       {/* ---- Summary stat cards ---- */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger-children">
+      <div className={`grid grid-cols-2 ${counts.updates > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3 stagger-children`}>
         <SummaryCard
           icon={<Package className="h-4 w-4 text-cyan-400" />}
           label="Total Images"
@@ -753,6 +761,15 @@ export default function Updates() {
           color="rose"
           loading={isInitialLoad}
         />
+        {counts.updates > 0 && (
+          <SummaryCard
+            icon={<ArrowUpCircle className="h-4 w-4 text-emerald-400" />}
+            label="Updates"
+            value={counts.updates}
+            color="emerald"
+            loading={isInitialLoad}
+          />
+        )}
       </div>
 
       {/* ---- Image Table ---- */}
@@ -762,7 +779,7 @@ export default function Updates() {
             Tracked Images
           </h3>
           <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
-            Staleness is based on when the image was built upstream, not when you pulled it. An image may show as "aging" or "stale" even after updating if the upstream hasn't released a newer build.
+            Age shows when the image was built. Click "Check Registry" to compare digests against upstream — this shows definitive "Update" or "Latest" badges without pulling images.
           </p>
         </div>
 
@@ -883,9 +900,23 @@ export default function Updates() {
                         </span>
                       </td>
 
-                      {/* Staleness badge */}
+                      {/* Staleness badge + update indicator */}
                       <td className="px-4 py-3">
-                        <StalenessBadge staleness={img.staleness} />
+                        <div className="flex items-center gap-1.5">
+                          <StalenessBadge staleness={img.staleness} />
+                          {img.update_available === true && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400">
+                              <ArrowUpCircle size={10} />
+                              Update
+                            </span>
+                          )}
+                          {img.update_available === false && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
+                              <CheckCircle size={10} />
+                              Latest
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Update button */}
@@ -893,15 +924,19 @@ export default function Updates() {
                         {isAdmin ? (
                           <button
                             onClick={() => handleUpdateImage(img.image)}
-                            disabled={isUpdating || img.staleness === 'current'}
+                            disabled={isUpdating || (img.staleness === 'current' && img.update_available !== true)}
                             className={`
                               inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
                               transition-all duration-200
-                              ${img.staleness === 'current'
-                                ? 'bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default'
-                                : isUpdating
+                              ${img.update_available === true
+                                ? isUpdating
                                   ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
-                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
+                                  : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 hover:border-emerald-500/35 press shadow-sm shadow-emerald-500/10'
+                                : img.staleness === 'current'
+                                  ? 'bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default'
+                                  : isUpdating
+                                    ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
+                                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
                               }
                             `}
                           >
