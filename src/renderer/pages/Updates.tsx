@@ -410,6 +410,11 @@ export default function Updates() {
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            {lastChecked && (
+              <span className="text-[10px] text-slate-500">
+                Last checked {formatRelativeTime(lastChecked)}
+              </span>
+            )}
             <button
               onClick={handleCheckSystemUpdate}
               disabled={sysChecking}
@@ -418,9 +423,6 @@ export default function Updates() {
               {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Check for Updates
             </button>
-            <span className="text-[10px] text-slate-500 min-w-[100px]">
-              {lastChecked ? `Last checked ${formatRelativeTime(lastChecked)}` : '\u00A0'}
-            </span>
           </div>
         </div>
 
