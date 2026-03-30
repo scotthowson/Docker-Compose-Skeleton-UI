@@ -357,6 +357,13 @@ export function restartContainer(name: string): Promise<ContainerActionResponse>
   )
 }
 
+/** POST /containers/:name/recreate — Pull latest image, stop, remove, and recreate container */
+export function recreateContainer(name: string): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>(
+    `/containers/${encodeURIComponent(name)}/recreate`, undefined, 120000,
+  )
+}
+
 /** POST /containers/:name/remove — Force-remove a container */
 export function removeContainer(name: string): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
