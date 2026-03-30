@@ -152,10 +152,10 @@ export default function Secrets() {
                     <p className="text-slate-400">services:</p>
                     <p className="text-slate-400">{'  '}my-app:</p>
                     <p className="text-slate-400">{'    '}environment:</p>
-                    <p className="text-slate-300">{'      '}- DB_PASSWORD=<span className="text-amber-400">{'${SECRETS.DB_PASSWORD}'}</span></p>
-                    <p className="text-slate-300">{'      '}- API_KEY=<span className="text-amber-400">{'${SECRETS.STRIPE_KEY}'}</span></p>
+                    <p className="text-slate-300">{'      '}- DB_PASSWORD=<span className="text-amber-400">{'${SECRETS_DB_PASSWORD}'}</span></p>
+                    <p className="text-slate-300">{'      '}- API_KEY=<span className="text-amber-400">{'${SECRETS_STRIPE_KEY}'}</span></p>
                   </div>
-                  <p className="text-slate-500 mt-1">DCS resolves these at deploy time — the actual values never appear in your compose files.</p>
+                  <p className="text-slate-500 mt-1">DCS decrypts these at start time and injects them as environment variables. The values never touch disk. You can also use dot syntax (<code className="text-amber-400/70">{'${SECRETS.KEY}'}</code>) — it auto-converts.</p>
                 </div>
               )}
             </div>
