@@ -39,6 +39,7 @@ import {
   Store,
   Sparkles,
   Network,
+  Shield,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -257,9 +258,12 @@ function lintCompose(compose: string): LintWarning[] {
 // Traefik route generation helper
 // ---------------------------------------------------------------------------
 
-function generateRouteYaml(serviceName: string, containerName: string, containerPort: string, domain: string): string {
+function generateRouteYaml(serviceName: string, containerName: string, containerPort: string, domain: string, autheliaProtected = false): string {
   const routeId = serviceName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
   const protocol = ['443', '9443', '8443'].includes(containerPort) ? 'https' : 'http'
+  const middlewares = autheliaProtected
+    ? `        - "traefik-chain"\n        - "authelia-forwardauth"\n        - "compress-gzip"`
+    : `        - "traefik-chain"\n        - "compress-gzip"`
   return `# Auto-generated Traefik route for: ${serviceName}
 # Edit the subdomain or middlewares as needed.
 
@@ -271,8 +275,7 @@ http:
       rule: "Host(\`${serviceName}.${domain}\`)"
       service: "${routeId}"
       middlewares:
-        - "traefik-chain"
-        - "compress-gzip"
+${middlewares}
       tls: {}
 
   services:
@@ -412,6 +415,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [traefikDomain, setTraefikDomain] = useState('')
   const [enableRouting, setEnableRouting] = useState(true)
   const [connectProxy, setConnectProxy] = useState(true)
+  const [enableAuthelia, setEnableAuthelia] = useState(false)
   const [showRoutes, setShowRoutes] = useState(false)
   const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
   const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
@@ -450,10 +454,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const routes: Record<string, string> = {}
     for (const svc of routeServices) {
       if (!svc.enabled) continue
-      routes[svc.name] = generateRouteYaml(svc.subdomain, svc.containerName, svc.port, traefikDomain)
+      routes[svc.name] = generateRouteYaml(svc.subdomain, svc.containerName, svc.port, traefikDomain, enableAuthelia)
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain])
+  }, [enableRouting, routeServices, traefikDomain, enableAuthelia])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -949,6 +953,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${connectProxy ? 'bg-emerald-500' : 'bg-slate-700'}`}
                     >
                       <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${connectProxy ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                    </button>
+                  </div>
+
+                  {/* Authelia SSO Protection Toggle */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-emerald-500/10 bg-violet-500/[0.02]">
+                    <div className="flex items-center gap-2">
+                      <Shield size={12} className="text-violet-400" />
+                      <span className="text-[11px] text-slate-400">Protect with <span className="text-violet-400 font-medium">Authelia</span> SSO</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEnableAuthelia(!enableAuthelia)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableAuthelia ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                     </button>
                   </div>
 

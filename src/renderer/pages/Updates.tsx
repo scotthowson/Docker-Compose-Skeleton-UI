@@ -25,7 +25,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion } from '../api/endpoints'
+import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, APIVersion } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
@@ -155,6 +155,10 @@ export default function Updates() {
   const [sysRollingBack, setSysRollingBack] = useState(false)
   const [lastBackupTag, setLastBackupTag] = useState<string | null>(null)
 
+  // ---- UI image update state ----
+  const [uiUpdateAvailable, setUiUpdateAvailable] = useState(false)
+  const [uiUpdating, setUiUpdating] = useState(false)
+
   // App version from Electron
   const [appVersion, setAppVersion] = useState<string>(BUILD_VERSION)
   useEffect(() => {
@@ -172,8 +176,14 @@ export default function Updates() {
     try {
       const result = await checkSystemUpdate()
       setSysUpdate(result)
+      // Check for UI image update
+      const uiUp = (result as Record<string, unknown>).ui_update as { available?: boolean } | undefined
+      setUiUpdateAvailable(!!uiUp?.available)
       useSettingsStore.getState().updateSetting('updatesAvailable', result.available ? result.commits_behind : 0)
       setLastChecked(Date.now())
+      if (uiUp?.available) {
+        addToast({ type: 'info', message: 'DCS Manager UI update available' })
+      }
       if (result.available) {
         addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
       } else {
@@ -597,12 +607,42 @@ export default function Updates() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
-                  <CheckCircle size={10} />
-                  Current
-                </span>
+                {uiUpdateAvailable ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full">
+                    <ArrowUpCircle size={10} />
+                    Update Available
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
+                    <CheckCircle size={10} />
+                    Current
+                  </span>
+                )}
               </div>
             </div>
+            {uiUpdateAvailable && (
+              <div className="mt-3 pt-3 border-t border-white/[0.03]">
+                <button
+                  onClick={async () => {
+                    setUiUpdating(true)
+                    addToast({ type: 'info', message: 'Updating DCS Manager UI...', duration: 3000 })
+                    try {
+                      await applyUiUpdate()
+                      addToast({ type: 'success', message: 'UI updated — reconnecting...', duration: 5000 })
+                      setTimeout(() => window.location.reload(), 8000)
+                    } catch (err) {
+                      addToast({ type: 'error', message: err instanceof Error ? err.message : 'UI update failed' })
+                    }
+                    setUiUpdating(false)
+                  }}
+                  disabled={uiUpdating}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/20 disabled:opacity-50 transition-all press"
+                >
+                  {uiUpdating ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                  {uiUpdating ? 'Updating...' : 'Update DCS Manager'}
+                </button>
+              </div>
+            )}
 
             <div className="mt-4 pt-3 border-t border-white/[0.03]">
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800/40">
