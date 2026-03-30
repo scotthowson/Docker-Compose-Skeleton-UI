@@ -70,10 +70,9 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
     {
       action: 'start',
       icon: Play,
-      label: 'Start',
+      label: isRunning ? 'Reload' : 'Start',
       color: 'text-emerald-400',
       hoverColor: 'hover:bg-emerald-500/15 hover:text-emerald-300',
-      disabled: isRunning,
     },
     {
       action: 'stop',
