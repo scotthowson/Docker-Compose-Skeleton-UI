@@ -6,7 +6,7 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
-import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
+import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, recreateContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import { CopyButton } from '../common/CopyButton'
 import LiveLogViewer from '../logs/LiveLogViewer'
@@ -543,9 +543,9 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   }, [fetchStats])
 
   // Container action handler
-  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'remove') => {
-    const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', remove: 'removed' }
-    const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', remove: 'Removing' }
+  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'recreate' | 'remove') => {
+    const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', recreate: 'recreated', remove: 'removed' }
+    const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', recreate: 'Recreating', remove: 'Removing' }
 
     if (action === 'remove') {
       if (!window.confirm(`Remove container "${containerName}"? This will force-remove it and cannot be undone.`)) return
@@ -555,7 +555,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     addToast({ type: 'info', message: `${gerund[action]} "${containerName}"...`, duration: 2000 })
 
     try {
-      const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer, remove: removeContainer }[action]
+      const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer, recreate: recreateContainer, remove: removeContainer }[action]
       const result = await actionFn(containerName)
 
       if (result.success) {
@@ -835,6 +835,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               >
                 {actionLoading === 'restart' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
                 Restart
+              </button>
+              <button
+                onClick={() => handleAction('recreate')}
+                disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all disabled:opacity-50"
+              >
+                {actionLoading === 'recreate' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Recreate
               </button>
               <button
                 onClick={() => handleAction('stop')}
