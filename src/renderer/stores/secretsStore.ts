@@ -21,7 +21,11 @@ export const useSecretsStore = create<SecretsState>((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await api.fetchSecrets()
-      set({ keys: res.secrets, loading: false })
+      // API returns objects {key, modified, size} — extract key strings
+      const keys = Array.isArray(res.secrets)
+        ? res.secrets.map((s: string | { key: string }) => typeof s === 'string' ? s : s.key)
+        : []
+      set({ keys, loading: false })
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch secrets' })
     }
@@ -32,7 +36,10 @@ export const useSecretsStore = create<SecretsState>((set) => ({
     try {
       await api.setSecret(key, value)
       const res = await api.fetchSecrets()
-      set({ keys: res.secrets, saving: false })
+      const keys = Array.isArray(res.secrets)
+        ? res.secrets.map((s: string | { key: string }) => typeof s === 'string' ? s : s.key)
+        : []
+      set({ keys, saving: false })
       return true
     } catch (err) {
       set({ saving: false, error: err instanceof Error ? err.message : 'Failed to set secret' })
