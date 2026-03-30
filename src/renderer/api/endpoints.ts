@@ -1408,6 +1408,11 @@ export function rollbackSystemUpdate(backupTag: string): Promise<SystemUpdateRol
   return apiClient.post<SystemUpdateRollbackResponse>('/system/update/rollback', { backup_tag: backupTag })
 }
 
+/** POST /system/ui-update/apply — Pull latest DCS-UI image and recreate container */
+export function applyUiUpdate(): Promise<{ success: boolean; message: string }> {
+  return apiClient.post<{ success: boolean; message: string }>('/system/ui-update/apply', {}, 120000)
+}
+
 /** POST /system/os-update/check — Check for available OS package updates */
 export function checkOsUpdates(terminalToken: string, password?: string): Promise<OsUpdateCheckResponse> {
   return apiClient.post<OsUpdateCheckResponse>('/system/os-update/check', { terminal_token: terminalToken, ...(password ? { password } : {}) }, 120000)
