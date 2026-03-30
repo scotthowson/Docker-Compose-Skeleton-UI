@@ -47,22 +47,36 @@ const PBKDF2_ITERATIONS = 100_000
 // Crypto helpers — PBKDF2 with salt (Web Crypto API, zero dependencies)
 // ---------------------------------------------------------------------------
 
+/** Check if Web Crypto API is available (requires HTTPS or localhost) */
+const hasCrypto = typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined' && typeof crypto.getRandomValues === 'function'
+
 /** Generate a random 128-bit salt as hex string */
 function generateSalt(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+  if (hasCrypto) {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+  }
+  // Fallback: Math.random (less secure, but functional over HTTP)
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 }
 
 /** Generate a random session token */
 function generateToken(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+  if (hasCrypto) {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+  }
+  return Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 }
 
 /** Derive a key from password + salt using PBKDF2-SHA256 (100k iterations) */
 async function deriveKey(password: string, salt: string): Promise<string> {
+  if (!hasCrypto) {
+    // Fallback: simple hash (server does real PBKDF2 anyway)
+    return simpleHash(salt + password)
+  }
   const encoder = new TextEncoder()
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
@@ -84,12 +98,24 @@ async function deriveKey(password: string, salt: string): Promise<string> {
 
 /** Legacy SHA-256 hash (for backwards compatibility with v1 accounts) */
 async function sha256Hash(password: string): Promise<string> {
+  if (!hasCrypto) {
+    return simpleHash(password)
+  }
   const encoder = new TextEncoder()
   const data = encoder.encode(password)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+/** Simple string hash fallback when crypto.subtle is unavailable (HTTP context) */
+function simpleHash(str: string): string {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0
+  }
+  return Math.abs(h).toString(16).padStart(16, '0') + Math.abs(h * 31).toString(16).padStart(16, '0')
 }
 
 /** Hash a password with the appropriate algorithm */

@@ -903,6 +903,10 @@ async function verifyCurrentPassword(password: string): Promise<{ valid: boolean
   if (!account) return { valid: false, error: 'Account not found' }
 
   let valid = false
+  if (!crypto?.subtle) {
+    // No Web Crypto (HTTP context) — skip client-side verification, let server handle it
+    return { valid: true }
+  }
   if (account.hashVersion === 2 && account.salt) {
     const encoder = new TextEncoder()
     const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])

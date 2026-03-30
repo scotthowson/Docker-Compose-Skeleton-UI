@@ -8,7 +8,6 @@ android
 .env*
 .eslintrc*
 .prettierrc*
-tsconfig.node.json
 electron-builder.yml
 *.test.ts
 *.spec.ts
