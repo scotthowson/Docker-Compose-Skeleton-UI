@@ -60,8 +60,8 @@ const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string;
 
 const CHANGELOG = [
   {
-    version: BUILD_VERSION,
-    date: BUILD_DATE,
+    version: '2.8',
+    date: '2026-03-31',
     highlights: [
       { icon: Store, color: 'text-orange-400', text: 'Homarr integration — auto-register services on deploy with icons' },
       { icon: KeyRound, color: 'text-amber-400', text: 'Secrets system — encrypted ${SECRETS_KEY} variables in compose files' },
