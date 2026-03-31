@@ -8,6 +8,7 @@ import {
   Sun, Moon, LogOut, ChevronDown, Settings, Shield,
   UserCircle, Mail, Clock, Bell, Sparkles, X,
   Zap, Palette, Download, Network, Lock, RefreshCw, Package, Layout,
+  Store, Cpu, HardDrive, BarChart3, KeyRound,
 } from 'lucide-react'
 import { BUILD_VERSION, BUILD_DATE } from '../../constants/buildInfo'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -62,33 +63,38 @@ const CHANGELOG = [
     version: BUILD_VERSION,
     date: BUILD_DATE,
     highlights: [
-      { icon: Shield, color: 'text-violet-400', text: 'Authelia SSO — single sign-on with 2FA and WebAuthn, deployed from Setup Wizard' },
-      { icon: Shield, color: 'text-cyan-400', text: 'Two-Factor Authentication — TOTP 2FA with authenticator app support and auto-lock' },
-      { icon: Zap, color: 'text-emerald-400', text: 'Traefik auto-routing — wildcard TLS, auto DNS, proxy network, custom subdomains' },
-      { icon: Network, color: 'text-cyan-400', text: 'Cloudflare DNS — auto CNAME on deploy, auto-delete on undeploy, rate limit protection' },
-      { icon: Lock, color: 'text-amber-400', text: 'Auto-generate secrets — encryption keys and JWT secrets created automatically on deploy' },
-      { icon: Zap, color: 'text-emerald-400', text: 'Performance — batch Docker inspect, 470x faster container queries at scale' },
-      { icon: Layout, color: 'text-amber-400', text: 'Customizable dashboard — drag, resize, rearrange with per-card min/max constraints' },
-      { icon: RefreshCw, color: 'text-emerald-400', text: 'System updates — git-based with backup tags, one-click rollback, factory reset' },
+      { icon: Store, color: 'text-orange-400', text: 'Homarr integration — auto-register services on deploy with icons' },
+      { icon: KeyRound, color: 'text-amber-400', text: 'Secrets system — encrypted ${SECRETS_KEY} variables in compose files' },
+      { icon: Cpu, color: 'text-cyan-400', text: 'Live CPU/memory stats on containers page and dashboard Top Consumers' },
+      { icon: Bell, color: 'text-rose-400', text: 'NTFY notification engine — custom messages with template variables' },
+      { icon: Package, color: 'text-emerald-400', text: 'Registry-based image update detection (no pulling)' },
+      { icon: HardDrive, color: 'text-sky-400', text: 'Disk analysis — host disk stats, Docker volumes, per-stack sizes' },
+      { icon: BarChart3, color: 'text-amber-400', text: 'Resource limits toggle on template deploy (memory + CPU)' },
+      { icon: Sparkles, color: 'text-pink-400', text: '15 template categories with grouped view and smart filtering' },
+      { icon: Zap, color: 'text-indigo-400', text: 'Deploy only starts new services — no more Plex/Homarr restarts' },
+      { icon: Shield, color: 'text-violet-400', text: '60+ server config settings readable and writable via API' },
+    ],
+  },
+  {
+    version: '2.4.0',
+    date: '2026-03-30',
+    highlights: [
+      { icon: Shield, color: 'text-violet-400', text: 'Authelia SSO — single sign-on with 2FA, deployed from Setup Wizard' },
+      { icon: Zap, color: 'text-emerald-400', text: 'Traefik auto-routing — wildcard TLS, auto DNS, custom subdomains' },
+      { icon: Network, color: 'text-cyan-400', text: 'Cloudflare DNS — auto CNAME on deploy, auto-delete on undeploy' },
+      { icon: Lock, color: 'text-amber-400', text: 'Auto-generate secrets and encryption keys on deploy' },
+      { icon: Layout, color: 'text-amber-400', text: 'Customizable dashboard — drag, resize, rearrange cards' },
+      { icon: RefreshCw, color: 'text-emerald-400', text: 'System updates — one-click with backup tags and rollback' },
     ],
   },
   {
     version: '2.3.0',
     date: '2026-03-18',
     highlights: [
-      { icon: Zap, color: 'text-emerald-400', text: 'Setup Wizard — guided first-run configuration with Traefik integration' },
+      { icon: Zap, color: 'text-emerald-400', text: 'Setup Wizard — guided first-run configuration with Traefik' },
       { icon: Package, color: 'text-cyan-400', text: '100+ service templates with one-click deployment' },
-      { icon: Lock, color: 'text-amber-400', text: 'Security hardening — SSRF protection, terminal guards, session management' },
+      { icon: Lock, color: 'text-amber-400', text: 'Security hardening — SSRF protection, session management' },
       { icon: Layout, color: 'text-violet-400', text: 'Plugin system with lifecycle hooks and template support' },
-    ],
-  },
-  {
-    version: '2.2.0',
-    date: '2026-03-15',
-    highlights: [
-      { icon: Zap, color: 'text-emerald-400', text: 'Stack management — create, deploy, start, stop, and delete stacks' },
-      { icon: Download, color: 'text-cyan-400', text: 'Backup & restore with scheduled automation support' },
-      { icon: RefreshCw, color: 'text-amber-400', text: 'Container management — logs, exec, file browser, stats' },
     ],
   },
 ]

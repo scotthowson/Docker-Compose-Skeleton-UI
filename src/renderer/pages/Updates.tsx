@@ -28,7 +28,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, APIVersion } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
-import WhatsNew from '../components/common/WhatsNew'
+// WhatsNew is in the user menu (Header) — no separate card needed here
 
 // ---------------------------------------------------------------------------
 // Staleness Badge
@@ -664,11 +664,6 @@ export default function Updates() {
           </div>
         </div>
       </div>
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          What's New
-          ══════════════════════════════════════════════════════════════════════ */}
-      <WhatsNew />
 
       {/* ══════════════════════════════════════════════════════════════════════
           Image Updates (existing section)
