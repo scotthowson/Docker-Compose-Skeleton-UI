@@ -86,7 +86,8 @@ interface PresetTemplate {
   title_template: string
   message_template: string
   icon: React.ElementType
-  color: string
+  iconBg: string
+  iconText: string
 }
 
 const PRESET_TEMPLATES: PresetTemplate[] = [
@@ -99,7 +100,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '⚠️ {container} is Unhealthy',
     message_template: 'Container {container} in {stack} has become unhealthy. Check logs and restart if needed.',
     icon: HeartPulse,
-    color: 'rose',
+    iconBg: 'bg-rose-500/10 border-rose-500/15',
+    iconText: 'text-rose-400',
   },
   {
     name: 'Stack Down Alert',
@@ -110,7 +112,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '🔴 Stack Down — {stack}',
     message_template: 'Stack {stack} has been stopped on {hostname} at {timestamp}.',
     icon: Power,
-    color: 'amber',
+    iconBg: 'bg-amber-500/10 border-amber-500/15',
+    iconText: 'text-amber-400',
   },
   {
     name: 'Container Stopped',
@@ -121,7 +124,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '⏹️ {container} Stopped',
     message_template: '{container} in {stack} has stopped. Status: {status}.',
     icon: Box,
-    color: 'orange',
+    iconBg: 'bg-orange-500/10 border-orange-500/15',
+    iconText: 'text-orange-400',
   },
   {
     name: 'Disk Space Warning',
@@ -132,7 +136,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '💾 Disk Space Critical',
     message_template: 'Disk usage on {hostname} is critically high. Free up space immediately.',
     icon: HardDrive,
-    color: 'red',
+    iconBg: 'bg-red-500/10 border-red-500/15',
+    iconText: 'text-red-400',
   },
   {
     name: 'Image Update Available',
@@ -143,7 +148,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '📦 Image Updates Available',
     message_template: 'Container images have upstream updates available. Check the Updates page.',
     icon: Package,
-    color: 'cyan',
+    iconBg: 'bg-cyan-500/10 border-cyan-500/15',
+    iconText: 'text-cyan-400',
   },
   {
     name: 'Deploy Complete',
@@ -154,7 +160,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '✅ Deployed — {stack}',
     message_template: 'Template deployed to {stack} on {hostname} at {timestamp}.',
     icon: Play,
-    color: 'emerald',
+    iconBg: 'bg-emerald-500/10 border-emerald-500/15',
+    iconText: 'text-emerald-400',
   },
 ]
 
@@ -614,12 +621,12 @@ export default function Notifications() {
                   group text-left rounded-xl border p-3.5 transition-all duration-200
                   ${alreadyExists
                     ? 'border-white/[0.03] bg-white/[0.01] opacity-50 cursor-default'
-                    : `border-white/5 bg-white/[0.02] hover:border-${preset.color}-500/20 hover:bg-${preset.color}-500/[0.04] cursor-pointer press`
+                    : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 cursor-pointer press'
                   }
                 `}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-lg bg-${preset.color}-500/10 border border-${preset.color}-500/15 flex items-center justify-center shrink-0 text-${preset.color}-400`}>
+                  <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${preset.iconBg} ${preset.iconText}`}>
                     <PresetIcon size={14} />
                   </div>
                   <div className="min-w-0 flex-1">

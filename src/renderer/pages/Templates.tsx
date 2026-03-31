@@ -3,7 +3,7 @@
 //             search, template cards, and deploy modal
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   Rocket,
   Search,
@@ -2127,7 +2127,7 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
   const colors = getCategoryColors(template.category)
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6 flex flex-col gap-3 hover:border-white/10 hover:bg-white/[0.03] transition-all duration-200 group">
+    <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-5 flex flex-col gap-2.5 hover:border-white/10 hover:bg-white/[0.03] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 group">
       {/* Top row: category badge + deploy status + actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -2209,18 +2209,26 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
         </div>
       )}
 
-      {/* Deploy button — singleton templates show "Deployed" when already running */}
+      {/* Deploy button */}
       {template.singleton && deployStatus && deployStatus.state !== 'none' ? (
-        <div className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default">
-          <CheckCircle size={12} />
+        <div className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-emerald-500/[0.06] text-emerald-500/60 border border-emerald-500/10 cursor-default select-none">
+          <CheckCircle size={11} />
           Deployed
         </div>
+      ) : deployStatus && deployStatus.state === 'running' ? (
+        <button
+          onClick={() => onDeploy(template)}
+          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/15 hover:bg-cyan-500/20 hover:border-cyan-500/25 transition-all duration-200 press"
+        >
+          <Rocket size={11} />
+          Redeploy
+        </button>
       ) : (
         <button
           onClick={() => onDeploy(template)}
-          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 press"
+          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 press"
         >
-          <Play size={12} />
+          <Play size={11} />
           Deploy
         </button>
       )}
@@ -2852,47 +2860,55 @@ export default function Templates() {
       ) : (
         <>
           {/* Category filter bar + search */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-            {/* Category pills — horizontal scrollable on mobile */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-              {CATEGORIES.filter((cat) => {
-                if (cat.id === 'all') return true
-                // Only show categories that have at least one template
-                return templates.some((t) => resolveCategory(t.category).id === cat.id)
-              }).map((cat) => {
-                const CatIcon = cat.icon
-                const isActive = activeCategory === cat.id
-                const count = cat.id === 'all' ? templates.length : templates.filter((t) => resolveCategory(t.category).id === cat.id).length
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 ${
-                      isActive
-                        ? cat.id === 'all'
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          : `${cat.color.badge}`
-                        : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/5 hover:text-slate-300'
-                    }`}
-                  >
-                    <CatIcon size={13} />
-                    {cat.label}
-                    <span className={`text-[10px] ${isActive ? 'opacity-70' : 'text-slate-600'}`}>{count}</span>
-                  </button>
-                )
-              })}
-            </div>
-
+          <div className="space-y-3">
             {/* Search bar */}
-            <div className="relative flex-1 min-w-0 md:max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search templates..."
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                placeholder={`Search ${templates.length} templates...`}
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/[0.04] border border-white/5 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.06] focus:shadow-lg focus:shadow-emerald-500/5 transition-all duration-200"
               />
+              {search ? (
+                <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                  <X size={14} />
+                </button>
+              ) : (
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 font-mono hidden sm:inline">/</span>
+              )}
+            </div>
+
+            {/* Category pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {CATEGORIES.filter((cat) => {
+                if (cat.id === 'all') return true
+                return templates.some((t) => resolveCategory(t.category).id === cat.id)
+              }).map((cat, idx) => {
+                const CatIcon = cat.icon
+                const isActive = activeCategory === cat.id
+                const count = cat.id === 'all' ? templates.length : templates.filter((t) => resolveCategory(t.category).id === cat.id).length
+                return (
+                  <React.Fragment key={cat.id}>
+                    {idx === 1 && <div className="w-px h-5 bg-white/10 mx-0.5" />}
+                    <button
+                      onClick={() => setActiveCategory(cat.id)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium border whitespace-nowrap transition-all duration-150 ${
+                        isActive
+                          ? cat.id === 'all'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-sm shadow-emerald-500/10'
+                            : `${cat.color.badge} shadow-sm`
+                          : 'bg-white/[0.03] text-slate-500 border-white/[0.04] hover:bg-white/[0.06] hover:text-slate-300 hover:border-white/10'
+                      }`}
+                    >
+                      <CatIcon size={11} />
+                      {cat.label}
+                      <span className={`text-[9px] font-semibold ${isActive ? 'opacity-80' : 'text-slate-600'}`}>{count}</span>
+                    </button>
+                  </React.Fragment>
+                )
+              })}
             </div>
           </div>
 
@@ -2940,23 +2956,21 @@ export default function Templates() {
 
           {/* Template cards — grouped by category when viewing "All", flat grid otherwise */}
           {grouped ? (
-            <div className="space-y-8">
-              {grouped.map((group) => {
+            <div className="space-y-6">
+              {grouped.map((group, gi) => {
                 const { def, templates: groupTemplates } = group
                 const CatIcon = def.icon
                 return (
-                  <div key={def.id} className="animate-fade-in">
+                  <div key={def.id} className="animate-fade-in" style={{ animationDelay: `${gi * 40}ms` }}>
                     {/* Category section header */}
-                    <div className={`flex items-center gap-3 mb-4 pl-3 border-l-2 ${def.color.border}`}>
-                      <div className={`w-8 h-8 rounded-lg bg-white/[0.04] border border-white/5 flex items-center justify-center ${def.color.iconColor}`}>
-                        <CatIcon size={15} />
+                    <div className={`flex items-center gap-3 mb-4 pb-2 border-b border-white/[0.04]`}>
+                      <div className={`w-7 h-7 rounded-md flex items-center justify-center ${def.color.iconColor}`} style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                        <CatIcon size={14} />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-sm font-bold text-slate-200 tracking-tight">{def.label}</h3>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${def.color.badge}`}>
-                          {groupTemplates.length}
-                        </span>
-                      </div>
+                      <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">{def.label}</h3>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${def.color.badge}`}>
+                        {groupTemplates.length}
+                      </span>
                     </div>
                     {/* Category grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
