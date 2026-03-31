@@ -258,7 +258,7 @@ const Images: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
               <p className="text-sm text-slate-400">
-                Track Docker image freshness and staleness
+                Track freshness — check registry for definitive update badges
               </p>
             </div>
           </div>
@@ -651,7 +651,7 @@ const GLOW_MAP: Record<string, string> = {
 }
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ icon, label, value, color }) => (
-  <div className={`glass p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
+  <div className={`bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 ${GLOW_MAP[color] ?? ''}`}>
     <div className="flex-shrink-0">{icon}</div>
     <div>
       <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>

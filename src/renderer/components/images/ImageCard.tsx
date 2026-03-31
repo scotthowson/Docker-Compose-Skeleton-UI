@@ -102,13 +102,15 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
             {style.label}
           </span>
           {image.update_available === true && (
-            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
+            <span title="Update available" className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400">
               <ArrowUpCircle size={9} />
+              New
             </span>
           )}
           {image.update_available === false && (
-            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-white/[0.04] text-slate-500">
+            <span title="Up to date" className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
               <CheckCircle size={9} />
+              Latest
             </span>
           )}
         </div>
