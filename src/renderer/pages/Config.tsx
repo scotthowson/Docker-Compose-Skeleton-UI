@@ -848,8 +848,8 @@ export default function Config() {
 
       {/* Unsaved changes indicator */}
       {hasChanges && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl">
+        <div className="fixed bottom-16 inset-x-0 z-50 flex justify-center animate-fade-in-up">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/30">
             <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
             <span className="text-sm text-slate-300">You have unsaved changes</span>
             <button
