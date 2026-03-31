@@ -29,14 +29,29 @@ const Containers: React.FC = () => {
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
   const pendingFocusRef = useRef<string | null>(null)
 
+  const setStats = useContainerStore((s) => s.setStats)
+
   // Fetch containers via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
     setLoading(true)
     const result = await fetchContainers()
     setContainers(result.containers)
+    // Populate stats store from bulk cpu_percent/mem_percent in the response
+    for (const c of result.containers) {
+      if (c.cpu_percent != null || c.mem_percent != null) {
+        setStats(c.name, {
+          cpu_percent: c.cpu_percent != null ? `${c.cpu_percent}%` : '--',
+          memory_percent: c.mem_percent != null ? `${c.mem_percent}%` : '--',
+          memory_usage: '',
+          network_io: '',
+          block_io: '',
+          pids: '',
+        })
+      }
+    }
     setLoading(false)
     return result
-  }, [setContainers, setLoading])
+  }, [setContainers, setLoading, setStats])
 
   const { refresh } = useApi(handleFetch, CONTAINER_POLL_INTERVAL, {
     enabled: isConnected,

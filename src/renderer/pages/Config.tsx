@@ -275,47 +275,52 @@ export default function Config() {
   const [edits, setEdits] = useState<EditableConfig>({})
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [userIsEditing, setUserIsEditing] = useState(false)
 
-  // Sync original data when it arrives
+  // Build edits from server data
+  const buildEditsFromData = useCallback((d: ServerConfig): EditableConfig => ({
+    ENVIRONMENT: d.environment,
+    LOG_LEVEL: d.log_level,
+    TZ: d.timezone,
+    SERVER_NAME: d.server_name,
+    SKIP_HEALTHCHECK_WAIT: d.skip_healthcheck_wait,
+    CONTINUE_ON_FAILURE: d.continue_on_failure,
+    REMOVE_VOLUMES_ON_STOP: d.remove_volumes_on_stop,
+    AGGRESSIVE_IMAGE_PRUNE: d.aggressive_image_prune,
+    UPDATE_NOTIFICATION: d.update_notification,
+    SHOW_BANNERS: d.show_banners,
+    API_PORT: d.api_port,
+    API_BIND: d.api_bind,
+    API_ENABLED: d.api_enabled ?? true,
+    NTFY_URL: d.ntfy_url ?? '',
+    NTFY_TOPIC: d.ntfy_topic ?? '',
+    NTFY_PRIORITY: d.ntfy_priority ?? 'default',
+    ENABLE_COLORS: d.enable_colors ?? true,
+    COLOR_MODE: d.color_mode ?? 'auto',
+    COLOR_THEME: d.color_theme ?? 'dark',
+    FORCE_COLOR: d.force_color ?? false,
+    VERBOSE_MODE: d.verbose_mode ?? false,
+    SHOW_SYSTEM_INFO: d.show_system_info ?? true,
+    PROGRESS_BAR_WIDTH: d.progress_bar_width ?? 50,
+    ENABLE_LOG_DATE: d.enable_log_date ?? true,
+    ENABLE_MILLISECONDS: d.enable_milliseconds ?? false,
+    LOG_DATE_FORMAT: d.log_date_format ?? '%Y-%m-%d %H:%M:%S',
+    ENABLE_LOG_MOOD: d.enable_log_mood ?? true,
+    ENABLE_LOG_PID: d.enable_log_pid ?? false,
+    ENABLE_LOG_HOSTNAME: d.enable_log_hostname ?? false,
+  }), [])
+
+  // Sync from server ONLY when user hasn't started editing
   useEffect(() => {
-    if (data) {
-      setEdits({
-        ENVIRONMENT: data.environment,
-        LOG_LEVEL: data.log_level,
-        TZ: data.timezone,
-        SERVER_NAME: data.server_name,
-        SKIP_HEALTHCHECK_WAIT: data.skip_healthcheck_wait,
-        CONTINUE_ON_FAILURE: data.continue_on_failure,
-        REMOVE_VOLUMES_ON_STOP: data.remove_volumes_on_stop,
-        AGGRESSIVE_IMAGE_PRUNE: data.aggressive_image_prune,
-        UPDATE_NOTIFICATION: data.update_notification,
-        SHOW_BANNERS: data.show_banners,
-        API_PORT: data.api_port,
-        API_BIND: data.api_bind,
-        API_ENABLED: data.api_enabled ?? true,
-        NTFY_URL: data.ntfy_url ?? '',
-        NTFY_TOPIC: data.ntfy_topic ?? '',
-        NTFY_PRIORITY: data.ntfy_priority ?? 'default',
-        ENABLE_COLORS: data.enable_colors ?? true,
-        COLOR_MODE: data.color_mode ?? 'auto',
-        COLOR_THEME: data.color_theme ?? 'dark',
-        FORCE_COLOR: data.force_color ?? false,
-        VERBOSE_MODE: data.verbose_mode ?? false,
-        SHOW_SYSTEM_INFO: data.show_system_info ?? true,
-        PROGRESS_BAR_WIDTH: data.progress_bar_width ?? 50,
-        ENABLE_LOG_DATE: data.enable_log_date ?? true,
-        ENABLE_MILLISECONDS: data.enable_milliseconds ?? false,
-        LOG_DATE_FORMAT: data.log_date_format ?? '%Y-%m-%d %H:%M:%S',
-        ENABLE_LOG_MOOD: data.enable_log_mood ?? true,
-        ENABLE_LOG_PID: data.enable_log_pid ?? false,
-        ENABLE_LOG_HOSTNAME: data.enable_log_hostname ?? false,
-      })
+    if (data && !userIsEditing) {
+      setEdits(buildEditsFromData(data))
     }
-  }, [data])
+  }, [data, userIsEditing, buildEditsFromData])
 
   const handleChange = useCallback((key: string, val: string | boolean | number) => {
     setEdits((prev) => ({ ...prev, [key]: val }))
     setSaveResult(null)
+    setUserIsEditing(true)
   }, [])
 
   const handleBoolChange = useCallback((key: string, val: boolean) => {
@@ -353,7 +358,8 @@ export default function Config() {
     try {
       const result = await updateConfig(diff)
       setSaveResult({ success: result.success, message: result.message })
-      // Refresh to get updated values
+      // Refresh to get updated values — clear editing flag so poll can sync
+      setUserIsEditing(false)
       setTimeout(refresh, 500)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -364,6 +370,7 @@ export default function Config() {
   }
 
   const handleReset = () => {
+    setUserIsEditing(false)
     if (data) {
       setEdits({
         ENVIRONMENT: data.environment,
@@ -846,10 +853,10 @@ export default function Config() {
         </div>
       )}
 
-      {/* Unsaved changes indicator */}
+      {/* Unsaved changes indicator — sticky to viewport bottom */}
       {hasChanges && (
-        <div className="fixed bottom-16 inset-x-0 z-50 flex justify-center animate-fade-in-up">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/30">
+        <div className="fixed bottom-6 inset-x-0 z-[100] flex justify-center pointer-events-none animate-fade-in-up">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/40 pointer-events-auto">
             <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
             <span className="text-sm text-slate-300">You have unsaved changes</span>
             <button

@@ -157,6 +157,8 @@ export interface ContainerInfo {
   uptime_seconds: number
   ports: string
   restart_count: number
+  cpu_percent?: number | null
+  mem_percent?: number | null
 }
 
 // GET /containers/:name
