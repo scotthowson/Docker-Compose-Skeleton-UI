@@ -896,9 +896,9 @@ export function checkImageRegistry(): Promise<ImageRegistryCheckResponse> {
   return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates', undefined, 120000)
 }
 
-/** POST /images/:name/update — Pull image and restart containers */
+/** POST /images/update — Pull image and restart containers (name in body, not URL) */
 export function updateImage(name: string): Promise<ImageUpdateResponse> {
-  return apiClient.post<ImageUpdateResponse>(`/images/${encodeURIComponent(name)}/update`, undefined, 120000)
+  return apiClient.post<ImageUpdateResponse>('/images/update', { image: name }, 120000)
 }
 
 /** GET /notifications/rules — List notification rules */
