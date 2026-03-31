@@ -474,24 +474,44 @@ export default function DiskAnalysis() {
       </div>
 
       {/* Host disk usage bar */}
-      {disk?.host_disk?.percent && (
-        <div className="glass border border-white/5 rounded-xl p-4 animate-fade-in" style={{ animationDelay: '60ms' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filesystem Usage</span>
-            <span className="text-xs font-mono text-slate-400">{disk.host_disk.used} / {disk.host_disk.total}</span>
+      {disk?.host_disk?.percent && (() => {
+        const hostPct = parseInt(disk.host_disk.percent)
+        const barGradient = hostPct > 90
+          ? 'bg-gradient-to-r from-rose-500 to-red-500 shadow-rose-500/20'
+          : hostPct > 75
+            ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-500/20'
+            : 'bg-gradient-to-r from-emerald-500 to-cyan-500 shadow-emerald-500/20'
+        const barTextColor = hostPct > 90 ? 'text-rose-400' : hostPct > 75 ? 'text-amber-400' : 'text-emerald-400'
+        return (
+          <div className="glass border border-white/5 rounded-xl p-5 animate-fade-in" style={{ animationDelay: '60ms' }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filesystem Usage</span>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-slate-500">
+                  <span className="text-slate-300 font-medium">{disk.host_disk.used}</span>
+                  <span className="text-slate-600 mx-0.5">/</span>
+                  {disk.host_disk.total}
+                </span>
+                <span className="text-slate-600">|</span>
+                <span className="text-slate-300 font-medium">{disk.host_disk.available}</span>
+                <span className="text-slate-500">free</span>
+              </div>
+            </div>
+            <div className="relative h-4 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 shadow-lg ${barGradient}`}
+                style={{ width: disk.host_disk.percent }}
+              />
+              {hostPct > 8 && (
+                <span className={`absolute inset-y-0 left-0 flex items-center text-[9px] font-bold tracking-wider ${barTextColor}`}
+                  style={{ paddingLeft: `max(8px, calc(${hostPct}% - 32px))` }}>
+                  {disk.host_disk.percent}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${
-                parseInt(disk.host_disk.percent) > 90 ? 'bg-gradient-to-r from-rose-500 to-red-500' :
-                parseInt(disk.host_disk.percent) > 75 ? 'bg-gradient-to-r from-amber-500 to-orange-500' :
-                'bg-gradient-to-r from-emerald-500 to-cyan-500'
-              }`}
-              style={{ width: disk.host_disk.percent }}
-            />
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ----------------------------------------------------------------- */}
       {/* Docker DF breakdown — Chart + Table                                */}

@@ -146,24 +146,35 @@ function DiskRow({ disk, label, onLabelChange }: {
           <span className="text-slate-400">{disk.available} free</span>
         </div>
 
-        <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden">
+        <div className="h-2.5 rounded-full bg-slate-800/80 overflow-hidden">
           <div
-            className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125' : ''}`}
+            className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125 shadow-lg' : ''}`}
             style={{ width: `${pct}%` }}
           />
         </div>
       </div>
 
       {/* Details row */}
-      <div className="flex items-center justify-between text-[10px] text-slate-500">
-        <span>{disk.used} / {disk.total} used</span>
-        <span>{disk.available} free</span>
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-slate-500">
+          <span className="text-slate-400 font-medium">{disk.used}</span>
+          <span className="text-slate-600 mx-0.5">/</span>
+          <span>{disk.total}</span>
+        </span>
+        <span className="text-slate-500">
+          <span className="text-slate-400 font-medium">{disk.available}</span>
+          <span className="ml-0.5">free</span>
+        </span>
       </div>
 
-      {/* Device path */}
-      {label && (
-        <div className="mt-1 text-[10px] text-slate-500 font-mono truncate" title={disk.device}>
+      {/* Mount path — shown when custom label is set, or always as subtle mono text */}
+      {label ? (
+        <div className="mt-1.5 text-[9px] text-slate-600 font-mono truncate" title={disk.device}>
           {disk.mount}
+        </div>
+      ) : (
+        <div className="mt-1.5 text-[9px] text-slate-600 font-mono truncate" title={disk.device}>
+          {disk.device}
         </div>
       )}
     </div>
@@ -268,16 +279,25 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
             <span className="text-slate-500">|</span>
             <span className="text-slate-400">{serverDisk.available} free</span>
           </div>
-          <div className="h-2 rounded-full bg-slate-800/80 overflow-hidden">
-            <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125' : ''}`} style={{ width: `${pct}%` }} />
+          <div className="h-2.5 rounded-full bg-slate-800/80 overflow-hidden">
+            <div className={`h-full rounded-full ${percentColor(pct)} transition-all duration-700 ease-out ${isNearCapacity ? 'animate-pulse' : ''} ${barHovered ? 'brightness-125 shadow-lg' : ''}`} style={{ width: `${pct}%` }} />
           </div>
         </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-500">
-          <span>{serverDisk.used} / {serverDisk.total} used</span>
-          <span>{serverDisk.available} free</span>
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-slate-500">
+            <span className="text-slate-400 font-medium">{serverDisk.used}</span>
+            <span className="text-slate-600 mx-0.5">/</span>
+            <span>{serverDisk.total}</span>
+          </span>
+          <span className="text-slate-500">
+            <span className="text-slate-400 font-medium">{serverDisk.available}</span>
+            <span className="ml-0.5">free</span>
+          </span>
         </div>
-        {label && (
-          <div className="mt-1 text-[10px] text-slate-500 font-mono truncate" title={serverDisk.device}>{custom.mount}</div>
+        {label ? (
+          <div className="mt-1.5 text-[9px] text-slate-600 font-mono truncate" title={serverDisk.device}>{custom.mount}</div>
+        ) : (
+          <div className="mt-1.5 text-[9px] text-slate-600 font-mono truncate" title={serverDisk.device}>{serverDisk.device}</div>
         )}
       </div>
     )
@@ -382,12 +402,16 @@ export default function DiskMonitor({ disks }: { disks: DiskInfo[] }) {
           <HardDrive size={14} className="text-cyan-400" />
           Disk Usage
         </h3>
-        <span className="text-[11px] text-slate-500">
-          {totalMounts} mount{totalMounts !== 1 ? 's' : ''}
+        <div className="flex items-center gap-2">
           {customDisks.length > 0 && (
-            <span className="text-violet-400/50 ml-1">({customDisks.length} custom)</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-400/70 border border-violet-500/10">
+              {customDisks.length} custom
+            </span>
           )}
-        </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5">
+            {totalMounts} drive{totalMounts !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
 
       {/* Warning banner for disks above 85% */}
