@@ -15,10 +15,11 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { fetchMaintenanceDisk, triggerDeepPrune } from '../api/endpoints'
-import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize } from '../../shared/types'
+import { fetchMaintenanceDisk, fetchDisks, triggerDeepPrune } from '../api/endpoints'
+import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize, DiskInfo } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -162,6 +163,9 @@ export default function DiskAnalysis() {
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
 
+  // ---- Stores ----
+  const diskLabels = useSettingsStore((s) => s.diskLabels) ?? {}
+
   // ---- Polling ----
   const {
     data: disk,
@@ -169,6 +173,10 @@ export default function DiskAnalysis() {
     error,
     refresh,
   } = usePolling<DiskAnalysisData>(fetchMaintenanceDisk, 30000, { enabled: isConnected })
+
+  // Mounted drives from /disks endpoint (same as Dashboard)
+  const { data: disksData } = usePolling<{ total: number; disks: DiskInfo[] }>(fetchDisks, 60000, { enabled: isConnected })
+  const mountedDrives = disksData?.disks ?? []
 
   // ---- Action state ----
   const [deepPruning, setDeepPruning] = useState(false)
@@ -512,6 +520,105 @@ export default function DiskAnalysis() {
           </div>
         )
       })()}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Mounted Drives                                                     */}
+      {/* ----------------------------------------------------------------- */}
+      {mountedDrives.length > 0 && (
+        <div
+          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
+          style={{ animationDelay: '90ms' }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <HardDrive size={14} className="text-cyan-400" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Mounted Drives
+              </h3>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5">
+              {mountedDrives.length} drive{mountedDrives.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[...mountedDrives]
+              .sort((a, b) => parseInt(b.percent) - parseInt(a.percent))
+              .map((d) => {
+                const pct = parseInt(d.percent.replace('%', '')) || 0
+                const label = diskLabels[d.mount] || ''
+                const displayName = label || d.mount
+                const barColor = pct >= 90
+                  ? 'from-rose-500 to-red-500'
+                  : pct >= 75
+                    ? 'from-amber-500 to-orange-500'
+                    : 'from-emerald-500 to-cyan-500'
+                const textColor = pct >= 90 ? 'text-rose-400' : pct >= 75 ? 'text-amber-400' : 'text-emerald-400'
+                const glowColor = pct >= 90 ? 'shadow-rose-500/10' : pct >= 75 ? 'shadow-amber-500/10' : 'shadow-emerald-500/10'
+
+                return (
+                  <div
+                    key={d.mount}
+                    className={`rounded-xl bg-slate-800/40 border border-white/[0.04] hover:border-white/[0.08] p-4 transition-all duration-200 hover:shadow-lg ${glowColor}`}
+                  >
+                    {/* Header: name + percent */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <HardDrive size={13} className={textColor} />
+                        <span className="text-sm font-semibold text-slate-200 truncate" title={d.mount}>
+                          {displayName}
+                        </span>
+                      </div>
+                      <span className={`text-sm font-bold tabular-nums ${textColor}`}>
+                        {d.percent}
+                      </span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="relative h-3 rounded-full bg-slate-800/80 overflow-hidden mb-3">
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-700 ease-out ${pct >= 90 ? 'animate-pulse' : ''}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                      {pct > 12 && (
+                        <span
+                          className={`absolute inset-y-0 flex items-center text-[8px] font-bold ${textColor}`}
+                          style={{ left: `max(6px, calc(${pct}% - 24px))` }}
+                        >
+                          {d.percent}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500">
+                        <span className="text-slate-300 font-medium">{d.used}</span>
+                        <span className="text-slate-600 mx-0.5">/</span>
+                        <span>{d.total}</span>
+                      </span>
+                      <span className="text-slate-500">
+                        <span className="text-slate-300 font-medium">{d.available}</span>
+                        <span className="ml-0.5">free</span>
+                      </span>
+                    </div>
+
+                    {/* Device + mount path */}
+                    <div className="mt-2 flex items-center gap-2 text-[9px] text-slate-600 font-mono truncate">
+                      <span title={d.device}>{d.device}</span>
+                      {label && (
+                        <>
+                          <span className="text-slate-700">&rarr;</span>
+                          <span title={d.mount}>{d.mount}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Docker DF breakdown — Chart + Table                                */}
