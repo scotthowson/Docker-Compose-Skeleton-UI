@@ -45,15 +45,24 @@ const SettingsDirtyContext = createContext<SettingsDirtyCtx>({
 
 function useSettingsDirty(section: string, isDirty: boolean, save: () => void | Promise<void>, discard: () => void) {
   const ctx = useContext(SettingsDirtyContext)
+  // Keep latest callbacks in refs to avoid stale closures
+  const saveRef = useRef(save)
+  const discardRef = useRef(discard)
+  saveRef.current = save
+  discardRef.current = discard
+
   useEffect(() => {
     if (isDirty) {
-      ctx.markDirty(section, { save, discard })
+      ctx.markDirty(section, {
+        save: () => saveRef.current(),
+        discard: () => discardRef.current(),
+      })
     } else {
       ctx.markClean(section)
     }
-  }, [isDirty]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDirty, section, ctx])
   // Clean up on unmount
-  useEffect(() => () => ctx.markClean(section), []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => ctx.markClean(section), [section, ctx])
 }
 
 // ---------------------------------------------------------------------------

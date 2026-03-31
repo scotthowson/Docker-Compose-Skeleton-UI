@@ -7,8 +7,6 @@ import {
   Settings2,
   Globe,
   FolderOpen,
-  ToggleRight,
-  Radio,
   Bell,
   RefreshCw,
   Save,
@@ -216,7 +214,6 @@ interface GroupCardProps {
   title: string
   description?: string
   children: React.ReactNode
-  accentColor?: 'emerald' | 'cyan' | 'amber' | 'rose' | 'violet'
   storageKey?: string
 }
 
@@ -518,7 +515,7 @@ export default function Config() {
             icon={<Globe size={16} className="text-emerald-400" />}
             title="Environment"
             description="Runtime environment and server identity"
-            accentColor="emerald"
+
           >
             <SelectRow
               label="Environment"
@@ -559,7 +556,7 @@ export default function Config() {
             icon={<FolderOpen size={16} className="text-cyan-400" />}
             title="Paths"
             description="Server directory paths (read-only)"
-            accentColor="cyan"
+
           >
             <TextRow label="Compose Dir" configKey="" value={cfg.compose_dir} onChange={() => {}} readOnly />
             <TextRow label="App Data Dir" configKey="" value={cfg.app_data_dir} onChange={() => {}} readOnly />
@@ -572,7 +569,7 @@ export default function Config() {
             icon={<Zap size={16} className="text-amber-400" />}
             title="Feature Flags"
             description="Toggle framework features on or off"
-            accentColor="amber"
+
           >
             <ToggleRow
               label="Show Banners"
@@ -623,7 +620,7 @@ export default function Config() {
             icon={<Palette size={16} className="text-violet-400" />}
             title="Display & Colors"
             description="Terminal output appearance settings"
-            accentColor="violet"
+
           >
             <ToggleRow
               label="Enable Colors"
@@ -685,7 +682,7 @@ export default function Config() {
             icon={<ScrollText size={16} className="text-cyan-400" />}
             title="Log Formatting"
             description="Customize log output format and metadata"
-            accentColor="cyan"
+
           >
             <ToggleRow
               label="Log Timestamps"
@@ -739,7 +736,7 @@ export default function Config() {
             icon={<Server size={16} className="text-emerald-400" />}
             title="API Server"
             description="REST API server settings"
-            accentColor="emerald"
+
           >
             {/* Auto-detect: API is running since you're viewing this page */}
             {isConnected && (
@@ -794,7 +791,7 @@ export default function Config() {
             icon={<Bell size={16} className="text-amber-400" />}
             title="Push Notifications (NTFY)"
             description="Configure NTFY push notification service"
-            accentColor="amber"
+
           >
             <div className="flex items-center gap-2 py-3 border-b border-white/[0.03]">
               <span className="text-sm font-medium text-slate-200">Status</span>
@@ -843,7 +840,7 @@ export default function Config() {
             icon={<Shield size={16} className="text-rose-400" />}
             title="Security"
             description="Access control and safety settings"
-            accentColor="rose"
+
           >
             <div className="py-3 border-b border-white/[0.03]">
               <div className="flex items-center justify-between">
@@ -876,7 +873,7 @@ export default function Config() {
             icon={<Network size={16} className="text-cyan-400" />}
             title="Traefik & DNS"
             description="Reverse proxy, ACME certificates, and dynamic DNS"
-            accentColor="cyan"
+
           >
             <TextRow label="Traefik Domain" description="Primary domain for auto-routing" configKey="TRAEFIK_DOMAIN" value={String(edits.TRAEFIK_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
             <TextRow label="ACME Email" description="Email for Let's Encrypt certificates" configKey="TRAEFIK_ACME_EMAIL" value={String(edits.TRAEFIK_ACME_EMAIL ?? '')} onChange={handleStringChange} placeholder="admin@example.com" />
@@ -890,7 +887,7 @@ export default function Config() {
             icon={<Container size={16} className="text-cyan-400" />}
             title="Docker"
             description="Container engine and stack management"
-            accentColor="cyan"
+
           >
             <NumberRow label="Docker Timeout" description="Seconds before docker commands are killed" configKey="DOCKER_TIMEOUT" value={Number(edits.DOCKER_TIMEOUT ?? 120)} onChange={handleNumberChange} min={30} max={600} />
             <ToggleRow label="Force Recreate" description="Always recreate containers on start, even if unchanged" configKey="FORCE_RECREATE" value={Boolean(edits.FORCE_RECREATE)} onChange={handleBoolChange} />
@@ -904,7 +901,7 @@ export default function Config() {
             icon={<HeartPulse size={16} className="text-rose-400" />}
             title="Health & Monitoring"
             description="Health checks, scoring, and container prioritization"
-            accentColor="rose"
+
           >
             <ToggleRow label="Post-Startup Health Check" description="Run a health check after all stacks start" configKey="ENABLE_POST_STARTUP_HEALTH_CHECK" value={Boolean(edits.ENABLE_POST_STARTUP_HEALTH_CHECK)} onChange={handleBoolChange} />
             <NumberRow label="Health Check Delay" description="Seconds to wait before the health check" configKey="HEALTH_CHECK_DELAY" value={Number(edits.HEALTH_CHECK_DELAY ?? 10)} onChange={handleNumberChange} min={0} max={120} />
@@ -918,7 +915,7 @@ export default function Config() {
             icon={<Activity size={16} className="text-violet-400" />}
             title="Metrics & Features"
             description="Optional subsystems — metrics, scheduler, plugins, rollback"
-            accentColor="violet"
+
           >
             <ToggleRow label="Metrics Collection" description="Collect CPU, memory, disk metrics at regular intervals" configKey="METRICS_ENABLED" value={Boolean(edits.METRICS_ENABLED)} onChange={handleBoolChange} />
             <NumberRow label="Metrics Interval" description="Seconds between metrics snapshots" configKey="METRICS_COLLECT_INTERVAL" value={Number(edits.METRICS_COLLECT_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={600} />
@@ -933,7 +930,7 @@ export default function Config() {
             icon={<HardDrive size={16} className="text-amber-400" />}
             title="Backup"
             description="Automated backup source, destination, and retention"
-            accentColor="amber"
+
           >
             <TextRow label="Source Directory" description="Path to back up (typically your Stacks or App-Data)" configKey="BACKUP_SOURCE_DIR" value={String(edits.BACKUP_SOURCE_DIR ?? '')} onChange={handleStringChange} placeholder="/opt/docker" />
             <TextRow label="Destination Directory" description="Where backups are stored" configKey="BACKUP_DEST_DIR" value={String(edits.BACKUP_DEST_DIR ?? '')} onChange={handleStringChange} placeholder="/mnt/backup" />

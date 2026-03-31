@@ -4,7 +4,7 @@
 // =============================================================================
 
 import React, { useState, useCallback } from 'react'
-import { HardDrive, Pencil, Check, X, Plus, Pin, PinOff, FolderPlus, AlertTriangle, ShieldAlert } from 'lucide-react'
+import { HardDrive, Pencil, Check, X, FolderPlus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { DiskInfo, CustomDiskEntry } from '../../../shared/types'
 

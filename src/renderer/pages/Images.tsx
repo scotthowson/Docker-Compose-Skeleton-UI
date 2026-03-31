@@ -30,7 +30,6 @@ import {
   RefreshCw,
   Image,
   ArrowUpCircle,
-  CheckCircle,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
