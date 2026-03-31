@@ -18,7 +18,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMaintenanceDisk, triggerDeepPrune } from '../api/endpoints'
-import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry } from '../../shared/types'
+import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -362,8 +362,8 @@ export default function DiskAnalysis() {
           <div>
             <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              {disk?.total_app_data
-                ? `Total application data: ${disk.total_app_data}`
+              {disk?.host_disk?.percent
+                ? `${disk.host_disk.used} of ${disk.host_disk.total} used (${disk.host_disk.percent})`
                 : 'Docker disk usage breakdown'}
             </p>
           </div>
@@ -401,25 +401,94 @@ export default function DiskAnalysis() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Total disk usage hero card                                         */}
+      {/* Overview stat cards                                                */}
       {/* ----------------------------------------------------------------- */}
-      {disk?.total_app_data && (
-        <div
-          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
-          style={{ animationDelay: '60ms' }}
-        >
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
+        {/* Total App Data */}
+        <div className="glass border border-white/5 rounded-xl p-4 hover:border-cyan-500/15 transition-all duration-200 glow-cyan">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center">
-              <Database size={22} className="text-cyan-400" />
+            <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center shrink-0">
+              <Database size={18} className="text-cyan-400" />
             </div>
-            <div>
-              <p className="text-2xl md:text-3xl font-bold text-slate-100 font-mono tabular-nums">
-                {disk.total_app_data}
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
+                {disk?.total_app_data && disk.total_app_data !== 'N/A' ? disk.total_app_data : '—'}
               </p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mt-0.5">
-                Total Application Data
-              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">App Data</p>
             </div>
+          </div>
+        </div>
+
+        {/* Host Disk Total */}
+        <div className="glass border border-white/5 rounded-xl p-4 hover:border-emerald-500/15 transition-all duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0">
+              <HardDrive size={18} className="text-emerald-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
+                {disk?.host_disk?.total ?? '—'}
+              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Disk Total</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Disk Used */}
+        <div className="glass border border-white/5 rounded-xl p-4 hover:border-amber-500/15 transition-all duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
+              <PieChart size={18} className="text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
+                {disk?.host_disk?.used ?? '—'}
+                {disk?.host_disk?.percent && (
+                  <span className={`text-xs ml-1.5 ${
+                    parseInt(disk.host_disk.percent) > 90 ? 'text-rose-400' :
+                    parseInt(disk.host_disk.percent) > 75 ? 'text-amber-400' : 'text-slate-500'
+                  }`}>
+                    {disk.host_disk.percent}
+                  </span>
+                )}
+              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Disk Used</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Available */}
+        <div className="glass border border-white/5 rounded-xl p-4 hover:border-sky-500/15 transition-all duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-sky-500/10 border border-sky-500/15 flex items-center justify-center shrink-0">
+              <Archive size={18} className="text-sky-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
+                {disk?.host_disk?.available ?? '—'}
+              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Available</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Host disk usage bar */}
+      {disk?.host_disk?.percent && (
+        <div className="glass border border-white/5 rounded-xl p-4 animate-fade-in" style={{ animationDelay: '60ms' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filesystem Usage</span>
+            <span className="text-xs font-mono text-slate-400">{disk.host_disk.used} / {disk.host_disk.total}</span>
+          </div>
+          <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${
+                parseInt(disk.host_disk.percent) > 90 ? 'bg-gradient-to-r from-rose-500 to-red-500' :
+                parseInt(disk.host_disk.percent) > 75 ? 'bg-gradient-to-r from-amber-500 to-orange-500' :
+                'bg-gradient-to-r from-emerald-500 to-cyan-500'
+              }`}
+              style={{ width: disk.host_disk.percent }}
+            />
           </div>
         </div>
       )}
@@ -571,6 +640,44 @@ export default function DiskAnalysis() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Docker Volumes                                                     */}
+      {/* ----------------------------------------------------------------- */}
+      {disk?.volumes && disk.volumes.length > 0 && (
+        <div
+          className="glass border border-white/5 rounded-xl p-4 md:p-6 animate-fade-in"
+          style={{ animationDelay: '240ms' }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Database size={14} className="text-violet-400" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Docker Volumes
+              </h3>
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {disk.volumes.length} volume{disk.volumes.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {disk.volumes
+              .sort((a: DiskVolumeSize, b: DiskVolumeSize) => parseSizeToBytes(b.size) - parseSizeToBytes(a.size))
+              .map((vol: DiskVolumeSize) => (
+              <div
+                key={vol.name}
+                className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.03] hover:border-violet-500/15 transition-all"
+              >
+                <span className="text-[11px] text-slate-400 font-mono truncate mr-3" title={vol.name}>
+                  {vol.name.length > 30 ? `...${vol.name.slice(-27)}` : vol.name}
+                </span>
+                <span className="text-[11px] text-slate-300 font-mono shrink-0 font-medium">{vol.size}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

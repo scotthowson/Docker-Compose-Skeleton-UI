@@ -686,10 +686,22 @@ export interface DiskDfEntry {
   reclaimable: string
 }
 
+export interface DiskVolumeSize {
+  name: string
+  size: string
+}
+
 export interface DiskAnalysis {
   stack_sizes: DiskStackSize[]
   docker_df: DiskDfEntry[]
   total_app_data: string
+  host_disk?: {
+    total: string
+    used: string
+    available: string
+    percent: string
+  }
+  volumes?: DiskVolumeSize[]
 }
 
 export interface LogRotateResponse {
@@ -1213,6 +1225,8 @@ export interface NotificationRule {
   target: string
   priority: string
   tags: string[]
+  title_template?: string
+  message_template?: string
   created_at: string
 }
 

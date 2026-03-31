@@ -67,51 +67,65 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-type CategoryId = 'all' | 'databases' | 'media' | 'monitoring' | 'web' | 'development' | 'storage'
+type CategoryId = 'all' | 'media' | 'monitoring' | 'web' | 'databases' | 'development' | 'tools' | 'productivity' | 'automation' | 'security' | 'network' | 'storage' | 'download' | 'entertainment' | 'other'
 
 interface CategoryDef {
   id: CategoryId
   label: string
   icon: React.ElementType
+  // Maps template category strings to this filter ID
+  aliases: string[]
+  color: { badge: string; iconColor: string; border: string }
 }
 
 const CATEGORIES: CategoryDef[] = [
-  { id: 'all', label: 'All', icon: Package },
-  { id: 'databases', label: 'Databases', icon: Database },
-  { id: 'media', label: 'Media', icon: Tv },
-  { id: 'monitoring', label: 'Monitoring', icon: BarChart3 },
-  { id: 'web', label: 'Web', icon: Globe },
-  { id: 'development', label: 'Development', icon: Code },
-  { id: 'storage', label: 'Storage', icon: HardDrive },
+  { id: 'all', label: 'All', icon: Package, aliases: [], color: { badge: '', iconColor: '', border: '' } },
+  { id: 'media', label: 'Media', icon: Tv, aliases: ['media', 'photos', 'content', 'publishing'],
+    color: { badge: 'bg-violet-500/15 text-violet-400 border-violet-500/20', iconColor: 'text-violet-400', border: 'border-l-violet-500/60' } },
+  { id: 'monitoring', label: 'Monitoring', icon: BarChart3, aliases: ['monitoring', 'metrics', 'dashboard'],
+    color: { badge: 'bg-amber-500/15 text-amber-400 border-amber-500/20', iconColor: 'text-amber-400', border: 'border-l-amber-500/60' } },
+  { id: 'web', label: 'Web', icon: Globe, aliases: ['web'],
+    color: { badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20', iconColor: 'text-emerald-400', border: 'border-l-emerald-500/60' } },
+  { id: 'databases', label: 'Databases', icon: Database, aliases: ['databases', 'database', 'db'],
+    color: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400', border: 'border-l-cyan-500/60' } },
+  { id: 'development', label: 'Development', icon: Code, aliases: ['development', 'dev'],
+    color: { badge: 'bg-rose-500/15 text-rose-400 border-rose-500/20', iconColor: 'text-rose-400', border: 'border-l-rose-500/60' } },
+  { id: 'tools', label: 'Tools', icon: Sparkles, aliases: ['tools', 'utilities', 'remote'],
+    color: { badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20', iconColor: 'text-indigo-400', border: 'border-l-indigo-500/60' } },
+  { id: 'productivity', label: 'Productivity', icon: Store, aliases: ['productivity', 'notes', 'documents', 'knowledge', 'finance', 'lifestyle'],
+    color: { badge: 'bg-teal-500/15 text-teal-400 border-teal-500/20', iconColor: 'text-teal-400', border: 'border-l-teal-500/60' } },
+  { id: 'automation', label: 'Automation', icon: Sparkles, aliases: ['automation', 'notifications', 'sync'],
+    color: { badge: 'bg-orange-500/15 text-orange-400 border-orange-500/20', iconColor: 'text-orange-400', border: 'border-l-orange-500/60' } },
+  { id: 'security', label: 'Security', icon: Shield, aliases: ['security', 'vpn', 'privacy'],
+    color: { badge: 'bg-red-500/15 text-red-400 border-red-500/20', iconColor: 'text-red-400', border: 'border-l-red-500/60' } },
+  { id: 'network', label: 'Network', icon: Network, aliases: ['network', 'management'],
+    color: { badge: 'bg-blue-500/15 text-blue-400 border-blue-500/20', iconColor: 'text-blue-400', border: 'border-l-blue-500/60' } },
+  { id: 'storage', label: 'Storage', icon: HardDrive, aliases: ['storage', 'backup'],
+    color: { badge: 'bg-sky-500/15 text-sky-400 border-sky-500/20', iconColor: 'text-sky-400', border: 'border-l-sky-500/60' } },
+  { id: 'download', label: 'Download', icon: Download, aliases: ['download'],
+    color: { badge: 'bg-lime-500/15 text-lime-400 border-lime-500/20', iconColor: 'text-lime-400', border: 'border-l-lime-500/60' } },
+  { id: 'entertainment', label: 'Entertainment', icon: Tv, aliases: ['entertainment', 'ai'],
+    color: { badge: 'bg-pink-500/15 text-pink-400 border-pink-500/20', iconColor: 'text-pink-400', border: 'border-l-pink-500/60' } },
+  { id: 'other', label: 'Other', icon: Package, aliases: [],
+    color: { badge: 'bg-slate-500/15 text-slate-400 border-slate-500/20', iconColor: 'text-slate-400', border: 'border-l-slate-500/60' } },
 ]
 
-const CATEGORY_ICON_MAP: Record<string, React.ElementType> = {
-  databases: Database,
-  database: Database,
-  db: Database,
-  media: Tv,
-  monitoring: BarChart3,
-  metrics: BarChart3,
-  web: Globe,
-  development: Code,
-  dev: Code,
-  storage: HardDrive,
-  backup: HardDrive,
+/** Resolve a template's category string to a CategoryDef */
+function resolveCategory(cat: string): CategoryDef {
+  const lower = cat.toLowerCase()
+  return CATEGORIES.find((c) => c.id !== 'all' && c.id !== 'other' && c.aliases.includes(lower))
+    ?? CATEGORIES[CATEGORIES.length - 1] // 'other'
 }
 
-const CATEGORY_COLOR_MAP: Record<string, { badge: string; iconColor: string }> = {
-  databases: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400' },
-  database: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400' },
-  db: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400' },
-  media: { badge: 'bg-violet-500/15 text-violet-400 border-violet-500/20', iconColor: 'text-violet-400' },
-  monitoring: { badge: 'bg-amber-500/15 text-amber-400 border-amber-500/20', iconColor: 'text-amber-400' },
-  metrics: { badge: 'bg-amber-500/15 text-amber-400 border-amber-500/20', iconColor: 'text-amber-400' },
-  web: { badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20', iconColor: 'text-emerald-400' },
-  development: { badge: 'bg-rose-500/15 text-rose-400 border-rose-500/20', iconColor: 'text-rose-400' },
-  dev: { badge: 'bg-rose-500/15 text-rose-400 border-rose-500/20', iconColor: 'text-rose-400' },
-  storage: { badge: 'bg-sky-500/15 text-sky-400 border-sky-500/20', iconColor: 'text-sky-400' },
-  backup: { badge: 'bg-sky-500/15 text-sky-400 border-sky-500/20', iconColor: 'text-sky-400' },
-}
+const CATEGORY_ICON_MAP: Record<string, React.ElementType> = Object.fromEntries(
+  CATEGORIES.filter((c) => c.id !== 'all').flatMap((c) => c.aliases.map((a) => [a, c.icon]))
+)
+
+const CATEGORY_COLOR_MAP: Record<string, { badge: string; iconColor: string }> = Object.fromEntries(
+  CATEGORIES.filter((c) => c.id !== 'all').flatMap((c) =>
+    c.aliases.map((a) => [a, { badge: c.color.badge, iconColor: c.color.iconColor }])
+  )
+)
 
 const DEFAULT_CATEGORY_COLOR = {
   badge: 'bg-slate-500/15 text-slate-400 border-slate-500/20',
@@ -148,9 +162,9 @@ function getCategoryColors(category: string) {
 
 function matchesCategory(template: TemplateInfo, filter: CategoryId): boolean {
   if (filter === 'all') return true
-  const cat = template.category.toLowerCase()
-  // Allow substring matching for flexibility (e.g. "database" matches "databases")
-  return cat === filter || cat === filter.slice(0, -1) || filter.startsWith(cat)
+  const resolved = resolveCategory(template.category)
+  if (filter === 'other') return resolved.id === 'other'
+  return resolved.id === filter
 }
 
 /** Parse ${VAR_NAME} and ${VAR:-default} patterns from compose YAML */
@@ -361,7 +375,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -416,6 +430,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [enableRouting, setEnableRouting] = useState(true)
   const [connectProxy, setConnectProxy] = useState(true)
   const [enableAuthelia, setEnableAuthelia] = useState(false)
+  // Resource limits state
+  const [enableResourceLimits, setEnableResourceLimits] = useState(false)
+  const [memLimit, setMemLimit] = useState('')
+  const [cpuLimit, setCpuLimit] = useState('')
   const [showRoutes, setShowRoutes] = useState(false)
   const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
   const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
@@ -525,7 +543,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     await new Promise((r) => setTimeout(r, 400))
     setDeployStep(2) // Sending to server
     const proxyFlag = traefikActive && connectProxy ? true : undefined
-    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag)
+    const resLimits = enableResourceLimits && (memLimit || cpuLimit)
+      ? { mem_limit: memLimit || undefined, cpus: cpuLimit ? Number(cpuLimit) : undefined }
+      : undefined
+    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits)
     if (result) {
       if (autoStart && result.started) {
         setDeployStep(3) // Pulling images
@@ -1031,6 +1052,66 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   )}
                 </div>
               )}
+
+              {/* Resource Limits Toggle */}
+              <div className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={13} className="text-amber-400" />
+                    <span className="text-[11px] font-medium text-slate-300">Resource Limits</span>
+                    <span className="text-[10px] text-slate-500">per service</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEnableResourceLimits(!enableResourceLimits)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableResourceLimits ? 'bg-amber-500' : 'bg-slate-700'}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableResourceLimits ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                  </button>
+                </div>
+                {enableResourceLimits && (
+                  <div className="px-3 py-3 border-t border-white/5 space-y-3 animate-fade-in">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Memory Limit</label>
+                        <select
+                          value={memLimit}
+                          onChange={(e) => setMemLimit(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
+                        >
+                          <option value="">No limit</option>
+                          <option value="128m">128 MB</option>
+                          <option value="256m">256 MB</option>
+                          <option value="512m">512 MB</option>
+                          <option value="1g">1 GB</option>
+                          <option value="2g">2 GB</option>
+                          <option value="4g">4 GB</option>
+                          <option value="8g">8 GB</option>
+                          <option value="16g">16 GB</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">CPU Limit</label>
+                        <select
+                          value={cpuLimit}
+                          onChange={(e) => setCpuLimit(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
+                        >
+                          <option value="">No limit</option>
+                          <option value="0.5">0.5 CPU</option>
+                          <option value="1">1 CPU</option>
+                          <option value="2">2 CPUs</option>
+                          <option value="4">4 CPUs</option>
+                          <option value="8">8 CPUs</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Applies to all services in this template. You can fine-tune per-service limits in the compose editor after deployment.
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Compose preview (collapsible) */}
               <div>
@@ -2297,6 +2378,24 @@ export default function Templates() {
     )
   }, [templates, activeCategory, search])
 
+  // Group templates by resolved category for the "All" view
+  const grouped = useMemo(() => {
+    if (activeCategory !== 'all') return null
+    const groups = new Map<string, { def: CategoryDef; templates: TemplateInfo[] }>()
+    // Initialize groups in CATEGORIES order (excluding 'all')
+    for (const cat of CATEGORIES) {
+      if (cat.id === 'all') continue
+      groups.set(cat.id, { def: cat, templates: [] })
+    }
+    for (const t of filtered) {
+      const resolved = resolveCategory(t.category)
+      const group = groups.get(resolved.id)
+      if (group) group.templates.push(t)
+    }
+    // Return only non-empty groups, in order
+    return Array.from(groups.values()).filter((g) => g.templates.length > 0)
+  }, [filtered, activeCategory])
+
   // Open deploy modal
   const handleOpenDeploy = useCallback(async (template: TemplateInfo) => {
     setDeployTarget(template)
@@ -2325,7 +2424,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -2337,6 +2436,7 @@ export default function Templates() {
           exclude_services: excludeServices,
           custom_routes: customRoutes,
           connect_proxy: connectProxy,
+          resource_limits: resourceLimits,
         })
         if (res.success) {
           refresh()
@@ -2747,21 +2847,29 @@ export default function Templates() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
             {/* Category pills — horizontal scrollable on mobile */}
             <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-              {CATEGORIES.map((cat) => {
+              {CATEGORIES.filter((cat) => {
+                if (cat.id === 'all') return true
+                // Only show categories that have at least one template
+                return templates.some((t) => resolveCategory(t.category).id === cat.id)
+              }).map((cat) => {
                 const CatIcon = cat.icon
                 const isActive = activeCategory === cat.id
+                const count = cat.id === 'all' ? templates.length : templates.filter((t) => resolveCategory(t.category).id === cat.id).length
                 return (
                   <button
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 ${
                       isActive
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        ? cat.id === 'all'
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : `${cat.color.badge}`
                         : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/5 hover:text-slate-300'
                     }`}
                   >
                     <CatIcon size={13} />
                     {cat.label}
+                    <span className={`text-[10px] ${isActive ? 'opacity-70' : 'text-slate-600'}`}>{count}</span>
                   </button>
                 )
               })}
@@ -2822,47 +2930,115 @@ export default function Templates() {
             </div>
           )}
 
-          {/* Template card grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((template) => (
-              <TemplateCard
-                key={template.name}
-                template={template}
-                onDeploy={handleOpenDeploy}
-                onEdit={handleOpenEdit}
-                onDelete={handleDeleteTemplate}
-                onExport={handleExportTemplate}
-                deployStatus={deployStatusMap[template.name] || { state: 'none' }}
-              />
-            ))}
+          {/* Template cards — grouped by category when viewing "All", flat grid otherwise */}
+          {grouped ? (
+            <div className="space-y-8">
+              {grouped.map((group) => {
+                const { def, templates: groupTemplates } = group
+                const CatIcon = def.icon
+                return (
+                  <div key={def.id} className="animate-fade-in">
+                    {/* Category section header */}
+                    <div className={`flex items-center gap-3 mb-4 pl-3 border-l-2 ${def.color.border}`}>
+                      <div className={`w-8 h-8 rounded-lg bg-white/[0.04] border border-white/5 flex items-center justify-center ${def.color.iconColor}`}>
+                        <CatIcon size={15} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm font-bold text-slate-200 tracking-tight">{def.label}</h3>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${def.color.badge}`}>
+                          {groupTemplates.length}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Category grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {groupTemplates.map((template) => (
+                        <TemplateCard
+                          key={template.name}
+                          template={template}
+                          onDeploy={handleOpenDeploy}
+                          onEdit={handleOpenEdit}
+                          onDelete={handleDeleteTemplate}
+                          onExport={handleExportTemplate}
+                          deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
 
-            {/* Create Template Card */}
-            <button
-              onClick={handleOpenCreate}
-              className="
-                group relative flex flex-col items-center justify-center
-                min-h-[200px] rounded-xl border border-dashed
-                border-white/10 hover:border-emerald-500/30
-                bg-white/[0.02] hover:bg-emerald-500/[0.04]
-                transition-all duration-300 cursor-pointer
-              "
-            >
-              <div className="
-                flex items-center justify-center w-12 h-12 rounded-xl
-                bg-white/5 group-hover:bg-emerald-500/15
-                border border-white/5 group-hover:border-emerald-500/20
-                transition-all duration-300 mb-3
-              ">
-                <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
+              {/* Create Template Card — at the end */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <button
+                  onClick={handleOpenCreate}
+                  className="
+                    group relative flex flex-col items-center justify-center
+                    min-h-[200px] rounded-xl border border-dashed
+                    border-white/10 hover:border-emerald-500/30
+                    bg-white/[0.02] hover:bg-emerald-500/[0.04]
+                    transition-all duration-300 cursor-pointer
+                  "
+                >
+                  <div className="
+                    flex items-center justify-center w-12 h-12 rounded-xl
+                    bg-white/5 group-hover:bg-emerald-500/15
+                    border border-white/5 group-hover:border-emerald-500/20
+                    transition-all duration-300 mb-3
+                  ">
+                    <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
+                  </div>
+                  <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
+                    Create Template
+                  </span>
+                  <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+                    Build a custom service template
+                  </span>
+                </button>
               </div>
-              <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                Create Template
-              </span>
-              <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-                Build a custom service template
-              </span>
-            </button>
-          </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((template) => (
+                <TemplateCard
+                  key={template.name}
+                  template={template}
+                  onDeploy={handleOpenDeploy}
+                  onEdit={handleOpenEdit}
+                  onDelete={handleDeleteTemplate}
+                  onExport={handleExportTemplate}
+                  deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+                />
+              ))}
+
+              {/* Create Template Card */}
+              <button
+                onClick={handleOpenCreate}
+                className="
+                  group relative flex flex-col items-center justify-center
+                  min-h-[200px] rounded-xl border border-dashed
+                  border-white/10 hover:border-emerald-500/30
+                  bg-white/[0.02] hover:bg-emerald-500/[0.04]
+                  transition-all duration-300 cursor-pointer
+                "
+              >
+                <div className="
+                  flex items-center justify-center w-12 h-12 rounded-xl
+                  bg-white/5 group-hover:bg-emerald-500/15
+                  border border-white/5 group-hover:border-emerald-500/20
+                  transition-all duration-300 mb-3
+                ">
+                  <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
+                </div>
+                <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
+                  Create Template
+                </span>
+                <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+                  Build a custom service template
+                </span>
+              </button>
+            </div>
+          )}
         </>
       )}
 

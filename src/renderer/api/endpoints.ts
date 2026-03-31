@@ -1020,6 +1020,7 @@ export function deployTemplate(name: string, opts: {
   exclude_services?: string[]
   custom_routes?: Record<string, string>
   connect_proxy?: boolean
+  resource_limits?: { mem_limit?: string; cpus?: number }
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }

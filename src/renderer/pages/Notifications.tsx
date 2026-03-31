@@ -42,6 +42,8 @@ type TriggerType =
   | 'disk_warning'
   | 'stack_down'
   | 'image_stale'
+  | 'deploy_complete'
+  | 'update_available'
 
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
@@ -53,6 +55,8 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
   { value: 'disk_warning', label: 'Disk Warning' },
   { value: 'stack_down', label: 'Stack Down' },
   { value: 'image_stale', label: 'Image Stale' },
+  { value: 'deploy_complete', label: 'Deploy Complete' },
+  { value: 'update_available', label: 'Update Available' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -60,6 +64,98 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: 'high', label: 'High' },
   { value: 'default', label: 'Default' },
   { value: 'low', label: 'Low' },
+]
+
+/** Available template variables for notification messages */
+const TEMPLATE_VARIABLES = [
+  { var: '{stack}', desc: 'Stack name (e.g. media-services)' },
+  { var: '{container}', desc: 'Container name (e.g. Plex)' },
+  { var: '{status}', desc: 'Current status (e.g. unhealthy, stopped)' },
+  { var: '{event}', desc: 'Event type (e.g. container_unhealthy)' },
+  { var: '{timestamp}', desc: 'Current date/time' },
+  { var: '{hostname}', desc: 'Server hostname' },
+]
+
+/** Premade notification rule templates */
+interface PresetTemplate {
+  name: string
+  description: string
+  trigger: TriggerType
+  priority: Priority
+  tags: string[]
+  title_template: string
+  message_template: string
+  icon: React.ElementType
+  color: string
+}
+
+const PRESET_TEMPLATES: PresetTemplate[] = [
+  {
+    name: 'Container Health Alert',
+    description: 'Alert when any container becomes unhealthy',
+    trigger: 'container_unhealthy',
+    priority: 'urgent',
+    tags: ['warning', 'docker', 'health'],
+    title_template: '⚠️ {container} is Unhealthy',
+    message_template: 'Container {container} in {stack} has become unhealthy. Check logs and restart if needed.',
+    icon: HeartPulse,
+    color: 'rose',
+  },
+  {
+    name: 'Stack Down Alert',
+    description: 'Notify when a stack is stopped or goes down',
+    trigger: 'stack_down',
+    priority: 'high',
+    tags: ['warning', 'stack', 'down'],
+    title_template: '🔴 Stack Down — {stack}',
+    message_template: 'Stack {stack} has been stopped on {hostname} at {timestamp}.',
+    icon: Power,
+    color: 'amber',
+  },
+  {
+    name: 'Container Stopped',
+    description: 'Alert when a container stops unexpectedly',
+    trigger: 'container_stopped',
+    priority: 'high',
+    tags: ['container', 'stopped'],
+    title_template: '⏹️ {container} Stopped',
+    message_template: '{container} in {stack} has stopped. Status: {status}.',
+    icon: Box,
+    color: 'orange',
+  },
+  {
+    name: 'Disk Space Warning',
+    description: 'Alert when disk usage exceeds threshold',
+    trigger: 'disk_warning',
+    priority: 'urgent',
+    tags: ['disk', 'storage', 'warning'],
+    title_template: '💾 Disk Space Critical',
+    message_template: 'Disk usage on {hostname} is critically high. Free up space immediately.',
+    icon: HardDrive,
+    color: 'red',
+  },
+  {
+    name: 'Image Update Available',
+    description: 'Notify when container images have updates',
+    trigger: 'image_stale',
+    priority: 'low',
+    tags: ['update', 'image'],
+    title_template: '📦 Image Updates Available',
+    message_template: 'Container images have upstream updates available. Check the Updates page.',
+    icon: Package,
+    color: 'cyan',
+  },
+  {
+    name: 'Deploy Complete',
+    description: 'Confirm when a template deployment finishes',
+    trigger: 'deploy_complete',
+    priority: 'default',
+    tags: ['deploy', 'success'],
+    title_template: '✅ Deployed — {stack}',
+    message_template: 'Template deployed to {stack} on {hostname} at {timestamp}.',
+    icon: Play,
+    color: 'emerald',
+  },
 ]
 
 function triggerIcon(trigger: string) {
@@ -179,6 +275,9 @@ export default function Notifications() {
   const [newTarget, setNewTarget] = useState('*')
   const [newPriority, setNewPriority] = useState<Priority>('default')
   const [newTags, setNewTags] = useState('')
+  const [newTitleTemplate, setNewTitleTemplate] = useState('')
+  const [newMessageTemplate, setNewMessageTemplate] = useState('')
+  const [showGuide, setShowGuide] = useState(false)
 
   // Polling
   const { data: rulesData, loading: rulesLoading, refresh: refreshRules } = usePolling(
@@ -250,6 +349,16 @@ export default function Notifications() {
     }
   }, [addToast, refreshRules])
 
+  const resetForm = useCallback(() => {
+    setNewName('')
+    setNewTrigger('container_unhealthy')
+    setNewTarget('*')
+    setNewPriority('default')
+    setNewTags('')
+    setNewTitleTemplate('')
+    setNewMessageTemplate('')
+  }, [])
+
   const handleCreateRule = useCallback(async () => {
     if (!newName.trim()) return
     setCreating(true)
@@ -262,21 +371,31 @@ export default function Notifications() {
         priority: newPriority,
         tags,
         enabled: true,
+        title_template: newTitleTemplate.trim(),
+        message_template: newMessageTemplate.trim(),
       })
       addToast({ type: 'success', message: `Rule "${newName.trim()}" created` })
       setShowAddModal(false)
-      setNewName('')
-      setNewTrigger('container_unhealthy')
-      setNewTarget('*')
-      setNewPriority('default')
-      setNewTags('')
+      resetForm()
       refreshRules()
     } catch {
       addToast({ type: 'error', message: 'Failed to create notification rule' })
     } finally {
       setCreating(false)
     }
-  }, [newName, newTrigger, newTarget, newPriority, newTags, addToast, refreshRules])
+  }, [newName, newTrigger, newTarget, newPriority, newTags, newTitleTemplate, newMessageTemplate, addToast, refreshRules, resetForm])
+
+  /** Apply a preset template to the form */
+  const applyPreset = useCallback((preset: PresetTemplate) => {
+    setNewName(preset.name)
+    setNewTrigger(preset.trigger)
+    setNewPriority(preset.priority)
+    setNewTags(preset.tags.join(', '))
+    setNewTitleTemplate(preset.title_template)
+    setNewMessageTemplate(preset.message_template)
+    setNewTarget('*')
+    setShowAddModal(true)
+  }, [])
 
   // Webhook handlers
   const handleCreateWebhook = useCallback(async () => {
@@ -377,6 +496,13 @@ export default function Notifications() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
+          >
+            <Archive size={13} />
+            Guide
+          </button>
+          <button
             onClick={handleSendTest}
             disabled={sendingTest || !ntfyConfigured}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 disabled:opacity-50 press"
@@ -394,6 +520,127 @@ export default function Notifications() {
               Add Rule
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ── Guide Section ──────────────────────────────────────────────── */}
+      {showGuide && (
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap size={14} className="text-amber-400" />
+              <h2 className="text-sm font-semibold text-white">Notification Guide</h2>
+            </div>
+            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <XCircle size={14} className="text-slate-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <p className="text-sm text-slate-400">
+              Create notification rules that fire automatically when events occur. Customize the NTFY message title, body, priority, and tags. Use template variables to include dynamic context.
+            </p>
+
+            {/* How it works */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-[10px] font-bold">1</div>
+                  <span className="text-xs font-medium text-slate-300">Create a Rule</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">Choose a trigger event, set priority, and write your notification message using template variables.</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-amber-500/15 flex items-center justify-center text-amber-400 text-[10px] font-bold">2</div>
+                  <span className="text-xs font-medium text-slate-300">Event Fires</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">When the trigger event occurs (container down, stack stopped, etc.), DCS evaluates all matching rules.</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/15 flex items-center justify-center text-cyan-400 text-[10px] font-bold">3</div>
+                  <span className="text-xs font-medium text-slate-300">NTFY Sends</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">Variables are substituted and the notification is pushed to your NTFY topic instantly.</p>
+              </div>
+            </div>
+
+            {/* Template Variables */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-300 mb-2">Template Variables</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                {TEMPLATE_VARIABLES.map((v) => (
+                  <div key={v.var} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.03]">
+                    <code className="text-amber-400 text-[10px] font-mono font-medium bg-amber-500/10 px-1.5 py-0.5 rounded">{v.var}</code>
+                    <span className="text-[10px] text-slate-500 truncate">{v.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Example */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-300 mb-2">Example Notification</h3>
+              <div className="rounded-lg bg-slate-950/60 border border-white/5 p-3 font-mono text-[11px] space-y-1">
+                <p className="text-slate-500">Title:</p>
+                <p className="text-amber-300 ml-2">⚠️ {'{'}<span className="text-amber-400">container</span>{'}'} is Unhealthy</p>
+                <p className="text-slate-500 mt-2">Message:</p>
+                <p className="text-slate-300 ml-2">Container {'{'}<span className="text-amber-400">container</span>{'}'} in {'{'}<span className="text-amber-400">stack</span>{'}'} has become unhealthy at {'{'}<span className="text-amber-400">timestamp</span>{'}'}.</p>
+                <p className="text-slate-500 mt-2">Sends as:</p>
+                <p className="text-emerald-300 ml-2">⚠️ Plex is Unhealthy</p>
+                <p className="text-slate-300 ml-2">Container Plex in media-services has become unhealthy at 2026-03-30 21:15:00.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Add Presets ──────────────────────────────────────────── */}
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={14} className="text-amber-400" />
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick Add — Notification Presets</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {PRESET_TEMPLATES.map((preset) => {
+            const PresetIcon = preset.icon
+            const alreadyExists = rules.some((r) => r.trigger === preset.trigger && r.name === preset.name)
+            return (
+              <button
+                key={preset.name}
+                onClick={() => !alreadyExists && applyPreset(preset)}
+                disabled={alreadyExists}
+                className={`
+                  group text-left rounded-xl border p-3.5 transition-all duration-200
+                  ${alreadyExists
+                    ? 'border-white/[0.03] bg-white/[0.01] opacity-50 cursor-default'
+                    : `border-white/5 bg-white/[0.02] hover:border-${preset.color}-500/20 hover:bg-${preset.color}-500/[0.04] cursor-pointer press`
+                  }
+                `}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg bg-${preset.color}-500/10 border border-${preset.color}-500/15 flex items-center justify-center shrink-0 text-${preset.color}-400`}>
+                    <PresetIcon size={14} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">{preset.name}</span>
+                      {alreadyExists && (
+                        <span className="text-[9px] text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-full">Added</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed mt-0.5">{preset.description}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${priorityColor(preset.priority)}`}>
+                        {preset.priority}
+                      </span>
+                      <span className="text-[9px] text-slate-600">{preset.tags.join(', ')}</span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -866,9 +1113,9 @@ export default function Notifications() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
-          <div className="w-full max-w-md mx-4 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden">
+          <div className="w-full max-w-lg mx-4 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
               <div className="flex items-center gap-2">
                 <Plus size={16} className="text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">New Notification Rule</h3>
@@ -959,6 +1206,59 @@ export default function Notifications() {
                   placeholder="warning, server, docker"
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                 />
+              </div>
+
+              {/* Notification Message section */}
+              <div className="pt-2 border-t border-white/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Send size={12} className="text-amber-400" />
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">NTFY Message</span>
+                </div>
+
+                {/* Title Template */}
+                <div className="mb-3">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Title
+                    <span className="text-slate-600 ml-1 normal-case">— use {'{'}<span className="text-amber-400">variables</span>{'}'} for dynamic content</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newTitleTemplate}
+                    onChange={(e) => setNewTitleTemplate(e.target.value)}
+                    placeholder="e.g. ⚠️ {container} is {status}"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors"
+                  />
+                </div>
+
+                {/* Message Template */}
+                <div className="mb-3">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Message Body</label>
+                  <textarea
+                    value={newMessageTemplate}
+                    onChange={(e) => setNewMessageTemplate(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Container {container} in {stack} needs attention. Status: {status}"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors resize-none"
+                  />
+                </div>
+
+                {/* Quick variable buttons */}
+                <div className="flex flex-wrap gap-1">
+                  {TEMPLATE_VARIABLES.map((v) => (
+                    <button
+                      key={v.var}
+                      type="button"
+                      onClick={() => {
+                        // Insert at the end of message template
+                        setNewMessageTemplate((prev) => prev ? `${prev} ${v.var}` : v.var)
+                      }}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/15 hover:bg-amber-500/20 transition-colors"
+                      title={v.desc}
+                    >
+                      {v.var}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
