@@ -83,10 +83,17 @@ function parseSizeToBytes(s: string): number {
   return parseSizeToMB(s) * 1024 * 1024
 }
 
-/** Format MB value to a human-friendly label for chart tooltip */
+/** Format MB value to a clean human-friendly label */
 function formatMB(mb: number): string {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`
-  if (mb >= 1) return `${mb.toFixed(1)} MB`
+  if (mb >= 1024 * 1024) {
+    const tb = mb / (1024 * 1024)
+    return tb >= 10 ? `${Math.round(tb)} TB` : `${tb.toFixed(1)} TB`
+  }
+  if (mb >= 1024) {
+    const gb = mb / 1024
+    return gb >= 100 ? `${Math.round(gb)} GB` : `${gb.toFixed(1)} GB`
+  }
+  if (mb >= 1) return `${Math.round(mb)} MB`
   return `${(mb * 1024).toFixed(0)} KB`
 }
 
@@ -413,7 +420,18 @@ export default function DiskAnalysis() {
             <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
             <p className="text-sm text-slate-400 mt-0.5">
               {storageTotals
-                ? <>{storageTotals.used} used of {storageTotals.total} across {storageTotals.driveCount} drive{storageTotals.driveCount !== 1 ? 's' : ''} <span className={`font-medium ${storageTotals.percent > 80 ? 'text-amber-400' : 'text-slate-300'}`}>({storageTotals.percent}%)</span></>
+                ? <>
+                    <span className="text-slate-300">{storageTotals.used}</span>
+                    {' used of '}
+                    <span className="text-slate-300">{storageTotals.total}</span>
+                    {' across '}
+                    <span className="text-slate-300">{storageTotals.driveCount}</span>
+                    {' drive'}{storageTotals.driveCount !== 1 ? 's' : ''}
+                    {' '}
+                    <span className={`font-semibold ${storageTotals.percent > 80 ? 'text-amber-400' : storageTotals.percent > 60 ? 'text-slate-300' : 'text-emerald-400'}`}>
+                      ({storageTotals.percent}%)
+                    </span>
+                  </>
                 : disk?.host_disk?.percent
                   ? `${disk.host_disk.used} of ${disk.host_disk.total} used (${disk.host_disk.percent})`
                   : 'Docker disk usage breakdown'}
@@ -471,7 +489,7 @@ export default function DiskAnalysis() {
           </div>
         </div>
 
-        {/* Host Disk Total */}
+        {/* Total Storage (aggregate across all drives) */}
         <div className="glass border border-white/5 rounded-xl p-4 hover:border-emerald-500/15 transition-all duration-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0">
@@ -479,14 +497,14 @@ export default function DiskAnalysis() {
             </div>
             <div className="min-w-0">
               <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
-                {disk?.host_disk?.total ?? '—'}
+                {storageTotals?.total ?? disk?.host_disk?.total ?? '—'}
               </p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Disk Total</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Storage</p>
             </div>
           </div>
         </div>
 
-        {/* Disk Used */}
+        {/* Used */}
         <div className="glass border border-white/5 rounded-xl p-4 hover:border-amber-500/15 transition-all duration-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
@@ -494,17 +512,16 @@ export default function DiskAnalysis() {
             </div>
             <div className="min-w-0">
               <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
-                {disk?.host_disk?.used ?? '—'}
-                {disk?.host_disk?.percent && (
+                {storageTotals?.used ?? disk?.host_disk?.used ?? '—'}
+                {(storageTotals || disk?.host_disk?.percent) && (
                   <span className={`text-xs ml-1.5 ${
-                    parseInt(disk.host_disk.percent) > 90 ? 'text-rose-400' :
-                    parseInt(disk.host_disk.percent) > 75 ? 'text-amber-400' : 'text-slate-500'
+                    (storageTotals?.percent ?? parseInt(disk?.host_disk?.percent ?? '0')) > 80 ? 'text-amber-400' : 'text-slate-500'
                   }`}>
-                    {disk.host_disk.percent}
+                    {storageTotals ? `${storageTotals.percent}%` : disk?.host_disk?.percent}
                   </span>
                 )}
               </p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Disk Used</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Used</p>
             </div>
           </div>
         </div>
@@ -517,7 +534,7 @@ export default function DiskAnalysis() {
             </div>
             <div className="min-w-0">
               <p className="text-lg font-bold text-slate-100 font-mono tabular-nums truncate">
-                {disk?.host_disk?.available ?? '—'}
+                {storageTotals?.free ?? disk?.host_disk?.available ?? '—'}
               </p>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Available</p>
             </div>
@@ -525,39 +542,44 @@ export default function DiskAnalysis() {
         </div>
       </div>
 
-      {/* Host disk usage bar */}
-      {disk?.host_disk?.percent && (() => {
-        const hostPct = parseInt(disk.host_disk.percent)
-        const barGradient = hostPct > 90
+      {/* Aggregate storage bar */}
+      {storageTotals && (() => {
+        const pct = storageTotals.percent
+        const barGradient = pct > 90
           ? 'bg-gradient-to-r from-rose-500 to-red-500 shadow-rose-500/20'
-          : hostPct > 75
+          : pct > 75
             ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-500/20'
             : 'bg-gradient-to-r from-emerald-500 to-cyan-500 shadow-emerald-500/20'
-        const barTextColor = hostPct > 90 ? 'text-rose-400' : hostPct > 75 ? 'text-amber-400' : 'text-emerald-400'
+        const barTextColor = pct > 90 ? 'text-rose-400' : pct > 75 ? 'text-amber-400' : 'text-emerald-400'
         return (
           <div className="glass border border-white/5 rounded-xl p-5 animate-fade-in" style={{ animationDelay: '60ms' }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filesystem Usage</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Storage</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5">
+                  {storageTotals.driveCount} drive{storageTotals.driveCount !== 1 ? 's' : ''}
+                </span>
+              </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-slate-500">
-                  <span className="text-slate-300 font-medium">{disk.host_disk.used}</span>
+                  <span className="text-slate-300 font-medium">{storageTotals.used}</span>
                   <span className="text-slate-600 mx-0.5">/</span>
-                  {disk.host_disk.total}
+                  {storageTotals.total}
                 </span>
                 <span className="text-slate-600">|</span>
-                <span className="text-slate-300 font-medium">{disk.host_disk.available}</span>
-                <span className="text-slate-500">free</span>
+                <span className="text-slate-300 font-medium">{storageTotals.free}</span>
+                <span className="text-slate-500 ml-0.5">free</span>
               </div>
             </div>
             <div className="relative h-4 rounded-full bg-slate-800 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 shadow-lg ${barGradient}`}
-                style={{ width: disk.host_disk.percent }}
+                style={{ width: `${pct}%` }}
               />
-              {hostPct > 8 && (
+              {pct > 8 && (
                 <span className={`absolute inset-y-0 left-0 flex items-center text-[9px] font-bold tracking-wider ${barTextColor}`}
-                  style={{ paddingLeft: `max(8px, calc(${hostPct}% - 32px))` }}>
-                  {disk.host_disk.percent}
+                  style={{ paddingLeft: `max(8px, calc(${pct}% - 24px))` }}>
+                  {pct}%
                 </span>
               )}
             </div>
