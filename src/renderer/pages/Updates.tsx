@@ -28,7 +28,6 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, APIVersion } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
-// WhatsNew is in the user menu (Header) — no separate card needed here
 
 // ---------------------------------------------------------------------------
 // Staleness Badge
@@ -176,23 +175,26 @@ export default function Updates() {
     setSysChecking(true)
     try {
       const result = await checkSystemUpdate()
-      processUpdateResult(result)
-      // Toasts for manual check
+      setSysUpdate(result)
+      // Check for UI image update
       const uiUp = (result as Record<string, unknown>).ui_update as { available?: boolean } | undefined
+      setUiUpdateAvailable(!!uiUp?.available)
+      useSettingsStore.getState().updateSetting('updatesAvailable', result.available ? result.commits_behind : 0)
+      setLastChecked(Date.now())
       if (uiUp?.available) {
         addToast({ type: 'info', message: 'DCS Manager UI update available' })
       }
       if (result.available) {
         addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
-      } else if (!uiUp?.available) {
-        addToast({ type: 'success', message: 'Everything is up to date' })
+      } else {
+        addToast({ type: 'success', message: 'DCS framework is up to date' })
       }
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })
     } finally {
       setSysChecking(false)
     }
-  }, [sysChecking, addToast, processUpdateResult])
+  }, [sysChecking, addToast])
 
   const handleApplySystemUpdate = useCallback(async () => {
     if (sysApplying || !sysUpdate?.available) return
@@ -237,19 +239,17 @@ export default function Updates() {
     }
   }, [sysRollingBack, lastBackupTag, addToast])
 
-  // Process update check result — shared by auto-check and manual check
-  const processUpdateResult = useCallback((res: SystemUpdateCheckResponse) => {
-    setSysUpdate(res)
-    const uiUp = (res as Record<string, unknown>).ui_update as { available?: boolean } | undefined
-    setUiUpdateAvailable(!!uiUp?.available)
-    useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
-    setLastChecked(Date.now())
-  }, [])
-
   // Auto-check for system + UI updates on mount
   useEffect(() => {
     if (isConnected && !sysUpdate && !sysChecking) {
-      checkSystemUpdate().then(processUpdateResult).catch(() => {})
+      checkSystemUpdate().then(res => {
+        setSysUpdate(res)
+        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
+        // Also check UI image update from the response
+        const uiUp = (res as Record<string, unknown>).ui_update as { available?: boolean } | undefined
+        if (uiUp?.available) setUiUpdateAvailable(true)
+        setLastChecked(Date.now())
+      }).catch(() => {})
       fetchVersion().then(setApiVersionInfo).catch(() => {})
     }
   }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -258,10 +258,13 @@ export default function Updates() {
   useEffect(() => {
     if (!isConnected || !autoCheckUpdates || autoCheckUpdates <= 0) return
     const timer = setInterval(() => {
-      checkSystemUpdate().then(processUpdateResult).catch(() => {})
+      checkSystemUpdate().then(res => {
+        setSysUpdate(res)
+        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
+      }).catch(() => {})
     }, autoCheckUpdates)
     return () => clearInterval(timer)
-  }, [isConnected, autoCheckUpdates, processUpdateResult])
+  }, [isConnected, autoCheckUpdates])
 
   // ---- Image update state ----
   const [registryChecking, setRegistryChecking] = useState(false)
