@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import {
   HardDrive, Trash2, RefreshCw, Loader2, WifiOff,
   Database, Layers, Box, Archive, PieChart,
+  Pencil, Check, X,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -165,6 +166,11 @@ export default function DiskAnalysis() {
 
   // ---- Stores ----
   const diskLabels = useSettingsStore((s) => s.diskLabels) ?? {}
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+
+  // Inline rename state for drive cards
+  const [renamingMount, setRenamingMount] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   // ---- Polling ----
   const {
@@ -177,6 +183,42 @@ export default function DiskAnalysis() {
   // Mounted drives from /disks endpoint (same as Dashboard)
   const { data: disksData } = usePolling<{ total: number; disks: DiskInfo[] }>(fetchDisks, 60000, { enabled: isConnected })
   const mountedDrives = disksData?.disks ?? []
+
+  // Rename handler — writes to shared settingsStore (syncs to Dashboard + Settings)
+  const handleRenameLabel = useCallback((mount: string, label: string) => {
+    const next = { ...diskLabels }
+    if (label) {
+      next[mount] = label
+    } else {
+      delete next[mount]
+    }
+    updateSetting('diskLabels', next)
+    setRenamingMount(null)
+  }, [diskLabels, updateSetting])
+
+  // Aggregate totals across all mounted drives (deduplicated by device)
+  const storageTotals = useMemo(() => {
+    if (!mountedDrives.length) return null
+    // Deduplicate by device — some devices mount at multiple paths
+    const seen = new Set<string>()
+    let totalMB = 0
+    let usedMB = 0
+    for (const d of mountedDrives) {
+      if (seen.has(d.device)) continue
+      seen.add(d.device)
+      totalMB += parseSizeToMB(d.total)
+      usedMB += parseSizeToMB(d.used)
+    }
+    const freeMB = totalMB - usedMB
+    const pct = totalMB > 0 ? Math.round((usedMB / totalMB) * 100) : 0
+    return {
+      total: formatMB(totalMB),
+      used: formatMB(usedMB),
+      free: formatMB(freeMB),
+      percent: pct,
+      driveCount: seen.size,
+    }
+  }, [mountedDrives])
 
   // ---- Action state ----
   const [deepPruning, setDeepPruning] = useState(false)
@@ -370,9 +412,11 @@ export default function DiskAnalysis() {
           <div>
             <h1 className="text-2xl font-bold"><span className="text-gradient">Disk Analysis</span></h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              {disk?.host_disk?.percent
-                ? `${disk.host_disk.used} of ${disk.host_disk.total} used (${disk.host_disk.percent})`
-                : 'Docker disk usage breakdown'}
+              {storageTotals
+                ? <>{storageTotals.used} used of {storageTotals.total} across {storageTotals.driveCount} drive{storageTotals.driveCount !== 1 ? 's' : ''} <span className={`font-medium ${storageTotals.percent > 80 ? 'text-amber-400' : 'text-slate-300'}`}>({storageTotals.percent}%)</span></>
+                : disk?.host_disk?.percent
+                  ? `${disk.host_disk.used} of ${disk.host_disk.total} used (${disk.host_disk.percent})`
+                  : 'Docker disk usage breakdown'}
             </p>
           </div>
         </div>
@@ -559,17 +603,42 @@ export default function DiskAnalysis() {
                 return (
                   <div
                     key={d.mount}
-                    className={`rounded-xl bg-slate-800/40 border border-white/[0.04] hover:border-white/[0.08] p-4 transition-all duration-200 hover:shadow-lg ${glowColor}`}
+                    className={`group/drive rounded-xl bg-slate-800/40 border border-white/[0.04] hover:border-white/[0.08] p-4 transition-all duration-200 hover:shadow-lg ${glowColor}`}
                   >
                     {/* Header: name + percent */}
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <HardDrive size={13} className={textColor} />
-                        <span className="text-sm font-semibold text-slate-200 truncate" title={d.mount}>
-                          {displayName}
-                        </span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <HardDrive size={13} className={`${textColor} shrink-0`} />
+                        {renamingMount === d.mount ? (
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' ? handleRenameLabel(d.mount, renameValue.trim()) : e.key === 'Escape' ? setRenamingMount(null) : null}
+                              autoFocus
+                              placeholder={d.mount}
+                              className="flex-1 min-w-0 bg-slate-900/60 border border-cyan-500/30 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none"
+                            />
+                            <button onClick={() => handleRenameLabel(d.mount, renameValue.trim())} className="text-emerald-400 hover:text-emerald-300 shrink-0"><Check size={12} /></button>
+                            <button onClick={() => setRenamingMount(null)} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-sm font-semibold text-slate-200 truncate" title={d.mount}>
+                              {displayName}
+                            </span>
+                            <button
+                              onClick={() => { setRenameValue(label); setRenamingMount(d.mount) }}
+                              className="opacity-0 group-hover/drive:opacity-100 text-slate-500 hover:text-slate-400 transition-opacity shrink-0"
+                              title="Rename drive"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                          </>
+                        )}
                       </div>
-                      <span className={`text-sm font-bold tabular-nums ${textColor}`}>
+                      <span className={`text-sm font-bold tabular-nums ${textColor} shrink-0 ml-2`}>
                         {d.percent}
                       </span>
                     </div>
