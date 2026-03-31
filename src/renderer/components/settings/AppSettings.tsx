@@ -3,7 +3,7 @@
 // =============================================================================
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { Timer, Layout, RotateCcw, Save } from 'lucide-react'
+import { Timer, Layout, RotateCcw } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { AppSettings as AppSettingsType } from '../../../shared/types'
 
@@ -69,7 +69,10 @@ const intervalFields: IntervalField[] = [
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AppSettingsForm() {
+export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
+  onDirtyChange?: (dirty: boolean) => void
+  onRegisterSave?: (save: () => void, discard: () => void) => void
+} = {}) {
   const pollingInterval = useSettingsStore((s) => s.pollingInterval)
   const containerPollingInterval = useSettingsStore((s) => s.containerPollingInterval)
   const imagePollingInterval = useSettingsStore((s) => s.imagePollingInterval)
@@ -112,6 +115,16 @@ export default function AppSettingsForm() {
     setDirty(false)
   }, [localIntervals, updateSetting])
 
+  const handleDiscard = useCallback(() => {
+    setLocalIntervals({
+      pollingInterval: pollingInterval / 1000,
+      containerPollingInterval: containerPollingInterval / 1000,
+      imagePollingInterval: imagePollingInterval / 1000,
+      logPollingInterval: logPollingInterval / 1000,
+    })
+    setDirty(false)
+  }, [pollingInterval, containerPollingInterval, imagePollingInterval, logPollingInterval])
+
   const handleReset = useCallback(() => {
     for (const field of intervalFields) {
       updateSetting(field.key, DEFAULTS[field.key])
@@ -127,6 +140,10 @@ export default function AppSettingsForm() {
     })
     setDirty(false)
   }, [updateSetting, sidebarCollapsed, toggleSidebar])
+
+  // Report dirty state to parent
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { onRegisterSave?.(handleSave, handleDiscard) }, [handleSave, handleDiscard, onRegisterSave])
 
   return (
     <div className="space-y-6">
@@ -222,24 +239,8 @@ export default function AppSettingsForm() {
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-3 pt-2 border-t border-white/5">
-        <button
-          onClick={handleSave}
-          disabled={!dirty}
-          className="
-            flex items-center gap-2 rounded-lg px-4 py-2
-            text-sm font-medium
-            text-emerald-400 bg-emerald-500/10 border border-emerald-500/20
-            hover:bg-emerald-500/20 hover:border-emerald-500/30
-            disabled:opacity-50 disabled:cursor-not-allowed
-            transition-all duration-200
-          "
-        >
-          <Save size={14} />
-          Save Changes
-        </button>
-
+      {/* Reset to defaults */}
+      <div className="flex items-center pt-2 border-t border-white/5">
         <button
           onClick={handleReset}
           className="

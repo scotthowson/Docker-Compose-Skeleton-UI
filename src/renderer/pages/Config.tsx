@@ -22,6 +22,11 @@ import {
   Server,
   ChevronDown,
   ScrollText,
+  Network,
+  HeartPulse,
+  Activity,
+  HardDrive,
+  Container,
 } from 'lucide-react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { usePolling } from '../hooks/usePolling'
@@ -293,6 +298,12 @@ export default function Config() {
     API_PORT: d.api_port,
     API_BIND: d.api_bind,
     API_ENABLED: d.api_enabled ?? true,
+    API_AUTH_ENABLED: d.api_auth_enabled ?? true,
+    API_RATE_LIMIT: d.api_rate_limit ?? 600,
+    API_RATE_WINDOW: d.api_rate_window ?? 60,
+    API_TOKEN_EXPIRY: d.api_token_expiry ?? 86400,
+    API_SINGLE_SESSION: d.api_single_session ?? false,
+    API_CORS_ORIGINS: d.api_cors_origins ?? '',
     NTFY_URL: d.ntfy_url ?? '',
     NTFY_TOPIC: d.ntfy_topic ?? '',
     NTFY_PRIORITY: d.ntfy_priority ?? 'default',
@@ -309,6 +320,36 @@ export default function Config() {
     ENABLE_LOG_MOOD: d.enable_log_mood ?? true,
     ENABLE_LOG_PID: d.enable_log_pid ?? false,
     ENABLE_LOG_HOSTNAME: d.enable_log_hostname ?? false,
+    LOG_MAX_SIZE: d.log_max_size ?? '10M',
+    LOG_BACKUP_COUNT: d.log_backup_count ?? 12,
+    // Traefik/DNS
+    TRAEFIK_DOMAIN: d.traefik_domain ?? '',
+    TRAEFIK_ACME_EMAIL: d.traefik_acme_email ?? '',
+    DDNS_ENABLED: d.ddns_enabled ?? false,
+    DDNS_INTERVAL: d.ddns_interval ?? 300,
+    // Health/Monitoring
+    ENABLE_POST_STARTUP_HEALTH_CHECK: d.enable_post_startup_health_check ?? true,
+    HEALTH_CHECK_DELAY: d.health_check_delay ?? 10,
+    CRITICAL_CONTAINERS: d.critical_containers ?? '',
+    IMPORTANT_CONTAINERS: d.important_containers ?? '',
+    HEALTH_SCORE_ENABLED: d.health_score_enabled ?? true,
+    // Metrics/Features
+    METRICS_ENABLED: d.metrics_enabled ?? true,
+    METRICS_COLLECT_INTERVAL: d.metrics_collect_interval ?? 60,
+    ROLLBACK_ENABLED: d.rollback_enabled ?? true,
+    SCHEDULER_ENABLED: d.scheduler_enabled ?? true,
+    PLUGINS_ENABLED: d.plugins_enabled ?? true,
+    PLUGINS_HOOKS_ENABLED: d.plugins_hooks_enabled ?? true,
+    // Docker
+    DOCKER_TIMEOUT: d.docker_timeout ?? 120,
+    FORCE_RECREATE: d.force_recreate ?? false,
+    REMOVE_ORPHANED_CONTAINERS: d.remove_orphaned_containers ?? true,
+    SERVICE_START_DELAY: d.service_start_delay ?? 0,
+    SERVICE_STOP_DELAY: d.service_stop_delay ?? 0,
+    // Backup
+    BACKUP_SOURCE_DIR: d.backup_source_dir ?? '',
+    BACKUP_DEST_DIR: d.backup_dest_dir ?? '',
+    BACKUP_RETENTION_COUNT: d.backup_retention_count ?? 7,
   }), [])
 
   // Sync from server ONLY when user hasn't started editing
@@ -373,37 +414,7 @@ export default function Config() {
   const handleReset = () => {
     setUserIsEditing(false)
     if (data) {
-      setEdits({
-        ENVIRONMENT: data.environment,
-        LOG_LEVEL: data.log_level,
-        TZ: data.timezone,
-        SERVER_NAME: data.server_name,
-        SKIP_HEALTHCHECK_WAIT: data.skip_healthcheck_wait,
-        CONTINUE_ON_FAILURE: data.continue_on_failure,
-        REMOVE_VOLUMES_ON_STOP: data.remove_volumes_on_stop,
-        AGGRESSIVE_IMAGE_PRUNE: data.aggressive_image_prune,
-        UPDATE_NOTIFICATION: data.update_notification,
-        SHOW_BANNERS: data.show_banners,
-        API_PORT: data.api_port,
-        API_BIND: data.api_bind,
-        API_ENABLED: data.api_enabled ?? true,
-        NTFY_URL: data.ntfy_url ?? '',
-        NTFY_TOPIC: data.ntfy_topic ?? '',
-        NTFY_PRIORITY: data.ntfy_priority ?? 'default',
-        ENABLE_COLORS: data.enable_colors ?? true,
-        COLOR_MODE: data.color_mode ?? 'auto',
-        COLOR_THEME: data.color_theme ?? 'dark',
-        FORCE_COLOR: data.force_color ?? false,
-        VERBOSE_MODE: data.verbose_mode ?? false,
-        SHOW_SYSTEM_INFO: data.show_system_info ?? true,
-        PROGRESS_BAR_WIDTH: data.progress_bar_width ?? 50,
-        ENABLE_LOG_DATE: data.enable_log_date ?? true,
-        ENABLE_MILLISECONDS: data.enable_milliseconds ?? false,
-        LOG_DATE_FORMAT: data.log_date_format ?? '%Y-%m-%d %H:%M:%S',
-        ENABLE_LOG_MOOD: data.enable_log_mood ?? true,
-        ENABLE_LOG_PID: data.enable_log_pid ?? false,
-        ENABLE_LOG_HOSTNAME: data.enable_log_hostname ?? false,
-      })
+      setEdits(buildEditsFromData(data))
       setSaveResult(null)
     }
   }
@@ -719,6 +730,8 @@ export default function Config() {
               value={Boolean(edits.ENABLE_LOG_HOSTNAME ?? cfg.enable_log_hostname ?? false)}
               onChange={handleBoolChange}
             />
+            <TextRow label="Max Log Size" description="Max size per log file before rotation (e.g. 10M, 50M)" configKey="LOG_MAX_SIZE" value={String(edits.LOG_MAX_SIZE ?? '10M')} onChange={handleStringChange} placeholder="10M" />
+            <NumberRow label="Log Backup Count" description="Number of rotated log archives to keep" configKey="LOG_BACKUP_COUNT" value={Number(edits.LOG_BACKUP_COUNT ?? 12)} onChange={handleNumberChange} min={1} max={100} />
           </GroupCard>
 
           {/* API Server */}
@@ -768,6 +781,12 @@ export default function Config() {
               onChange={handleStringChange}
               placeholder="0.0.0.0"
             />
+            <ToggleRow label="Authentication" description="Require auth for API requests (auto-enabled when bound to 0.0.0.0)" configKey="API_AUTH_ENABLED" value={Boolean(edits.API_AUTH_ENABLED ?? true)} onChange={handleBoolChange} />
+            <NumberRow label="Rate Limit" description="Max requests per window per IP" configKey="API_RATE_LIMIT" value={Number(edits.API_RATE_LIMIT ?? 600)} onChange={handleNumberChange} min={10} max={10000} />
+            <NumberRow label="Rate Window" description="Rate limit window in seconds" configKey="API_RATE_WINDOW" value={Number(edits.API_RATE_WINDOW ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
+            <NumberRow label="Token Expiry" description="Session token lifetime in seconds (86400 = 24h)" configKey="API_TOKEN_EXPIRY" value={Number(edits.API_TOKEN_EXPIRY ?? 86400)} onChange={handleNumberChange} min={300} max={604800} />
+            <ToggleRow label="Single Session" description="Allow only one active session per user" configKey="API_SINGLE_SESSION" value={Boolean(edits.API_SINGLE_SESSION)} onChange={handleBoolChange} />
+            <TextRow label="CORS Origins" description="Comma-separated allowed origins (empty = same-origin only)" configKey="API_CORS_ORIGINS" value={String(edits.API_CORS_ORIGINS ?? '')} onChange={handleStringChange} placeholder="http://localhost:3000" />
           </GroupCard>
 
           {/* Push Notifications (NTFY) */}
@@ -851,6 +870,75 @@ export default function Config() {
               </div>
             </div>
           </GroupCard>
+
+          {/* ── Traefik / DNS ── */}
+          <GroupCard
+            icon={<Network size={16} className="text-cyan-400" />}
+            title="Traefik & DNS"
+            description="Reverse proxy, ACME certificates, and dynamic DNS"
+            accentColor="cyan"
+          >
+            <TextRow label="Traefik Domain" description="Primary domain for auto-routing" configKey="TRAEFIK_DOMAIN" value={String(edits.TRAEFIK_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
+            <TextRow label="ACME Email" description="Email for Let's Encrypt certificates" configKey="TRAEFIK_ACME_EMAIL" value={String(edits.TRAEFIK_ACME_EMAIL ?? '')} onChange={handleStringChange} placeholder="admin@example.com" />
+            <ToggleRow label="Cloudflare DNS Token" description={cfg?.cf_dns_api_token_set ? 'A Cloudflare API token is configured' : 'No Cloudflare token set — configure via .env'} configKey="_CF_TOKEN_SET" value={cfg?.cf_dns_api_token_set ?? false} onChange={() => {}} disabled />
+            <ToggleRow label="DDNS Enabled" description="Periodically update DNS A records with current public IP" configKey="DDNS_ENABLED" value={Boolean(edits.DDNS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="DDNS Interval" description="Seconds between DDNS update checks" configKey="DDNS_INTERVAL" value={Number(edits.DDNS_INTERVAL ?? 300)} onChange={handleNumberChange} min={60} max={3600} />
+          </GroupCard>
+
+          {/* ── Docker ── */}
+          <GroupCard
+            icon={<Container size={16} className="text-cyan-400" />}
+            title="Docker"
+            description="Container engine and stack management"
+            accentColor="cyan"
+          >
+            <NumberRow label="Docker Timeout" description="Seconds before docker commands are killed" configKey="DOCKER_TIMEOUT" value={Number(edits.DOCKER_TIMEOUT ?? 120)} onChange={handleNumberChange} min={30} max={600} />
+            <ToggleRow label="Force Recreate" description="Always recreate containers on start, even if unchanged" configKey="FORCE_RECREATE" value={Boolean(edits.FORCE_RECREATE)} onChange={handleBoolChange} />
+            <ToggleRow label="Remove Orphaned Containers" description="Remove containers not defined in compose files" configKey="REMOVE_ORPHANED_CONTAINERS" value={Boolean(edits.REMOVE_ORPHANED_CONTAINERS)} onChange={handleBoolChange} />
+            <NumberRow label="Service Start Delay" description="Seconds to wait between starting each stack" configKey="SERVICE_START_DELAY" value={Number(edits.SERVICE_START_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
+            <NumberRow label="Service Stop Delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
+          </GroupCard>
+
+          {/* ── Health & Monitoring ── */}
+          <GroupCard
+            icon={<HeartPulse size={16} className="text-rose-400" />}
+            title="Health & Monitoring"
+            description="Health checks, scoring, and container prioritization"
+            accentColor="rose"
+          >
+            <ToggleRow label="Post-Startup Health Check" description="Run a health check after all stacks start" configKey="ENABLE_POST_STARTUP_HEALTH_CHECK" value={Boolean(edits.ENABLE_POST_STARTUP_HEALTH_CHECK)} onChange={handleBoolChange} />
+            <NumberRow label="Health Check Delay" description="Seconds to wait before the health check" configKey="HEALTH_CHECK_DELAY" value={Number(edits.HEALTH_CHECK_DELAY ?? 10)} onChange={handleNumberChange} min={0} max={120} />
+            <ToggleRow label="Health Score" description="Calculate container health scores (affects dashboard)" configKey="HEALTH_SCORE_ENABLED" value={Boolean(edits.HEALTH_SCORE_ENABLED)} onChange={handleBoolChange} />
+            <TextRow label="Critical Containers" description="Comma-separated names — unhealthy triggers critical alerts" configKey="CRITICAL_CONTAINERS" value={String(edits.CRITICAL_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="traefik,pihole" />
+            <TextRow label="Important Containers" description="Comma-separated names — unhealthy triggers warnings" configKey="IMPORTANT_CONTAINERS" value={String(edits.IMPORTANT_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="plex,nextcloud" />
+          </GroupCard>
+
+          {/* ── Metrics & Features ── */}
+          <GroupCard
+            icon={<Activity size={16} className="text-violet-400" />}
+            title="Metrics & Features"
+            description="Optional subsystems — metrics, scheduler, plugins, rollback"
+            accentColor="violet"
+          >
+            <ToggleRow label="Metrics Collection" description="Collect CPU, memory, disk metrics at regular intervals" configKey="METRICS_ENABLED" value={Boolean(edits.METRICS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="Metrics Interval" description="Seconds between metrics snapshots" configKey="METRICS_COLLECT_INTERVAL" value={Number(edits.METRICS_COLLECT_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={600} />
+            <ToggleRow label="Rollback" description="Snapshot compose files before changes for one-click rollback" configKey="ROLLBACK_ENABLED" value={Boolean(edits.ROLLBACK_ENABLED)} onChange={handleBoolChange} />
+            <ToggleRow label="Scheduler" description="Cron-like task scheduler daemon" configKey="SCHEDULER_ENABLED" value={Boolean(edits.SCHEDULER_ENABLED)} onChange={handleBoolChange} />
+            <ToggleRow label="Plugins" description="Load plugins from .plugins/ directory" configKey="PLUGINS_ENABLED" value={Boolean(edits.PLUGINS_ENABLED)} onChange={handleBoolChange} />
+            <ToggleRow label="Plugin Hooks" description="Fire plugin hooks on stack start/stop/update events" configKey="PLUGINS_HOOKS_ENABLED" value={Boolean(edits.PLUGINS_HOOKS_ENABLED)} onChange={handleBoolChange} />
+          </GroupCard>
+
+          {/* ── Backup ── */}
+          <GroupCard
+            icon={<HardDrive size={16} className="text-amber-400" />}
+            title="Backup"
+            description="Automated backup source, destination, and retention"
+            accentColor="amber"
+          >
+            <TextRow label="Source Directory" description="Path to back up (typically your Stacks or App-Data)" configKey="BACKUP_SOURCE_DIR" value={String(edits.BACKUP_SOURCE_DIR ?? '')} onChange={handleStringChange} placeholder="/opt/docker" />
+            <TextRow label="Destination Directory" description="Where backups are stored" configKey="BACKUP_DEST_DIR" value={String(edits.BACKUP_DEST_DIR ?? '')} onChange={handleStringChange} placeholder="/mnt/backup" />
+            <NumberRow label="Retention Count" description="Number of backup copies to keep" configKey="BACKUP_RETENTION_COUNT" value={Number(edits.BACKUP_RETENTION_COUNT ?? 7)} onChange={handleNumberChange} min={1} max={90} />
+          </GroupCard>
         </div>
       )}
 
@@ -859,7 +947,7 @@ export default function Config() {
   )
 }
 
-// Map config key to original data value
+// Map config key to original data value — uses the same field map as buildEditsFromData
 function getOriginalValue(data: ServerConfig, key: string): string | boolean | number {
   const map: Record<string, string | boolean | number> = {
     ENVIRONMENT: data.environment,
@@ -875,6 +963,12 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     API_PORT: data.api_port,
     API_BIND: data.api_bind,
     API_ENABLED: data.api_enabled ?? true,
+    API_AUTH_ENABLED: data.api_auth_enabled ?? true,
+    API_RATE_LIMIT: data.api_rate_limit ?? 600,
+    API_RATE_WINDOW: data.api_rate_window ?? 60,
+    API_TOKEN_EXPIRY: data.api_token_expiry ?? 86400,
+    API_SINGLE_SESSION: data.api_single_session ?? false,
+    API_CORS_ORIGINS: data.api_cors_origins ?? '',
     NTFY_URL: data.ntfy_url ?? '',
     NTFY_TOPIC: data.ntfy_topic ?? '',
     NTFY_PRIORITY: data.ntfy_priority ?? 'default',
@@ -891,6 +985,31 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     ENABLE_LOG_MOOD: data.enable_log_mood ?? true,
     ENABLE_LOG_PID: data.enable_log_pid ?? false,
     ENABLE_LOG_HOSTNAME: data.enable_log_hostname ?? false,
+    LOG_MAX_SIZE: data.log_max_size ?? '10M',
+    LOG_BACKUP_COUNT: data.log_backup_count ?? 12,
+    TRAEFIK_DOMAIN: data.traefik_domain ?? '',
+    TRAEFIK_ACME_EMAIL: data.traefik_acme_email ?? '',
+    DDNS_ENABLED: data.ddns_enabled ?? false,
+    DDNS_INTERVAL: data.ddns_interval ?? 300,
+    ENABLE_POST_STARTUP_HEALTH_CHECK: data.enable_post_startup_health_check ?? true,
+    HEALTH_CHECK_DELAY: data.health_check_delay ?? 10,
+    CRITICAL_CONTAINERS: data.critical_containers ?? '',
+    IMPORTANT_CONTAINERS: data.important_containers ?? '',
+    HEALTH_SCORE_ENABLED: data.health_score_enabled ?? true,
+    METRICS_ENABLED: data.metrics_enabled ?? true,
+    METRICS_COLLECT_INTERVAL: data.metrics_collect_interval ?? 60,
+    ROLLBACK_ENABLED: data.rollback_enabled ?? true,
+    SCHEDULER_ENABLED: data.scheduler_enabled ?? true,
+    PLUGINS_ENABLED: data.plugins_enabled ?? true,
+    PLUGINS_HOOKS_ENABLED: data.plugins_hooks_enabled ?? true,
+    DOCKER_TIMEOUT: data.docker_timeout ?? 120,
+    FORCE_RECREATE: data.force_recreate ?? false,
+    REMOVE_ORPHANED_CONTAINERS: data.remove_orphaned_containers ?? true,
+    SERVICE_START_DELAY: data.service_start_delay ?? 0,
+    SERVICE_STOP_DELAY: data.service_stop_delay ?? 0,
+    BACKUP_SOURCE_DIR: data.backup_source_dir ?? '',
+    BACKUP_DEST_DIR: data.backup_dest_dir ?? '',
+    BACKUP_RETENTION_COUNT: data.backup_retention_count ?? 7,
   }
   return map[key] ?? ''
 }

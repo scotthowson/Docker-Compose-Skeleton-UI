@@ -13,6 +13,8 @@ import {
   Tag,
   Database,
   Loader2,
+  ArrowUpCircle,
+  CheckCircle,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -352,14 +354,28 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                         </span>
                       </td>
 
-                      {/* Staleness */}
+                      {/* Staleness + Update/Latest */}
                       <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${ss.bg} ${ss.text} ${ss.ring}`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${ss.dot}`} />
-                          {image.staleness}
-                        </span>
+                        <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${ss.bg} ${ss.text} ${ss.ring}`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${ss.dot}`} />
+                            {image.staleness}
+                          </span>
+                          {image.update_available === true && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400">
+                              <ArrowUpCircle size={10} />
+                              Update
+                            </span>
+                          )}
+                          {image.update_available === false && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
+                              <CheckCircle size={10} />
+                              Latest
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )

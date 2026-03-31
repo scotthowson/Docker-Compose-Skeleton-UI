@@ -301,6 +301,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         PUID: String(data.system.puid || data.defaults.PUID || '1000'),
         PGID: String(data.system.pgid || data.defaults.PGID || '1000'),
         NTFY_URL: data.defaults.NTFY_URL || '',
+        NTFY_TOPIC: data.defaults.NTFY_TOPIC || '',
         LOG_LEVEL: data.defaults.LOG_LEVEL || 'INFO',
         DOCKER_TIMEOUT: data.defaults.DOCKER_TIMEOUT || '300',
         BACKUP_SOURCE_DIR: data.defaults.BACKUP_SOURCE_DIR || '',
@@ -1058,15 +1059,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showNotifications && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY URL</label>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY Server URL</label>
                         <input
                           type="text"
                           value={envVars.NTFY_URL || ''}
                           onChange={(e) => setEnvVars({ ...envVars, NTFY_URL: e.target.value })}
-                          placeholder="https://ntfy.sh/your-topic"
+                          placeholder="https://ntfy.sh"
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                         />
                         <p className="text-[10px] text-slate-500 mt-1">Leave empty to disable push notifications</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY Topic</label>
+                        <input
+                          type="text"
+                          value={envVars.NTFY_TOPIC || ''}
+                          onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
+                          placeholder="dcs-notifications"
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">The topic name for notifications on your NTFY server</p>
                       </div>
                     </div>
                   )}
@@ -1803,6 +1815,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <span className="text-[10px] text-slate-500 shrink-0">NTFY_URL</span>
                       <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars.NTFY_URL}</span>
                     </div>
+                    {envVars.NTFY_TOPIC && (
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03] mt-1">
+                        <span className="text-[10px] text-slate-500 shrink-0">NTFY_TOPIC</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{envVars.NTFY_TOPIC}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 

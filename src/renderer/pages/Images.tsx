@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
-import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage } from '../api/endpoints'
+import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry } from '../api/endpoints'
 import { useToast } from '../components/common/Toast'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
@@ -29,6 +29,8 @@ import {
   Globe,
   RefreshCw,
   Image,
+  ArrowUpCircle,
+  CheckCircle,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
@@ -60,6 +62,9 @@ const Images: React.FC = () => {
   const [hubSearchLoading, setHubSearchLoading] = useState(false)
   const [hubSearched, setHubSearched] = useState(false)
   const [pullingImages, setPullingImages] = useState<Set<string>>(new Set())
+
+  // Registry check state
+  const [registryChecking, setRegistryChecking] = useState(false)
 
   // Fetch images via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
@@ -112,6 +117,25 @@ const Images: React.FC = () => {
       })
     }
   }, [pullingImages, addToast, handleFetch])
+
+  // Check registry for digest updates (slow POST)
+  const handleCheckRegistry = useCallback(async () => {
+    if (registryChecking) return
+    setRegistryChecking(true)
+    try {
+      const result = await checkImageRegistry()
+      addToast({
+        type: 'info',
+        message: `Registry check complete: ${result.updates_available} update${result.updates_available !== 1 ? 's' : ''} available out of ${result.total} image${result.total !== 1 ? 's' : ''}`,
+        duration: 5000,
+      })
+      await handleFetch()
+    } catch {
+      addToast({ type: 'error', message: 'Registry check failed' })
+    } finally {
+      setRegistryChecking(false)
+    }
+  }, [registryChecking, addToast, handleFetch])
 
   // Prune dangling images
   const handlePrune = useCallback(async () => {
@@ -217,7 +241,8 @@ const Images: React.FC = () => {
     const current = images.filter((i) => i.staleness === 'current').length
     const aging = images.filter((i) => i.staleness === 'aging').length
     const stale = images.filter((i) => i.staleness === 'stale').length
-    return { total, current, aging, stale }
+    const updates = images.filter((i) => i.update_available === true).length
+    return { total, current, aging, stale, updates }
   }, [images])
 
   return (
@@ -239,6 +264,21 @@ const Images: React.FC = () => {
           </div>
 
           <div className="flex items-center flex-wrap gap-2 sm:gap-3">
+          {/* Check Registry */}
+          <button
+            onClick={handleCheckRegistry}
+            disabled={registryChecking || !isConnected}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
+              registryChecking
+                ? 'bg-cyan-500/5 border-cyan-500/10 text-cyan-400/50 cursor-not-allowed'
+                : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/30 press'
+            } disabled:opacity-50`}
+            title="Compare local digests against upstream registries"
+          >
+            {registryChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            <span className="hidden sm:inline">{registryChecking ? 'Checking...' : 'Check Registry'}</span>
+          </button>
+
           {/* Refresh */}
           <button
             onClick={refresh}
@@ -428,6 +468,14 @@ const Images: React.FC = () => {
             value={counts.stale}
             color="rose"
           />
+          {counts.updates > 0 && (
+            <SummaryCard
+              icon={<ArrowUpCircle className="h-4 w-4 text-emerald-400" />}
+              label="Updates"
+              value={counts.updates}
+              color="emerald"
+            />
+          )}
         </div>
 
         {/* ---- Content ---- */}

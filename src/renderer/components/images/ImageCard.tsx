@@ -4,7 +4,7 @@
 
 import React from 'react'
 import { ImageInfo } from '../../../shared/types'
-import { HardDrive, Tag, Clock, Hash } from 'lucide-react'
+import { HardDrive, Tag, Clock, Hash, ArrowUpCircle, CheckCircle } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Staleness styling
@@ -94,12 +94,24 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
           </div>
         </div>
 
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 flex-shrink-0 ${style.bg} ${style.text} ${style.ring}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${style.barColor}`} />
-          {style.label}
-        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${style.bg} ${style.text} ${style.ring}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${style.barColor}`} />
+            {style.label}
+          </span>
+          {image.update_available === true && (
+            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
+              <ArrowUpCircle size={9} />
+            </span>
+          )}
+          {image.update_available === false && (
+            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-white/[0.04] text-slate-500">
+              <CheckCircle size={9} />
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Image ID (short) */}

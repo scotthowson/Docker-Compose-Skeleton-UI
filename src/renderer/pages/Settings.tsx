@@ -2,14 +2,14 @@
 // Settings — Premium settings with connection, appearance, disks, shortcuts
 // =============================================================================
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import {
   Cog, Info, HardDrive, Pencil, Check, X, Trash2,
   Keyboard, Timer, Image, Sun, Moon, Palette, Eye,
   Monitor, Shield, Lock, User, UserCircle, Mail,
   Camera, Save, Key, AlertTriangle, XCircle, Plus, FolderPlus,
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
-  Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff,
+  Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff, Loader2,
 } from 'lucide-react'
 import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
@@ -20,8 +20,41 @@ import { useAuthStore } from '../stores/authStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { Tooltip } from '../components/common/Tooltip'
 import { usePolling } from '../hooks/usePolling'
-import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, fetchProfile, saveProfileToServer } from '../api/endpoints'
+import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
+import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, fetchProfile, saveProfileToServer, updateConfig, fetchConfig } from '../api/endpoints'
 import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, ConnectionProfile, AlertThresholds } from '../../shared/types'
+
+// ---------------------------------------------------------------------------
+// Settings Dirty Context — single FloatingSaveBar for all sections
+// ---------------------------------------------------------------------------
+
+interface DirtyEntry {
+  save: () => void | Promise<void>
+  discard: () => void
+}
+
+interface SettingsDirtyCtx {
+  markDirty: (section: string, entry: DirtyEntry) => void
+  markClean: (section: string) => void
+}
+
+const SettingsDirtyContext = createContext<SettingsDirtyCtx>({
+  markDirty: () => {},
+  markClean: () => {},
+})
+
+function useSettingsDirty(section: string, isDirty: boolean, save: () => void | Promise<void>, discard: () => void) {
+  const ctx = useContext(SettingsDirtyContext)
+  useEffect(() => {
+    if (isDirty) {
+      ctx.markDirty(section, { save, discard })
+    } else {
+      ctx.markClean(section)
+    }
+  }, [isDirty]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Clean up on unmount
+  useEffect(() => () => ctx.markClean(section), []) // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 // ---------------------------------------------------------------------------
 // User Profile Editor
@@ -74,7 +107,7 @@ function saveProfileData(data: ProfileData) {
 function ProfileSettings() {
   const { currentUser } = useAuthStore()
   const [profile, setProfile] = useState<ProfileData>(getProfileData)
-  const [saved, setSaved] = useState(false)
+  const [initialProfile, setInitialProfile] = useState<ProfileData>(getProfileData)
   const [avatarPreview, setAvatarPreview] = useState(profile.icon)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -100,6 +133,7 @@ function ProfileSettings() {
         const key = getProfileKey()
         localStorage.setItem(key, JSON.stringify(merged))
         setProfile(merged)
+        setInitialProfile(merged)
         setAvatarPreview(merged.icon)
         window.dispatchEvent(new Event('profile-updated'))
       })
@@ -109,18 +143,25 @@ function ProfileSettings() {
 
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
 
+  // Dirty tracking — compare current vs initial (exclude backgroundImage, managed elsewhere)
+  const isDirty = JSON.stringify({ ...profile, backgroundImage: '' }) !== JSON.stringify({ ...initialProfile, backgroundImage: '' })
+
   const handleChange = (key: keyof ProfileData, value: string) => {
     setProfile((prev) => ({ ...prev, [key]: value }))
-    setSaved(false)
   }
 
-  const handleSave = () => {
-    // Re-read backgroundImage from localStorage since AppearanceSettings may have changed it
+  const handleSave = useCallback(() => {
     const current = getProfileData()
     saveProfileData({ ...profile, backgroundImage: current.backgroundImage })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+    setInitialProfile({ ...profile, backgroundImage: current.backgroundImage })
+  }, [profile])
+
+  const handleDiscard = useCallback(() => {
+    setProfile(initialProfile)
+    setAvatarPreview(initialProfile.icon)
+  }, [initialProfile])
+
+  useSettingsDirty('profile', isDirty, handleSave, handleDiscard)
 
   const handleAvatarUrlChange = (url: string) => {
     handleChange('icon', url)
@@ -391,28 +432,6 @@ function ProfileSettings() {
         </div>
       </div>
 
-      {/* Save button */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          className={`
-            flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
-            transition-all duration-300
-            ${saved
-              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-              : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30'
-            } press
-          `}
-        >
-          {saved ? <Check size={15} /> : <Save size={15} />}
-          {saved ? 'Saved!' : 'Save Profile'}
-        </button>
-        {saved && (
-          <span className="text-xs text-emerald-400/80 animate-fade-in">
-            Profile updated successfully
-          </span>
-        )}
-      </div>
     </div>
   )
 }
@@ -803,6 +822,56 @@ function AppearanceSettings() {
   const [nameInput, setNameInput] = useState(projectName)
   const [subtitleInput, setSubtitleInput] = useState(projectSubtitle)
 
+  // Sync branding from server on mount (survives browser data clears)
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  useEffect(() => {
+    if (!isConnected) return
+    let cancelled = false
+    fetchConfig().then((cfg) => {
+      if (cancelled) return
+      const sn = (cfg as Record<string, unknown>).server_name as string | undefined
+      const ss = (cfg as Record<string, unknown>).server_subtitle as string | undefined
+      if (sn && sn !== 'Docker Server' && projectName === 'DCS Manager') {
+        updateSetting('projectName', sn)
+        setNameInput(sn)
+      }
+      if (ss && ss !== 'Docker Compose Skeleton' && projectSubtitle === 'Docker Compose Skeleton') {
+        updateSetting('projectSubtitle', ss)
+        setSubtitleInput(ss)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dirty tracking for branding + background
+  const brandingDirty = nameInput !== projectName || subtitleInput !== projectSubtitle || bgInput.trim() !== backgroundImage
+
+  const handleSaveAppearance = useCallback(async () => {
+    const name = nameInput.trim() || 'DCS Manager'
+    const subtitle = subtitleInput.trim() || 'Docker Compose Skeleton'
+    // Save branding locally
+    updateSetting('projectName', name)
+    updateSetting('projectSubtitle', subtitle)
+    // Save background
+    const val = bgInput.trim()
+    const prof = getProfileData()
+    saveProfileData({ ...prof, backgroundImage: val })
+    setBackgroundImage(val)
+    // Persist branding to server so it survives browser data clears
+    const isConn = useConnectionStore.getState().status === 'connected'
+    if (isConn) {
+      updateConfig({ SERVER_NAME: name, SERVER_SUBTITLE: subtitle }).catch(() => {})
+    }
+  }, [nameInput, subtitleInput, bgInput, updateSetting])
+
+  const handleDiscardAppearance = useCallback(() => {
+    setNameInput(projectName)
+    setSubtitleInput(projectSubtitle)
+    setBgInput(backgroundImage)
+  }, [projectName, projectSubtitle, backgroundImage])
+
+  useSettingsDirty('appearance', brandingDirty, handleSaveAppearance, handleDiscardAppearance)
+
   const handleBgSave = () => {
     const val = bgInput.trim()
     const profile = getProfileData()
@@ -843,8 +912,6 @@ function AppearanceSettings() {
               type="text"
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
-              onBlur={() => updateSetting('projectName', nameInput.trim() || 'DCS Manager')}
-              onKeyDown={(e) => e.key === 'Enter' && updateSetting('projectName', nameInput.trim() || 'DCS Manager')}
               placeholder="DCS Manager"
               className="
                 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
@@ -860,8 +927,6 @@ function AppearanceSettings() {
               type="text"
               value={subtitleInput}
               onChange={(e) => setSubtitleInput(e.target.value)}
-              onBlur={() => updateSetting('projectSubtitle', subtitleInput.trim() || 'Docker Compose Skeleton')}
-              onKeyDown={(e) => e.key === 'Enter' && updateSetting('projectSubtitle', subtitleInput.trim() || 'Docker Compose Skeleton')}
               placeholder="Docker Compose Skeleton"
               className="
                 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
@@ -2248,29 +2313,37 @@ function AlertThresholdsEditor() {
     disk_warning: 85, disk_critical: 95,
     restart_threshold: 5,
   })
+  const [initialThresholds, setInitialThresholds] = useState<AlertThresholds>({
+    cpu_warning: 80, cpu_critical: 95,
+    memory_warning: 80, memory_critical: 95,
+    disk_warning: 85, disk_critical: 95,
+    restart_threshold: 5,
+  })
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (!isConnected) return
     setLoading(true)
     fetchAlertConfig()
-      .then((res) => { if (res.thresholds) setThresholds(res.thresholds) })
+      .then((res) => { if (res.thresholds) { setThresholds(res.thresholds); setInitialThresholds(res.thresholds) } })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [isConnected])
 
-  const handleSave = async () => {
-    setSaving(true)
-    setSaved(false)
+  const isDirty = JSON.stringify(thresholds) !== JSON.stringify(initialThresholds)
+
+  const handleSave = useCallback(async () => {
     try {
       await updateAlertConfig(thresholds)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      setInitialThresholds(thresholds)
     } catch { /* */ }
-    finally { setSaving(false) }
-  }
+  }, [thresholds])
+
+  const handleDiscard = useCallback(() => {
+    setThresholds(initialThresholds)
+  }, [initialThresholds])
+
+  useSettingsDirty('alertThresholds', isDirty, handleSave, handleDiscard)
 
   const updateField = (key: keyof AlertThresholds, value: number) => {
     setThresholds(prev => ({ ...prev, [key]: value }))
@@ -2353,18 +2426,6 @@ function AlertThresholdsEditor() {
         />
       </div>
 
-      {/* Save button */}
-      <div className="flex items-center justify-end gap-2 pt-2">
-        {saved && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={12} /> Saved</span>}
-        <button
-          onClick={handleSave}
-          disabled={saving || !isConnected}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-all press"
-        >
-          {saving ? <Timer size={12} className="animate-spin" /> : <Save size={12} />}
-          Save Thresholds
-        </button>
-      </div>
     </div>
   )
 }
@@ -2626,7 +2687,73 @@ export default function Settings() {
     loadVersion()
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // Unified FloatingSaveBar — one bar for all sections
+  // ---------------------------------------------------------------------------
+  const dirtyMapRef = useRef<Record<string, DirtyEntry>>({})
+  const [dirtyCount, setDirtyCount] = useState(0)
+  const [saving, setSaving] = useState(false)
+
+  const ctxValue = useRef<SettingsDirtyCtx>({
+    markDirty: (section, entry) => {
+      dirtyMapRef.current[section] = entry
+      setDirtyCount(Object.keys(dirtyMapRef.current).length)
+    },
+    markClean: (section) => {
+      delete dirtyMapRef.current[section]
+      setDirtyCount(Object.keys(dirtyMapRef.current).length)
+    },
+  }).current
+
+  // Custom CSS dirty tracking (inline, not a sub-component)
+  const cssDirty = customCSSLocal !== customCSS
+  useEffect(() => {
+    if (cssDirty) {
+      ctxValue.markDirty('customCSS', {
+        save: () => { updateSetting('customCSS', customCSSLocal) },
+        discard: () => { setCustomCSSLocal(customCSS) },
+      })
+    } else {
+      ctxValue.markClean('customCSS')
+    }
+  }, [cssDirty, customCSSLocal, customCSS]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // AppSettingsForm integration (separate component, uses props)
+  const appSettingsSaveRef = useRef<(() => void) | null>(null)
+  const appSettingsDiscardRef = useRef<(() => void) | null>(null)
+  const handleAppSettingsDirty = useCallback((dirty: boolean) => {
+    if (dirty) {
+      ctxValue.markDirty('appSettings', {
+        save: () => appSettingsSaveRef.current?.(),
+        discard: () => appSettingsDiscardRef.current?.(),
+      })
+    } else {
+      ctxValue.markClean('appSettings')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleAppSettingsRegister = useCallback((save: () => void, discard: () => void) => {
+    appSettingsSaveRef.current = save
+    appSettingsDiscardRef.current = discard
+  }, [])
+
+  const handleSaveAll = useCallback(async () => {
+    setSaving(true)
+    const entries = { ...dirtyMapRef.current }
+    for (const entry of Object.values(entries)) {
+      await entry.save()
+    }
+    setSaving(false)
+  }, [])
+
+  const handleDiscardAll = useCallback(() => {
+    const entries = { ...dirtyMapRef.current }
+    for (const entry of Object.values(entries)) {
+      entry.discard()
+    }
+  }, [])
+
   return (
+    <SettingsDirtyContext.Provider value={ctxValue}>
     <div className="space-y-3 md:space-y-6">
       {/* Page header */}
       <div className="flex items-center gap-4">
@@ -2679,7 +2806,7 @@ export default function Settings() {
           accentColor="border-t-amber-500"
           fullWidth
         >
-          <AppSettingsForm />
+          <AppSettingsForm onDirtyChange={handleAppSettingsDirty} onRegisterSave={handleAppSettingsRegister} />
         </SectionCard>
 
         {/* Row 4: Keyboard Shortcuts (hidden on mobile) + Disk Config */}
@@ -2752,7 +2879,7 @@ export default function Settings() {
           fullWidth
         >
           <div className="space-y-4">
-            <p className="text-[10px] text-slate-500">Add custom styles to personalize your dashboard</p>
+            <p className="text-[10px] text-slate-500">Add custom styles to personalize your dashboard. Changes are saved via the floating save bar.</p>
             <textarea
               value={customCSSLocal}
               onChange={(e) => setCustomCSSLocal(e.target.value)}
@@ -2770,23 +2897,15 @@ export default function Settings() {
               <span className="text-[10px] text-slate-500">
                 {customCSSLocal.length} characters
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { setCustomCSSLocal(''); updateSetting('customCSS', '') }}
-                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={() => updateSetting('customCSS', customCSSLocal)}
-                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-400 shadow-lg shadow-violet-500/20 transition-all press"
-                >
-                  Apply
-                </button>
-              </div>
+              <button
+                onClick={() => { setCustomCSSLocal(''); updateSetting('customCSS', '') }}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
+              >
+                Clear
+              </button>
             </div>
             <p className="text-[10px] text-slate-500">
-              Changes apply instantly when you click Apply. Use browser dev tools to inspect element classes.
+              Use browser dev tools to inspect element classes.
             </p>
           </div>
         </SectionCard>}
@@ -2839,6 +2958,14 @@ export default function Settings() {
           <SecuritySettings />
         </SectionCard>
       </div>
+
+      <FloatingSaveBar
+        hasChanges={dirtyCount > 0}
+        onSave={handleSaveAll}
+        onDiscard={handleDiscardAll}
+        saving={saving}
+      />
     </div>
+    </SettingsDirtyContext.Provider>
   )
 }

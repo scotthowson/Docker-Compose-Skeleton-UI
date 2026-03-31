@@ -220,6 +220,7 @@ export interface ImageInfo {
   size: string
   age_days: number
   staleness: 'current' | 'aging' | 'stale' | 'unknown'
+  update_available?: boolean | null
 }
 
 // GET /config
@@ -257,7 +258,48 @@ export interface ServerConfig {
   enable_log_hostname: boolean
   api_enabled: boolean
   server_name: string
+  server_subtitle: string
   timezone: string
+  // Traefik/DNS
+  proxy_domain: string
+  traefik_domain: string
+  traefik_acme_email: string
+  cf_dns_api_token_set: boolean
+  ddns_enabled: boolean
+  ddns_interval: number
+  // Health/Monitoring
+  enable_post_startup_health_check: boolean
+  health_check_delay: number
+  critical_containers: string
+  important_containers: string
+  health_score_enabled: boolean
+  // Metrics/Features
+  metrics_enabled: boolean
+  metrics_collect_interval: number
+  rollback_enabled: boolean
+  scheduler_enabled: boolean
+  plugins_enabled: boolean
+  plugins_hooks_enabled: boolean
+  // Backup
+  backup_source_dir: string
+  backup_dest_dir: string
+  backup_retention_count: number
+  // Docker
+  docker_timeout: number
+  force_recreate: boolean
+  remove_orphaned_containers: boolean
+  service_start_delay: number
+  service_stop_delay: number
+  // API extended
+  api_auth_enabled: boolean
+  api_rate_limit: number
+  api_rate_window: number
+  api_token_expiry: number
+  api_single_session: boolean
+  api_cors_origins: string
+  // Log extended
+  log_max_size: string
+  log_backup_count: number
 }
 
 // POST /stacks (create)
