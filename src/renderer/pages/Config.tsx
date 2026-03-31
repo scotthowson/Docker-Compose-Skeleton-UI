@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ScrollText,
 } from 'lucide-react'
+import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { usePolling } from '../hooks/usePolling'
 import { fetchConfig, updateConfig } from '../api/endpoints'
 import { useConfigStore } from '../stores/configStore'
@@ -853,28 +854,7 @@ export default function Config() {
         </div>
       )}
 
-      {/* Unsaved changes indicator — sticky to viewport bottom */}
-      {hasChanges && (
-        <div className="fixed bottom-6 inset-x-0 z-[100] flex justify-center pointer-events-none animate-fade-in-up">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/40 pointer-events-auto">
-            <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-sm text-slate-300">You have unsaved changes</span>
-            <button
-              onClick={handleReset}
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1"
-            >
-              Discard
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 transition-all disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
+      <FloatingSaveBar hasChanges={hasChanges} onSave={handleSave} onDiscard={handleReset} saving={saving} />
     </div>
   )
 }

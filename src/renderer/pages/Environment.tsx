@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
+import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import {
   FileCode, Save, CheckCircle, AlertTriangle, RefreshCw,
   ChevronDown, Eye, Pencil,
@@ -753,35 +754,15 @@ export default function Environment() {
         </div>
       )}
 
-      {/* Unsaved changes floating bar */}
-      {((activeTab === 'root' && rootHasChanges) || (activeTab === 'stack' && stackHasChanges)) && (
-        <div className="fixed bottom-16 inset-x-0 z-50 flex justify-center animate-fade-in-up">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/30">
-            <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-sm text-slate-300">You have unsaved changes</span>
-            <button
-              onClick={() => {
-                if (activeTab === 'root') {
-                  setRootRaw(rootOriginal)
-                  setRootValidation(null)
-                } else {
-                  setStackRaw(stackOriginal)
-                }
-              }}
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1"
-            >
-              Discard
-            </button>
-            <button
-              onClick={activeTab === 'root' ? handleRootSave : handleStackSave}
-              disabled={activeTab === 'root' ? rootSaving : stackSaving}
-              className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 transition-all disabled:opacity-50"
-            >
-              {(activeTab === 'root' ? rootSaving : stackSaving) ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
+      <FloatingSaveBar
+        hasChanges={(activeTab === 'root' && rootHasChanges) || (activeTab === 'stack' && stackHasChanges)}
+        onSave={activeTab === 'root' ? handleRootSave : handleStackSave}
+        onDiscard={() => {
+          if (activeTab === 'root') { setRootRaw(rootOriginal); setRootValidation(null) }
+          else { setStackRaw(stackOriginal) }
+        }}
+        saving={activeTab === 'root' ? rootSaving : stackSaving}
+      />
     </div>
   )
 }

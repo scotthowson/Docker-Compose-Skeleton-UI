@@ -1506,8 +1506,36 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 # Stack-specific overrides below
 `)
   const [activeTab, setActiveTab] = useState<'compose' | 'env' | 'meta'>('compose')
+  const [saved, setSaved] = useState(false)
 
   const canSave = name.trim().length > 0 && compose.trim().length > 0 && !saving
+
+  // Detect changes from initial values (edit mode)
+  const hasChanges = mode === 'edit' ? (
+    compose !== (initial?.compose ?? '') ||
+    env !== (initial?.env ?? '') ||
+    title !== ((initial?.metadata?.title as string) ?? '') ||
+    description !== ((initial?.metadata?.description as string) ?? '') ||
+    category !== ((initial?.metadata?.category as string) ?? 'other') ||
+    targetStack !== ((initial?.metadata?.target_stack as string) ?? '')
+  ) : canSave
+
+  const handleSaveInPlace = useCallback(() => {
+    onSave({ name, compose, env, metadata: { title: title || name, description, category, target_stack: targetStack || undefined, tags: [], variables: [] } })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }, [name, compose, env, title, description, category, targetStack, onSave])
+
+  const handleDiscard = useCallback(() => {
+    if (mode === 'edit' && initial) {
+      setCompose(initial.compose ?? '')
+      setEnv(initial.env ?? '')
+      setTitle((initial.metadata?.title as string) ?? '')
+      setDescription((initial.metadata?.description as string) ?? '')
+      setCategory((initial.metadata?.category as string) ?? 'other')
+      setTargetStack((initial.metadata?.target_stack as string) ?? '')
+    }
+  }, [mode, initial])
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -1677,19 +1705,51 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-3 border-t border-white/5 shrink-0">
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={() => onSave({ name, compose, env, metadata: { title: title || name, description, category, target_stack: targetStack || undefined, tags: [], variables: [] } })}
-            disabled={!canSave}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
-          >
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-            {mode === 'create' ? 'Create Template' : 'Save Changes'}
-          </button>
+        <div className="flex items-center justify-between px-4 md:px-5 py-3 border-t border-white/5 shrink-0">
+          <div className="flex items-center gap-2">
+            {saved && (
+              <span className="text-xs text-emerald-400 animate-fade-in flex items-center gap-1">
+                <CheckCircle size={12} /> Saved
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
+              {mode === 'edit' ? 'Close' : 'Cancel'}
+            </button>
+            {mode === 'create' && (
+              <button
+                onClick={handleSaveInPlace}
+                disabled={!canSave}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                Create Template
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Floating save bar for edit mode */}
+        {mode === 'edit' && hasChanges && (
+          <div className="absolute bottom-16 inset-x-0 z-[100] flex justify-center pointer-events-none animate-fade-in-up">
+            <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/40 pointer-events-auto">
+              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-sm text-slate-300">Unsaved changes</span>
+              <button onClick={handleDiscard} className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1">
+                Discard
+              </button>
+              <button
+                onClick={handleSaveInPlace}
+                disabled={saving}
+                className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {saving && <Loader2 size={12} className="animate-spin" />}
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
