@@ -176,26 +176,23 @@ export default function Updates() {
     setSysChecking(true)
     try {
       const result = await checkSystemUpdate()
-      setSysUpdate(result)
-      // Check for UI image update
+      processUpdateResult(result)
+      // Toasts for manual check
       const uiUp = (result as Record<string, unknown>).ui_update as { available?: boolean } | undefined
-      setUiUpdateAvailable(!!uiUp?.available)
-      useSettingsStore.getState().updateSetting('updatesAvailable', result.available ? result.commits_behind : 0)
-      setLastChecked(Date.now())
       if (uiUp?.available) {
         addToast({ type: 'info', message: 'DCS Manager UI update available' })
       }
       if (result.available) {
         addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
-      } else {
-        addToast({ type: 'success', message: 'DCS framework is up to date' })
+      } else if (!uiUp?.available) {
+        addToast({ type: 'success', message: 'Everything is up to date' })
       }
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })
     } finally {
       setSysChecking(false)
     }
-  }, [sysChecking, addToast])
+  }, [sysChecking, addToast, processUpdateResult])
 
   const handleApplySystemUpdate = useCallback(async () => {
     if (sysApplying || !sysUpdate?.available) return
@@ -240,13 +237,19 @@ export default function Updates() {
     }
   }, [sysRollingBack, lastBackupTag, addToast])
 
-  // Auto-check for system updates on mount
+  // Process update check result — shared by auto-check and manual check
+  const processUpdateResult = useCallback((res: SystemUpdateCheckResponse) => {
+    setSysUpdate(res)
+    const uiUp = (res as Record<string, unknown>).ui_update as { available?: boolean } | undefined
+    setUiUpdateAvailable(!!uiUp?.available)
+    useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
+    setLastChecked(Date.now())
+  }, [])
+
+  // Auto-check for system + UI updates on mount
   useEffect(() => {
     if (isConnected && !sysUpdate && !sysChecking) {
-      checkSystemUpdate().then(res => {
-        setSysUpdate(res)
-        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
-      }).catch(() => {})
+      checkSystemUpdate().then(processUpdateResult).catch(() => {})
       fetchVersion().then(setApiVersionInfo).catch(() => {})
     }
   }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -255,13 +258,10 @@ export default function Updates() {
   useEffect(() => {
     if (!isConnected || !autoCheckUpdates || autoCheckUpdates <= 0) return
     const timer = setInterval(() => {
-      checkSystemUpdate().then(res => {
-        setSysUpdate(res)
-        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
-      }).catch(() => {})
+      checkSystemUpdate().then(processUpdateResult).catch(() => {})
     }, autoCheckUpdates)
     return () => clearInterval(timer)
-  }, [isConnected, autoCheckUpdates])
+  }, [isConnected, autoCheckUpdates, processUpdateResult])
 
   // ---- Image update state ----
   const [registryChecking, setRegistryChecking] = useState(false)
