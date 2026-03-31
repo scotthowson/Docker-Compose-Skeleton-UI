@@ -49,7 +49,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus } from '../api/endpoints'
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus } from '../api/endpoints'
 import type {
   TemplateInfo,
   TemplateDetailResponse,
@@ -375,7 +375,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -430,6 +430,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [enableRouting, setEnableRouting] = useState(true)
   const [connectProxy, setConnectProxy] = useState(true)
   const [enableAuthelia, setEnableAuthelia] = useState(false)
+  // Homarr integration state
+  const [homarrActive, setHomarrActive] = useState(false)
+  const [addToHomarr, setAddToHomarr] = useState(false)
   // Resource limits state
   const [enableResourceLimits, setEnableResourceLimits] = useState(false)
   const [memLimit, setMemLimit] = useState('')
@@ -449,6 +452,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         setTraefikActive(res.active)
         setTraefikDomain(res.domain || '')
       })
+      .catch(() => {})
+  }, [isConnected, template.name])
+
+  // Fetch Homarr status on mount (skip for homarr template itself)
+  useEffect(() => {
+    if (!isConnected || template.name === 'homarr') return
+    fetchHomarrStatus()
+      .then((res) => setHomarrActive(res.active && res.has_api_key))
       .catch(() => {})
   }, [isConnected, template.name])
 
@@ -546,7 +557,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const resLimits = enableResourceLimits && (memLimit || cpuLimit)
       ? { mem_limit: memLimit || undefined, cpus: cpuLimit ? Number(cpuLimit) : undefined }
       : undefined
-    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits)
+    const homarrFlag = homarrActive && addToHomarr ? true : undefined
+    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag)
     if (result) {
       if (autoStart && result.started) {
         setDeployStep(3) // Pulling images
@@ -1049,6 +1061,25 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
                     >
                       <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableAuthelia ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Homarr Dashboard Toggle — only visible when Homarr is deployed with API key */}
+              {homarrActive && (
+                <div className="rounded-lg border border-white/5 bg-orange-500/[0.02] overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <Store size={13} className="text-orange-400" />
+                      <span className="text-[11px] font-medium text-slate-300">Add to <span className="text-orange-400 font-medium">Homarr</span> Dashboard</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAddToHomarr(!addToHomarr)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${addToHomarr ? 'bg-orange-500' : 'bg-slate-700'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${addToHomarr ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                     </button>
                   </div>
                 </div>
@@ -2440,7 +2471,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -2453,6 +2484,7 @@ export default function Templates() {
           custom_routes: customRoutes,
           connect_proxy: connectProxy,
           resource_limits: resourceLimits,
+          add_to_homarr: addToHomarr,
         })
         if (res.success) {
           refresh()

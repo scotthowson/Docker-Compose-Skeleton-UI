@@ -988,6 +988,11 @@ export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string 
   return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
 }
 
+/** GET /homarr/status — Check if Homarr is deployed with API key */
+export function fetchHomarrStatus(): Promise<{ active: boolean; has_api_key: boolean; url: string }> {
+  return apiClient.get<{ active: boolean; has_api_key: boolean; url: string }>('/homarr/status')
+}
+
 /** GET /plugins/cards — List all available plugin cards */
 export function fetchPluginCards(): Promise<PluginCardsResponse> {
   return apiClient.get<PluginCardsResponse>('/plugins/cards')
@@ -1021,6 +1026,7 @@ export function deployTemplate(name: string, opts: {
   custom_routes?: Record<string, string>
   connect_proxy?: boolean
   resource_limits?: { mem_limit?: string; cpus?: number }
+  add_to_homarr?: boolean
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }
