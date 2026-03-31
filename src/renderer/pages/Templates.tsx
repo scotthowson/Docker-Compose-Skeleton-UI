@@ -1730,9 +1730,9 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
           </div>
         </div>
 
-        {/* Floating save bar for edit mode */}
-        {mode === 'edit' && hasChanges && (
-          <div className="absolute bottom-16 inset-x-0 z-[100] flex justify-center pointer-events-none animate-fade-in-up">
+        {/* Floating save bar for edit mode — fixed to viewport bottom, outside modal */}
+        {mode === 'edit' && hasChanges && createPortal(
+          <div className="fixed bottom-6 inset-x-0 z-[10000] flex justify-center pointer-events-none animate-fade-in-up">
             <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/40 pointer-events-auto">
               <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
               <span className="text-sm text-slate-300">Unsaved changes</span>
@@ -1748,7 +1748,8 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                 {saving ? 'Saving...' : 'Save'}
               </button>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </div>,
