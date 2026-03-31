@@ -2208,14 +2208,21 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
         </div>
       )}
 
-      {/* Deploy button */}
-      <button
-        onClick={() => onDeploy(template)}
-        className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 press"
-      >
-        <Play size={12} />
-        Deploy
-      </button>
+      {/* Deploy button — singleton templates show "Deployed" when already running */}
+      {template.singleton && deployStatus && deployStatus.state !== 'none' ? (
+        <div className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default">
+          <CheckCircle size={12} />
+          Deployed
+        </div>
+      ) : (
+        <button
+          onClick={() => onDeploy(template)}
+          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 press"
+        >
+          <Play size={12} />
+          Deploy
+        </button>
+      )}
     </div>
   )
 }

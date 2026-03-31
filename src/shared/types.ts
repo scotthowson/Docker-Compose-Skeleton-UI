@@ -1326,6 +1326,7 @@ export interface TemplateInfo {
   icon?: string
   variables?: TemplateVariable[]
   optional_services?: TemplateOptionalService[]
+  singleton?: boolean
 }
 
 export interface TemplateVariable {
