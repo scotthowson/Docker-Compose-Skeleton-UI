@@ -436,7 +436,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       {/* Tab content */}
       {activeTab === 'gauges' ? (
         <>
-          <div className="flex flex-wrap items-start justify-around gap-3 md:gap-6">
+          <div className="flex flex-wrap items-start justify-around gap-2 md:gap-4">
             <DonutChart
               title="CPU"
               data={cpuData}
@@ -445,36 +445,37 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               centerLabel="load"
               unit="%"
             />
-            <DonutChart
-              title="Memory"
-              data={memoryData}
-              colors={[COLORS.used, COLORS.available]}
-              centerValue={`${memPercent}%`}
-              centerLabel="used"
-              unit=" MB"
-            />
-            {hasSwap && (
-              <div className="flex flex-col items-center" title={`Swap: ${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} used of ${swapTotal > 1024 ? (swapTotal / 1024).toFixed(0) + ' GB' : swapTotal + ' MB'}`}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Swap</p>
-                <div className="relative h-16 w-16 md:h-20 md:w-20">
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3.5" />
-                    <circle
-                      cx="18" cy="18" r="14" fill="none"
-                      strokeWidth="3.5"
-                      strokeLinecap="round"
-                      stroke={swapPercent > 80 ? '#f43f5e' : swapPercent > 50 ? '#f59e0b' : '#8b5cf6'}
-                      strokeDasharray={`${swapPercent * 0.88} 88`}
-                      style={{ transition: 'stroke-dasharray 0.7s ease' }}
-                    />
-                  </svg>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-xs font-bold text-white">{swapPercent}%</span>
-                    <span className="text-[8px] text-slate-500">used</span>
+            <div className={`flex items-start ${hasSwap ? 'gap-1' : ''}`}>
+              <DonutChart
+                title="Memory"
+                data={memoryData}
+                colors={[COLORS.used, COLORS.available]}
+                centerValue={`${memPercent}%`}
+                centerLabel="used"
+                unit=" MB"
+              />
+              {hasSwap && (
+                <div className="flex flex-col items-center mt-0.5" title={`Swap: ${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} used of ${swapTotal > 1024 ? (swapTotal / 1024).toFixed(0) + ' GB' : swapTotal + ' MB'}`}>
+                  <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">Swap</p>
+                  <div className="relative h-14 w-14 md:h-16 md:w-16">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3" />
+                      <circle
+                        cx="18" cy="18" r="14" fill="none"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        stroke={swapPercent > 80 ? '#f43f5e' : swapPercent > 50 ? '#f59e0b' : '#8b5cf6'}
+                        strokeDasharray={`${swapPercent * 0.88} 88`}
+                        style={{ transition: 'stroke-dasharray 0.7s ease' }}
+                      />
+                    </svg>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-[11px] font-bold text-white">{swapPercent}%</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             <DonutChart
               title="Disk"
               data={diskData}
@@ -485,30 +486,26 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
             />
           </div>
 
-          <div className="mt-6 border-t border-white/5 pt-5">
+          <div className="mt-3 border-t border-white/5 pt-3">
             <LoadAverage values={loadAvg} />
           </div>
 
           {/* Quick stat callouts */}
-          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">{cpuCount}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg bg-slate-800/40 px-2.5 py-2 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">CPU Cores</p>
+              <p className="text-sm font-semibold text-slate-100 mt-0.5">{cpuCount}</p>
             </div>
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total Memory</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+            <div className="rounded-lg bg-slate-800/40 px-2.5 py-2 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">Total Memory</p>
+              <p className="text-sm font-semibold text-slate-100 mt-0.5">
                 {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
-                {(() => {
-                  const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
-                  if (!swap || swap.total <= 0) return null
-                  return <span className="text-[10px] text-slate-500 font-normal"> + {swap.total > 1024 ? `${(swap.total / 1024).toFixed(0)} GB` : `${swap.total} MB`} swap</span>
-                })()}
+                {hasSwap && <span className="text-[10px] text-slate-400 font-normal"> + {swapTotal > 1024 ? `${(swapTotal / 1024).toFixed(0)} GB` : `${swapTotal} MB`} swap</span>}
               </p>
             </div>
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+            <div className="rounded-lg bg-slate-800/40 px-2.5 py-2 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">Disk Used</p>
+              <p className="text-sm font-semibold text-slate-100 mt-0.5">
                 {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
               </p>
             </div>
