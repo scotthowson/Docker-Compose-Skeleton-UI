@@ -459,12 +459,12 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
             const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
             const hasSwap = swap && swap.total > 0
             return (
-              <div className={`mt-4 grid gap-3 text-center ${hasSwap ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
-                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+              <div className="mt-4 flex items-stretch gap-3">
+                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
                   <p className="text-sm font-semibold text-slate-200 mt-0.5">{cpuCount}</p>
                 </div>
-                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Memory</p>
                   <p className="text-sm font-semibold text-slate-200 mt-0.5">
                     {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
@@ -472,22 +472,32 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                 </div>
                 {hasSwap && (() => {
                   const swapUsed = swap!.total - swap!.free
-                  const swapPct = Math.round((swapUsed / swap!.total) * 100)
-                  const swapTotalStr = swap!.total > 1024 ? `${(swap!.total / 1024).toFixed(1)} GB` : `${swap!.total} MB`
+                  const swapPct = swap!.total > 0 ? Math.round((swapUsed / swap!.total) * 100) : 0
+                  const swapTotalStr = swap!.total > 1024 ? `${(swap!.total / 1024).toFixed(0)} GB` : `${swap!.total} MB`
                   return (
-                    <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]" title={`${swapPct}% used`}>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Swap</p>
-                      <p className="text-sm font-semibold text-slate-200 mt-0.5">{swapTotalStr}</p>
-                      <div className="h-1 rounded-full bg-slate-700/60 overflow-hidden mt-1.5">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${swapPct > 80 ? 'bg-rose-500' : swapPct > 50 ? 'bg-amber-500' : 'bg-violet-500'}`}
-                          style={{ width: `${Math.max(swapPct, 2)}%` }}
-                        />
+                    <div
+                      className="w-14 shrink-0 rounded-lg bg-slate-800/40 border border-white/[0.03] flex flex-col items-center justify-center gap-1 py-2"
+                      title={`Swap: ${swapPct}% used (${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} / ${swapTotalStr})`}
+                    >
+                      <div className="relative w-8 h-8">
+                        <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(51,65,85,0.5)" strokeWidth="3" />
+                          <circle
+                            cx="18" cy="18" r="14" fill="none"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            stroke={swapPct > 80 ? '#f43f5e' : swapPct > 50 ? '#f59e0b' : '#8b5cf6'}
+                            strokeDasharray={`${swapPct * 0.88} 88`}
+                            className="transition-all duration-700"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-slate-300">{swapPct}%</span>
                       </div>
+                      <span className="text-[8px] text-slate-500 uppercase tracking-wider leading-none">Swap</span>
                     </div>
                   )
                 })()}
-                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
                   <p className="text-sm font-semibold text-slate-200 mt-0.5">
                     {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
