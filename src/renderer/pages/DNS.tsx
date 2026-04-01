@@ -125,10 +125,16 @@ export default function DNS() {
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b))
   }, [filteredRoutes])
 
-  // ---- Orphaned DNS records (CNAME exists but no matching route file) ----
+  // ---- Orphaned DNS records (CNAME exists but no matching route) ----
   const orphanedDns = useMemo(() => {
-    const routeSubdomains = new Set(routes.map(r => r.subdomain))
-    return dnsRecords.filter(d => d.managed && !routeSubdomains.has(d.name))
+    // Build a set of known subdomains from routes (both full FQDN and prefix)
+    const known = new Set<string>()
+    for (const r of routes) {
+      known.add(r.subdomain)                    // full FQDN: authelia.howson.dev
+      known.add(r.subdomain.split('.')[0])      // prefix: authelia
+      known.add(r.service)                       // service name: authelia
+    }
+    return dnsRecords.filter(d => d.managed && !known.has(d.name) && !known.has(d.subdomain))
   }, [routes, dnsRecords])
 
   // ---- Handlers ----
@@ -472,7 +478,7 @@ export default function DNS() {
               </thead>
               <tbody className="divide-y divide-white/[0.03]">
                 {dnsRecords.map((rec: DnsRecord) => {
-                  const hasRoute = routes.some(r => r.subdomain === rec.name)
+                  const hasRoute = routes.some(r => r.subdomain === rec.name || r.subdomain.split('.')[0] === rec.subdomain || r.service === rec.subdomain)
                   return (
                     <tr key={rec.id} className="hover:bg-white/[0.03] transition-colors">
                       <td className="px-4 py-2.5">
