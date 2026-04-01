@@ -263,10 +263,10 @@ export default function DNS() {
           </div>
         </div>
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
-          {cfConfigured ? <CheckCircle size={16} className="text-emerald-400 shrink-0" /> : <CloudOff size={16} className="text-slate-500 shrink-0" />}
+          {!dnsData ? <Loader2 size={16} className="text-slate-500 shrink-0 animate-spin" /> : cfConfigured ? <CheckCircle size={16} className="text-emerald-400 shrink-0" /> : <CloudOff size={16} className="text-slate-500 shrink-0" />}
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wide">Cloudflare</p>
-            <p className={`text-sm font-bold ${cfConfigured ? 'text-emerald-400' : 'text-slate-500'}`}>{cfConfigured ? 'Connected' : 'Not Set'}</p>
+            <p className={`text-sm font-bold ${!dnsData ? 'text-slate-500' : cfConfigured ? 'text-emerald-400' : 'text-slate-500'}`}>{!dnsData ? 'Loading...' : cfConfigured ? 'Connected' : 'Not Set'}</p>
           </div>
         </div>
       </div>
@@ -515,8 +515,8 @@ export default function DNS() {
         </div>
       )}
 
-      {/* ---- No Cloudflare banner ---- */}
-      {!cfConfigured && isConnected && (
+      {/* ---- No Cloudflare banner — only show after DNS data has loaded ---- */}
+      {!cfConfigured && isConnected && dnsData && !dnsLoading && (
         <div className="glass border border-white/5 rounded-xl p-5 flex items-center gap-4 animate-fade-in">
           <CloudOff size={20} className="text-slate-500 shrink-0" />
           <div>
