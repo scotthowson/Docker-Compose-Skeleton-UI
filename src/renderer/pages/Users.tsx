@@ -15,8 +15,9 @@ import { Tooltip } from '../components/common/Tooltip'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   authListUsers, authListInvites, authCreateInvite, authRevokeUser,
+  authListSessions, authRevokeSession,
 } from '../api/endpoints'
-import type { ApiUser, InviteCode } from '../../shared/types'
+import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,15 +73,19 @@ export default function Users() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin'>('user')
   const [showConfirmRevoke, setShowConfirmRevoke] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<SessionEntry[]>([])
+  const [revokingSession, setRevokingSession] = useState<string | null>(null)
 
   // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [usersRes, invitesRes] = await Promise.all([
+      const [usersRes, invitesRes, sessionsRes] = await Promise.all([
         authListUsers(),
         authListInvites(),
+        authListSessions().catch(() => ({ sessions: [], total: 0 })),
       ])
+      setSessions(sessionsRes.sessions)
       setUsers(usersRes.users ?? [])
       setInvites(invitesRes.invites ?? [])
     } catch {
@@ -130,6 +135,23 @@ export default function Users() {
     } finally {
       setRevokeTarget(null)
       setShowConfirmRevoke(null)
+    }
+  }, [addToast, fetchData])
+
+  const handleRevokeSession = useCallback(async (tokenPrefix: string) => {
+    setRevokingSession(tokenPrefix)
+    try {
+      const result = await authRevokeSession(tokenPrefix)
+      if (result.success) {
+        addToast({ type: 'success', message: `Session revoked (${result.revoked} token${result.revoked !== 1 ? 's' : ''})` })
+        fetchData()
+      } else {
+        addToast({ type: 'error', message: result.message || 'Failed to revoke session' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to revoke' })
+    } finally {
+      setRevokingSession(null)
     }
   }, [addToast, fetchData])
 
@@ -410,6 +432,56 @@ export default function Users() {
               <p className="text-xs text-slate-500 mt-1">Generate an invite to allow new user registration</p>
             </div>
           )}
+        </div>
+
+        {/* ── Active Sessions ── */}
+        <div className="glass rounded-xl border border-white/5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-amber-400" />
+              <h3 className="text-sm font-semibold text-slate-200">Active Sessions</h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5">{sessions.length}</span>
+            </div>
+          </div>
+          <div className="p-4">
+            {sessions.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-6">No active sessions</p>
+            ) : (
+              <div className="space-y-2">
+                {sessions.map((s) => {
+                  const hours = Math.floor(s.remaining_seconds / 3600)
+                  const mins = Math.floor((s.remaining_seconds % 3600) / 60)
+                  return (
+                    <div key={s.id} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] hover:border-white/5 px-4 py-3 transition-all">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/10 shrink-0">
+                        <Shield className="h-3.5 w-3.5 text-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-200">{s.username}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${s.role === 'admin' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}`}>{s.role}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500">
+                          <span className="font-mono">{s.id}</span>
+                          <span>{s.ip}</span>
+                          <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{hours}h {mins}m left</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRevokeSession(s.id.replace('...', ''))}
+                        disabled={revokingSession === s.id}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 bg-rose-500/10 border border-rose-500/15 hover:bg-rose-500/20 disabled:opacity-50 transition-all press shrink-0"
+                        title="Revoke this session"
+                      >
+                        {revokingSession === s.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldX size={11} />}
+                        Revoke
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

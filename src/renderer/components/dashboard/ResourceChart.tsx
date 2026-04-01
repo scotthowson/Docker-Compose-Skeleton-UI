@@ -464,9 +464,21 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
             </div>
             <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total Memory</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
-                {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
-              </p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <p className="text-sm font-semibold text-slate-200">
+                  {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
+                </p>
+                {(status?.system as Record<string, unknown>)?.swap_mb && (() => {
+                  const swap = (status?.system as Record<string, unknown>).swap_mb as { total: number; free: number } | undefined
+                  if (!swap || swap.total <= 0) return null
+                  const swapUsed = swap.total - swap.free
+                  return (
+                    <span className="text-[10px] text-slate-500" title={`Swap: ${swapUsed} MB used / ${swap.total} MB total`}>
+                      + {swap.total > 1024 ? `${(swap.total / 1024).toFixed(1)} GB` : `${swap.total} MB`} swap
+                    </span>
+                  )
+                })()}
+              </div>
             </div>
             <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
