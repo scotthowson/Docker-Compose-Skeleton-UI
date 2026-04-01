@@ -378,6 +378,19 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
     { name: 'Available', value: diskAvailMB },
   ]
 
+  // Swap
+  const swapInfo = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
+  const swapTotal = swapInfo?.total ?? 0
+  const swapFree = swapInfo?.free ?? 0
+  const swapUsed = Math.max(0, swapTotal - swapFree)
+  const swapPercent = swapTotal > 0 ? Math.round((swapUsed / swapTotal) * 100) : 0
+  const hasSwap = swapTotal > 0
+
+  const swapData = hasSwap ? [
+    { name: 'Used', value: swapUsed || 1 },
+    { name: 'Free', value: swapFree || 1 },
+  ] : []
+
   // Load average & CPU
   const loadAvg = status?.system.load_average ?? [0, 0, 0] as [number, number, number]
   const cpuCount = systemInfo?.cpu_count ?? 1
@@ -440,6 +453,28 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               centerLabel="used"
               unit=" MB"
             />
+            {hasSwap && (
+              <div className="flex flex-col items-center" title={`Swap: ${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} used of ${swapTotal > 1024 ? (swapTotal / 1024).toFixed(0) + ' GB' : swapTotal + ' MB'}`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Swap</p>
+                <div className="relative h-16 w-16 md:h-20 md:w-20">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3.5" />
+                    <circle
+                      cx="18" cy="18" r="14" fill="none"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      stroke={swapPercent > 80 ? '#f43f5e' : swapPercent > 50 ? '#f59e0b' : '#8b5cf6'}
+                      strokeDasharray={`${swapPercent * 0.88} 88`}
+                      style={{ transition: 'stroke-dasharray 0.7s ease' }}
+                    />
+                  </svg>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xs font-bold text-white">{swapPercent}%</span>
+                    <span className="text-[8px] text-slate-500">used</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <DonutChart
               title="Disk"
               data={diskData}
@@ -455,57 +490,29 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
           </div>
 
           {/* Quick stat callouts */}
-          {(() => {
-            const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
-            const hasSwap = swap && swap.total > 0
-            return (
-              <div className="mt-4 flex items-stretch gap-3">
-                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
-                  <p className="text-sm font-semibold text-slate-200 mt-0.5">{cpuCount}</p>
-                </div>
-                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Memory</p>
-                  <p className="text-sm font-semibold text-slate-200 mt-0.5">
-                    {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
-                  </p>
-                </div>
-                {hasSwap && (() => {
-                  const swapUsed = swap!.total - swap!.free
-                  const swapPct = swap!.total > 0 ? Math.round((swapUsed / swap!.total) * 100) : 0
-                  const swapTotalStr = swap!.total > 1024 ? `${(swap!.total / 1024).toFixed(0)} GB` : `${swap!.total} MB`
-                  return (
-                    <div
-                      className="w-14 shrink-0 rounded-lg bg-slate-800/40 border border-white/[0.03] flex flex-col items-center justify-center gap-1 py-2"
-                      title={`Swap: ${swapPct}% used (${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} / ${swapTotalStr})`}
-                    >
-                      <div className="relative w-8 h-8">
-                        <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
-                          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(51,65,85,0.5)" strokeWidth="3" />
-                          <circle
-                            cx="18" cy="18" r="14" fill="none"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            stroke={swapPct > 80 ? '#f43f5e' : swapPct > 50 ? '#f59e0b' : '#8b5cf6'}
-                            strokeDasharray={`${swapPct * 0.88} 88`}
-                            className="transition-all duration-700"
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-slate-300">{swapPct}%</span>
-                      </div>
-                      <span className="text-[8px] text-slate-500 uppercase tracking-wider leading-none">Swap</span>
-                    </div>
-                  )
+          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
+              <p className="text-sm font-semibold text-slate-200 mt-0.5">{cpuCount}</p>
+            </div>
+            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total Memory</p>
+              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+                {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
+                {(() => {
+                  const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
+                  if (!swap || swap.total <= 0) return null
+                  return <span className="text-[10px] text-slate-500 font-normal"> + {swap.total > 1024 ? `${(swap.total / 1024).toFixed(0)} GB` : `${swap.total} MB`} swap</span>
                 })()}
-                <div className="flex-1 rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03] text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
-                  <p className="text-sm font-semibold text-slate-200 mt-0.5">
-                    {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
-                  </p>
-                </div>
-              </div>
-            )
-          })()}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
+              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+                {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
+              </p>
+            </div>
+          </div>
         </>
       ) : (
         <TrendingCharts history={history} />
