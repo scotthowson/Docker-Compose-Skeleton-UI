@@ -455,48 +455,47 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
           </div>
 
           {/* Quick stat callouts */}
-          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
-                {cpuCount}
-              </p>
-            </div>
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider text-center">Total Memory</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5 text-center">
-                {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
-              </p>
-              {(() => {
-                const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
-                if (!swap || swap.total <= 0) return null
-                const swapUsed = swap.total - swap.free
-                const swapPct = Math.round((swapUsed / swap.total) * 100)
-                const swapTotalStr = swap.total > 1024 ? `${(swap.total / 1024).toFixed(1)} GB` : `${swap.total} MB`
-                const swapUsedStr = swapUsed > 1024 ? `${(swapUsed / 1024).toFixed(1)} GB` : `${swapUsed} MB`
-                return (
-                  <div className="mt-2 pt-2 border-t border-white/[0.03]" title={`${swapUsedStr} used of ${swapTotalStr}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">Swap</span>
-                      <span className="text-[9px] text-slate-400 font-mono">{swapUsedStr} / {swapTotalStr}</span>
+          {(() => {
+            const swap = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
+            const hasSwap = swap && swap.total > 0
+            return (
+              <div className={`mt-4 grid gap-3 text-center ${hasSwap ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
+                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">CPU Cores</p>
+                  <p className="text-sm font-semibold text-slate-200 mt-0.5">{cpuCount}</p>
+                </div>
+                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Memory</p>
+                  <p className="text-sm font-semibold text-slate-200 mt-0.5">
+                    {memTotal > 1024 ? `${(memTotal / 1024).toFixed(1)} GB` : `${memTotal} MB`}
+                  </p>
+                </div>
+                {hasSwap && (() => {
+                  const swapUsed = swap!.total - swap!.free
+                  const swapPct = Math.round((swapUsed / swap!.total) * 100)
+                  const swapTotalStr = swap!.total > 1024 ? `${(swap!.total / 1024).toFixed(1)} GB` : `${swap!.total} MB`
+                  return (
+                    <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]" title={`${swapPct}% used`}>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Swap</p>
+                      <p className="text-sm font-semibold text-slate-200 mt-0.5">{swapTotalStr}</p>
+                      <div className="h-1 rounded-full bg-slate-700/60 overflow-hidden mt-1.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${swapPct > 80 ? 'bg-rose-500' : swapPct > 50 ? 'bg-amber-500' : 'bg-violet-500'}`}
+                          style={{ width: `${Math.max(swapPct, 2)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 rounded-full bg-slate-800/80 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${swapPct > 80 ? 'bg-rose-500' : swapPct > 50 ? 'bg-amber-500' : 'bg-violet-500'}`}
-                        style={{ width: `${Math.max(swapPct, 1)}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })()}
-            </div>
-            <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
-                {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
-              </p>
-            </div>
-          </div>
+                  )
+                })()}
+                <div className="rounded-lg bg-slate-800/40 px-3 py-2.5 border border-white/[0.03]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Disk Used</p>
+                  <p className="text-sm font-semibold text-slate-200 mt-0.5">
+                    {status?.system.disk.used ?? '--'} / {status?.system.disk.total ?? '--'}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
         </>
       ) : (
         <TrendingCharts history={history} />
