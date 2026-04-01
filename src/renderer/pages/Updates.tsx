@@ -153,7 +153,10 @@ export default function Updates() {
   const [sysChecking, setSysChecking] = useState(false)
   const [sysApplying, setSysApplying] = useState(false)
   const [sysRollingBack, setSysRollingBack] = useState(false)
-  const [lastBackupTag, setLastBackupTag] = useState<string | null>(null)
+  const [lastBackupTag, setLastBackupTag] = useState<string | null>(() => {
+    // Persist across navigation — load from sessionStorage
+    try { return sessionStorage.getItem('dcs-last-backup-tag') } catch { return null }
+  })
 
   // ---- UI image update state ----
   const [uiUpdateAvailable, setUiUpdateAvailable] = useState(false)
@@ -202,7 +205,9 @@ export default function Updates() {
     try {
       const result = await applySystemUpdate()
       if (result.success || result.updated) {
-        setLastBackupTag(result.backup_tag)
+        const tag = result.backup_tag
+        setLastBackupTag(tag)
+        try { if (tag) sessionStorage.setItem('dcs-last-backup-tag', tag) } catch {}
         const newVersion = result.updated_to || result.new_version || 'latest'
         addToast({ type: 'success', message: `Updated to ${newVersion}${result.restart_required ? ' — API server restart may be needed' : ''}`, duration: 6000 })
         useSettingsStore.getState().updateSetting('updatesAvailable', 0)
@@ -227,6 +232,7 @@ export default function Updates() {
       if (result.success || result.rolled_back) {
         addToast({ type: 'success', message: `Rolled back to ${result.restored_version || 'previous version'}` })
         setLastBackupTag(null)
+        try { sessionStorage.removeItem('dcs-last-backup-tag') } catch {}
         const fresh = await checkSystemUpdate()
         setSysUpdate(fresh)
       } else {
@@ -245,6 +251,11 @@ export default function Updates() {
       checkSystemUpdate().then(res => {
         setSysUpdate(res)
         useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
+        // Load last backup tag from server if we don't have one locally
+        if (res.last_backup_tag && !lastBackupTag) {
+          setLastBackupTag(res.last_backup_tag)
+          try { sessionStorage.setItem('dcs-last-backup-tag', res.last_backup_tag) } catch {}
+        }
         // Also check UI image update from the response
         const uiUp = (res as Record<string, unknown>).ui_update as { available?: boolean } | undefined
         if (uiUp?.available) setUiUpdateAvailable(true)
@@ -554,7 +565,7 @@ export default function Updates() {
                   </div>
                 )}
 
-                {/* Action buttons */}
+                {/* Update action button */}
                 {isAdmin && sysUpdate.available && !sysUpdate.has_local_changes && (
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.03]">
                     <button
@@ -565,16 +576,24 @@ export default function Updates() {
                       {sysApplying ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                       {sysApplying ? 'Updating...' : 'Apply Update'}
                     </button>
-                    {lastBackupTag && (
-                      <button
-                        onClick={handleRollback}
-                        disabled={sysRollingBack}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-amber-400 disabled:opacity-50 transition-all press"
-                      >
-                        {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                        Rollback
-                      </button>
-                    )}
+                  </div>
+                )}
+
+                {/* Rollback — always visible when a backup tag exists */}
+                {isAdmin && lastBackupTag && (
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.03]">
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Rollback Available</p>
+                      <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5" title={lastBackupTag}>{lastBackupTag}</p>
+                    </div>
+                    <button
+                      onClick={handleRollback}
+                      disabled={sysRollingBack}
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press shrink-0 ml-3"
+                    >
+                      {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                      {sysRollingBack ? 'Rolling back...' : 'Rollback'}
+                    </button>
                   </div>
                 )}
               </div>

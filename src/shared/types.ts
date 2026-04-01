@@ -897,6 +897,7 @@ export interface SystemUpdateCheckResponse {
   changelog: { hash: string; message: string; author: string; date: string }[]
   has_local_changes: boolean
   branch: string
+  last_backup_tag?: string
 }
 
 export interface SystemUpdateApplyResponse {
