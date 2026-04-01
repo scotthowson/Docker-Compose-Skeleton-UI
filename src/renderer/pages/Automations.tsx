@@ -38,17 +38,18 @@ const CRON_PRESETS: { label: string; cron: string }[] = [
 
 const CONDITION_OPTIONS = [
   { value: 'container_unhealthy', label: 'Container Unhealthy' },
-  { value: 'high_cpu', label: 'High CPU Usage' },
-  { value: 'disk_full', label: 'Disk Full' },
+  { value: 'container_stopped', label: 'Container Stopped Unexpectedly' },
+  { value: 'high_cpu', label: 'High CPU Usage (>90%)' },
+  { value: 'high_memory', label: 'High Memory Usage (>90%)' },
+  { value: 'disk_full', label: 'Disk Full (>90%)' },
 ]
 
 const ACTION_TYPES = [
-  { value: 'stack_start', label: 'Start Stack' },
-  { value: 'stack_stop', label: 'Stop Stack' },
   { value: 'stack_restart', label: 'Restart Stack' },
   { value: 'container_restart', label: 'Restart Container' },
+  { value: 'stack_start', label: 'Start Stack' },
+  { value: 'stack_stop', label: 'Stop Stack' },
   { value: 'docker_prune', label: 'Docker Prune' },
-  { value: 'backup_trigger', label: 'Trigger Backup' },
   { value: 'notification_send', label: 'Send Notification' },
 ]
 
@@ -361,7 +362,7 @@ export default function Automations() {
           <div>
             <h2 className="text-lg font-bold"><span className="text-gradient">Automations</span></h2>
             <p className="text-xs text-slate-500">
-              Scheduled actions &amp; condition-based rules
+              Reactive rules — trigger actions based on system conditions
             </p>
           </div>
         </div>

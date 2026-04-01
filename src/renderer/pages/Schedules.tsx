@@ -272,8 +272,11 @@ export default function Schedules() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Target <span className="text-slate-600">(optional)</span></label>
-                <input value={form.target} onChange={e => setForm({ ...form, target: e.target.value })} placeholder="Stack name or script path" className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all" />
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Target {(form.action === 'update' || form.action === 'restart') ? <span className="text-rose-400">*</span> : <span className="text-slate-600">(optional)</span>}
+                </label>
+                <input value={form.target} onChange={e => setForm({ ...form, target: e.target.value })} placeholder={form.action === 'custom' ? '/path/to/script.sh' : form.action === 'update' || form.action === 'restart' ? 'Stack name (e.g. media-services)' : 'Leave empty for all'} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all" />
+                {form.action === 'custom' && <p className="text-[10px] text-slate-500 mt-1">Path to an executable script on the server</p>}
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
@@ -316,8 +319,11 @@ export default function Schedules() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Target <span className="text-slate-600">(optional)</span></label>
-                <input value={editForm.target} onChange={e => setEditForm({ ...editForm, target: e.target.value })} placeholder="Stack name or script path" className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" />
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Target {(editForm.action === 'update' || editForm.action === 'restart') ? <span className="text-rose-400">*</span> : <span className="text-slate-600">(optional)</span>}
+                </label>
+                <input value={editForm.target} onChange={e => setEditForm({ ...editForm, target: e.target.value })} placeholder={editForm.action === 'custom' ? '/path/to/script.sh' : editForm.action === 'update' || editForm.action === 'restart' ? 'Stack name (e.g. media-services)' : 'Leave empty for all'} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" />
+                {editForm.action === 'custom' && <p className="text-[10px] text-slate-500 mt-1">Path to an executable script on the server</p>}
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setEditingId(null)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
