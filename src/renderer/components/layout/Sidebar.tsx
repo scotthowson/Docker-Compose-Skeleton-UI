@@ -46,6 +46,7 @@ import {
   Puzzle,
   Radio,
   Download,
+  Globe,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -72,6 +73,7 @@ const navItems: NavItem[] = [
   { id: 'containers', label: 'Containers', icon: Box, section: 'main' },
   { id: 'images', label: 'Images', icon: HardDrive, section: 'main' },
   { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
+  { id: 'dns', label: 'DNS & Routes', icon: Globe, section: 'main' },
   { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
   { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
   // ── Monitoring ──

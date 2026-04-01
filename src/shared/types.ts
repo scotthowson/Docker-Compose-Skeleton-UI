@@ -1001,6 +1001,7 @@ export type PageId =
   | 'plugins'
   | 'event-feed'
   | 'export'
+  | 'dns'
   | 'setup'
 
 /**
@@ -1022,6 +1023,7 @@ export const ADMIN_ONLY_PAGES: ReadonlySet<PageId> = new Set([
   'automations',
   'snapshots',
   'export',
+  'dns',
 ])
 
 // ---------------------------------------------------------------------------

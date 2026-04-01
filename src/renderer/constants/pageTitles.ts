@@ -36,5 +36,6 @@ export const pageTitles: Record<PageId, string> = {
   plugins: 'Plugins',
   'event-feed': 'Live Events',
   export: 'Export Center',
+  dns: 'DNS & Routes',
   setup: 'Setup Wizard',
 }

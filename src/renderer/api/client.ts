@@ -158,6 +158,10 @@ export class ApiClient {
     return this.request<T>('POST', path, body ? JSON.stringify(body) : undefined, timeoutOverride)
   }
 
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', path, body ? JSON.stringify(body) : undefined)
+  }
+
   async delete<T>(path: string): Promise<T> {
     return this.request<T>('DELETE', path)
   }

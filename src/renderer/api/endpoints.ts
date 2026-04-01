@@ -988,6 +988,79 @@ export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string 
   return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
 }
 
+// ---------------------------------------------------------------------------
+// Routes & DNS
+// ---------------------------------------------------------------------------
+
+export interface RouteEntry {
+  subdomain: string
+  service: string
+  stack: string
+  target: string
+  conflict: boolean
+}
+
+export interface RoutesResponse {
+  total: number
+  routes: RouteEntry[]
+  domain: string
+}
+
+export interface RouteCheckResponse {
+  available: boolean
+  subdomain: string
+  fqdn: string
+  existing_service: string
+  existing_stack: string
+}
+
+export interface DnsRecord {
+  id: string
+  name: string
+  subdomain: string
+  content: string
+  proxied: boolean
+  managed: boolean
+}
+
+export interface DnsRecordsResponse {
+  total: number
+  records: DnsRecord[]
+  domain: string
+  cf_configured: boolean
+  error?: string
+}
+
+/** GET /routes — List all Traefik routes */
+export function fetchRoutes(): Promise<RoutesResponse> {
+  return apiClient.get<RoutesResponse>('/routes')
+}
+
+/** GET /routes/check?subdomain=xyz — Check subdomain availability */
+export function checkSubdomain(subdomain: string): Promise<RouteCheckResponse> {
+  return apiClient.get<RouteCheckResponse>(`/routes/check?subdomain=${encodeURIComponent(subdomain)}`)
+}
+
+/** PUT /routes/:stack/:service — Update a route's subdomain */
+export function updateRoute(stack: string, service: string, subdomain: string): Promise<{ success: boolean; old_subdomain: string; new_subdomain: string }> {
+  return apiClient.put<{ success: boolean; old_subdomain: string; new_subdomain: string }>(
+    `/routes/${encodeURIComponent(stack)}/${encodeURIComponent(service)}`,
+    { subdomain },
+  )
+}
+
+/** DELETE /routes/:stack/:service — Delete a route and clean up DNS */
+export function deleteRoute(stack: string, service: string): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(
+    `/routes/${encodeURIComponent(stack)}/${encodeURIComponent(service)}`,
+  )
+}
+
+/** GET /dns/records — List Cloudflare CNAME records */
+export function fetchDnsRecords(): Promise<DnsRecordsResponse> {
+  return apiClient.get<DnsRecordsResponse>('/dns/records')
+}
+
 /** GET /homarr/status — Check if Homarr is deployed with API key */
 export function fetchHomarrStatus(): Promise<{ active: boolean; has_api_key: boolean; url: string }> {
   return apiClient.get<{ active: boolean; has_api_key: boolean; url: string }>('/homarr/status')
