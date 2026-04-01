@@ -740,6 +740,16 @@ export function restoreBackup(filename: string): Promise<BackupRestoreResponse> 
   return apiClient.post<BackupRestoreResponse>('/backups/restore', { filename, confirm: 'RESTORE' }, 120000)
 }
 
+/** POST /backups/cancel — Cancel a running backup */
+export function cancelBackup(): Promise<{ success: boolean; message: string }> {
+  return apiClient.post<{ success: boolean; message: string }>('/backups/cancel')
+}
+
+/** POST /schedules/:id/run — Run a schedule immediately */
+export function runSchedule(id: string): Promise<{ success: boolean; action: string; output: string }> {
+  return apiClient.post<{ success: boolean; action: string; output: string }>(`/schedules/${encodeURIComponent(id)}/run`)
+}
+
 // ---------------------------------------------------------------------------
 // v3.1: Terminal, Image Delete, Container Rename, Stack Services, System Metrics
 // ---------------------------------------------------------------------------

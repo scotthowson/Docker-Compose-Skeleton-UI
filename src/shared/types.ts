@@ -855,6 +855,8 @@ export interface BackupStatusResponse {
   last_backup?: { filename: string; size: string; timestamp: string } | null
   last_restore?: { filename: string; timestamp: string } | null
   progress?: string | null
+  percent?: number
+  stage?: string
   error?: string
   started_at?: string
   filename?: string

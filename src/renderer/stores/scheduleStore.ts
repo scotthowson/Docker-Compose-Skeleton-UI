@@ -13,6 +13,7 @@ interface ScheduleState {
   updateSchedule: (id: string, updates: Partial<Schedule>) => Promise<boolean>
   deleteSchedule: (id: string) => Promise<boolean>
   toggleSchedule: (id: string) => Promise<boolean>
+  runSchedule: (id: string) => Promise<{ success: boolean; output: string } | null>
   fetchHistory: (id: string) => Promise<void>
 }
 
@@ -77,6 +78,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       set(prev => ({ schedules: prev.schedules.map(s => s.id === id ? updated : s) }))
       return true
     } catch { return false }
+  },
+
+  runSchedule: async (id) => {
+    try {
+      const result = await api.runSchedule(id)
+      get().fetchSchedules() // Refresh to update run_count and last_run
+      get().fetchHistory(id) // Refresh history
+      return result
+    } catch { return null }
   },
 
   fetchHistory: async (id) => {

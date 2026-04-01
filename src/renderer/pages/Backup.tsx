@@ -14,6 +14,7 @@ import {
   fetchBackupConfig,
   triggerBackup,
   restoreBackup,
+  cancelBackup,
   fetchStacks,
 } from '../api/endpoints'
 import {
@@ -32,6 +33,7 @@ import {
   ChevronDown,
   ChevronRight,
   Layers,
+  XCircle,
 } from 'lucide-react'
 import type {
   BackupStatusResponse,
@@ -146,6 +148,7 @@ export default function Backup() {
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null)
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [restoreLoading, setRestoreLoading] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
@@ -167,6 +170,7 @@ export default function Backup() {
   const {
     data: statusData,
     loading: statusLoading,
+    refresh: refreshStatus,
   } = usePolling<BackupStatusResponse>(fetchBackupStatus, 5000, {
     enabled: isConnected,
   })
@@ -226,6 +230,19 @@ export default function Backup() {
     },
     [addToast, refreshBackups],
   )
+
+  const handleCancelBackup = useCallback(async () => {
+    setCancelling(true)
+    try {
+      const result = await cancelBackup()
+      addToast({ type: result.success ? 'info' : 'error', message: result.message })
+      refreshStatus()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to cancel' })
+    } finally {
+      setCancelling(false)
+    }
+  }, [addToast, refreshStatus])
 
   const handleRestore = useCallback(async () => {
     if (!restoreTarget) return
@@ -427,22 +444,31 @@ export default function Backup() {
                     )}
                   </div>
                 </div>
-                {/* Animated progress bar */}
-                <div className="relative h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400"
-                    style={{
-                      animation: 'backupProgressPulse 2s ease-in-out infinite',
-                    }}
-                  />
+                {/* Progress bar — real percentage when available, animated fallback */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500">{statusData?.stage === 'copy' ? 'Copying files' : statusData?.stage === 'archive' ? 'Creating archive' : statusData?.stage === 'cleanup' ? 'Cleaning up' : statusData?.stage === 'retention' ? 'Enforcing retention' : 'Processing'}</span>
+                    <span className="text-[10px] font-mono text-cyan-400">{statusData?.percent != null ? `${statusData.percent}%` : ''}</span>
+                  </div>
+                  <div className="relative h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                    {statusData?.percent != null ? (
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 shadow-lg shadow-cyan-500/20 transition-all duration-700 ease-out"
+                        style={{ width: `${Math.max(statusData.percent, 2)}%` }}
+                      />
+                    ) : (
+                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 animate-pulse" style={{ width: '45%' }} />
+                    )}
+                  </div>
+                  <button
+                    onClick={handleCancelBackup}
+                    disabled={cancelling}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 bg-rose-500/10 border border-rose-500/15 hover:bg-rose-500/20 disabled:opacity-50 transition-all press mt-1"
+                  >
+                    {cancelling ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />}
+                    Cancel Backup
+                  </button>
                 </div>
-                <style>{`
-                  @keyframes backupProgressPulse {
-                    0% { width: 15%; opacity: 0.7; }
-                    50% { width: 85%; opacity: 1; }
-                    100% { width: 15%; opacity: 0.7; }
-                  }
-                `}</style>
               </div>
             )}
 
