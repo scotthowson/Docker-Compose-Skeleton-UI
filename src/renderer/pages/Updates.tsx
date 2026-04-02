@@ -189,8 +189,9 @@ export default function Updates() {
       }
       if (result.available) {
         addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
-      } else {
-        addToast({ type: 'success', message: 'DCS framework is up to date' })
+      }
+      if (!result.available && !uiUp?.available) {
+        addToast({ type: 'success', message: 'Everything is up to date' })
       }
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })

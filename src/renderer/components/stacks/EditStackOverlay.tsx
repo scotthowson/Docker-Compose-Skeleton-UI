@@ -1476,7 +1476,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         {/* Validation result bar */}
         {activeTab === 'compose' && composeEditMode && validationResult && (
           <div className={`
-            flex items-start gap-2 px-6 py-2.5 border-b border-white/5 shrink-0 text-xs
+            flex items-start gap-2 px-6 py-2.5 border-b border-white/5 shrink-0 text-xs max-h-40 overflow-y-auto scrollbar-thin
             ${!validationResult.valid
               ? 'bg-rose-500/[0.06] text-rose-400'
               : validationResult.hasLintWarnings
