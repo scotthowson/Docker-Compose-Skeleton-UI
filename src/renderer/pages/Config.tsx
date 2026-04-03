@@ -286,6 +286,10 @@ export default function Config() {
     LOG_LEVEL: d.log_level,
     TZ: d.timezone,
     SERVER_NAME: d.server_name,
+    SERVER_SUBTITLE: d.server_subtitle ?? '',
+    PROXY_DOMAIN: d.proxy_domain ?? '',
+    PUID: d.puid ?? 1000,
+    PGID: d.pgid ?? 1000,
     SKIP_HEALTHCHECK_WAIT: d.skip_healthcheck_wait,
     CONTINUE_ON_FAILURE: d.continue_on_failure,
     REMOVE_VOLUMES_ON_STOP: d.remove_volumes_on_stop,
@@ -301,9 +305,11 @@ export default function Config() {
     API_TOKEN_EXPIRY: d.api_token_expiry ?? 86400,
     API_SINGLE_SESSION: d.api_single_session ?? false,
     API_CORS_ORIGINS: d.api_cors_origins ?? '',
+    API_IP_WHITELIST: d.api_ip_whitelist ?? '',
     NTFY_URL: d.ntfy_url ?? '',
     NTFY_TOPIC: d.ntfy_topic ?? '',
     NTFY_PRIORITY: d.ntfy_priority ?? 'default',
+    NOTIFICATION_STACKS: d.notification_stacks ?? '',
     ENABLE_COLORS: d.enable_colors ?? true,
     COLOR_MODE: d.color_mode ?? 'auto',
     COLOR_THEME: d.color_theme ?? 'dark',
@@ -319,6 +325,8 @@ export default function Config() {
     ENABLE_LOG_HOSTNAME: d.enable_log_hostname ?? false,
     LOG_MAX_SIZE: d.log_max_size ?? '10M',
     LOG_BACKUP_COUNT: d.log_backup_count ?? 12,
+    LOG_RETENTION_DAYS: d.log_retention_days ?? 30,
+    ENABLE_STRUCTURED_LOGGING: d.enable_structured_logging ?? false,
     // Traefik/DNS
     TRAEFIK_DOMAIN: d.traefik_domain ?? '',
     TRAEFIK_ACME_EMAIL: d.traefik_acme_email ?? '',
@@ -337,12 +345,20 @@ export default function Config() {
     SCHEDULER_ENABLED: d.scheduler_enabled ?? true,
     PLUGINS_ENABLED: d.plugins_enabled ?? true,
     PLUGINS_HOOKS_ENABLED: d.plugins_hooks_enabled ?? true,
+    METRICS_RETENTION_DAYS: d.metrics_retention_days ?? 7,
+    INCLUDE_RESOURCE_METRICS: d.include_resource_metrics ?? true,
+    ROLLBACK_MAX_SNAPSHOTS: d.rollback_max_snapshots ?? 10,
+    SECRETS_ENCRYPTION: d.secrets_encryption ?? true,
+    SCHEDULER_CHECK_INTERVAL: d.scheduler_check_interval ?? 60,
     // Docker
     DOCKER_TIMEOUT: d.docker_timeout ?? 120,
     FORCE_RECREATE: d.force_recreate ?? false,
     REMOVE_ORPHANED_CONTAINERS: d.remove_orphaned_containers ?? true,
     SERVICE_START_DELAY: d.service_start_delay ?? 0,
     SERVICE_STOP_DELAY: d.service_stop_delay ?? 0,
+    DOCKER_STACKS: d.docker_stacks ?? '',
+    MAX_PARALLEL_OPERATIONS: d.max_parallel_operations ?? 3,
+    STACK_START_TIMEOUT: d.stack_start_timeout ?? 300,
     // Backup
     BACKUP_SOURCE_DIR: d.backup_source_dir ?? '',
     BACKUP_DEST_DIR: d.backup_dest_dir ?? '',
@@ -549,6 +565,10 @@ export default function Config() {
               onChange={handleStringChange}
               placeholder="UTC"
             />
+            <TextRow label="Server Subtitle" description="Subtitle shown in the UI header" configKey="SERVER_SUBTITLE" value={String(edits.SERVER_SUBTITLE ?? '')} onChange={handleStringChange} />
+            <TextRow label="Proxy Domain" description="Primary reverse proxy domain" configKey="PROXY_DOMAIN" value={String(edits.PROXY_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
+            <NumberRow label="PUID" description="User ID for container permissions" configKey="PUID" value={Number(edits.PUID ?? 1000)} onChange={handleNumberChange} min={0} max={65534} />
+            <NumberRow label="PGID" description="Group ID for container permissions" configKey="PGID" value={Number(edits.PGID ?? 1000)} onChange={handleNumberChange} min={0} max={65534} />
           </GroupCard>
 
           {/* Paths (read-only) */}
@@ -729,6 +749,8 @@ export default function Config() {
             />
             <TextRow label="Max Log Size" description="Max size per log file before rotation (e.g. 10M, 50M)" configKey="LOG_MAX_SIZE" value={String(edits.LOG_MAX_SIZE ?? '10M')} onChange={handleStringChange} placeholder="10M" />
             <NumberRow label="Log Backup Count" description="Number of rotated log archives to keep" configKey="LOG_BACKUP_COUNT" value={Number(edits.LOG_BACKUP_COUNT ?? 12)} onChange={handleNumberChange} min={1} max={100} />
+            <NumberRow label="Log Retention Days" description="How many days to keep log archives" configKey="LOG_RETENTION_DAYS" value={Number(edits.LOG_RETENTION_DAYS ?? 30)} onChange={handleNumberChange} min={1} max={365} />
+            <ToggleRow label="Structured Logging" description="Enable JSONL structured log output" configKey="ENABLE_STRUCTURED_LOGGING" value={Boolean(edits.ENABLE_STRUCTURED_LOGGING)} onChange={handleBoolChange} />
           </GroupCard>
 
           {/* API Server */}
@@ -784,6 +806,7 @@ export default function Config() {
             <NumberRow label="Token Expiry" description="Session token lifetime in seconds (86400 = 24h)" configKey="API_TOKEN_EXPIRY" value={Number(edits.API_TOKEN_EXPIRY ?? 86400)} onChange={handleNumberChange} min={300} max={604800} />
             <ToggleRow label="Single Session" description="Allow only one active session per user" configKey="API_SINGLE_SESSION" value={Boolean(edits.API_SINGLE_SESSION)} onChange={handleBoolChange} />
             <TextRow label="CORS Origins" description="Comma-separated allowed origins (empty = same-origin only)" configKey="API_CORS_ORIGINS" value={String(edits.API_CORS_ORIGINS ?? '')} onChange={handleStringChange} placeholder="http://localhost:3000" />
+            <TextRow label="IP Whitelist" description="Comma-separated allowed IPs/CIDRs (empty = allow all)" configKey="API_IP_WHITELIST" value={String(edits.API_IP_WHITELIST ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24,10.0.0.5" />
           </GroupCard>
 
           {/* Push Notifications (NTFY) */}
@@ -833,6 +856,7 @@ export default function Config() {
               options={['min', 'low', 'default', 'high', 'urgent']}
               onChange={handleStringChange}
             />
+            <TextRow label="Notification Stacks" description="Comma-separated stacks to notify about (empty = all)" configKey="NOTIFICATION_STACKS" value={String(edits.NOTIFICATION_STACKS ?? '')} onChange={handleStringChange} placeholder="core-infrastructure,web-applications" />
           </GroupCard>
 
           {/* Security */}
@@ -894,6 +918,8 @@ export default function Config() {
             <ToggleRow label="Remove Orphaned Containers" description="Remove containers not defined in compose files" configKey="REMOVE_ORPHANED_CONTAINERS" value={Boolean(edits.REMOVE_ORPHANED_CONTAINERS)} onChange={handleBoolChange} />
             <NumberRow label="Service Start Delay" description="Seconds to wait between starting each stack" configKey="SERVICE_START_DELAY" value={Number(edits.SERVICE_START_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
             <NumberRow label="Service Stop Delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
+            <NumberRow label="Stack Start Timeout" description="Maximum seconds to wait for a stack to start" configKey="STACK_START_TIMEOUT" value={Number(edits.STACK_START_TIMEOUT ?? 300)} onChange={handleNumberChange} min={30} max={900} />
+            <NumberRow label="Max Parallel Operations" description="Maximum concurrent Docker operations" configKey="MAX_PARALLEL_OPERATIONS" value={Number(edits.MAX_PARALLEL_OPERATIONS ?? 3)} onChange={handleNumberChange} min={1} max={10} />
           </GroupCard>
 
           {/* ── Health & Monitoring ── */}
@@ -923,6 +949,11 @@ export default function Config() {
             <ToggleRow label="Scheduler" description="Cron-like task scheduler daemon" configKey="SCHEDULER_ENABLED" value={Boolean(edits.SCHEDULER_ENABLED)} onChange={handleBoolChange} />
             <ToggleRow label="Plugins" description="Load plugins from .plugins/ directory" configKey="PLUGINS_ENABLED" value={Boolean(edits.PLUGINS_ENABLED)} onChange={handleBoolChange} />
             <ToggleRow label="Plugin Hooks" description="Fire plugin hooks on stack start/stop/update events" configKey="PLUGINS_HOOKS_ENABLED" value={Boolean(edits.PLUGINS_HOOKS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="Metrics Retention Days" description="Days of metrics history to keep" configKey="METRICS_RETENTION_DAYS" value={Number(edits.METRICS_RETENTION_DAYS ?? 7)} onChange={handleNumberChange} min={1} max={90} />
+            <ToggleRow label="Include Resource Metrics" description="Include CPU/memory data in health reports" configKey="INCLUDE_RESOURCE_METRICS" value={Boolean(edits.INCLUDE_RESOURCE_METRICS)} onChange={handleBoolChange} />
+            <NumberRow label="Rollback Max Snapshots" description="Maximum compose snapshots per stack" configKey="ROLLBACK_MAX_SNAPSHOTS" value={Number(edits.ROLLBACK_MAX_SNAPSHOTS ?? 10)} onChange={handleNumberChange} min={1} max={50} />
+            <ToggleRow label="Secrets Encryption" description="Encrypt secrets at rest with AES-256-CBC" configKey="SECRETS_ENCRYPTION" value={Boolean(edits.SECRETS_ENCRYPTION)} onChange={handleBoolChange} />
+            <NumberRow label="Scheduler Check Interval" description="Seconds between scheduler checks" configKey="SCHEDULER_CHECK_INTERVAL" value={Number(edits.SCHEDULER_CHECK_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
           </GroupCard>
 
           {/* ── Backup ── */}
@@ -951,6 +982,10 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     LOG_LEVEL: data.log_level,
     TZ: data.timezone,
     SERVER_NAME: data.server_name,
+    SERVER_SUBTITLE: data.server_subtitle ?? '',
+    PROXY_DOMAIN: data.proxy_domain ?? '',
+    PUID: data.puid ?? 1000,
+    PGID: data.pgid ?? 1000,
     SKIP_HEALTHCHECK_WAIT: data.skip_healthcheck_wait,
     CONTINUE_ON_FAILURE: data.continue_on_failure,
     REMOVE_VOLUMES_ON_STOP: data.remove_volumes_on_stop,
@@ -966,9 +1001,11 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     API_TOKEN_EXPIRY: data.api_token_expiry ?? 86400,
     API_SINGLE_SESSION: data.api_single_session ?? false,
     API_CORS_ORIGINS: data.api_cors_origins ?? '',
+    API_IP_WHITELIST: data.api_ip_whitelist ?? '',
     NTFY_URL: data.ntfy_url ?? '',
     NTFY_TOPIC: data.ntfy_topic ?? '',
     NTFY_PRIORITY: data.ntfy_priority ?? 'default',
+    NOTIFICATION_STACKS: data.notification_stacks ?? '',
     ENABLE_COLORS: data.enable_colors ?? true,
     COLOR_MODE: data.color_mode ?? 'auto',
     COLOR_THEME: data.color_theme ?? 'dark',
@@ -984,6 +1021,8 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     ENABLE_LOG_HOSTNAME: data.enable_log_hostname ?? false,
     LOG_MAX_SIZE: data.log_max_size ?? '10M',
     LOG_BACKUP_COUNT: data.log_backup_count ?? 12,
+    LOG_RETENTION_DAYS: data.log_retention_days ?? 30,
+    ENABLE_STRUCTURED_LOGGING: data.enable_structured_logging ?? false,
     TRAEFIK_DOMAIN: data.traefik_domain ?? '',
     TRAEFIK_ACME_EMAIL: data.traefik_acme_email ?? '',
     DDNS_ENABLED: data.ddns_enabled ?? false,
@@ -999,11 +1038,19 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     SCHEDULER_ENABLED: data.scheduler_enabled ?? true,
     PLUGINS_ENABLED: data.plugins_enabled ?? true,
     PLUGINS_HOOKS_ENABLED: data.plugins_hooks_enabled ?? true,
+    METRICS_RETENTION_DAYS: data.metrics_retention_days ?? 7,
+    INCLUDE_RESOURCE_METRICS: data.include_resource_metrics ?? true,
+    ROLLBACK_MAX_SNAPSHOTS: data.rollback_max_snapshots ?? 10,
+    SECRETS_ENCRYPTION: data.secrets_encryption ?? true,
+    SCHEDULER_CHECK_INTERVAL: data.scheduler_check_interval ?? 60,
     DOCKER_TIMEOUT: data.docker_timeout ?? 120,
     FORCE_RECREATE: data.force_recreate ?? false,
     REMOVE_ORPHANED_CONTAINERS: data.remove_orphaned_containers ?? true,
     SERVICE_START_DELAY: data.service_start_delay ?? 0,
     SERVICE_STOP_DELAY: data.service_stop_delay ?? 0,
+    DOCKER_STACKS: data.docker_stacks ?? '',
+    MAX_PARALLEL_OPERATIONS: data.max_parallel_operations ?? 3,
+    STACK_START_TIMEOUT: data.stack_start_timeout ?? 300,
     BACKUP_SOURCE_DIR: data.backup_source_dir ?? '',
     BACKUP_DEST_DIR: data.backup_dest_dir ?? '',
     BACKUP_RETENTION_COUNT: data.backup_retention_count ?? 7,

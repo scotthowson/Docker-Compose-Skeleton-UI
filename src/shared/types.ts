@@ -243,6 +243,7 @@ export interface ServerConfig {
   ntfy_url: string
   ntfy_topic: string
   ntfy_priority: string
+  notification_stacks: string
   enable_colors: boolean
   color_mode: string
   color_theme: string
@@ -260,8 +261,10 @@ export interface ServerConfig {
   server_name: string
   server_subtitle: string
   timezone: string
-  // Traefik/DNS
   proxy_domain: string
+  puid: number
+  pgid: number
+  // Traefik/DNS
   traefik_domain: string
   traefik_acme_email: string
   cf_dns_api_token_set: boolean
@@ -289,6 +292,9 @@ export interface ServerConfig {
   force_recreate: boolean
   remove_orphaned_containers: boolean
   service_start_delay: number
+  docker_stacks: string
+  max_parallel_operations: number
+  stack_start_timeout: number
   service_stop_delay: number
   // API extended
   api_auth_enabled: boolean
@@ -297,9 +303,19 @@ export interface ServerConfig {
   api_token_expiry: number
   api_single_session: boolean
   api_cors_origins: string
+  api_ip_whitelist: string
   // Log extended
   log_max_size: string
   log_backup_count: number
+  log_retention_days: number
+  enable_structured_logging: boolean
+  // Metrics extended
+  metrics_retention_days: number
+  include_resource_metrics: boolean
+  // Features extended
+  rollback_max_snapshots: number
+  secrets_encryption: boolean
+  scheduler_check_interval: number
 }
 
 // POST /stacks (create)
