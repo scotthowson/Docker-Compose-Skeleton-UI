@@ -114,6 +114,8 @@ export default function App() {
   const [lockPassword, setLockPassword] = useState('')
   const [lockError, setLockError] = useState('')
   const [unlocking, setUnlocking] = useState(false)
+  const [lockAttempts, setLockAttempts] = useState(0)
+  const [lockLockedUntil, setLockLockedUntil] = useState(0)
 
   // Smooth logout transition: brief fade-to-dark before Login mounts.
   // useLayoutEffect fires synchronously BEFORE the browser paints, so
@@ -330,10 +332,18 @@ export default function App() {
     }
   }, [autoLockMinutes, isAuthenticated, isLocked])
 
-  // Unlock handler — verifies password locally
+  // Unlock handler — verifies password locally with rate limiting
   const handleUnlock = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!lockPassword.trim() || unlocking) return
+
+    // Check lock screen rate limit
+    if (lockLockedUntil > Date.now()) {
+      const remaining = Math.ceil((lockLockedUntil - Date.now()) / 1000)
+      setLockError(`Too many failed attempts. Try again in ${remaining}s`)
+      return
+    }
+
     setUnlocking(true)
     setLockError('')
     try {
@@ -344,15 +354,26 @@ export default function App() {
         setIsLocked(false)
         setLockPassword('')
         setLockError('')
+        setLockAttempts(0)
+        setLockLockedUntil(0)
         resetAutoLock()
       } else {
-        setLockError('Incorrect password')
+        const next = lockAttempts + 1
+        setLockAttempts(next)
+        if (next >= 5) {
+          const until = Date.now() + 60_000
+          setLockLockedUntil(until)
+          setLockError('Too many failed attempts. Try again in 60s')
+          setLockAttempts(0)
+        } else {
+          setLockError('Incorrect password')
+        }
       }
     } catch {
       setLockError('Verification failed')
     }
     setUnlocking(false)
-  }, [lockPassword, unlocking, resetAutoLock])
+  }, [lockPassword, unlocking, resetAutoLock, lockAttempts, lockLockedUntil])
 
   useEffect(() => {
     if (!isAuthenticated || autoLockMinutes <= 0 || isLocked) return

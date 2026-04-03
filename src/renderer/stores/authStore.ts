@@ -469,7 +469,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const lockout = isLockedOut()
     if (lockout.locked) {
       const seconds = Math.ceil(lockout.remainingMs / 1000)
-      set({ error: `Too many failed attempts. Try again in ${seconds}s` })
+      set({ error: 'Too many failed attempts. Please try again later.' })
       return false
     }
 
@@ -489,13 +489,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const valid = await verifyPassword(password, account)
     if (!valid) {
-      const attempts = recordFailedAttempt()
-      const remaining = LOCKOUT_ATTEMPTS - attempts.count
-      if (remaining > 0 && remaining <= 2) {
-        set({ error: `Invalid password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining` })
-      } else {
-        set({ error: 'Invalid username or password' })
-      }
+      recordFailedAttempt()
+      set({ error: 'Invalid username or password' })
       return false
     }
 
