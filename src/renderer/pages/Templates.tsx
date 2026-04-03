@@ -864,7 +864,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                           })
                           if (!visible) return null
                         }
-                        // Dropdown select for variables with options
+                        // Segmented toggle buttons for variables with options
                         if (v.options && v.options.length > 0) {
                           return (
                             <div key={v.name}>
@@ -872,16 +872,23 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 <span className="text-xs text-slate-300 font-medium">{v.label}</span>
                                 {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
                               </div>
-                              {v.description && <p className="text-[10px] text-slate-500 mb-1">{v.description}</p>}
-                              <select
-                                value={value}
-                                onChange={(e) => handleVariableChange(v.name, e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
-                              >
+                              {v.description && <p className="text-[10px] text-slate-500 mb-1.5">{v.description}</p>}
+                              <div className="flex rounded-lg overflow-hidden border border-white/10">
                                 {v.options.map((opt) => (
-                                  <option key={opt.value} value={opt.value} className="bg-slate-800 text-slate-200">{opt.label}</option>
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => handleVariableChange(v.name, opt.value)}
+                                    className={`flex-1 px-3 py-2 text-[11px] font-medium transition-all duration-150 ${
+                                      value === opt.value
+                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-white/[0.03] text-slate-400 hover:bg-white/[0.06] hover:text-slate-300'
+                                    } ${v.options!.indexOf(opt) > 0 ? 'border-l border-white/10' : ''}`}
+                                  >
+                                    {opt.label}
+                                  </button>
                                 ))}
-                              </select>
+                              </div>
                             </div>
                           )
                         }
