@@ -834,6 +834,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     required: v.required || false,
                     type: v.type || '',
                     isBoolean: v.type === 'boolean' || v.default === 'true' || v.default === 'false',
+                    show_if: v.show_if,
                   })),
                   ...extraVars.map((v) => ({
                     name: v.name,
@@ -854,6 +855,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <div className="space-y-2.5">
                       {allVars.map((v) => {
                         const value = variables[v.name] ?? v.defaultValue
+                        // Conditional visibility: hide fields whose show_if condition isn't met
+                        if (v.show_if) {
+                          const visible = Object.entries(v.show_if).every(([dep, expected]) => {
+                            const depVal = variables[dep] ?? allVars.find((av) => av.name === dep)?.defaultValue ?? ''
+                            return depVal === expected
+                          })
+                          if (!visible) return null
+                        }
                         if (v.isBoolean) {
                           const isOn = value === 'true'
                           return (

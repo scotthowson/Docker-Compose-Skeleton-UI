@@ -1418,6 +1418,8 @@ export interface TemplateVariable {
   default?: string
   required?: boolean
   type?: string
+  /** Conditional visibility: { "OTHER_VAR": "value" } — only show this field when OTHER_VAR equals value */
+  show_if?: Record<string, string>
 }
 
 export interface TemplateListResponse {
