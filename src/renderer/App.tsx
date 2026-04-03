@@ -117,6 +117,22 @@ export default function App() {
   const [lockAttempts, setLockAttempts] = useState(0)
   const [lockLockedUntil, setLockLockedUntil] = useState(0)
 
+  // Live countdown for lock screen lockout
+  useEffect(() => {
+    if (!isLocked || lockLockedUntil <= Date.now()) return
+    const interval = setInterval(() => {
+      const now = Date.now()
+      if (lockLockedUntil > now) {
+        const remaining = Math.ceil((lockLockedUntil - now) / 1000)
+        setLockError(`Too many failed attempts. Try again in ${remaining}s`)
+      } else {
+        setLockError('')
+        clearInterval(interval)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isLocked, lockLockedUntil])
+
   // Smooth logout transition: brief fade-to-dark before Login mounts.
   // useLayoutEffect fires synchronously BEFORE the browser paints, so
   // the user never sees Login flash before the dark screen appears.
