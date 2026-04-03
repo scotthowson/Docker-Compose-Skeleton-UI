@@ -835,6 +835,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     type: v.type || '',
                     isBoolean: v.type === 'boolean' || v.default === 'true' || v.default === 'false',
                     show_if: v.show_if,
+                    options: v.options,
                   })),
                   ...extraVars.map((v) => ({
                     name: v.name,
@@ -862,6 +863,27 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             return depVal === expected
                           })
                           if (!visible) return null
+                        }
+                        // Dropdown select for variables with options
+                        if (v.options && v.options.length > 0) {
+                          return (
+                            <div key={v.name}>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-xs text-slate-300 font-medium">{v.label}</span>
+                                {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
+                              </div>
+                              {v.description && <p className="text-[10px] text-slate-500 mb-1">{v.description}</p>}
+                              <select
+                                value={value}
+                                onChange={(e) => handleVariableChange(v.name, e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                              >
+                                {v.options.map((opt) => (
+                                  <option key={opt.value} value={opt.value} className="bg-slate-800 text-slate-200">{opt.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )
                         }
                         if (v.isBoolean) {
                           const isOn = value === 'true'

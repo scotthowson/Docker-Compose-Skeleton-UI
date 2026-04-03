@@ -1420,6 +1420,8 @@ export interface TemplateVariable {
   type?: string
   /** Conditional visibility: { "OTHER_VAR": "value" } — only show this field when OTHER_VAR equals value */
   show_if?: Record<string, string>
+  /** Dropdown options: [{ "value": "sqlite", "label": "SQLite (built-in)" }] */
+  options?: { value: string; label: string }[]
 }
 
 export interface TemplateListResponse {
