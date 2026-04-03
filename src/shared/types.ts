@@ -316,6 +316,23 @@ export interface ServerConfig {
   rollback_max_snapshots: number
   secrets_encryption: boolean
   scheduler_check_interval: number
+  // API extended (v2)
+  api_max_login_attempts: number
+  api_lockout_duration: number
+  api_tls_enabled: boolean
+  api_behind_tls_proxy: boolean
+  api_invite_expiry: number
+  api_max_body_size: number
+  terminal_session_expiry: number
+  // Traefik extended
+  traefik_trusted_lan: string
+  // DDNS extended
+  ddns_subdomains: string
+  // Dashboard
+  portainer_url: string
+  dashboard_icon_url: string
+  // Docker extended
+  docker_compose_version: string
 }
 
 // POST /stacks (create)

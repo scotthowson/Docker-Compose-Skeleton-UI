@@ -363,6 +363,19 @@ export default function Config() {
     BACKUP_SOURCE_DIR: d.backup_source_dir ?? '',
     BACKUP_DEST_DIR: d.backup_dest_dir ?? '',
     BACKUP_RETENTION_COUNT: d.backup_retention_count ?? 7,
+    // API extended
+    API_MAX_LOGIN_ATTEMPTS: d.api_max_login_attempts ?? 5,
+    API_LOCKOUT_DURATION: d.api_lockout_duration ?? 900,
+    API_TLS_ENABLED: d.api_tls_enabled ?? false,
+    API_BEHIND_TLS_PROXY: d.api_behind_tls_proxy ?? false,
+    API_INVITE_EXPIRY: d.api_invite_expiry ?? 604800,
+    API_MAX_BODY_SIZE: d.api_max_body_size ?? 1048576,
+    TERMINAL_SESSION_EXPIRY: d.terminal_session_expiry ?? 14400,
+    TRAEFIK_TRUSTED_LAN: d.traefik_trusted_lan ?? '',
+    DDNS_SUBDOMAINS: d.ddns_subdomains ?? '@',
+    PORTAINER_URL: d.portainer_url ?? '',
+    DASHBOARD_ICON_URL: d.dashboard_icon_url ?? '',
+    DOCKER_COMPOSE_VERSION: d.docker_compose_version ?? 'auto',
   }), [])
 
   // Sync from server ONLY when user hasn't started editing
@@ -807,6 +820,11 @@ export default function Config() {
             <ToggleRow label="Single Session" description="Allow only one active session per user" configKey="API_SINGLE_SESSION" value={Boolean(edits.API_SINGLE_SESSION)} onChange={handleBoolChange} />
             <TextRow label="CORS Origins" description="Comma-separated allowed origins (empty = same-origin only)" configKey="API_CORS_ORIGINS" value={String(edits.API_CORS_ORIGINS ?? '')} onChange={handleStringChange} placeholder="http://localhost:3000" />
             <TextRow label="IP Whitelist" description="Comma-separated allowed IPs/CIDRs (empty = allow all)" configKey="API_IP_WHITELIST" value={String(edits.API_IP_WHITELIST ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24,10.0.0.5" />
+            <NumberRow label="Max Login Attempts" description="Failed login attempts before lockout" configKey="API_MAX_LOGIN_ATTEMPTS" value={Number(edits.API_MAX_LOGIN_ATTEMPTS ?? 5)} onChange={handleNumberChange} min={1} max={20} />
+            <NumberRow label="Lockout Duration" description="Seconds of lockout after max failed attempts" configKey="API_LOCKOUT_DURATION" value={Number(edits.API_LOCKOUT_DURATION ?? 900)} onChange={handleNumberChange} min={60} max={86400} />
+            <NumberRow label="Invite Expiry" description="Invite code validity in seconds (604800 = 7 days)" configKey="API_INVITE_EXPIRY" value={Number(edits.API_INVITE_EXPIRY ?? 604800)} onChange={handleNumberChange} min={3600} max={2592000} />
+            <NumberRow label="Max Body Size" description="Maximum request body size in bytes" configKey="API_MAX_BODY_SIZE" value={Number(edits.API_MAX_BODY_SIZE ?? 1048576)} onChange={handleNumberChange} min={65536} max={10485760} />
+            <NumberRow label="Terminal Session Expiry" description="Terminal session validity in seconds (14400 = 4h)" configKey="TERMINAL_SESSION_EXPIRY" value={Number(edits.TERMINAL_SESSION_EXPIRY ?? 14400)} onChange={handleNumberChange} min={300} max={86400} />
           </GroupCard>
 
           {/* Push Notifications (NTFY) */}
@@ -857,6 +875,8 @@ export default function Config() {
               onChange={handleStringChange}
             />
             <TextRow label="Notification Stacks" description="Comma-separated stacks to notify about (empty = all)" configKey="NOTIFICATION_STACKS" value={String(edits.NOTIFICATION_STACKS ?? '')} onChange={handleStringChange} placeholder="core-infrastructure,web-applications" />
+            <TextRow label="Portainer URL" description="Portainer dashboard link for notification buttons" configKey="PORTAINER_URL" value={String(edits.PORTAINER_URL ?? '')} onChange={handleStringChange} placeholder="https://portainer.example.com" />
+            <TextRow label="Dashboard Icon URL" description="Custom icon URL for notification action buttons" configKey="DASHBOARD_ICON_URL" value={String(edits.DASHBOARD_ICON_URL ?? '')} onChange={handleStringChange} />
           </GroupCard>
 
           {/* Security */}
@@ -890,6 +910,8 @@ export default function Config() {
                 </span>
               </div>
             </div>
+            <ToggleRow label="TLS Enabled" description="Direct TLS termination on the API server" configKey="API_TLS_ENABLED" value={Boolean(edits.API_TLS_ENABLED)} onChange={handleBoolChange} />
+            <ToggleRow label="Behind TLS Proxy" description="API is behind a TLS-terminating proxy (enables HSTS)" configKey="API_BEHIND_TLS_PROXY" value={Boolean(edits.API_BEHIND_TLS_PROXY)} onChange={handleBoolChange} />
           </GroupCard>
 
           {/* ── Traefik / DNS ── */}
@@ -904,6 +926,8 @@ export default function Config() {
             <ToggleRow label="Cloudflare DNS Token" description={cfg?.cf_dns_api_token_set ? 'A Cloudflare API token is configured' : 'No Cloudflare token set — configure via .env'} configKey="_CF_TOKEN_SET" value={cfg?.cf_dns_api_token_set ?? false} onChange={() => {}} disabled />
             <ToggleRow label="DDNS Enabled" description="Periodically update DNS A records with current public IP" configKey="DDNS_ENABLED" value={Boolean(edits.DDNS_ENABLED)} onChange={handleBoolChange} />
             <NumberRow label="DDNS Interval" description="Seconds between DDNS update checks" configKey="DDNS_INTERVAL" value={Number(edits.DDNS_INTERVAL ?? 300)} onChange={handleNumberChange} min={60} max={3600} />
+            <TextRow label="Trusted LAN" description="CIDR subnet for Traefik IP-based access rules" configKey="TRAEFIK_TRUSTED_LAN" value={String(edits.TRAEFIK_TRUSTED_LAN ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24" />
+            <TextRow label="DDNS Subdomains" description="DNS records to update (@ = root, * = wildcard)" configKey="DDNS_SUBDOMAINS" value={String(edits.DDNS_SUBDOMAINS ?? '@')} onChange={handleStringChange} />
           </GroupCard>
 
           {/* ── Docker ── */}
@@ -920,6 +944,8 @@ export default function Config() {
             <NumberRow label="Service Stop Delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
             <NumberRow label="Stack Start Timeout" description="Maximum seconds to wait for a stack to start" configKey="STACK_START_TIMEOUT" value={Number(edits.STACK_START_TIMEOUT ?? 300)} onChange={handleNumberChange} min={30} max={900} />
             <NumberRow label="Max Parallel Operations" description="Maximum concurrent Docker operations" configKey="MAX_PARALLEL_OPERATIONS" value={Number(edits.MAX_PARALLEL_OPERATIONS ?? 3)} onChange={handleNumberChange} min={1} max={10} />
+            <SelectRow label="Compose Version" description="Docker Compose version detection mode" configKey="DOCKER_COMPOSE_VERSION" value={String(edits.DOCKER_COMPOSE_VERSION ?? 'auto')} onChange={handleStringChange} options={['auto', 'v1', 'v2']} />
+            <TextRow label="Stack Startup Order" description="Space-separated stack names defining startup sequence" configKey="DOCKER_STACKS" value={String(edits.DOCKER_STACKS ?? '')} onChange={handleStringChange} />
           </GroupCard>
 
           {/* ── Health & Monitoring ── */}
@@ -1054,6 +1080,19 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     BACKUP_SOURCE_DIR: data.backup_source_dir ?? '',
     BACKUP_DEST_DIR: data.backup_dest_dir ?? '',
     BACKUP_RETENTION_COUNT: data.backup_retention_count ?? 7,
+    // API extended
+    API_MAX_LOGIN_ATTEMPTS: data.api_max_login_attempts ?? 5,
+    API_LOCKOUT_DURATION: data.api_lockout_duration ?? 900,
+    API_TLS_ENABLED: data.api_tls_enabled ?? false,
+    API_BEHIND_TLS_PROXY: data.api_behind_tls_proxy ?? false,
+    API_INVITE_EXPIRY: data.api_invite_expiry ?? 604800,
+    API_MAX_BODY_SIZE: data.api_max_body_size ?? 1048576,
+    TERMINAL_SESSION_EXPIRY: data.terminal_session_expiry ?? 14400,
+    TRAEFIK_TRUSTED_LAN: data.traefik_trusted_lan ?? '',
+    DDNS_SUBDOMAINS: data.ddns_subdomains ?? '@',
+    PORTAINER_URL: data.portainer_url ?? '',
+    DASHBOARD_ICON_URL: data.dashboard_icon_url ?? '',
+    DOCKER_COMPOSE_VERSION: data.docker_compose_version ?? 'auto',
   }
   return map[key] ?? ''
 }
