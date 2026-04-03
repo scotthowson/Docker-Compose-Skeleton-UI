@@ -1473,10 +1473,10 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
           </div>
         </div>
 
-        {/* Validation result bar */}
+        {/* Validation result bar — compact status, scrollable only for errors */}
         {activeTab === 'compose' && composeEditMode && validationResult && (
           <div className={`
-            flex items-start gap-2 px-6 py-2.5 border-b border-white/5 shrink-0 text-xs max-h-40 overflow-y-auto scrollbar-thin
+            flex items-start gap-2 px-6 py-2 border-b border-white/5 shrink-0 text-xs
             ${!validationResult.valid
               ? 'bg-rose-500/[0.06] text-rose-400'
               : validationResult.hasLintWarnings
@@ -1491,14 +1491,17 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
             ) : (
               <CheckCircle size={14} className="shrink-0 mt-0.5" />
             )}
-            <pre className="flex-1 whitespace-pre-wrap font-mono leading-relaxed">
-              {!validationResult.valid
-                ? validationResult.output
-                : validationResult.hasLintWarnings
-                  ? validationResult.output
-                  : 'Valid compose file'
-              }
-            </pre>
+            {!validationResult.valid ? (
+              <pre className="flex-1 whitespace-pre-wrap font-mono leading-relaxed max-h-32 overflow-y-auto scrollbar-thin">
+                {validationResult.output}
+              </pre>
+            ) : (
+              <span className="text-xs font-medium">
+                {validationResult.hasLintWarnings
+                  ? 'Valid compose — review lint warnings below'
+                  : 'Valid compose file'}
+              </span>
+            )}
           </div>
         )}
 
