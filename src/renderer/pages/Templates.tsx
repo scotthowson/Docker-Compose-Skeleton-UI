@@ -542,6 +542,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
   // Plugin hooks awareness — which active plugins fire during deployment
   const plugins = usePluginStore((s) => s.plugins)
+  const fetchPlugins = usePluginStore((s) => s.fetchPlugins)
+  useEffect(() => { fetchPlugins() }, [fetchPlugins])
   const deployHookPlugins = useMemo(() => {
     return plugins.filter(
       (p) => p.enabled && (p.hooks ?? []).some((h) => h === 'pre-deploy' || h === 'post-deploy'),
@@ -2596,7 +2598,7 @@ export default function Templates() {
         setDeploying(false)
       }
     },
-    [deployTarget, addToast, refresh, refreshHistory],
+    [deployTarget, detail, addToast, refresh, refreshHistory],
   )
 
   // F4: Undeploy handler
