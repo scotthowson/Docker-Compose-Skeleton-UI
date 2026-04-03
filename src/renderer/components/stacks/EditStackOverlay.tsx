@@ -672,7 +672,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       return (
         <span>
           {highlighted.map((seg, i) => (
-            <span key={i} className={seg.className}>{seg.text}</span>
+            <span key={`${seg.className}-${i}`} className={seg.className}>{seg.text}</span>
           ))}
         </span>
       )
@@ -800,7 +800,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
               const leftIsPlaceholder = dl.type === 'added'
               const rightIsPlaceholder = dr.type === 'removed'
               return (
-                <div key={idx} className="grid grid-cols-2">
+                <div key={`diff-${dl.lineNumber ?? idx}`} className="grid grid-cols-2">
                   {/* Left cell */}
                   <div className={`flex border-r border-white/5 min-h-6 ${
                     leftIsChange ? 'bg-rose-500/[0.08]' : leftIsPlaceholder ? 'bg-slate-900/40' : ''

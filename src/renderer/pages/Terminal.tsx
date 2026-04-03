@@ -474,8 +474,8 @@ export default function Terminal() {
 
         {/* Command entries */}
         <div className="p-3 space-y-0">
-          {entries.map((entry, idx) => (
-            <div key={idx} className="group animate-fade-in border-b border-white/[0.02] pb-1 mb-1">
+          {entries.map((entry) => (
+            <div key={`${entry.timestamp}-${entry.command}`} className="group animate-fade-in border-b border-white/[0.02] pb-1 mb-1">
               {/* Prompt + command */}
               <div className="flex items-start gap-0">
                 <span className="text-emerald-500 select-none shrink-0">

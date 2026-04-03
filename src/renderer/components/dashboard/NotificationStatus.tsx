@@ -115,10 +115,10 @@ export default function NotificationStatus({ data, error, onRetry, collapsible =
             <p className="text-xs text-slate-500">No notifications sent</p>
           ) : (
             <div className="space-y-1.5">
-              {recent.map((h, i) => {
+              {recent.map((h) => {
                 const ok = h.status_code >= 200 && h.status_code < 300
                 return (
-                  <div key={i} className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.03] px-2.5 py-1.5">
+                  <div key={`${h.timestamp}-${h.title}`} className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.03] px-2.5 py-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
                         h.type === 'error' ? 'bg-rose-500/10 text-rose-400'

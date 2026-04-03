@@ -209,7 +209,7 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
       <div className="flex gap-[2px] h-7 items-center">
         {segments.map((seg, i) => (
           <div
-            key={i}
+            key={`${seg.status}-${i}`}
             className="flex-1 h-full rounded-[3px] transition-all duration-300 ease-out hover:scale-y-125 hover:brightness-125 cursor-default"
             style={{ backgroundColor: COLORS[seg.status] }}
             onMouseEnter={(e) => {

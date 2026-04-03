@@ -1211,8 +1211,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     </button>
                     {showLintDetails && (
                       <div className="space-y-1 mt-2.5 pl-[22px]">
-                        {lintWarnings.map((w, i) => (
-                          <div key={i} className="flex items-start gap-2 text-[11px]">
+                        {lintWarnings.map((w) => (
+                          <div key={`${w.service}-${w.message}`} className="flex items-start gap-2 text-[11px]">
                             <Circle
                               size={6}
                               className={`mt-1 shrink-0 ${w.severity === 'warning' ? 'text-amber-400 fill-amber-400' : 'text-slate-500 fill-slate-500'}`}
@@ -1301,8 +1301,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         </p>
                         {dryRunResult.port_conflicts_detail && dryRunResult.port_conflicts_detail.length > 0 ? (
                           <div className="space-y-1">
-                            {dryRunResult.port_conflicts_detail.map((pc, idx) => (
-                              <div key={idx} className="flex items-center gap-2 text-[10px] flex-wrap">
+                            {dryRunResult.port_conflicts_detail.map((pc) => (
+                              <div key={`${pc.port}-${pc.owner}`} className="flex items-center gap-2 text-[10px] flex-wrap">
                                 <span className="font-mono text-rose-300 font-bold">:{pc.port}</span>
                                 <span className="text-rose-400/70">in use by</span>
                                 <span className={`font-mono px-1.5 py-0.5 rounded ${pc.type === 'stack' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15'}`}>

@@ -719,9 +719,9 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
                   <td className="px-4 py-3">
                     {c.ports ? (
                       <div className="flex flex-wrap gap-1">
-                        {c.ports.split(',').map((port, i) => (
+                        {c.ports.split(',').map((port) => (
                           <span
-                            key={i}
+                            key={port.trim()}
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400 font-mono ring-1 ring-cyan-500/20"
                           >
                             <Network className="w-2.5 h-2.5" />

@@ -98,7 +98,7 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
                     <span className="text-sm text-slate-300">{shortcut.description}</span>
                     <div className="flex items-center gap-1">
                       {shortcut.keys.map((key, i) => (
-                        <span key={i}>
+                        <span key={key}>
                           {i > 0 && <span className="text-slate-500 mx-0.5">+</span>}
                           <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-6 px-1.5 rounded-md bg-slate-800/80 border border-white/10 text-[11px] font-mono font-medium text-slate-300 shadow-sm">
                             {key}

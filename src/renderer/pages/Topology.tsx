@@ -330,10 +330,10 @@ function DetailPanel({
             <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ports</p>
               <div className="space-y-1.5">
-                {node.ports.split(' ').filter(Boolean).map((p, i) => {
+                {node.ports.split(' ').filter(Boolean).map((p) => {
                   const link = parsePortLink(p, hostname)
                   return (
-                    <div key={i} className="flex items-center justify-between">
+                    <div key={p} className="flex items-center justify-between">
                       <span className="text-xs text-slate-300 font-mono break-all">{p}</span>
                       {link && (
                         <a

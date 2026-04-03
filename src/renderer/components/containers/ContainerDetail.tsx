@@ -1229,8 +1229,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               <div className="px-5 py-3 border-t border-white/[0.03]">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-2">IP Addresses</span>
                 <div className="flex flex-wrap gap-2">
-                  {ips.map((entry, idx) => (
-                    <div key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/5">
+                  {ips.map((entry) => (
+                    <div key={`${entry.network}-${entry.ip}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/5">
                       <Network className="h-3 w-3 text-purple-400 flex-shrink-0" />
                       <span className="text-[10px] text-slate-500">{entry.network}</span>
                       <span className="text-xs font-mono text-cyan-400">{entry.ip}</span>
@@ -1495,7 +1495,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       const revealed = revealedSecrets.has(entry.key)
                       return (
                         <div
-                          key={idx}
+                          key={entry.key}
                           className={`flex items-center gap-3 px-4 py-2.5 animate-fade-in ${
                             idx % 2 === 0 ? 'bg-white/[0.03]' : 'bg-transparent'
                           }`}
@@ -1556,7 +1556,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             <div className="grid gap-2.5">
               {mountEntries.map((mount, idx) => (
                 <div
-                  key={idx}
+                  key={`${mount.source}:${mount.destination}`}
                   className="
                     flex items-center gap-3 px-4 py-3 rounded-lg
                     bg-white/[0.03] border border-white/[0.03]
@@ -1634,7 +1634,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 })() : null
                 return (
                 <div
-                  key={idx}
+                  key={`${port.hostPort || 'exposed'}-${port.containerPort}-${port.protocol}`}
                   className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg
                     bg-white/[0.03] border border-white/[0.03]
@@ -1718,7 +1718,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 const color = NETWORK_COLORS[idx % NETWORK_COLORS.length]
                 return (
                   <span
-                    key={idx}
+                    key={net}
                     className={`
                       inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
                       ring-1 transition-all duration-200 hover:scale-105 cursor-default

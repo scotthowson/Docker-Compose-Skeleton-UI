@@ -212,7 +212,7 @@ export default function DiffViewer({
           <table className="w-full font-mono text-sm border-collapse">
             <tbody>
               {lines.map((line, idx) => (
-                <tr key={idx} className={lineStyles[line.type]}>
+                <tr key={`${line.oldNum ?? ''}-${line.newNum ?? ''}-${idx}`} className={lineStyles[line.type]}>
                   <td className="text-slate-500 text-xs w-10 text-right pr-1 select-none align-top py-px">
                     {line.oldNum ?? ''}
                   </td>
@@ -237,7 +237,7 @@ export default function DiffViewer({
                 <tbody>
                   {splitData.left.map((line, idx) => (
                     <tr
-                      key={idx}
+                      key={`left-${line?.oldNum ?? idx}`}
                       className={line ? lineStyles[line.type === 'add' ? 'same' : line.type] : ''}
                     >
                       <td className="text-slate-500 text-xs w-10 text-right pr-2 select-none align-top py-px">
@@ -258,7 +258,7 @@ export default function DiffViewer({
                 <tbody>
                   {splitData.right.map((line, idx) => (
                     <tr
-                      key={idx}
+                      key={`right-${line?.newNum ?? idx}`}
                       className={line ? lineStyles[line.type === 'del' ? 'same' : line.type] : ''}
                     >
                       <td className="text-slate-500 text-xs w-10 text-right pr-2 select-none align-top py-px">

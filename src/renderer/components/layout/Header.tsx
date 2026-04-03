@@ -145,10 +145,10 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
                 )}
               </div>
               <div className="space-y-2">
-                {release.highlights.map((item, idx) => {
+                {release.highlights.map((item) => {
                   const Icon = item.icon
                   return (
-                    <div key={idx} className="flex items-start gap-3 py-1.5">
+                    <div key={item.text} className="flex items-start gap-3 py-1.5">
                       <Icon size={14} className={`${item.color} shrink-0 mt-0.5`} />
                       <p className="text-xs text-slate-300 leading-relaxed">{item.text}</p>
                     </div>

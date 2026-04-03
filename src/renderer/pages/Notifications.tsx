@@ -813,9 +813,9 @@ export default function Notifications() {
                 {/* Tags row */}
                 {rule.tags && rule.tags.length > 0 && (
                   <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                    {rule.tags.map((tag, i) => (
+                    {rule.tags.map((tag) => (
                       <span
-                        key={i}
+                        key={tag}
                         className="text-[10px] text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded border border-white/5"
                       >
                         {tag}
@@ -870,9 +870,9 @@ export default function Notifications() {
             {/* Timeline */}
             {history.length > 0 && (
               <div className="space-y-2">
-                {history.map((entry, idx) => (
+                {history.map((entry) => (
                   <div
-                    key={idx}
+                    key={entry.timestamp}
                     className={`glass border border-white/5 rounded-xl p-4 md:p-5 border-l-2 ${historyPriorityAccent(entry.priority)}`}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

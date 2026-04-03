@@ -428,7 +428,7 @@ export default function LiveLogViewer({
           const cfg = levelConfig[level]
           return (
             <div
-              key={idx}
+              key={`${entry.timestamp}-${idx}`}
               className={`flex items-start gap-2 px-4 py-0.5 hover:bg-white/[0.03] ${cfg.bg} transition-colors`}
             >
               {/* Timestamp */}

@@ -224,8 +224,8 @@ export default function Schedules() {
                       <p className="text-sm text-slate-500">No execution history yet</p>
                     ) : (
                       <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
-                        {history[s.id].map((h, i) => (
-                          <div key={i} className="flex items-center gap-3 text-xs">
+                        {history[s.id].map((h) => (
+                          <div key={h.timestamp} className="flex items-center gap-3 text-xs">
                             {h.success ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                             <span className="text-slate-500">{new Date(h.timestamp).toLocaleString()}</span>
                             <span className="text-slate-400">{actionLabels[h.action] || h.action}</span>

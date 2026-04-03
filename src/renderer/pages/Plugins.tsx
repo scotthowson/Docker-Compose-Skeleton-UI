@@ -800,7 +800,7 @@ export default function Plugins() {
               const isExpanded = expandedGuide === i
               const Icon = section.icon
               return (
-                <div key={i} className="border border-white/[0.03] rounded-lg overflow-hidden">
+                <div key={section.title} className="border border-white/[0.03] rounded-lg overflow-hidden">
                   <button
                     onClick={() => setExpandedGuide(isExpanded ? null : i)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"

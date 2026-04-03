@@ -697,7 +697,7 @@ export default function Snapshots() {
               const Icon = section.icon
               const isExpanded = expandedGuide === idx
               return (
-                <div key={idx} className="rounded-lg border border-white/[0.03] overflow-hidden">
+                <div key={section.title} className="rounded-lg border border-white/[0.03] overflow-hidden">
                   <button
                     onClick={() => setExpandedGuide(isExpanded ? null : idx)}
                     className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left hover:bg-white/[0.03] transition-all duration-200"

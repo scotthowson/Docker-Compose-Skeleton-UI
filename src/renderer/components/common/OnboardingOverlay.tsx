@@ -199,9 +199,9 @@ export default function OnboardingOverlay() {
 
           {/* Detail bullets */}
           <div className="space-y-2.5">
-            {current.details.map((detail, i) => (
+            {current.details.map((detail) => (
               <div
-                key={i}
+                key={detail}
                 className="flex items-start gap-2.5 text-xs text-slate-300"
               >
                 <ChevronRight

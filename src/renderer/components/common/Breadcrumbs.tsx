@@ -35,7 +35,7 @@ export default function Breadcrumbs({ segments }: BreadcrumbsProps) {
         const isClickable = !!crumb.page && !isLast
 
         return (
-          <span key={i} className="flex items-center gap-1">
+          <span key={`${crumb.label}-${i}`} className="flex items-center gap-1">
             {i === 0 && <Home size={11} className="text-slate-500 mr-0.5" />}
             {isClickable ? (
               <button

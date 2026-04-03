@@ -431,8 +431,8 @@ function OsUpdatesPanel() {
           {showPackages && updateData?.packages && updateData.packages.length > 0 && (
             <div className="rounded-lg bg-slate-950/60 border border-white/5 max-h-48 overflow-y-auto scrollbar-thin">
               <div className="divide-y divide-white/[0.03]">
-                {updateData.packages.map((pkg, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                {updateData.packages.map((pkg) => (
+                  <div key={pkg.package} className="flex items-center justify-between px-3 py-1.5 text-xs">
                     <span className="text-slate-300 font-mono truncate">{pkg.package}</span>
                     <span className="text-slate-500 font-mono text-[10px] shrink-0 ml-3">{pkg.version}</span>
                   </div>

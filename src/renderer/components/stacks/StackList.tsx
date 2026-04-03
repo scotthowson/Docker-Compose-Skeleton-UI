@@ -505,8 +505,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                     </div>
                     {result.diagnostics.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        {result.diagnostics.slice(0, 5).map((d, i) => (
-                          <div key={i} className="flex items-start gap-2 text-[10px]">
+                        {result.diagnostics.slice(0, 5).map((d) => (
+                          <div key={`${d.line}-${d.message}`} className="flex items-start gap-2 text-[10px]">
                             <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
                               {d.severity === 'error' ? '\u25cf' : d.severity === 'warning' ? '\u25b2' : '\u2139'}
                             </span>

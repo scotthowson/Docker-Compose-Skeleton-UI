@@ -396,8 +396,8 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.03]">
-          {portEntries.slice(0, 20).map((entry, idx) => (
-            <tr key={idx} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
+          {portEntries.slice(0, 20).map((entry) => (
+            <tr key={`${entry.container}-${entry.host}-${entry.container_port}`} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
               <td className="px-3 py-2">
                 <button
                   onClick={() => window.open(`http://${window.location.hostname}:${entry.host}`, '_blank')}
