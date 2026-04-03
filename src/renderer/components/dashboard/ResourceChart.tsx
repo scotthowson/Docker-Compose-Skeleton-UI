@@ -402,6 +402,15 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
     { name: 'Available', value: cpuFree },
   ]
 
+  // GPU (NVIDIA)
+  const gpuInfo = (status?.system as Record<string, unknown>)?.gpu as { name: string; utilization: number; memory_used_mb: number; memory_total_mb: number; temperature: number; fan_speed: number } | null | undefined
+  const hasGpu = !!gpuInfo
+  const gpuUtil = gpuInfo?.utilization ?? 0
+  const gpuMemUsed = gpuInfo?.memory_used_mb ?? 0
+  const gpuMemTotal = gpuInfo?.memory_total_mb ?? 0
+  const gpuMemPercent = gpuMemTotal > 0 ? Math.round((gpuMemUsed / gpuMemTotal) * 100) : 0
+  const gpuTemp = gpuInfo?.temperature ?? 0
+
   const tabs: { id: TabId; label: string }[] = [
     { id: 'gauges', label: 'Gauges' },
     { id: 'trending', label: 'Trending' },
@@ -445,6 +454,41 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               centerLabel="load"
               unit="%"
             />
+            {hasGpu && (
+              <div className="flex items-start gap-1">
+                <DonutChart
+                  title="GPU"
+                  data={[
+                    { name: 'Used', value: gpuUtil || 1 },
+                    { name: 'Available', value: Math.max(0, 100 - gpuUtil) || 1 },
+                  ]}
+                  colors={['#22d3ee', '#1e293b']}
+                  centerValue={`${gpuUtil}%`}
+                  centerLabel="util"
+                  unit="%"
+                />
+                <div className="flex flex-col items-center mt-0.5" title={`VRAM: ${gpuMemUsed} MB / ${gpuMemTotal} MB | Temp: ${gpuTemp}°C`}>
+                  <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">VRAM</p>
+                  <div className="relative h-14 w-14 md:h-16 md:w-16">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3" />
+                      <circle
+                        cx="18" cy="18" r="14" fill="none"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        stroke={gpuMemPercent > 80 ? '#f43f5e' : gpuMemPercent > 50 ? '#f59e0b' : '#22d3ee'}
+                        strokeDasharray={`${gpuMemPercent * 0.88} 88`}
+                        style={{ transition: 'stroke-dasharray 0.7s ease' }}
+                      />
+                    </svg>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-[11px] font-bold text-white">{gpuMemPercent}%</span>
+                    </div>
+                  </div>
+                  <p className="text-[8px] text-slate-500 mt-1">{gpuTemp}°C</p>
+                </div>
+              </div>
+            )}
             <div className={`flex items-start ${hasSwap ? 'gap-1' : ''}`}>
               <DonutChart
                 title="Memory"
