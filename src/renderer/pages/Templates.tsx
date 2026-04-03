@@ -216,12 +216,16 @@ function lintCompose(compose: string): LintWarning[] {
   const warnings: LintWarning[] = []
   if (!compose) return warnings
 
-  // Parse services from compose content
-  const serviceRegex = /^  ([a-zA-Z_-][a-zA-Z0-9_-]*):/gm
+  // Parse services from compose content — only within the services: block
   const services: string[] = []
-  let m: RegExpExecArray | null
-  while ((m = serviceRegex.exec(compose)) !== null) {
-    services.push(m[1])
+  const servicesMatch = compose.match(/^services:\s*\n([\s\S]*?)(?=^[a-zA-Z]|\Z)/m)
+  if (servicesMatch) {
+    const servicesBlock = servicesMatch[1]
+    const serviceRegex = /^  ([a-zA-Z_-][a-zA-Z0-9_-]*):/gm
+    let m: RegExpExecArray | null
+    while ((m = serviceRegex.exec(servicesBlock)) !== null) {
+      services.push(m[1])
+    }
   }
 
   for (const svc of services) {
@@ -525,7 +529,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // F4: Extract service names from template for confirmation panel
   const templateServiceNames = useMemo(() => {
     if (!detail?.compose) return [template.name]
-    const matches = detail.compose.match(/^  [a-zA-Z_-][a-zA-Z0-9_-]*:/gm)
+    // Only extract service names from within the services: block
+    const servicesMatch = detail.compose.match(/^services:\s*\n([\s\S]*?)(?=^[a-zA-Z]|\Z)/m)
+    if (!servicesMatch) return [template.name]
+    const matches = servicesMatch[1].match(/^  [a-zA-Z_-][a-zA-Z0-9_-]*:/gm)
     return matches ? matches.map((m) => m.trim().replace(/:$/, '')) : [template.name]
   }, [detail, template.name])
 
@@ -2536,6 +2543,8 @@ export default function Templates() {
       if (!deployTarget) return null
       setDeploying(true)
       try {
+        // Auto-approve privileged mode for built-in templates (user sees linter warning before deploying)
+        const needsPrivileged = detail?.compose ? /privileged\s*:\s*true/.test(detail.compose) : false
         const res = await deployTemplate(deployTarget.name, {
           target_stack: targetStack,
           variables,
@@ -2546,6 +2555,7 @@ export default function Templates() {
           connect_proxy: connectProxy,
           resource_limits: resourceLimits,
           add_to_homarr: addToHomarr,
+          allow_privileged: needsPrivileged,
         })
         if (res.success) {
           refresh()
