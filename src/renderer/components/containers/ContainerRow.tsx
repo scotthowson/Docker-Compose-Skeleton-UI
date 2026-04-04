@@ -34,15 +34,17 @@ function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 1) + '\u2026'
 }
 
-function parseCpuPercent(cpuStr: string | undefined): number {
-  if (!cpuStr || cpuStr === '--') return 0
-  const match = cpuStr.match(/([\d.]+)/)
+function parseCpuPercent(cpuStr: string | number | undefined): number {
+  if (cpuStr == null || cpuStr === '--') return 0
+  if (typeof cpuStr === 'number') return cpuStr
+  const match = String(cpuStr).match(/([\d.]+)/)
   return match ? parseFloat(match[1]) : 0
 }
 
-function parseMemPercent(memStr: string | undefined): number {
-  if (!memStr || memStr === '--') return 0
-  const match = memStr.match(/([\d.]+)/)
+function parseMemPercent(memStr: string | number | undefined): number {
+  if (memStr == null || memStr === '--') return 0
+  if (typeof memStr === 'number') return memStr
+  const match = String(memStr).match(/([\d.]+)/)
   return match ? parseFloat(match[1]) : 0
 }
 

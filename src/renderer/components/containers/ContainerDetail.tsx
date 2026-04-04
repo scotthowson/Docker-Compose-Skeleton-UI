@@ -289,9 +289,10 @@ function parseMountEntries(mountStr: string): MountEntry[] {
 /**
  * Parse cpu_percent string like "2.34%" to a number (2.34).
  */
-function parseCpuPercent(cpuStr: string): number {
-  if (!cpuStr || cpuStr === '--') return 0
-  const match = cpuStr.match(/([\d.]+)/)
+function parseCpuPercent(cpuStr: string | number): number {
+  if (cpuStr == null || cpuStr === '--') return 0
+  if (typeof cpuStr === 'number') return cpuStr
+  const match = String(cpuStr).match(/([\d.]+)/)
   return match ? parseFloat(match[1]) : 0
 }
 
