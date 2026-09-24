@@ -28,6 +28,27 @@ export class ApiNetworkError extends ApiError {
   }
 }
 
+/**
+ * Endpoints whose 401 means "the credentials in this request are wrong", not
+ * "your API session is gone". A 401 from anything else ends the session.
+ */
+const CREDENTIAL_CHECK_PATHS = [
+  '/auth/login',
+  '/auth/setup',
+  '/auth/register',
+  '/auth/totp/validate',
+  '/auth/totp/verify',
+  '/auth/totp/disable',
+  '/terminal/auth',
+  '/terminal/exec',
+  '/system/os-update',
+]
+
+function isCredentialCheckPath(path: string): boolean {
+  const clean = path.split('?')[0]
+  return CREDENTIAL_CHECK_PATHS.some((p) => clean === p || clean.startsWith(`${p}/`))
+}
+
 export class ApiClient {
   private baseUrl: string
   private timeout: number
@@ -101,13 +122,17 @@ export class ApiClient {
       } catch {
         // response body was not JSON — use statusText
       }
-      // Handle 401 — token expired or invalid
+      // Handle 401 — the API session is invalid, expired, or was never
+      // established on this server (e.g. a session persisted by an older UI,
+      // or a server that was reinstalled). End the session so the login /
+      // setup flow takes over instead of polling forever; the authStore
+      // listener ignores the event when nobody is signed in.
+      // Endpoints that answer 401 about credentials carried *inside* the
+      // request (password, TOTP code, Linux login, terminal session) leave
+      // the API session untouched.
       if (response.status === 401) {
-        const hadToken = !!this.authToken
-        this.authToken = null
-        // Only fire session-expired if we actually sent a token that was rejected.
-        // A 401 with no token just means "not yet authenticated" — not "expired".
-        if (hadToken) {
+        if (!isCredentialCheckPath(path)) {
+          this.authToken = null
           window.dispatchEvent(new CustomEvent('api-auth-expired'))
         }
         throw new ApiError(401, errorMessage)

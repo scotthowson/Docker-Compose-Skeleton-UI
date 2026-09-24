@@ -165,7 +165,9 @@ export default function App() {
       let currentServerUrl = useSettingsStore.getState().serverUrl || getDefaultServerUrl()
       // Don't prepend http:// on relative URLs (Docker/web mode uses /api)
       if (!currentServerUrl.startsWith('/') && !/^https?:\/\//i.test(currentServerUrl)) currentServerUrl = `http://${currentServerUrl}`
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // The API may still be coming up right after ./setup.sh — a proxy 502
+      // or a refused connection is "unknown", not "initialized", so keep trying.
+      for (let attempt = 0; attempt < 6; attempt++) {
         try {
           let initialized = true
           if (window.electronAPI?.checkServer) {
@@ -178,10 +180,11 @@ export default function App() {
             const tid = setTimeout(() => ctrl.abort(), 5000)
             const resp = await fetch(`${currentServerUrl}/setup/status`, { method: 'GET', signal: ctrl.signal })
             clearTimeout(tid)
-            if (resp.ok) {
-              const data = await resp.json()
-              initialized = !!data.initialized
+            if (!resp.ok) {
+              throw new Error(`setup/status answered ${resp.status}`)
             }
+            const data = await resp.json()
+            initialized = !!data.initialized
           }
           if (!initialized) {
             if (window.electronAPI) {
@@ -198,7 +201,7 @@ export default function App() {
           }
           break
         } catch {
-          if (attempt < 2) await new Promise(r => setTimeout(r, 300))
+          if (attempt < 5) await new Promise(r => setTimeout(r, 500))
         }
       }
 

@@ -45,6 +45,8 @@ function pushConnectionNotification(type: 'success' | 'error' | 'warning', title
 }
 
 let heartbeatFailCount = 0
+let pollReconnectTimer: ReturnType<typeof setTimeout> | null = null
+const POLL_RECONNECT_DELAY_MS = 5000
 const HEARTBEAT_FAIL_THRESHOLD = 3 // require 3 consecutive failures (30s) before declaring disconnected
 
 function startHeartbeat(connectFn: () => Promise<boolean>) {
@@ -209,9 +211,18 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     // After 4 consecutive poll failures, trigger reconnection
     // (higher threshold prevents false disconnects when server is busy with large requests)
     if (failures >= 4 && get().status === 'connected') {
-      set({ status: 'error', lastError: 'Multiple API requests failed' })
+      set({ status: 'error', lastError: 'Multiple API requests failed', consecutiveFailures: 0 })
       pushConnectionNotification('error', 'Connection Unstable', 'Multiple API requests have failed. Attempting to reconnect...')
-      get().connect()
+      // Reconnect after a pause, never immediately: the health probe (GET /)
+      // can succeed while every data endpoint keeps failing (rate limited,
+      // broken endpoint), and an instant reconnect turned that into a
+      // request storm of "unstable"/"restored" cycles.
+      if (!pollReconnectTimer) {
+        pollReconnectTimer = setTimeout(() => {
+          pollReconnectTimer = null
+          get().connect()
+        }, POLL_RECONNECT_DELAY_MS)
+      }
     }
   },
 }))
