@@ -3,7 +3,7 @@
 //             search, template cards, and deploy modal
 // =============================================================================
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Rocket,
   Search,
@@ -40,6 +40,10 @@ import {
   Sparkles,
   Network,
   Shield,
+  Lock,
+  KeyRound,
+  Wand2,
+  Terminal,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
@@ -51,7 +55,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus,
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
   validateCompose,
 } from '../api/endpoints'
 import type {
@@ -65,6 +69,8 @@ import type {
   TemplateDryRunResponse,
   ContainerInfo,
   GalleryTemplate,
+  StackActivityResponse,
+  StackActivityService,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -389,6 +395,76 @@ interface DeployModalProps {
   isAdmin?: boolean
 }
 
+// Deployment progress ---------------------------------------------------------
+const SECRET_REF_ALL = /\$\{SECRETS[._]([A-Za-z_][A-Za-z0-9_]*)\}/g
+const SECRET_REF_ONE = /^\$\{SECRETS[._][A-Za-z_][A-Za-z0-9_]*\}$/
+const SECRET_NAME_OK = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
+
+const DEPLOY_STEPS = [
+  { label: 'Merged', hint: 'compose, variables, routes' },
+  { label: 'Pull', hint: 'images' },
+  { label: 'Create', hint: 'containers' },
+  { label: 'Start', hint: 'containers' },
+  { label: 'Health', hint: 'checks' },
+] as const
+
+/** Index of the step in progress for a server-reported phase */
+function stepForPhase(phase: string | undefined, services: StackActivityService[]): number {
+  switch (phase) {
+    case 'pulling': return 1
+    case 'creating': return 2
+    case 'starting': case 'stopping': case 'stopped': return 3
+    case 'healthcheck': case 'unhealthy': return 4
+    case 'running': case 'started': return 5
+    case 'exited': return 4
+    case 'failed':
+      if (services.some((s) => !s.pulled)) return 1
+      if (services.some((s) => !s.created)) return 2
+      return 3
+    default: return 1
+  }
+}
+
+function phaseLabel(phase: string | undefined): string {
+  switch (phase) {
+    case 'pulling': return 'Pulling images…'
+    case 'creating': return 'Creating containers…'
+    case 'starting': return 'Starting containers…'
+    case 'healthcheck': return 'Waiting for health checks…'
+    case 'running': return 'Running'
+    case 'failed': return 'The start did not complete'
+    case 'exited': return 'A container exited'
+    case 'unhealthy': return 'A health check is failing'
+    default: return 'Waiting for the server…'
+  }
+}
+
+/** Human state of one service during and after a deployment */
+function serviceChip(svc: StackActivityService): { text: string; cls: string; busy: boolean } {
+  if (svc.state === 'running') {
+    if (svc.health === 'starting') return { text: 'starting · health', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20', busy: true }
+    if (svc.health === 'unhealthy') return { text: 'unhealthy', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/20', busy: false }
+    if (svc.health === 'healthy') return { text: 'healthy', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20', busy: false }
+    return { text: 'running', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20', busy: false }
+  }
+  if (svc.state === 'exited' || svc.state === 'dead') return { text: 'exited', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/20', busy: false }
+  if (svc.state === 'restarting') return { text: 'restarting', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/20', busy: true }
+  if (svc.state === 'created') return { text: 'created', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20', busy: true }
+  if (!svc.pulled) return { text: 'pulling image', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20', busy: true }
+  return { text: 'creating', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20', busy: true }
+}
+
+function generateSecretValue(length = 32): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+  const bytes = new Uint8Array(length)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
+}
+
+function isSensitiveVariable(v: { name: string; type?: string }): boolean {
+  return v.type === 'password' || /(PASS|SECRET|TOKEN|_KEY$|API_KEY|PRIVATE)/i.test(v.name)
+}
+
 function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy, isAdmin = true }: DeployModalProps) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const defaultStack = template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
@@ -409,11 +485,23 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [dropdownOpen, setDropdownOpen] = useState(false)
   // F4: Local deploying state (stays true through wait period, unlike parent prop)
   const [localDeploying, setLocalDeploying] = useState(false)
-  const [deployStep, setDeployStep] = useState(0)
   // F4: Success result
   const [deployResult, setDeployResult] = useState<TemplateDeployResponse | null>(null)
   // F4: Undeploy loading
   const [undeploying, setUndeploying] = useState(false)
+  const { addToast } = useToast()
+  // Real progress of the background start (GET /stacks/{stack}/activity)
+  const [activity, setActivity] = useState<StackActivityResponse | null>(null)
+  const [activityError, setActivityError] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<'pending' | 'running' | 'failed' | 'not-started'>('pending')
+  const [autoOpenIn, setAutoOpenIn] = useState<number | null>(null)
+  const [showOutput, setShowOutput] = useState(true)
+  const outputRef = useRef<HTMLPreElement>(null)
+  // Secrets: what the template or a typed value references, and what exists
+  const [existingSecrets, setExistingSecrets] = useState<Set<string> | null>(null)
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({})
+  const [creatingSecret, setCreatingSecret] = useState<string | null>(null)
+  const [storeAsSecret, setStoreAsSecret] = useState<Set<string>>(new Set())
   // F5: Dry-run state
   const [dryRunResult, setDryRunResult] = useState<TemplateDryRunResponse | null>(null)
   const [dryRunLoading, setDryRunLoading] = useState(false)
@@ -525,6 +613,126 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     setVariables((prev) => ({ ...prev, [name]: value }))
   }, [])
 
+  // Known secret names (admins only — the list never contains values)
+  useEffect(() => {
+    if (!isAdmin) { setExistingSecrets(new Set()); return }
+    fetchSecrets()
+      .then((res) => setExistingSecrets(new Set(res.secrets.map((e) => e.key))))
+      .catch(() => setExistingSecrets(new Set()))
+  }, [isAdmin])
+
+  // Password-type variables go to the secret store by default
+  useEffect(() => {
+    const vars = detail?.template.variables ?? []
+    setStoreAsSecret(new Set(vars.filter((v) => v.type === 'password').map((v) => v.name)))
+  }, [detail])
+
+  // Every ${SECRETS_NAME} the deployment will need: template files + typed values + lock toggles
+  const requiredSecrets = useMemo(() => {
+    const names = new Set<string>()
+    for (const s of detail?.secrets ?? []) names.add(s.name)
+    for (const value of Object.values(variables)) {
+      for (const m of String(value ?? '').matchAll(SECRET_REF_ALL)) names.add(m[1])
+    }
+    return Array.from(names).sort()
+  }, [detail, variables])
+  const willCreateSecrets = useMemo(() => {
+    const out = new Set<string>()
+    for (const name of storeAsSecret) if ((variables[name] ?? '').trim() && !SECRET_REF_ONE.test(variables[name].trim())) out.add(name)
+    return out
+  }, [storeAsSecret, variables])
+  const missingSecrets = useMemo(
+    () => requiredSecrets.filter((n) => !(existingSecrets?.has(n) ?? true) && !willCreateSecrets.has(n)),
+    [requiredSecrets, existingSecrets, willCreateSecrets],
+  )
+
+  const handleCreateSecret = useCallback(async (name: string) => {
+    const value = (secretDrafts[name] ?? '').trim()
+    if (!value) { addToast({ type: 'warning', message: `Enter or generate a value for ${name} first` }); return }
+    setCreatingSecret(name)
+    try {
+      await setSecret(name, value)
+      setExistingSecrets((prev) => new Set([...(prev ?? []), name]))
+      setSecretDrafts((prev) => { const next = { ...prev }; delete next[name]; return next })
+      addToast({ type: 'success', message: `Secret ${name} stored — referenced as \${SECRETS_${name}}` })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `Could not store ${name}` })
+    } finally {
+      setCreatingSecret(null)
+    }
+  }, [secretDrafts, addToast])
+
+  // Poll the stack's activity while the background start runs
+  useEffect(() => {
+    if (!deployResult || outcome !== 'pending') return
+    const stack = deployResult.target_stack
+    const startedAt = Date.now()
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let firstError: number | null = null
+    const tick = async () => {
+      try {
+        const a = await fetchStackActivity(stack)
+        if (cancelled) return
+        setActivity(a)
+        setActivityError(null)
+        if (a.phase === 'running') { setOutcome('running'); return }
+        if (a.phase === 'failed' || a.phase === 'exited' || a.phase === 'unhealthy') { setOutcome('failed'); return }
+        if (a.phase === 'healthcheck' && a.finished_at && Date.now() - new Date(a.finished_at).getTime() > 90_000) { setOutcome('running'); return }
+        if (!a.active && a.phase === 'started') { setOutcome('running'); return }
+        if (!a.active && a.phase === 'idle' && Date.now() - startedAt > 20_000) { setOutcome('running'); return }
+      } catch (err) {
+        if (cancelled) return
+        firstError ??= Date.now()
+        setActivityError(err instanceof Error ? err.message : 'Progress unavailable')
+        // A server without the activity endpoint: fall back to the old optimistic behaviour
+        if (Date.now() - firstError > 20_000) { setOutcome('running'); return }
+      }
+      if (Date.now() - startedAt > 15 * 60_000) {
+        setActivityError('Still not finished after 15 minutes — the start continues in the background')
+        setOutcome('failed')
+        return
+      }
+      if (!cancelled) timer = setTimeout(tick, 1500)
+    }
+    timer = setTimeout(tick, 400)
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [deployResult, outcome])
+
+  // Keep the compose output scrolled to its end
+  useEffect(() => {
+    const el = outputRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [activity?.output.length, showOutput])
+
+  // Open the container page once everything runs — with a way to stay
+  const firstContainer = activity?.services[0]?.container || (deployResult?.services_added?.[0] ? deployResult.containers?.[deployResult.services_added[0]] || deployResult.services_added[0] : '')
+  const openContainers = useCallback(() => {
+    onClose()
+    setCurrentPage('containers', firstContainer ? { focusContainer: firstContainer } : {})
+  }, [onClose, setCurrentPage, firstContainer])
+  useEffect(() => {
+    if (outcome === 'running' && deployResult) setAutoOpenIn(4)
+  }, [outcome, deployResult])
+  useEffect(() => {
+    if (autoOpenIn === null) return
+    if (autoOpenIn <= 0) { openContainers(); return }
+    const t = setTimeout(() => setAutoOpenIn((v) => (v === null ? null : v - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [autoOpenIn, openContainers])
+
+  const handleStartNow = useCallback(async () => {
+    if (!deployResult) return
+    try {
+      await startStack(deployResult.target_stack)
+      setActivity(null)
+      setShowOutput(true)
+      setOutcome('pending')
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not start the stack' })
+    }
+  }, [deployResult, addToast])
+
   const canDeploy = targetStack.length > 0 && !deploying && !detailLoading
 
   // F2: Resolve selected stack info
@@ -561,31 +769,40 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       return
     }
     setLocalDeploying(true)
-    setDeployStep(1) // Merging compose
+    setActivity(null)
+    setActivityError(null)
+    setAutoOpenIn(null)
+    // Values marked "store as secret" go to the encrypted store first; the
+    // deployment then only ever sees the ${SECRETS_NAME} reference
+    const varsToSend: Record<string, string> = { ...variables }
+    for (const name of storeAsSecret) {
+      const val = (variables[name] ?? '').trim()
+      if (!val || SECRET_REF_ONE.test(val) || !SECRET_NAME_OK.test(name)) continue
+      try {
+        await setSecret(name, val)
+        varsToSend[name] = `\${SECRETS_${name}}`
+        setExistingSecrets((prev) => new Set([...(prev ?? []), name]))
+      } catch (err) {
+        addToast({ type: 'error', message: `Could not store ${name} as a secret: ${err instanceof Error ? err.message : 'request failed'}` })
+        setLocalDeploying(false)
+        return
+      }
+    }
     const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
     const routes = traefikActive && enableRouting && Object.keys(customRoutes).length > 0 ? customRoutes : undefined
-    await new Promise((r) => setTimeout(r, 400))
-    setDeployStep(2) // Sending to server
     const proxyFlag = traefikActive && connectProxy ? true : undefined
     const resLimits = enableResourceLimits && (memLimit || cpuLimit)
       ? { mem_limit: memLimit || undefined, cpus: cpuLimit ? Number(cpuLimit) : undefined }
       : undefined
     const homarrFlag = homarrActive && addToHomarr ? true : undefined
-    const result = await onDeploy(targetStack, variables, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag)
+    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag)
     if (result) {
-      if (autoStart && result.started) {
-        setDeployStep(3) // Pulling images
-        await new Promise((r) => setTimeout(r, 1500))
-        setDeployStep(4) // Starting containers
-        await new Promise((r) => setTimeout(r, 2000))
-        setDeployStep(5) // Verifying health
-        await new Promise((r) => setTimeout(r, 1000))
-      }
       setDeployResult(result)
+      setOutcome(result.started ? 'pending' : 'not-started')
+      setShowOutput(true)
     }
-    setDeployStep(0)
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, customRoutes, connectProxy])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -620,6 +837,112 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     }
   }, [template.name, targetStack, variables, excludedServices])
 
+  const headerTone = deployResult
+    ? (outcome === 'running' ? 'ok' : outcome === 'failed' ? 'bad' : outcome === 'not-started' ? 'held' : 'busy')
+    : localDeploying ? 'busy' : 'idle'
+  const headerTitle = deployResult
+    ? (outcome === 'running' ? 'Deployed and running' : outcome === 'failed' ? 'Deployment needs attention' : outcome === 'not-started' ? 'Merged — not started' : `Deploying ${template.name}`)
+    : localDeploying ? `Preparing ${template.name}` : `Deploy: ${template.name}`
+  const headerSub = deployResult
+    ? (outcome === 'pending'
+      ? `${phaseLabel(activity?.phase)}${activity?.elapsed_s ? ` · ${activity.elapsed_s}s` : ''}`
+      : `${deployResult.services_added?.length ?? 0} service${(deployResult.services_added?.length ?? 0) === 1 ? '' : 's'} in ${deployResult.target_stack}`)
+    : localDeploying ? 'Checking conflicts, merging the compose file, writing variables and routes' : template.description
+  const progressServices: StackActivityService[] = activity?.services?.length
+    ? activity.services
+    : (deployResult?.services_added ?? []).map((svc) => ({ service: svc, container: deployResult?.containers?.[svc] ?? svc, image: '', state: 'missing', health: 'none', pulled: false, created: false, started: false }))
+  const currentStep = stepForPhase(activity?.phase, progressServices)
+
+  const renderSecretsPanel = () => requiredSecrets.length === 0 ? null : (
+    <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <KeyRound size={13} className="text-violet-300 shrink-0" />
+        <p className="text-xs font-semibold text-violet-200">Secrets this deployment uses</p>
+        <span className="ml-auto text-[10px] text-slate-500">
+          {existingSecrets === null ? 'checking…' : missingSecrets.length === 0 ? 'all available' : `${missingSecrets.length} missing`}
+        </span>
+      </div>
+      {requiredSecrets.map((name) => {
+        const exists = existingSecrets?.has(name) ?? false
+        const willCreate = willCreateSecrets.has(name)
+        return (
+          <div key={name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[11px] text-slate-200">{name}</span>
+            {exists ? (
+              <span className="text-[9px] px-1.5 py-px rounded bg-emerald-500/10 text-emerald-300">stored</span>
+            ) : willCreate ? (
+              <span className="text-[9px] px-1.5 py-px rounded bg-cyan-500/10 text-cyan-300">stored when you deploy</span>
+            ) : (
+              <>
+                <span className="text-[9px] px-1.5 py-px rounded bg-amber-500/10 text-amber-300">missing</span>
+                <input
+                  type="password"
+                  value={secretDrafts[name] ?? ''}
+                  onChange={(e) => setSecretDrafts((prev) => ({ ...prev, [name]: e.target.value }))}
+                  placeholder="value"
+                  className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                />
+                <button type="button" onClick={() => setSecretDrafts((prev) => ({ ...prev, [name]: generateSecretValue() }))} className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10" title="Generate a random 32-character value">
+                  <Wand2 size={11} /> Generate
+                </button>
+                <button type="button" onClick={() => void handleCreateSecret(name)} disabled={creatingSecret === name || !isAdmin} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-violet-500/15 text-violet-200 border border-violet-500/25 hover:bg-violet-500/25 disabled:opacity-50">
+                  {creatingSecret === name ? <Loader2 size={11} className="animate-spin" /> : <Lock size={11} />} Store
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })}
+      <p className="text-[10px] text-slate-500">
+        Values live only in the encrypted secret store; the compose and .env files keep the {'${SECRETS_NAME}'} reference and DCS fills it in when the stack starts.
+      </p>
+    </div>
+  )
+
+  const renderOutputPanel = (defaultOpen: boolean) => (
+    <div className="rounded-xl border border-white/5 bg-slate-950/70 overflow-hidden">
+      <button type="button" onClick={() => setShowOutput((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors">
+        <span className="flex items-center gap-1.5"><Terminal size={11} /> Compose output</span>
+        <span>{activity?.output?.length ?? 0} lines · {(showOutput ?? defaultOpen) ? 'hide' : 'show'}</span>
+      </button>
+      {showOutput && (
+        <pre ref={outputRef} className="px-3 pb-3 text-[10px] font-mono text-slate-400 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-all">
+          {(activity?.output ?? []).join('\n') || (activityError ? activityError : 'Waiting for output…')}
+        </pre>
+      )}
+    </div>
+  )
+
+  const renderServiceRows = () => (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] divide-y divide-white/[0.04]">
+      {progressServices.map((svc) => {
+        const chip = serviceChip(svc)
+        return (
+          <div key={svc.service} className="flex items-center gap-3 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-slate-200 truncate">
+                {svc.service}
+                {svc.container && svc.container !== svc.service && <span className="text-slate-500 font-mono text-[10px]"> → {svc.container}</span>}
+              </p>
+              {svc.image && <p className="text-[10px] text-slate-500 font-mono truncate">{svc.image}</p>}
+            </div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${chip.cls}`}>
+              {chip.busy && <Loader2 size={9} className="animate-spin" />}
+              {chip.text}
+            </span>
+          </div>
+        )
+      })}
+      {progressServices.some((s) => s.detail && (s.health === 'unhealthy' || s.state === 'exited' || s.state === 'dead')) && (
+        <div className="px-3 py-2 space-y-1">
+          {progressServices.filter((s) => s.detail && (s.health === 'unhealthy' || s.state === 'exited' || s.state === 'dead')).map((s) => (
+            <p key={`${s.service}-detail`} className="text-[10px] font-mono text-rose-300/80 whitespace-pre-wrap break-all"><span className="text-slate-500">{s.service}: </span>{s.detail}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       {/* Backdrop click to close */}
@@ -630,16 +953,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         {/* Header */}
         <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${deployResult ? 'bg-emerald-500/20 border border-emerald-500/30' : localDeploying ? 'bg-cyan-500/20 border border-cyan-500/30' : 'bg-emerald-500/15 border border-emerald-500/20'}`}>
-              {deployResult ? <CheckCircle size={16} className="text-emerald-400" /> : localDeploying ? <Loader2 size={16} className="text-cyan-400 animate-spin" /> : <Rocket size={16} className="text-emerald-400" />}
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+              headerTone === 'ok' ? 'bg-emerald-500/20 border-emerald-500/30'
+              : headerTone === 'bad' ? 'bg-rose-500/15 border-rose-500/25'
+              : headerTone === 'held' ? 'bg-amber-500/15 border-amber-500/25'
+              : headerTone === 'busy' ? 'bg-cyan-500/20 border-cyan-500/30'
+              : 'bg-emerald-500/15 border-emerald-500/20'}`}>
+              {headerTone === 'ok' ? <CheckCircle size={16} className="text-emerald-400" />
+                : headerTone === 'bad' ? <AlertTriangle size={16} className="text-rose-400" />
+                : headerTone === 'held' ? <AlertTriangle size={16} className="text-amber-400" />
+                : headerTone === 'busy' ? <Loader2 size={16} className="text-cyan-400 animate-spin" />
+                : <Rocket size={16} className="text-emerald-400" />}
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-slate-200 truncate">
-                {deployResult ? 'Deploy Successful' : localDeploying ? 'Deploying...' : `Deploy: ${template.name}`}
-              </h3>
-              <p className="text-[11px] text-slate-500 truncate">
-                {deployResult ? `Merged into ${deployResult.target_stack}` : localDeploying ? 'Creating and starting containers' : template.description}
-              </p>
+              <h3 className="text-sm font-semibold text-slate-200 truncate">{headerTitle}</h3>
+              <p className="text-[11px] text-slate-500 truncate">{headerSub}</p>
             </div>
           </div>
           <button
@@ -650,112 +978,113 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           </button>
         </div>
 
-        {/* Deploying progress state */}
+        {/* Preparing: the deploy request itself (merge, routes, DNS) */}
         {localDeploying && !deployResult ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 gap-5 animate-fade-in">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                <Loader2 size={32} className="text-cyan-400 animate-spin" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center animate-pulse">
-                <Package size={10} className="text-emerald-400" />
-              </div>
+          <div className="flex-1 flex flex-col items-center justify-center py-14 gap-4 animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+              <Loader2 size={28} className="text-cyan-400 animate-spin" />
             </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-slate-200">Deploying {template.name}</p>
-              <p className="text-xs text-slate-400 mt-1">into {targetStack}</p>
-            </div>
-            {/* Step progress */}
-            <div className="w-full max-w-xs space-y-2">
-              {[
-                { step: 1, label: 'Merging compose file' },
-                { step: 2, label: 'Sending to server' },
-                ...(autoStart ? [
-                  { step: 3, label: 'Pulling image & creating container' },
-                  { step: 4, label: 'Starting container' },
-                  { step: 5, label: 'Verifying health' },
-                ] : []),
-              ].map(({ step, label }) => {
-                const isActive = deployStep === step
-                const isDone = deployStep > step
-                return (
-                  <div key={step} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-cyan-500/10 border border-cyan-500/15' : isDone ? 'bg-emerald-500/5' : 'opacity-40'}`}>
-                    <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                      {isDone ? (
-                        <CheckCircle size={14} className="text-emerald-400" />
-                      ) : isActive ? (
-                        <Loader2 size={14} className="text-cyan-400 animate-spin" />
-                      ) : (
-                        <div className="w-2 h-2 rounded-full bg-slate-600" />
-                      )}
-                    </div>
-                    <span className={`text-xs ${isActive ? 'text-cyan-300 font-medium' : isDone ? 'text-emerald-400' : 'text-slate-500'}`}>{label}</span>
-                  </div>
-                )
-              })}
+            <div className="text-center max-w-sm">
+              <p className="text-sm font-semibold text-slate-200">Preparing {template.name}</p>
+              <p className="text-xs text-slate-400 mt-1">Checking conflicts, merging the compose file, writing variables and routes into {targetStack}</p>
             </div>
           </div>
-        ) : deployResult ? (
+        ) : deployResult && outcome === 'pending' ? (
           <>
-            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
-              <div className="flex flex-col items-center text-center py-4 gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
-                  <CheckCircle size={28} className="text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">
-                    Successfully merged {deployResult.services_added?.length || 0} service{(deployResult.services_added?.length || 0) !== 1 ? 's' : ''} into <span className="font-mono text-emerald-400">{deployResult.target_stack}</span>
-                  </p>
-                  {deployResult.started && (
-                    <p className="text-xs text-slate-400 mt-1">Stack restarted with new services</p>
-                  )}
-                </div>
-                {deployResult.services_added && deployResult.services_added.length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-1.5 mt-1">
-                    {deployResult.services_added.map((svc) => (
-                      <span key={svc} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
-                        {svc}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {deployResult.backup_file && (
-                  <p className="text-[10px] text-slate-500 mt-2">
-                    Backup: <span className="font-mono">{deployResult.backup_file}</span>
-                  </p>
-                )}
+            {/* Live progress from GET /stacks/{stack}/activity */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin animate-fade-in">
+              <div className="grid grid-cols-5 gap-1.5">
+                {DEPLOY_STEPS.map((st, i) => {
+                  const done = i < currentStep
+                  const active = i === currentStep
+                  return (
+                    <div key={st.label} className={`rounded-lg px-2 py-2 text-center border transition-all duration-300 ${done ? 'bg-emerald-500/10 border-emerald-500/20' : active ? 'bg-cyan-500/10 border-cyan-500/25' : 'bg-white/[0.02] border-white/5'}`}>
+                      <div className="flex items-center justify-center h-4">
+                        {done ? <CheckCircle size={13} className="text-emerald-400" /> : active ? <Loader2 size={13} className="text-cyan-400 animate-spin" /> : <Circle size={10} className="text-slate-600" />}
+                      </div>
+                      <p className={`text-[11px] font-medium mt-1 ${done ? 'text-emerald-300' : active ? 'text-cyan-200' : 'text-slate-500'}`}>{st.label}</p>
+                      <p className="text-[9px] text-slate-600 truncate">{st.hint}</p>
+                    </div>
+                  )
+                })}
+              </div>
+              {renderServiceRows()}
+              {renderOutputPanel(true)}
+              {activityError && <p className="text-[10px] text-amber-400/80">{activityError}</p>}
+            </div>
+            <div className="flex items-center justify-between gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
+              <p className="text-[10px] text-slate-500">Closing this window does not stop the deployment.</p>
+              <div className="flex items-center gap-2">
+                <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">Continue in background</button>
+                <button onClick={handleViewStack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 transition-colors">
+                  View Stack <ArrowRight size={13} />
+                </button>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
-                Done
-              </button>
+          </>
+        ) : deployResult ? (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin animate-fade-in">
+              {outcome === 'running' && (
+                <div className="flex flex-col items-center text-center py-3 gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                    <CheckCircle size={28} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">
+                      {deployResult.services_added?.length || 0} service{(deployResult.services_added?.length || 0) !== 1 ? 's' : ''} running in <span className="font-mono text-emerald-400">{deployResult.target_stack}</span>
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">Containers are created and started{progressServices.some((s) => s.health === 'healthy') ? ', health checks pass' : ''}.</p>
+                  </div>
+                  {autoOpenIn !== null && (
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <Loader2 size={12} className="animate-spin text-cyan-400" />
+                      Opening the container page in {autoOpenIn}s
+                      <button onClick={() => setAutoOpenIn(null)} className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">Stay here</button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {outcome === 'failed' && (
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] p-3">
+                  <p className="text-xs font-semibold text-rose-300 flex items-center gap-2"><AlertTriangle size={13} /> {phaseLabel(activity?.phase)}</p>
+                  <p className="text-[11px] text-rose-200/80 mt-1 break-words">{activity?.error || activityError || 'Compose reported a problem while starting the services. The output below has the details; the compose file was merged and can be edited on the Stacks page.'}</p>
+                </div>
+              )}
+              {outcome === 'not-started' && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3">
+                  <p className="text-xs font-semibold text-amber-300 flex items-center gap-2"><AlertTriangle size={13} /> Merged into {deployResult.target_stack}, containers not started</p>
+                  <p className="text-[11px] text-amber-200/80 mt-1">{deployResult.warning || 'Auto-start was off. Start the stack when you are ready.'}</p>
+                </div>
+              )}
+              {outcome === 'not-started' && renderSecretsPanel()}
+              {renderServiceRows()}
+              {deployResult.backup_file && (
+                <p className="text-[10px] text-slate-500">Previous compose file kept as <span className="font-mono">{deployResult.backup_file}</span></p>
+              )}
+              {(outcome === 'failed' || (activity?.output?.length ?? 0) > 0) && renderOutputPanel(outcome === 'failed')}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
+              <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">Done</button>
               {isAdmin && onUndeploy && (
-                <button
-                  onClick={handleUndoDeploy}
-                  disabled={undeploying}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all duration-200 disabled:opacity-50 press"
-                >
+                <button onClick={handleUndoDeploy} disabled={undeploying} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors disabled:opacity-50">
                   {undeploying ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
                   Undo Deploy
                 </button>
               )}
-              {deployResult.services_added?.length === 1 && (
-                <button
-                  onClick={() => { onClose(); setCurrentPage('containers', { focusContainer: deployResult.services_added![0] }) }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all duration-200 press"
-                >
-                  <Package size={13} />
-                  View Container
+              {isAdmin && outcome !== 'running' && (
+                <button onClick={handleStartNow} disabled={outcome === 'not-started' && missingSecrets.length > 0} title={outcome === 'not-started' && missingSecrets.length > 0 ? 'Store the missing secrets first' : 'Run the stack start again'} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors disabled:opacity-50">
+                  <Play size={13} />
+                  {outcome === 'failed' ? 'Retry start' : 'Start now'}
                 </button>
               )}
-              <button
-                onClick={handleViewStack}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-              >
+              {outcome === 'running' && (
+                <button onClick={openContainers} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors">
+                  <Package size={13} />
+                  View Container{(deployResult.services_added?.length ?? 0) > 1 ? 's' : ''}
+                </button>
+              )}
+              <button onClick={handleViewStack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
                 View Stack
                 <ArrowRight size={13} />
               </button>
@@ -927,13 +1256,28 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                               )}
                             </div>
                             {v.description && <p className="text-[10px] text-slate-500 mb-1">{v.description}</p>}
-                            <input
-                              type={v.type === 'password' ? 'password' : 'text'}
-                              value={value}
-                              onChange={(e) => handleVariableChange(v.name, e.target.value)}
-                              placeholder={v.defaultValue || v.name}
-                              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
-                            />
+                            <div className="relative">
+                              <input
+                                type={v.type === 'password' ? 'password' : 'text'}
+                                value={value}
+                                onChange={(e) => handleVariableChange(v.name, e.target.value)}
+                                placeholder={v.defaultValue || v.name}
+                                className={`w-full px-3 py-2 rounded-lg bg-white/5 border text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 transition-all ${storeAsSecret.has(v.name) ? 'border-violet-500/30 focus:border-violet-500/50 focus:ring-violet-500/20 pr-10' : 'border-white/5 focus:border-emerald-500/40 focus:ring-emerald-500/20'} ${isSensitiveVariable(v) ? 'pr-10' : ''}`}
+                              />
+                              {isSensitiveVariable(v) && isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => setStoreAsSecret((prev) => { const next = new Set(prev); if (next.has(v.name)) next.delete(v.name); else next.add(v.name); return next })}
+                                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${storeAsSecret.has(v.name) ? 'text-violet-300 bg-violet-500/15' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+                                  title={storeAsSecret.has(v.name) ? `Stored in the secret store as ${v.name}; the stack .env keeps only \${SECRETS_${v.name}}. Click to write the value into .env instead.` : `Store this value in the encrypted secret store as ${v.name} instead of the .env file`}
+                                >
+                                  <Lock size={12} />
+                                </button>
+                              )}
+                            </div>
+                            {storeAsSecret.has(v.name) && (value ?? '').trim() && !SECRET_REF_ONE.test((value ?? '').trim()) && (
+                              <p className="text-[10px] text-violet-300/70 mt-1">Saved as secret <span className="font-mono">{v.name}</span> when you deploy — the stack&apos;s .env will reference it</p>
+                            )}
                           </div>
                         )
                       })}
@@ -942,11 +1286,17 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 ) : null
               })()}
 
+              {renderSecretsPanel()}
+
               {/* Auto-start toggle */}
               <div className="flex items-center justify-between py-2">
                 <div>
                   <p className="text-xs font-medium text-slate-300">Auto-start after deploy</p>
-                  <p className="text-[11px] text-slate-500">Automatically start the stack after creation</p>
+                  <p className="text-[11px] text-slate-500">
+                    {autoStart && missingSecrets.length > 0
+                      ? `Held until ${missingSecrets.join(', ')} exist${missingSecrets.length === 1 ? 's' : ''} — store them above or turn this off`
+                      : 'Pull the images, create and start the containers right away'}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -1491,7 +1841,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {isAdmin && (
                 <button
                   onClick={handleDeployClick}
-                  disabled={!canDeploy}
+                  disabled={!canDeploy || (autoStart && missingSecrets.length > 0)}
+                  title={autoStart && missingSecrets.length > 0 ? `Store ${missingSecrets.join(', ')} first, or turn auto-start off` : undefined}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
                     confirming
                       ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'

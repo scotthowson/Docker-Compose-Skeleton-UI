@@ -68,6 +68,7 @@ import type {
   ImageDeleteResponse,
   ContainerRenameResponse,
   StackServicesResponse,
+  StackActivityResponse,
   SystemMetricsResponse,
   TerminalAuthResponse,
   TerminalAuthVerifyResponse,
@@ -781,6 +782,11 @@ export function renameContainer(name: string, newName: string): Promise<Containe
 }
 
 /** GET /stacks/:name/services — Per-service status within a stack */
+/** GET /stacks/:stack/activity — Progress of the background action on a stack (deploy, start, stop) */
+export function fetchStackActivity(name: string): Promise<StackActivityResponse> {
+  return apiClient.get<StackActivityResponse>(`/stacks/${encodeURIComponent(name)}/activity`)
+}
+
 export function fetchStackServices(name: string): Promise<StackServicesResponse> {
   return apiClient.get<StackServicesResponse>(
     `/stacks/${encodeURIComponent(name)}/services`,

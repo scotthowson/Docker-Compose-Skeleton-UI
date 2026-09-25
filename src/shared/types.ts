@@ -1456,6 +1456,8 @@ export interface TemplateDetailResponse {
   template: TemplateInfo
   compose: string
   env?: string
+  /** ${SECRETS_NAME} placeholders the template uses and whether each secret exists */
+  secrets?: { name: string; exists: boolean }[]
 }
 
 export interface TemplateUpdateResponse {
@@ -1477,6 +1479,46 @@ export interface TemplateDeployResponse {
   started: boolean
   message: string
   backup_file?: string
+  /** Why auto-start was held back (for example missing secrets) */
+  warning?: string
+  /** service → container name for the added services */
+  containers?: Record<string, string>
+  /** Set when the start runs in the background: poll GET /stacks/{stack}/activity */
+  activity_id?: string
+}
+
+// GET /stacks/:stack/activity — progress of a background action on a stack
+export type StackActivityPhase =
+  | 'idle' | 'pulling' | 'creating' | 'starting' | 'stopping'
+  | 'healthcheck' | 'running' | 'started' | 'stopped' | 'exited' | 'unhealthy' | 'failed'
+
+export interface StackActivityService {
+  service: string
+  container: string
+  image: string
+  state: 'missing' | 'created' | 'running' | 'restarting' | 'exited' | 'dead' | 'paused' | string
+  health: 'none' | 'starting' | 'healthy' | 'unhealthy' | string
+  pulled: boolean
+  created: boolean
+  started: boolean
+  /** The container's own explanation when it is not fine: last health-check output or last log lines */
+  detail?: string
+}
+
+export interface StackActivityResponse {
+  stack: string
+  active: boolean
+  id: string | null
+  action: 'deploy' | 'start' | 'stop' | 'restart' | null
+  template: string | null
+  phase: StackActivityPhase
+  started_at: string | null
+  finished_at: string | null
+  success: boolean | null
+  elapsed_s: number
+  services: StackActivityService[]
+  output: string[]
+  error: string
 }
 
 export interface TemplateImportResponse {
