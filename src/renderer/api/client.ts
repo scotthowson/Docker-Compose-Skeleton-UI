@@ -200,9 +200,11 @@ export class ApiClient {
       try {
         const response = await fetch(url, {
           method: 'GET',
+          headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
-        return response.ok
+        // The dashboard's own HTML answers 200 too; only the API speaks JSON
+        return response.ok && (response.headers.get('content-type') || '').includes('json')
       } catch {
         return false
       } finally {

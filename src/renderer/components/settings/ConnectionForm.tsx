@@ -6,7 +6,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { Link2, Check, X, Loader2, Save } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { apiClient } from '../../api/client'
+import { discoverServer, type DiscoveredServer } from '../../lib/discover'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'failed'
 
@@ -27,6 +27,7 @@ export default function ConnectionForm() {
   const [urlInput, setUrlInput] = useState(serverUrl)
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [dirty, setDirty] = useState(false)
+  const [resolved, setResolved] = useState<DiscoveredServer | null>(null)
 
   // Sync when server URL changes externally (e.g. server switch via ServerSwitcher)
   useEffect(() => {
@@ -46,21 +47,21 @@ export default function ConnectionForm() {
 
   const handleTest = useCallback(async () => {
     setTestStatus('testing')
-
-    const prevUrl = apiClient.getBaseUrl()
-    apiClient.setBaseUrl(urlInput)
-
-    try {
-      const ok = await apiClient.testConnection()
-      setTestStatus(ok ? 'success' : 'failed')
-    } catch {
+    setResolved(null)
+    // Discovery accepts the dashboard hostname, a LAN address or the API port
+    // and returns the URL that really answers (direct or via the /api proxy)
+    const found = await discoverServer(urlInput)
+    if (!found) {
       setTestStatus('failed')
+      return
     }
-
-    if (dirty) {
-      apiClient.setBaseUrl(prevUrl)
+    setResolved(found)
+    if (found.url !== urlInput) {
+      setUrlInput(found.url)
+      setDirty(found.url !== serverUrl)
     }
-  }, [urlInput, dirty])
+    setTestStatus('success')
+  }, [urlInput, serverUrl])
 
   const handleSave = useCallback(() => {
     setServerUrl(urlInput)
@@ -88,11 +89,12 @@ export default function ConnectionForm() {
           {connectionStatus}
         </span>
         <input
-          type="url"
+          type="text"
+          inputMode="url"
           value={urlInput}
           onChange={handleUrlChange}
           onKeyDown={handleKeyDown}
-          placeholder="http://127.0.0.1:9876"
+          placeholder="192.168.1.10:9876 or https://ui.example.com"
           className="
             flex-1 rounded-lg px-3 py-1.5
             text-xs text-slate-200 placeholder-slate-600 font-mono
@@ -111,10 +113,12 @@ export default function ConnectionForm() {
       {/* Test result — fixed height */}
       <div className="h-3.5">
         {testStatus === 'success' && (
-          <p className="text-[10px] text-emerald-400 animate-fade-in">Connection successful</p>
+          <p className="text-[10px] text-emerald-400 animate-fade-in">
+            Reachable {resolved?.via === 'proxy' ? 'through the dashboard proxy' : 'on the API port'}{resolved?.version ? ` · API ${resolved.version}` : ''}{dirty ? ' — save to use this address' : ''}
+          </p>
         )}
         {testStatus === 'failed' && (
-          <p className="text-[10px] text-rose-400 animate-fade-in">Failed — check URL and server status</p>
+          <p className="text-[10px] text-rose-400 animate-fade-in">Unreachable — tried as typed, with /api and on port 9876</p>
         )}
       </div>
 

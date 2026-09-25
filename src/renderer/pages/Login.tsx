@@ -14,6 +14,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
 import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus, totpValidate } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
+import { discoverServer } from '../lib/discover'
 
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0
@@ -69,6 +70,7 @@ export default function Login() {
     return false
   })
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+  const [connDetail, setConnDetail] = useState('')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // When we already have a configured server URL (e.g. returning from logout),
   // start optimistically: skip the loading spinner and show the login form
@@ -89,12 +91,6 @@ export default function Login() {
   })()
 
   // Normalize URL: ensure it has a protocol prefix
-  const normalizeUrl = (url: string): string => {
-    let u = url.trim()
-    if (!u) return u
-    if (!/^https?:\/\//i.test(u)) u = `http://${u}`
-    return u.replace(/\/+$/, '')
-  }
 
   // Combined connection test + setup detection in ONE call.
   // In Electron: uses checkServer IPC which runs Node.js http.get in the main
@@ -112,8 +108,8 @@ export default function Login() {
   }, [])
 
   const checkServer = useCallback(async (rawUrl: string, isInitial = false) => {
-    const url = normalizeUrl(rawUrl)
-    if (!url) { setConnStatus('idle'); setConnected(false); setServerInitialized(false); setInitialChecking(false); return }
+    const typed = rawUrl.trim()
+    if (!typed) { setConnStatus('idle'); setConnected(false); setServerInitialized(false); setInitialChecking(false); return }
 
     // Only reset state on explicit URL changes — not during
     // background re-checks after logout (prevents login form flash)
@@ -122,104 +118,46 @@ export default function Login() {
       setConnected(false)
       setServerInitialized(false)
     }
+    setConnDetail('')
     try {
-      if (window.electronAPI?.checkServer) {
-        // ── Electron path: single IPC call, Node.js http in main process ──
-        const res = await window.electronAPI.checkServer(url)
-        if (!res.reachable) {
-          // Server unreachable — only disrupt the UI on user-initiated checks.
-          // During background initial checks, keep the optimistic state so the
-          // login form doesn't flash back to the connection form.
-          if (!isInitial) {
-            setConnected(false)
-            setServerInitialized(false)
-          }
-          setConnStatus(isInitial ? 'idle' : 'fail')
-          setInitialChecking(false)
-          return
+      // One discovery pass covers every way the address can be written: the
+      // API port directly, the dashboard's /api proxy behind Traefik, http or
+      // https, with or without a scheme — the same in Electron, the Android
+      // app and the browser.
+      const found = await discoverServer(typed)
+      if (!found) {
+        if (!isInitial) {
+          setConnected(false)
+          setServerInitialized(false)
         }
-        // Server is reachable — persist URL and decide next step
-        apiClient.setBaseUrl(url)
-        setServerUrl(url)
-        useSettingsStore.getState().updateSetting('serverUrl', url)
-        syncUrlToServerStore(url)
-
-        if (!res.initialized) {
-          // Server needs first-run setup — clear stale data + redirect
-          if (window.electronAPI) {
-            await window.electronAPI.setSetting('userAccounts', undefined)
-          }
-          localStorage.removeItem('userAccounts')
-          localStorage.removeItem('auth-session')
-          localStorage.removeItem('api-auth-token')
-          apiClient.setAuthToken(null)
-          useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-          setCurrentPage('setup')
-        } else {
-          setServerInitialized(true)
-          setConnStatus('ok')
-          setConnected(true)
-        }
-      } else {
-        // ── Browser fallback: two fetch() calls ──
-        const prev = apiClient.getBaseUrl()
-        apiClient.setBaseUrl(url)
-        try {
-          const ok = await apiClient.testConnection()
-          if (!ok) {
-            if (!isInitial) {
-              setConnected(false)
-              setServerInitialized(false)
-            }
-            setConnStatus(isInitial ? 'idle' : 'fail')
-            apiClient.setBaseUrl(prev)
-            setInitialChecking(false)
-            return
-          }
-        } catch {
-          if (!isInitial) {
-            setConnected(false)
-            setServerInitialized(false)
-          }
-          setConnStatus(isInitial ? 'idle' : 'fail')
-          apiClient.setBaseUrl(prev)
-          setInitialChecking(false)
-          return
-        }
-
-        // Check setup status before showing success
-        apiClient.setBaseUrl(url)
-        setServerUrl(url)
-        useSettingsStore.getState().updateSetting('serverUrl', url)
-        syncUrlToServerStore(url)
-        try {
-          const ctrl = new AbortController()
-          const tid = setTimeout(() => ctrl.abort(), 5000)
-          const resp = await fetch(`${url}/setup/status`, { method: 'GET', signal: ctrl.signal })
-          clearTimeout(tid)
-          if (resp.ok) {
-            const data = await resp.json()
-            if (!data.initialized) {
-              localStorage.removeItem('userAccounts')
-              localStorage.removeItem('auth-session')
-              localStorage.removeItem('api-auth-token')
-              apiClient.setAuthToken(null)
-              useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
-              setCurrentPage('setup')
-              setInitialChecking(false)
-              return
-            }
-          }
-          setServerInitialized(true)
-          setConnStatus('ok')
-          setConnected(true)
-        } catch {
-          // Setup check failed but connection was confirmed — show login
-          setServerInitialized(true)
-          setConnStatus('ok')
-          setConnected(true)
-        }
+        setConnStatus(isInitial ? 'idle' : 'fail')
+        setInitialChecking(false)
+        return
       }
+      const url = found.url
+      apiClient.setBaseUrl(url)
+      setServerUrl(url)
+      useSettingsStore.getState().updateSetting('serverUrl', url)
+      syncUrlToServerStore(url)
+      setConnDetail(`${found.via === 'proxy' ? 'through the dashboard proxy' : 'API port'} · ${url}${found.version ? ` · API ${found.version}` : ''}`)
+
+      if (found.initialized === false) {
+        // Server needs first-run setup — clear stale data + redirect
+        if (window.electronAPI) {
+          await window.electronAPI.setSetting('userAccounts', undefined)
+        }
+        localStorage.removeItem('userAccounts')
+        localStorage.removeItem('auth-session')
+        localStorage.removeItem('api-auth-token')
+        apiClient.setAuthToken(null)
+        useAuthStore.setState({ hasAccount: false, isAuthenticated: false, currentUser: null })
+        setCurrentPage('setup')
+        setInitialChecking(false)
+        return
+      }
+      setServerInitialized(true)
+      setConnStatus('ok')
+      setConnected(true)
     } catch {
       // On initial auto-check failure, keep optimistic state to prevent flash
       if (!isInitial) {
@@ -644,7 +582,7 @@ export default function Login() {
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-slate-100">Connect to Server</h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  Enter the address of your DCS API server
+                  Your dashboard address or the API server — the port and the /api path are found automatically
                 </p>
               </div>
 
@@ -659,10 +597,11 @@ export default function Login() {
                   <div className="relative">
                     <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
-                      type="url"
+                      type="text"
+                      inputMode="url"
                       value={serverUrl}
                       onChange={(e) => setServerUrlLocal(e.target.value)}
-                      placeholder={window.electronAPI ? "http://192.168.1.100:9876" : "/api"}
+                      placeholder={window.electronAPI ? "192.168.1.100:9876 or https://ui.example.com" : "/api"}
                       autoFocus
                       autoComplete="url"
                       className="
@@ -685,10 +624,10 @@ export default function Login() {
                     : connStatus === 'testing' ? 'text-cyan-400/80'
                     : 'text-slate-500'
                   }`}>
-                    {connStatus === 'ok' ? 'Connected'
-                    : connStatus === 'fail' ? 'Server unreachable — check address and ensure API is running'
+                    {connStatus === 'ok' ? `Connected${connDetail ? ` — ${connDetail}` : ''}`
+                    : connStatus === 'fail' ? 'Server unreachable — tried the address as typed, with /api and on port 9876. Behind Traefik use https://ui.yourdomain/api; on the LAN, host:9876'
                     : connStatus === 'testing' ? 'Connecting…'
-                    : 'IP address and port of your DCS API server'}
+                    : 'Dashboard address (https://ui.example.com) or the API on the LAN (192.168.1.10:9876)'}
                   </p>
                 </div>
 
