@@ -3,7 +3,7 @@
 //           charts powered by server-side metrics collection (cron snapshots)
 // =============================================================================
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   TrendingUp, Clock, Cpu, HardDrive, MemoryStick,
   RefreshCw, Loader2, Database, WifiOff, Camera,
@@ -26,14 +26,33 @@ import {
 // Types & Constants
 // ---------------------------------------------------------------------------
 
-type TimeRange = '1h' | '6h' | '24h' | '7d'
+type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d' | '90d' | '1y' | 'all'
 
 const TIME_RANGES: { id: TimeRange; label: string; shortLabel: string }[] = [
   { id: '1h', label: '1 Hour', shortLabel: '1h' },
   { id: '6h', label: '6 Hours', shortLabel: '6h' },
   { id: '24h', label: '24 Hours', shortLabel: '24h' },
   { id: '7d', label: '7 Days', shortLabel: '7d' },
+  { id: '30d', label: '30 Days', shortLabel: '30d' },
+  { id: '90d', label: '90 Days', shortLabel: '90d' },
+  { id: '1y', label: '1 Year', shortLabel: '1y' },
+  { id: 'all', label: 'All', shortLabel: 'All' },
 ]
+
+/** Polling cadence follows the range: nobody needs a 1-year chart refreshed every minute */
+function pollIntervalFor(range: TimeRange): number {
+  if (range === '1h' || range === '6h') return 60_000
+  if (range === '24h' || range === '7d') return 300_000
+  return 900_000
+}
+
+function formatResolution(seconds?: number): string {
+  if (!seconds) return ''
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(seconds % 3600 === 0 ? 0 : 1)}h`
+  return `${(seconds / 86400).toFixed(1)}d`
+}
 
 const tooltipStyle = {
   backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -52,16 +71,21 @@ const tooltipLabelStyle = { color: '#94a3b8', fontSize: '10px', marginBottom: '4
 // ---------------------------------------------------------------------------
 
 /** Format epoch timestamp to a readable time label based on the selected range */
-function formatTimeLabel(epoch: number, range: TimeRange): string {
+function formatTimeLabel(epoch: number, range: TimeRange, full = false): string {
   const d = new Date(epoch * 1000)
+  if (full) return d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
   if (range === '1h' || range === '6h') {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   }
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  const hours = String(d.getHours()).padStart(2, '0')
-  const mins = String(d.getMinutes()).padStart(2, '0')
-  return `${month}/${day} ${hours}:${mins}`
+  if (range === '24h' || range === '7d') {
+    const hours = String(d.getHours()).padStart(2, '0')
+    const mins = String(d.getMinutes()).padStart(2, '0')
+    return `${month}/${day} ${hours}:${mins}`
+  }
+  if (range === '30d' || range === '90d') return `${month}/${day}`
+  return `${String(d.getFullYear()).slice(2)}/${month}/${day}`
 }
 
 /** Build chart-ready data from the API response */
@@ -74,6 +98,10 @@ function buildChartData(data: MetricsTrendsResponse | null, range: TimeRange) {
     load1: p.load1,
     mem: p.mem_pct,
     disk: p.disk_pct,
+    // min/max bands exist for rolled-up and downsampled points
+    cpuBand: p.cpu_min != null && p.cpu_max != null ? [p.cpu_min, p.cpu_max] : undefined,
+    memBand: p.mem_min != null && p.mem_max != null ? [p.mem_min, p.mem_max] : undefined,
+    diskBand: p.disk_min != null && p.disk_max != null ? [p.disk_min, p.disk_max] : undefined,
   }))
 }
 
@@ -128,6 +156,8 @@ interface ChartCardProps {
   gradientId: string
   strokeColor: string
   dataKey: string
+  bandKey?: string
+  range: TimeRange
   data: ReturnType<typeof buildChartData>
   thresholdWarning?: number
   thresholdCritical?: number
@@ -141,14 +171,17 @@ function ChartCard({
   gradientId,
   strokeColor,
   dataKey,
+  bandKey,
+  range,
   data,
   thresholdWarning,
   thresholdCritical,
   delay,
   unit = '%',
 }: ChartCardProps) {
+  const hasBand = !!bandKey && data.some((d) => (d as Record<string, unknown>)[bandKey] != null)
   // Compute min/max for the dataKey
-  const values = data.map((d) => (d as Record<string, number>)[dataKey] ?? 0)
+  const values = data.map((d) => Number((d as unknown as Record<string, unknown>)[dataKey] ?? 0))
   const peak = values.length > 0 ? Math.max(...values) : 0
   const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
 
@@ -186,12 +219,15 @@ function ChartCard({
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.5)" vertical={false} />
             <XAxis
-              dataKey="time"
+              dataKey="epoch"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={(v: number) => formatTimeLabel(v, range)}
               tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }}
               tickLine={false}
               axisLine={false}
-              interval="preserveStartEnd"
-              minTickGap={40}
+              minTickGap={48}
             />
             <YAxis
               domain={[0, 100]}
@@ -204,7 +240,12 @@ function ChartCard({
             <Tooltip
               contentStyle={tooltipStyle}
               labelStyle={tooltipLabelStyle}
-              formatter={(value: number) => [`${value.toFixed(1)}${unit}`, title]}
+              labelFormatter={(v) => formatTimeLabel(Number(v), range, true)}
+              formatter={(value: number | number[], name: string) =>
+                Array.isArray(value)
+                  ? [`${value[0].toFixed(1)} – ${value[1].toFixed(1)}${unit}`, 'min – max']
+                  : [`${Number(value).toFixed(1)}${unit}`, name === dataKey ? title : name]
+              }
               animationDuration={150}
             />
             {/* Threshold warning line */}
@@ -241,12 +282,25 @@ function ChartCard({
                 }}
               />
             )}
+            {hasBand && bandKey && (
+              <Area
+                type="monotone"
+                dataKey={bandKey}
+                stroke="none"
+                fill={strokeColor}
+                fillOpacity={0.14}
+                isAnimationActive={false}
+                dot={false}
+                activeDot={false}
+              />
+            )}
             <Area
               type="monotone"
               dataKey={dataKey}
               stroke={strokeColor}
               strokeWidth={2}
               fill={`url(#${gradientId})`}
+              isAnimationActive={data.length <= 500}
               animationDuration={600}
               dot={false}
               activeDot={{
@@ -295,9 +349,16 @@ export default function Trends() {
 
   const { data, loading, error, refresh } = usePolling<MetricsTrendsResponse>(
     fetchTrends,
-    60000,
+    pollIntervalFor(range),
     { enabled: isConnected && autoRefresh },
   )
+
+  // A new range must show new data at once, not at the next poll
+  const firstRangeRender = useRef(true)
+  useEffect(() => {
+    if (firstRangeRender.current) { firstRangeRender.current = false; return }
+    if (isConnected) refresh()
+  }, [range, isConnected, refresh])
 
   // Fetch alert thresholds (once, low frequency)
   const { data: alertConfig } = usePolling<AlertConfigResponse>(
@@ -312,6 +373,8 @@ export default function Trends() {
   // Latest data point for summary stats
   const latest = data?.points?.length ? data.points[data.points.length - 1] : null
   const pointCount = data?.count ?? 0
+  const sampleCount = data?.total ?? pointCount
+  const historySince = data?.oldest_epoch ? new Date(data.oldest_epoch * 1000) : null
 
   // Thresholds from alert config
   const thresholds = alertConfig?.thresholds
@@ -398,7 +461,7 @@ export default function Trends() {
             <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Resource Trends</span></h2>
             <p className="text-xs text-slate-500">
               {pointCount > 0
-                ? `${pointCount} data point${pointCount === 1 ? '' : 's'} \u00b7 ${TIME_RANGES.find((r) => r.id === range)?.label ?? range}`
+                ? `${sampleCount.toLocaleString()} sample${sampleCount === 1 ? '' : 's'}${data?.resolution_s ? ` \u00b7 ${formatResolution(data.resolution_s)} resolution` : ''} \u00b7 ${TIME_RANGES.find((r) => r.id === range)?.label ?? range}${historySince ? ` \u00b7 history since ${historySince.toLocaleDateString([], { dateStyle: 'medium' })}` : ''}`
                 : 'Historical resource usage metrics'}
             </p>
           </div>
@@ -524,9 +587,9 @@ export default function Trends() {
         />
         <StatCard
           icon={<Database size={14} />}
-          label="Data Points"
-          value={pointCount > 0 ? pointCount.toLocaleString() : '--'}
-          subValue={data?.range ? `Range: ${data.range}` : undefined}
+          label="Samples"
+          value={sampleCount > 0 ? sampleCount.toLocaleString() : '--'}
+          subValue={pointCount > 0 ? `${pointCount.toLocaleString()} points drawn${data?.resolution_s ? ` \u00b7 ${formatResolution(data.resolution_s)}` : ''}` : undefined}
           color="slate"
           delay={180}
         />
@@ -601,6 +664,8 @@ export default function Trends() {
             gradientId="trendCpuGradient"
             strokeColor="#f59e0b"
             dataKey="cpu"
+          bandKey="cpuBand"
+          range={range}
             data={chartData}
             thresholdWarning={thresholds?.cpu_warning}
             thresholdCritical={thresholds?.cpu_critical}
@@ -614,6 +679,8 @@ export default function Trends() {
             gradientId="trendMemGradient"
             strokeColor="#10b981"
             dataKey="mem"
+          bandKey="memBand"
+          range={range}
             data={chartData}
             thresholdWarning={thresholds?.memory_warning}
             thresholdCritical={thresholds?.memory_critical}
@@ -627,6 +694,8 @@ export default function Trends() {
             gradientId="trendDiskGradient"
             strokeColor="#06b6d4"
             dataKey="disk"
+          bandKey="diskBand"
+          range={range}
             data={chartData}
             thresholdWarning={thresholds?.disk_warning}
             thresholdCritical={thresholds?.disk_critical}

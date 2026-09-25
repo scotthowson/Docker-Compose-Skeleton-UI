@@ -23,6 +23,5 @@
     },
     "baseUrl": "."
   },
-  "include": ["src/renderer", "src/shared"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src/renderer", "src/shared"]
 }

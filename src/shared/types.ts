@@ -1238,12 +1238,20 @@ export interface MetricsPoint {
   epoch: number
   cpu_pct: number
   load1: number
-  load5: number
-  load15: number
+  load5?: number
+  load15?: number
   mem_used_mb: number
   mem_total_mb: number
   mem_pct: number
   disk_pct: number
+  /** Present on rolled-up (5-minute / hourly) or downsampled points */
+  n?: number
+  cpu_min?: number
+  cpu_max?: number
+  mem_min?: number
+  mem_max?: number
+  disk_min?: number
+  disk_max?: number
 }
 
 export interface MetricsSnapshotResponse {
@@ -1257,7 +1265,14 @@ export interface MetricsSnapshotResponse {
 export interface MetricsTrendsResponse {
   range: string
   points: MetricsPoint[]
+  /** Points returned (after downsampling) */
   count: number
+  /** Samples covered before downsampling */
+  total?: number
+  /** Seconds between points */
+  resolution_s?: number
+  oldest_epoch?: number | null
+  newest_epoch?: number | null
 }
 
 // GET/POST /images/check-updates
@@ -1669,8 +1684,12 @@ export interface SSEMetricsEvent {
 
 export interface MetricsHistoryResponse {
   range: string
+  data: MetricsPoint[]
   count: number
-  metrics: MetricsDataPoint[]
+  total?: number
+  resolution_s?: number
+  oldest_epoch?: number | null
+  newest_epoch?: number | null
 }
 
 export interface MetricsDataPoint {
@@ -1695,9 +1714,14 @@ export interface MetricsDataPoint {
 
 export interface MetricsSummaryResponse {
   range: string
-  cpu: { min: number; max: number; avg: number }
-  memory: { min: number; max: number; avg: number }
-  disk: { min: number; max: number; avg: number }
+  samples: number
+  points?: number
+  resolution_s?: number
+  oldest_epoch?: number | null
+  newest_epoch?: number | null
+  cpu: { avg: number; min: number; max: number }
+  mem: { avg: number; min: number; max: number }
+  disk: { avg: number; min: number; max: number }
 }
 
 export interface RollbackSnapshotsResponse {
@@ -1734,14 +1758,34 @@ export interface RollbackDiffResponse {
   image_changes: { image: string; from: string; to: string }[]
 }
 
+export interface SecretEntry {
+  key: string
+  modified: string
+  size: number
+}
+
 export interface SecretsListResponse {
-  secrets: string[]
-  total: number
+  secrets: SecretEntry[]
+  count: number
+  /** Regular expression the server applies to names */
+  name_rule?: string
 }
 
 export interface SecretSetResponse {
   success: boolean
   key: string
+  replaced: boolean
+  /** Placeholder to use in compose and .env files, e.g. ${SECRETS_DB_PASSWORD} */
+  reference: string
+  message: string
+}
+
+export interface SecretReferencesResponse {
+  key: string
+  exists: boolean
+  stacks: string[]
+  root_env: boolean
+  reference: string
 }
 
 export interface SecretDeleteResponse {
@@ -1838,6 +1882,32 @@ export interface Plugin {
   templates: string[]
   hooks: string[]
   enabled: boolean
+  category?: string
+  tags?: string[]
+  /** Root .env variables the hooks receive (declared in the manifest) */
+  env?: string[]
+  config?: Record<string, unknown>
+  contract?: number
+  installed_from?: string
+}
+
+export interface PluginCatalogEntry {
+  name: string
+  version: string
+  description: string
+  author?: string
+  category: string
+  tags: string[]
+  hooks: string[]
+  env: string[]
+  config: Record<string, unknown>
+  installed: boolean
+  contract?: number
+}
+
+export interface PluginCatalogResponse {
+  plugins: PluginCatalogEntry[]
+  count: number
 }
 
 export interface PluginInstallResponse {
@@ -2057,6 +2127,8 @@ export interface DashboardCard {
 }
 
 export interface DashboardLayout {
+  /** Epoch ms of the last save; the newer copy wins between cache and server */
+  updated_at?: number
   cards: DashboardCard[]
   labels: Record<string, string>  // card ID → custom title (for dividers)
   version: number
@@ -2101,3 +2173,28 @@ export interface TotpSetupResponse { secret: string; uri: string; message: strin
 export interface TotpVerifyResponse { success: boolean; message: string }
 export interface TotpValidateResponse { success: boolean; token?: string; username?: string; role?: string }
 
+
+// GET /crowdsec/status
+export interface CrowdSecDecision {
+  ip: string
+  scope?: string
+  scenario?: string
+  origin?: string
+  duration?: string
+  type?: string
+  since?: string
+  country?: string
+}
+
+export interface CrowdSecStatusResponse {
+  installed: boolean
+  running: boolean
+  container?: string
+  message?: string
+  client_ip?: string
+  client_banned?: boolean
+  trusted?: string[]
+  whitelist?: { synced_at?: string; public_ip?: string; file?: string; addresses?: string[]; reloaded?: boolean }
+  decisions?: CrowdSecDecision[]
+  decision_count?: number
+}

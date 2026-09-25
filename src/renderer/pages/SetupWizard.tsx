@@ -9,6 +9,7 @@ import {
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
   Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight, Palette,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -194,6 +195,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [tzFilter, setTzFilter] = useState('')
   const [tzDropdownOpen, setTzDropdownOpen] = useState(false)
 
+  // Push notifications: off, a self-hosted ntfy deployed by the wizard, or an existing server
+  const [notifyMode, setNotifyMode] = useState<'off' | 'self' | 'external'>('off')
+  const [ntfyPort, setNtfyPort] = useState('8093')
+  // Per-step outcome of the completion run, shown on the success screen
+  const [setupResults, setSetupResults] = useState<{ label: string; ok: boolean; detail?: string }[]>([])
+
   // Collapsible advanced sections (Step 3)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showStartup, setShowStartup] = useState(false)
@@ -232,6 +239,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // Server URL from settings
   const { setServerUrl } = useConnectionStore()
   const { register, login, setApiToken: setStoreApiToken } = useAuthStore()
+
+  // Defaults that already carry an ntfy URL mean "use that server"
+  useEffect(() => {
+    if (envVars.NTFY_URL && notifyMode === 'off') setNotifyMode('external')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envVars.NTFY_URL])
 
   // Override body overflow:hidden so the wizard page can scroll
   useEffect(() => {
@@ -362,9 +375,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     return true
   }, [adminUsername, adminPassword, adminConfirm, needsAdmin])
 
+  const notifyTopicValid = /^[A-Za-z0-9_-]{1,64}$/.test((envVars.NTFY_TOPIC || 'dcs').trim())
+  const notifyValid =
+    notifyMode === 'off' ||
+    (notifyMode === 'self' && /^\d{2,5}$/.test(ntfyPort) && Number(ntfyPort) > 0 && Number(ntfyPort) < 65536 && notifyTopicValid) ||
+    (notifyMode === 'external' && /^https?:\/\/\S+$/.test((envVars.NTFY_URL || '').trim()) && notifyTopicValid)
+
   const isStep3Valid = useCallback(() => {
-    return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim())
-  }, [envVars])
+    return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim()) && notifyValid
+  }, [envVars, notifyValid])
 
   const isStep4Valid = useCallback(() => {
     return stacks.length >= 1 && stacks.every((s) => /^[a-z0-9][a-z0-9_-]*$/.test(s.name))
@@ -465,16 +484,34 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         allEnvVars.DDNS_INTERVAL = String(ddnsInterval)
       }
 
+      // Push notifications: the API runs on the host, so a self-hosted ntfy is
+      // reached on the loopback port; the topic is appended by the server.
+      const ntfyTopic = (envVars.NTFY_TOPIC || 'dcs').trim()
+      if (notifyMode === 'self') {
+        allEnvVars.NTFY_URL = `http://127.0.0.1:${ntfyPort}`
+        allEnvVars.NTFY_TOPIC = ntfyTopic
+        allEnvVars.NTFY_TOKEN = ''
+      } else if (notifyMode === 'external') {
+        allEnvVars.NTFY_URL = (envVars.NTFY_URL || '').trim().replace(/\/+$/, '')
+        allEnvVars.NTFY_TOPIC = ntfyTopic
+        allEnvVars.NTFY_TOKEN = (envVars.NTFY_TOKEN || '').trim()
+      } else {
+        allEnvVars.NTFY_URL = ''
+        allEnvVars.NTFY_TOKEN = ''
+      }
+      const results: { label: string; ok: boolean; detail?: string }[] = []
+
       // Single setupConfigure call with everything — MUST be before setupComplete
       await setupConfigure({
         env_vars: allEnvVars,
         stacks: stacks.map((s) => s.name),
       })
+      results.push({ label: 'Configuration saved', ok: true })
 
       // 2. Deploy Traefik BEFORE marking setup complete (needs setup mode for permissive CORS/auth)
       if (enableTraefik && envVars.PROXY_DOMAIN) {
         try {
-          await deployTemplate('traefik', {
+          const res = await deployTemplate('traefik', {
             target_stack: 'networking-security',
             variables: {
               TRAEFIK_DOMAIN: envVars.PROXY_DOMAIN,
@@ -486,15 +523,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             replace_services: true,
             exclude_services: includeDockerSocket ? [] : ['docker-socket-proxy'],
           })
+          results.push({ label: 'Traefik deployed', ok: res.started !== false, detail: res.started === false ? (res as { warning?: string }).warning || 'Deployed but not started' : undefined })
         } catch (err) {
           console.error('[SetupWizard] Traefik deploy failed:', err)
+          results.push({ label: 'Traefik deployment', ok: false, detail: err instanceof Error ? err.message : 'failed' })
         }
       }
 
       // 3b. Deploy Authelia if enabled (non-fatal — requires Traefik)
       if (enableAuthelia && enableTraefik && autheliaUser && autheliaPassword) {
         try {
-          await deployTemplate('authelia', {
+          const res = await deployTemplate('authelia', {
             target_stack: 'networking-security',
             variables: {
               AUTHELIA_ADMIN_USER: autheliaUser,
@@ -506,10 +545,35 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             replace_services: true,
             connect_proxy: true,
           })
+          results.push({ label: 'Authelia deployed', ok: res.started !== false, detail: res.started === false ? (res as { warning?: string }).warning || 'Deployed but not started' : undefined })
         } catch (err) {
           console.error('[SetupWizard] Authelia deploy failed:', err)
+          results.push({ label: 'Authelia deployment', ok: false, detail: err instanceof Error ? err.message : 'failed' })
         }
       }
+
+      // 3c. Self-hosted ntfy so DCS notifications work out of the box
+      if (notifyMode === 'self') {
+        const targetStack = stacks.some((s) => s.name === 'communication-collaboration')
+          ? 'communication-collaboration'
+          : (stacks[0]?.name || 'communication-collaboration')
+        try {
+          const res = await deployTemplate('ntfy', {
+            target_stack: targetStack,
+            variables: { PORT_NTFY: ntfyPort },
+            auto_start: true,
+            replace_services: true,
+            connect_proxy: enableTraefik,
+          })
+          results.push({ label: `ntfy deployed to ${targetStack}`, ok: res.started !== false, detail: res.started === false ? (res as { warning?: string }).warning || 'Deployed but not started' : `Subscribe to topic "${ntfyTopic}" in the ntfy app` })
+        } catch (err) {
+          console.error('[SetupWizard] ntfy deploy failed:', err)
+          results.push({ label: 'ntfy deployment', ok: false, detail: err instanceof Error ? err.message : 'failed' })
+        }
+      } else if (notifyMode === 'external') {
+        results.push({ label: `Notifications via ${allEnvVars.NTFY_URL}/${ntfyTopic}`, ok: true })
+      }
+      setSetupResults(results)
 
       // 3. Mark setup as complete (AFTER template deploys so they run in setup mode)
       await setupComplete()
@@ -628,6 +692,19 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           <p className="text-sm text-slate-400 mb-4">
             <span className="font-semibold text-slate-200">{envVars.SERVER_NAME || 'Your server'}</span> is configured and ready to manage
           </p>
+          {setupResults.length > 0 && (
+            <ul className="text-left text-xs space-y-1.5 mb-5 bg-slate-900/60 border border-white/5 rounded-xl p-3">
+              {setupResults.map((r) => (
+                <li key={r.label} className="flex items-start gap-2">
+                  {r.ok ? <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-px" /> : <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-px" />}
+                  <span className={r.ok ? 'text-slate-300' : 'text-amber-300'}>
+                    {r.label}
+                    {r.detail && <span className="block text-[10px] text-slate-500">{r.detail}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
             <Loader2 size={12} className="animate-spin text-emerald-400" />
             <span>Entering Dashboard...</span>
@@ -1058,28 +1135,96 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   </button>
                   {showNotifications && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY Server URL</label>
-                        <input
-                          type="text"
-                          value={envVars.NTFY_URL || ''}
-                          onChange={(e) => setEnvVars({ ...envVars, NTFY_URL: e.target.value })}
-                          placeholder="https://ntfy.sh"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
-                        />
-                        <p className="text-[10px] text-slate-500 mt-1">Leave empty to disable push notifications</p>
+                      <p className="text-[11px] text-slate-500">
+                        DCS pushes start/stop failures, unhealthy containers, automation runs and deploy events through <span className="text-slate-300">ntfy</span>.
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { id: 'off', label: 'Off', hint: 'No push notifications' },
+                          { id: 'self', label: 'Deploy ntfy here', hint: 'Recommended · self-hosted' },
+                          { id: 'external', label: 'Existing server', hint: 'ntfy.sh or your own' },
+                        ] as { id: 'off' | 'self' | 'external'; label: string; hint: string }[]).map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setNotifyMode(opt.id)}
+                            className={`rounded-lg border px-3 py-2.5 text-left transition-all ${notifyMode === opt.id ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/5 bg-slate-800/30 hover:bg-slate-800/50'}`}
+                          >
+                            <span className={`block text-xs font-semibold ${notifyMode === opt.id ? 'text-amber-300' : 'text-slate-300'}`}>{opt.label}</span>
+                            <span className="block text-[10px] text-slate-500 mt-0.5">{opt.hint}</span>
+                          </button>
+                        ))}
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">NTFY Topic</label>
-                        <input
-                          type="text"
-                          value={envVars.NTFY_TOPIC || ''}
-                          onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
-                          placeholder="dcs-notifications"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
-                        />
-                        <p className="text-[10px] text-slate-500 mt-1">The topic name for notifications on your NTFY server</p>
-                      </div>
+                      {notifyMode === 'self' && (
+                        <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">ntfy port</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={ntfyPort}
+                              onChange={(e) => setNtfyPort(e.target.value.replace(/\D/g, ''))}
+                              placeholder="8093"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
+                            <input
+                              type="text"
+                              value={envVars.NTFY_TOPIC || ''}
+                              onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
+                              placeholder="dcs"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                            />
+                          </div>
+                          <p className="col-span-2 text-[10px] text-slate-500">
+                            The wizard deploys the ntfy template and starts it. On your phone, subscribe to topic <span className="font-mono text-slate-300">{(envVars.NTFY_TOPIC || 'dcs').trim() || 'dcs'}</span> on <span className="font-mono text-slate-300">http://{'<server-ip>'}:{ntfyPort || '8093'}</span>{enableTraefik && envVars.PROXY_DOMAIN ? <> or <span className="font-mono text-slate-300">https://ntfy.{envVars.PROXY_DOMAIN}</span></> : null}.
+                          </p>
+                        </div>
+                      )}
+                      {notifyMode === 'external' && (
+                        <div className="space-y-3 animate-fade-in">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">ntfy server URL</label>
+                            <input
+                              type="text"
+                              value={envVars.NTFY_URL || ''}
+                              onChange={(e) => setEnvVars({ ...envVars, NTFY_URL: e.target.value })}
+                              placeholder="https://ntfy.sh"
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
+                              <input
+                                type="text"
+                                value={envVars.NTFY_TOPIC || ''}
+                                onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
+                                placeholder="dcs"
+                                className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400 mb-1.5">Access token <span className="text-slate-600">(optional)</span></label>
+                              <input
+                                type="password"
+                                value={envVars.NTFY_TOKEN || ''}
+                                onChange={(e) => setEnvVars({ ...envVars, NTFY_TOKEN: e.target.value })}
+                                placeholder="tk_…"
+                                className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            Messages go to <span className="font-mono text-slate-300">{((envVars.NTFY_URL || 'https://ntfy.sh').trim().replace(/\/+$/, ''))}/{(envVars.NTFY_TOPIC || 'dcs').trim() || 'dcs'}</span>. Public servers need a hard-to-guess topic.
+                          </p>
+                        </div>
+                      )}
+                      {!notifyValid && (
+                        <p className="text-[10px] text-rose-400">{notifyMode === 'self' ? 'Enter a valid port and a topic of letters, digits, - or _.' : 'Enter an http(s) URL and a topic of letters, digits, - or _.'}</p>
+                      )}
                     </div>
                   )}
                 </div>

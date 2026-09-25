@@ -637,7 +637,7 @@ function lintEnv(envContent: string, composeContent?: string): EnvDiagnostic[] {
 // React Hooks
 // ---------------------------------------------------------------------------
 
-const EMPTY_LINT = { diagnostics: [] as ComposeDiagnostic[], counts: { errors: 0, warnings: 0, info: 0 } }
+const EMPTY_LINT = { diagnostics: [] as LintDiagnostic[], counts: { errors: 0, warnings: 0, info: 0 } }
 
 /** Check if the compose-linter plugin is enabled (non-reactive, for callbacks) */
 export function isComposeLinterEnabled(): boolean {

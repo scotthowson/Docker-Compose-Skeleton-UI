@@ -1,9 +1,9 @@
 import { create } from 'zustand'
-import type { MetricsDataPoint, MetricsSummaryResponse } from '../../shared/types'
+import type { MetricsPoint, MetricsSummaryResponse } from '../../shared/types'
 import * as api from '../api/endpoints'
 
 interface MetricsState {
-  history: MetricsDataPoint[]
+  history: MetricsPoint[]
   summary: MetricsSummaryResponse | null
   range: string
   loading: boolean
@@ -25,7 +25,7 @@ export const useMetricsStore = create<MetricsState>((set, get) => ({
     set({ loading: true, error: null, range: r })
     try {
       const res = await api.fetchMetricsHistory(r)
-      set({ history: res.metrics, loading: false })
+      set({ history: res.data, loading: false })
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch metrics' })
     }

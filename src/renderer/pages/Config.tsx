@@ -348,7 +348,6 @@ export default function Config() {
     METRICS_RETENTION_DAYS: d.metrics_retention_days ?? 7,
     INCLUDE_RESOURCE_METRICS: d.include_resource_metrics ?? true,
     ROLLBACK_MAX_SNAPSHOTS: d.rollback_max_snapshots ?? 10,
-    SECRETS_ENCRYPTION: d.secrets_encryption ?? true,
     SCHEDULER_CHECK_INTERVAL: d.scheduler_check_interval ?? 60,
     // Docker
     DOCKER_TIMEOUT: d.docker_timeout ?? 120,
@@ -978,7 +977,6 @@ export default function Config() {
             <NumberRow label="Metrics Retention Days" description="Days of metrics history to keep" configKey="METRICS_RETENTION_DAYS" value={Number(edits.METRICS_RETENTION_DAYS ?? 7)} onChange={handleNumberChange} min={1} max={90} />
             <ToggleRow label="Include Resource Metrics" description="Include CPU/memory data in health reports" configKey="INCLUDE_RESOURCE_METRICS" value={Boolean(edits.INCLUDE_RESOURCE_METRICS)} onChange={handleBoolChange} />
             <NumberRow label="Rollback Max Snapshots" description="Maximum compose snapshots per stack" configKey="ROLLBACK_MAX_SNAPSHOTS" value={Number(edits.ROLLBACK_MAX_SNAPSHOTS ?? 10)} onChange={handleNumberChange} min={1} max={50} />
-            <ToggleRow label="Secrets Encryption" description="Encrypt secrets at rest with AES-256-CBC" configKey="SECRETS_ENCRYPTION" value={Boolean(edits.SECRETS_ENCRYPTION)} onChange={handleBoolChange} />
             <NumberRow label="Scheduler Check Interval" description="Seconds between scheduler checks" configKey="SCHEDULER_CHECK_INTERVAL" value={Number(edits.SCHEDULER_CHECK_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
           </GroupCard>
 
@@ -1067,7 +1065,6 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     METRICS_RETENTION_DAYS: data.metrics_retention_days ?? 7,
     INCLUDE_RESOURCE_METRICS: data.include_resource_metrics ?? true,
     ROLLBACK_MAX_SNAPSHOTS: data.rollback_max_snapshots ?? 10,
-    SECRETS_ENCRYPTION: data.secrets_encryption ?? true,
     SCHEDULER_CHECK_INTERVAL: data.scheduler_check_interval ?? 60,
     DOCKER_TIMEOUT: data.docker_timeout ?? 120,
     FORCE_RECREATE: data.force_recreate ?? false,

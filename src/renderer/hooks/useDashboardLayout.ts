@@ -4,14 +4,33 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DashboardCard, DashboardLayout } from '../../shared/types'
-import { getDefaultLayout, GRID_COLS, clampCardSize } from '../components/dashboard/cardRegistry'
+import { getDefaultLayout, GRID_COLS, clampCardSize, CARD_REGISTRY } from '../components/dashboard/cardRegistry'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 const STORAGE_KEY_PREFIX = 'dashboard-layout-'
 
+/** One cache per server and user: the app can talk to several servers */
 function getStorageKey(): string {
   const user = useAuthStore.getState().currentUser || 'default'
-  return `${STORAGE_KEY_PREFIX}${user}`
+  const server = (useSettingsStore.getState().serverUrl || 'local').replace(/[^a-z0-9]/gi, '_')
+  return `${STORAGE_KEY_PREFIX}${server}-${user}`
+}
+
+/** Cards added to the catalogue since a layout was saved appear hidden, ready to enable */
+function mergeRegistry(layout: DashboardLayout): DashboardLayout {
+  const known = new Set(layout.cards.map((c) => c.id))
+  const missing = CARD_REGISTRY.filter((e) => !known.has(e.id))
+  if (missing.length === 0) return layout
+  const maxY = Math.max(0, ...layout.cards.filter((c) => c.visible).map((c) => c.y + c.h))
+  return {
+    ...layout,
+    cards: [...layout.cards, ...missing.map((e) => ({ id: e.id, visible: false, x: 0, y: maxY, w: e.defaultW, h: e.defaultH }))],
+  }
+}
+
+function stamped(layout: DashboardLayout): DashboardLayout {
+  return { ...layout, updated_at: Date.now() }
 }
 
 const CURRENT_VERSION = 9
@@ -26,7 +45,7 @@ function loadFromCache(): DashboardLayout | null {
     if (!parsed.version || parsed.version < CURRENT_VERSION) return null
     // Validate cards have x,y,w,h fields (v9+ uses free placement)
     if (parsed.cards?.length > 0 && typeof parsed.cards[0].x !== 'number') return null
-    return parsed
+    return mergeRegistry(parsed)
   } catch {}
   return null
 }
@@ -38,13 +57,14 @@ function saveToCache(layout: DashboardLayout): void {
   } catch {}
 }
 
-/** Save layout to server (fire-and-forget) */
-async function saveToServer(layout: DashboardLayout): Promise<void> {
+/** Save layout to the server. Resolves false when the server refused (the cache still holds it). */
+async function saveToServer(layout: DashboardLayout): Promise<boolean> {
   try {
     const { apiClient } = await import('../api/client')
     await apiClient.post('/settings/dashboard', { layout })
+    return true
   } catch {
-    // Server save failed — localStorage cache is the fallback
+    return false
   }
 }
 
@@ -66,22 +86,31 @@ export function useDashboardLayout() {
     return loadFromCache() || getDefaultLayout()
   })
   const [editMode, setEditMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [lastSaveOk, setLastSaveOk] = useState<boolean | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const layoutRef = useRef(layout)
   const savedLayoutRef = useRef(layout)  // snapshot before edit mode
   layoutRef.current = layout
 
-  // On mount: fetch from server in background (server wins if newer)
-  // Skip if user is actively editing to prevent overwriting their changes
+  // On mount: fetch from server in background. The newer copy wins (updated_at);
+  // a save made while the request was in flight is never overwritten.
   const editModeRef = useRef(false)
   editModeRef.current = editMode
+  const savedSinceMountRef = useRef(false)
 
   useEffect(() => {
     fetchFromServer().then((serverLayout) => {
-      if (editModeRef.current) return // don't overwrite active edits
-      if (serverLayout && serverLayout.version >= layoutRef.current.version) {
-        setLayout(serverLayout)
-        saveToCache(serverLayout)
+      if (editModeRef.current || savedSinceMountRef.current) return
+      if (!serverLayout || !serverLayout.version || serverLayout.version < CURRENT_VERSION) return
+      const local = layoutRef.current
+      const serverNewer = (serverLayout.updated_at ?? 0) >= (local.updated_at ?? 0)
+      if (serverNewer) {
+        const merged = mergeRegistry(serverLayout)
+        setLayout(merged)
+        saveToCache(merged)
+      } else {
+        saveToServer(local)
       }
     })
   }, [])
@@ -94,11 +123,17 @@ export function useDashboardLayout() {
   /** Get all cards sorted by position (filter out malformed entries) */
   const allCards = layout.cards.filter((c) => c.id).sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
 
-  /** Save layout (to both localStorage and server) */
-  const persistLayout = useCallback((newLayout: DashboardLayout) => {
-    setLayout(newLayout)
-    saveToCache(newLayout)
-    saveToServer(newLayout)
+  /** Save layout (to both localStorage and server). Resolves with the server result. */
+  const persistLayout = useCallback(async (newLayout: DashboardLayout): Promise<boolean> => {
+    const next = stamped(newLayout)
+    savedSinceMountRef.current = true
+    setLayout(next)
+    saveToCache(next)
+    setSaving(true)
+    const ok = await saveToServer(next)
+    setSaving(false)
+    setLastSaveOk(ok)
+    return ok
   }, [])
 
   /** Toggle card visibility (live edit, not persisted until Save) */
@@ -135,13 +170,16 @@ export function useDashboardLayout() {
     })
   }, [])
 
-  /** Move card — blocked if it would overlap another card */
+  /** Move card — kept inside the grid, blocked if it would overlap another card */
   const moveCard = useCallback((id: string, x: number, y: number) => {
     setLayout((prev) => {
       const card = prev.cards.find((c) => c.id === id)
       if (!card) return prev
-      if (wouldOverlap(prev.cards, id, x, y, card.w, card.h)) return prev
-      return { ...prev, cards: prev.cards.map((c) => c.id === id ? { ...c, x, y } : c) }
+      const nx = Math.max(0, Math.min(GRID_COLS - card.w, x))
+      const ny = Math.max(0, y)
+      if (nx === card.x && ny === card.y) return prev
+      if (wouldOverlap(prev.cards, id, nx, ny, card.w, card.h)) return prev
+      return { ...prev, cards: prev.cards.map((c) => c.id === id ? { ...c, x: nx, y: ny } : c) }
     })
   }, [])
 
@@ -169,10 +207,10 @@ export function useDashboardLayout() {
     setEditMode(true)
   }, [])
 
-  /** Save and exit edit mode — persist to cache + server */
-  const exitEditMode = useCallback(() => {
+  /** Save and exit edit mode — persist to cache + server; resolves with the server result */
+  const exitEditMode = useCallback((): Promise<boolean> => {
     setEditMode(false)
-    persistLayout(layoutRef.current)
+    return persistLayout(layoutRef.current)
   }, [persistLayout])
 
   /** Discard changes — restore snapshot from before edit mode */
@@ -186,11 +224,14 @@ export function useDashboardLayout() {
     setLayout(getDefaultLayout())
   }, [])
 
-  /** Add a plugin card to the layout at the bottom */
+  /** Add a plugin card to the layout at the bottom (re-adding a removed one just shows it again) */
   const addPluginCard = useCallback((id: string, w: number, h: number) => {
     setLayout((prev) => {
-      // Don't add if already exists
-      if (prev.cards.some((c) => c.id === id)) return prev
+      const existing = prev.cards.find((c) => c.id === id)
+      if (existing) {
+        if (existing.visible) return prev
+        return { ...prev, cards: prev.cards.map((c) => c.id === id ? { ...c, visible: true } : c) }
+      }
       const visCards = prev.cards.filter((c) => c.visible)
       const maxY = Math.max(...visCards.map((c) => c.y + c.h), 0)
       const newCard: DashboardCard = { id, visible: true, x: 0, y: maxY, w, h }
@@ -203,6 +244,8 @@ export function useDashboardLayout() {
     visibleCards,
     allCards,
     editMode,
+    saving,
+    lastSaveOk,
     dragIndex,
     setDragIndex,
     enterEditMode,

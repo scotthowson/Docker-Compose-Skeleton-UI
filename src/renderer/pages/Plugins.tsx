@@ -2,7 +2,8 @@
 // Plugins — Extension marketplace with featured plugins, install, and guide
 // =============================================================================
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import type { PluginCatalogEntry } from '../../shared/types'
 import { createPortal } from 'react-dom'
 import {
   Puzzle, Plus, Trash2, ToggleLeft, ToggleRight, GitBranch, LayoutTemplate,
@@ -37,6 +38,10 @@ interface FeaturedPlugin {
   category?: 'safety' | 'monitoring' | 'operations' | 'advanced' | 'cards'
   /** Built-in feature — always available, toggle controls the feature directly */
   builtIn?: boolean
+  /** Root .env variables the hooks read (declared by the plugin) */
+  env?: string[]
+  /** Installed by the server from its catalogue */
+  fromCatalog?: boolean
   /** When provided, plugin is scaffolded locally instead of git-cloned */
   scaffold?: {
     hooks?: Record<string, string>
@@ -52,8 +57,11 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: React.ElementType; 
   cards: { label: 'Dashboard Cards', icon: LayoutTemplate, color: 'text-emerald-400' },
 }
 
-const FEATURED_PLUGINS: FeaturedPlugin[] = [
-  // ── Safety & Validation ──────────────────────────────────────────────
+// Two entries live in the UI: the compose linter (a built-in feature of the
+// editors) and the example dashboard cards. Every other plugin comes from the
+// server's catalogue (.plugins-catalog/), where the hook scripts are versioned,
+// linted and installed by copying — so what you see is exactly what runs.
+const SPECIAL_PLUGINS: FeaturedPlugin[] = [
   {
     name: 'compose-linter',
     builtIn: true,
@@ -69,485 +77,7 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
     tags: ['validation', 'compose', 'safety'],
     hookCount: 1,
     templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# compose-linter — pre-deploy hook\n# Validates compose content before deployment\nCONTEXT=$(cat)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nTEMPLATE=$(echo "$CONTEXT" | jq -r \'.template // "unknown"\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then\n    echo "{\\"plugin\\":\\"compose-linter\\",\\"status\\":\\"skip\\",\\"message\\":\\"No compose content to lint\\"}"\n    exit 0\nfi\nWARN_COUNT=0\nWARNINGS=""\nSERVICES=$(echo "$COMPOSE" | grep -E "^  [a-zA-Z_-][a-zA-Z0-9_-]*:" | sed "s/^  //;s/://")\nfor SVC in $SERVICES; do\n    BLOCK=$(echo "$COMPOSE" | sed -n "/^  ${SVC}:/,/^  [a-zA-Z_-]/p")\n    if ! echo "$BLOCK" | grep -q "restart:"; then\n        WARN_COUNT=$((WARN_COUNT+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"service\\":\\"$SVC\\",\\"rule\\":\\"missing-restart\\",\\"message\\":\\"No restart policy\\",\\"severity\\":\\"warning\\"}"\n    fi\n    if echo "$BLOCK" | grep -q "privileged:[[:space:]]*true"; then\n        WARN_COUNT=$((WARN_COUNT+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"service\\":\\"$SVC\\",\\"rule\\":\\"privileged\\",\\"message\\":\\"Privileged mode enabled\\",\\"severity\\":\\"warning\\"}"\n    fi\n    if ! echo "$BLOCK" | grep -q "healthcheck:"; then\n        WARN_COUNT=$((WARN_COUNT+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"service\\":\\"$SVC\\",\\"rule\\":\\"missing-healthcheck\\",\\"message\\":\\"No health check\\",\\"severity\\":\\"info\\"}"\n    fi\ndone\nif [[ $WARN_COUNT -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"compose-linter\\",\\"status\\":\\"pass\\",\\"stack\\":\\"$STACK\\",\\"template\\":\\"$TEMPLATE\\",\\"warnings\\":[],\\"message\\":\\"All checks passed\\"}"\nelse\n    echo "{\\"plugin\\":\\"compose-linter\\",\\"status\\":\\"warn\\",\\"stack\\":\\"$STACK\\",\\"template\\":\\"$TEMPLATE\\",\\"warning_count\\":$WARN_COUNT,\\"warnings\\":[$WARNINGS],\\"message\\":\\"$WARN_COUNT issue(s) found\\"}"\nfi\nexit 0\n',
-      },
-    },
   },
-  {
-    name: 'env-validator',
-    category: 'safety',
-    description: 'Scans compose files for referenced environment variables that are not defined, detects duplicate keys, flags empty values, and warns about hardcoded secrets — catching configuration gaps before deployment.',
-    author: 'DCS Community',
-    version: '1.1.0',
-    icon: FileSearch,
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-500/10',
-    borderColor: 'border-orange-500/20',
-    url: '',
-    tags: ['validation', 'environment', 'safety'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# env-validator — pre-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nWARNINGS=""\nWARN_COUNT=0\nif [[ -n "$COMPOSE" ]]; then\n    REFERENCED_VARS=$(echo "$COMPOSE" | grep -oE \'\\$\\{[A-Z_][A-Z0-9_]*\' | sed \'s/\\${//\' | sort -u)\n    for var in $REFERENCED_VARS; do\n        VAL=$(eval echo "\\${$var:-}" 2>/dev/null)\n        if [[ -z "$VAL" ]]; then\n            WARN_COUNT=$((WARN_COUNT+1))\n            [[ -n "$WARNINGS" ]] && WARNINGS+=","\n            WARNINGS+="{\\"variable\\":\\"$var\\",\\"rule\\":\\"undefined\\",\\"message\\":\\"Referenced but not set\\",\\"severity\\":\\"warning\\"}"\n        fi\n    done\nfi\nif [[ $WARN_COUNT -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"env-validator\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"pass\\",\\"warnings\\":[],\\"message\\":\\"All environment variables resolved\\"}"\nelse\n    echo "{\\"plugin\\":\\"env-validator\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"warning_count\\":$WARN_COUNT,\\"warnings\\":[$WARNINGS],\\"message\\":\\"$WARN_COUNT undefined variable(s)\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'deploy-guard',
-    category: 'safety',
-    description: 'Logs every deployment with full context, creates pre-update safety checkpoints of running container states, and validates container health after starts.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Shield,
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/10',
-    borderColor: 'border-emerald-500/20',
-    url: '',
-    tags: ['safety', 'deployment', 'health'],
-    hookCount: 3,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# deploy-guard — post-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSUCCESS=$(echo "$CONTEXT" | jq -r \'.success // "true"\' 2>/dev/null)\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nLOG_DIR="$BASE/.logs/deploy-guard"\nmkdir -p "$LOG_DIR"\necho "$CONTEXT" | jq . > "$LOG_DIR/${STACK}_${TIMESTAMP}.json" 2>/dev/null\nif [[ "$SUCCESS" == "true" ]]; then\n    echo "{\\"plugin\\":\\"deploy-guard\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Deployment logged successfully\\"}"\nelse\n    echo "{\\"plugin\\":\\"deploy-guard\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"message\\":\\"Deployment failure logged\\"}"\nfi\nexit 0\n',
-        'pre-update': '#!/bin/bash\n# deploy-guard — pre-update hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nCHECKPOINT_DIR="$BASE/.logs/deploy-guard/checkpoints"\nmkdir -p "$CHECKPOINT_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\ndocker ps --format "{{.Names}}|{{.Image}}|{{.Status}}" > "$CHECKPOINT_DIR/${STACK}_${TIMESTAMP}.txt" 2>/dev/null\necho "{\\"plugin\\":\\"deploy-guard\\",\\"event\\":\\"pre-update\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Safety checkpoint created\\"}"\nexit 0\n',
-        'post-start': '#!/bin/bash\n# deploy-guard — post-start health validation\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nUNHEALTHY=$(docker ps --filter "health=unhealthy" --format "{{.Names}}" 2>/dev/null | wc -l)\nSTARTING=$(docker ps --filter "health=starting" --format "{{.Names}}" 2>/dev/null | wc -l)\nif [[ "$UNHEALTHY" -gt 0 ]]; then\n    echo "{\\"plugin\\":\\"deploy-guard\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"unhealthy\\":$UNHEALTHY,\\"message\\":\\"$UNHEALTHY unhealthy containers detected\\"}"\nelse\n    echo "{\\"plugin\\":\\"deploy-guard\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"starting\\":$STARTING,\\"message\\":\\"All containers healthy\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'auto-backup',
-    category: 'safety',
-    description: 'Snapshots compose files before updates and deployments automatically, so you can always roll back to the last known-good configuration.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Clock,
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/10',
-    borderColor: 'border-amber-500/20',
-    url: '',
-    tags: ['backup', 'safety', 'rollback'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-update': '#!/bin/bash\n# auto-backup — pre-update hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nBACKUP_DIR="$BASE/.backups/auto/$STACK"\nmkdir -p "$BACKUP_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nSTACK_DIR="$BASE/Stacks"\nCOUNT=0\nif [[ -d "$STACK_DIR" ]]; then\n    for compose in "$STACK_DIR"/*/docker-compose.yml; do\n        [[ -f "$compose" ]] || continue\n        CATEGORY=$(basename "$(dirname "$compose")")\n        cp "$compose" "$BACKUP_DIR/${CATEGORY}_${TIMESTAMP}.yml" 2>/dev/null\n        COUNT=$((COUNT+1))\n    done\nfi\necho "{\\"plugin\\":\\"auto-backup\\",\\"event\\":\\"pre-update\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"files_backed_up\\":$COUNT,\\"message\\":\\"$COUNT compose files backed up\\"}"\nexit 0\n',
-        'pre-deploy': '#!/bin/bash\n# auto-backup — pre-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nBACKUP_DIR="$BASE/.backups/auto/$STACK"\nmkdir -p "$BACKUP_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nTARGET_COMPOSE="$BASE/Stacks/$STACK/docker-compose.yml"\nif [[ -f "$TARGET_COMPOSE" ]]; then\n    cp "$TARGET_COMPOSE" "$BACKUP_DIR/compose_${TIMESTAMP}.yml.bak"\n    echo "{\\"plugin\\":\\"auto-backup\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Compose file backed up before deployment\\"}"\nelse\n    echo "{\\"plugin\\":\\"auto-backup\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"skip\\",\\"message\\":\\"No existing compose to backup\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'image-freshness',
-    category: 'safety',
-    description: 'Checks every running container image against Docker Hub on deployment. Warns when images are more than 30 days old, flags containers running latest tags without a pinned digest, and detects known vulnerable base images.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Timer,
-    color: 'text-yellow-400',
-    bgColor: 'bg-yellow-500/10',
-    borderColor: 'border-yellow-500/20',
-    url: '',
-    tags: ['images', 'freshness', 'safety', 'updates'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# image-freshness — checks image age after deployment\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSTALE=0\nLATEST_TAG=0\nWARNINGS=""\nMAX_AGE_DAYS=30\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    NAME=$(echo "$line" | cut -d"|" -f1)\n    IMAGE=$(echo "$line" | cut -d"|" -f2)\n    CREATED=$(docker inspect "$NAME" --format "{{.Created}}" 2>/dev/null | cut -dT -f1)\n    if [[ -n "$CREATED" ]]; then\n        AGE_DAYS=$(( ($(date +%s) - $(date -d "$CREATED" +%s 2>/dev/null || echo $(date +%s))) / 86400 ))\n        if [[ $AGE_DAYS -gt $MAX_AGE_DAYS ]]; then\n            STALE=$((STALE+1))\n            [[ -n "$WARNINGS" ]] && WARNINGS+=","\n            WARNINGS+="{\\"container\\":\\"$NAME\\",\\"image\\":\\"$IMAGE\\",\\"age_days\\":$AGE_DAYS,\\"rule\\":\\"stale-image\\"}"\n        fi\n    fi\n    if echo "$IMAGE" | grep -q ":latest$\\|:latest "; then\n        LATEST_TAG=$((LATEST_TAG+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"container\\":\\"$NAME\\",\\"image\\":\\"$IMAGE\\",\\"rule\\":\\"latest-tag\\"}"\n    fi\ndone < <(docker ps --format "{{.Names}}|{{.Image}}" 2>/dev/null | head -50)\nTOTAL=$((STALE+LATEST_TAG))\necho "{\\"plugin\\":\\"image-freshness\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $TOTAL -eq 0 ] && echo pass || echo warn)\\",\\"stale\\":$STALE,\\"latest_tags\\":$LATEST_TAG,\\"warnings\\":[$WARNINGS],\\"message\\":\\"$STALE stale image(s), $LATEST_TAG using :latest tag\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'rollback-sentinel',
-    category: 'safety',
-    description: 'Creates a full rollback checkpoint before every deployment — captures running container IDs, image digests, port mappings, and environment hashes. If a deploy fails, provides a one-command restore to the exact previous state.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: RotateCcw,
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10',
-    borderColor: 'border-blue-500/20',
-    url: '',
-    tags: ['rollback', 'checkpoint', 'safety', 'recovery'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# rollback-sentinel — creates rollback checkpoint\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nCHECK_DIR="$BASE/.data/rollback-sentinel/$STACK"\nmkdir -p "$CHECK_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nCHECKPOINT="$CHECK_DIR/$TIMESTAMP.json"\n# Capture full container state\nCONTAINERS="[]"\nif command -v jq >/dev/null 2>&1; then\n    CONTAINERS=$(docker ps --format \'{{json .}}\' 2>/dev/null | jq -s \'.\'  2>/dev/null || echo "[]")\nfi\n# Capture compose file\nCOMPOSE_BAK=""\nCOMPOSE_FILE="$BASE/Stacks/$STACK/docker-compose.yml"\n[[ -f "$COMPOSE_FILE" ]] && COMPOSE_BAK=$(cat "$COMPOSE_FILE" 2>/dev/null | base64 -w0)\necho "{\\"timestamp\\":\\"$TIMESTAMP\\",\\"stack\\":\\"$STACK\\",\\"containers\\":$CONTAINERS,\\"compose_backup\\":\\"$COMPOSE_BAK\\"}" > "$CHECKPOINT"\n# Keep only last 5 checkpoints\nls -1t "$CHECK_DIR"/*.json 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null\necho "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"checkpoint\\":\\"$TIMESTAMP\\",\\"message\\":\\"Rollback checkpoint created\\"}"\nexit 0\n',
-        'post-deploy': '#!/bin/bash\n# rollback-sentinel — validates deployment success\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSUCCESS=$(echo "$CONTEXT" | jq -r \'.success // "true"\' 2>/dev/null)\nif [[ "$SUCCESS" != "true" ]]; then\n    BASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\n    LATEST=$(ls -1t "$BASE/.data/rollback-sentinel/$STACK/"*.json 2>/dev/null | head -1)\n    echo "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"checkpoint\\":\\"$LATEST\\",\\"message\\":\\"Deploy failed — rollback checkpoint available\\"}"\nelse\n    echo "{\\"plugin\\":\\"rollback-sentinel\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Deploy verified — checkpoint retained\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  // ── Monitoring & Observability ───────────────────────────────────────
-  {
-    name: 'container-notifier',
-    category: 'monitoring',
-    description: 'Sends webhook alerts to Slack, Discord, or NTFY when deployments fail or containers go unhealthy. Set NOTIFY_WEBHOOK_URL in your .env to activate.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Bell,
-    color: 'text-violet-400',
-    bgColor: 'bg-violet-500/10',
-    borderColor: 'border-violet-500/20',
-    url: '',
-    tags: ['notifications', 'webhooks', 'alerting'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# container-notifier — post-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSUCCESS=$(echo "$CONTEXT" | jq -r \'.success // "true"\' 2>/dev/null)\nWEBHOOK_URL="${NOTIFY_WEBHOOK_URL:-}"\nif [[ "$SUCCESS" != "true" ]]; then\n    MESSAGE="Deployment to stack \'$STACK\' reported failure"\n    if [[ -n "$WEBHOOK_URL" ]]; then\n        curl -s -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "{\\"text\\":\\"$MESSAGE\\",\\"content\\":\\"$MESSAGE\\"}" >/dev/null 2>&1 || true\n    fi\n    echo "{\\"plugin\\":\\"container-notifier\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"message\\":\\"$MESSAGE\\"}"\nelse\n    echo "{\\"plugin\\":\\"container-notifier\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Deployment to $STACK succeeded\\"}"\nfi\nexit 0\n',
-        'post-start': '#!/bin/bash\n# container-notifier — post-start hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nUNHEALTHY=$(docker ps --filter "health=unhealthy" --format "{{.Names}}" 2>/dev/null | head -10)\nWEBHOOK_URL="${NOTIFY_WEBHOOK_URL:-}"\nif [[ -n "$UNHEALTHY" ]]; then\n    COUNT=$(echo "$UNHEALTHY" | wc -l)\n    NAMES=$(echo "$UNHEALTHY" | tr \'\\n\' \', \' | sed \'s/,$//\')\n    MESSAGE="$COUNT unhealthy container(s) after start: $NAMES"\n    if [[ -n "$WEBHOOK_URL" ]]; then\n        curl -s -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "{\\"text\\":\\"$MESSAGE\\",\\"content\\":\\"$MESSAGE\\"}" >/dev/null 2>&1 || true\n    fi\n    echo "{\\"plugin\\":\\"container-notifier\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"unhealthy_count\\":$COUNT,\\"message\\":\\"$MESSAGE\\"}"\nelse\n    echo "{\\"plugin\\":\\"container-notifier\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"All containers healthy\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'resource-monitor',
-    category: 'monitoring',
-    description: 'Identifies containers running without memory limits or CPU quotas after deployment — finds the resource hogs before they starve the host.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Gauge,
-    color: 'text-rose-400',
-    bgColor: 'bg-rose-500/10',
-    borderColor: 'border-rose-500/20',
-    url: '',
-    tags: ['resources', 'monitoring', 'performance'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# resource-monitor — post-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nWARNINGS=""\nWARN_COUNT=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    MEM=$(docker inspect "$container" --format "{{.HostConfig.Memory}}" 2>/dev/null)\n    CPU=$(docker inspect "$container" --format "{{.HostConfig.NanoCpus}}" 2>/dev/null)\n    if [[ "${MEM:-0}" == "0" ]]; then\n        WARN_COUNT=$((WARN_COUNT+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"container\\":\\"$container\\",\\"rule\\":\\"no-memory-limit\\",\\"message\\":\\"No memory limit set\\"}"\n    fi\n    if [[ "${CPU:-0}" == "0" ]]; then\n        WARN_COUNT=$((WARN_COUNT+1))\n        [[ -n "$WARNINGS" ]] && WARNINGS+=","\n        WARNINGS+="{\\"container\\":\\"$container\\",\\"rule\\":\\"no-cpu-limit\\",\\"message\\":\\"No CPU limit set\\"}"\n    fi\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -30)\nif [[ $WARN_COUNT -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"resource-monitor\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"pass\\",\\"message\\":\\"All containers have resource constraints\\"}"\nelse\n    echo "{\\"plugin\\":\\"resource-monitor\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"warning_count\\":$WARN_COUNT,\\"warnings\\":[$WARNINGS],\\"message\\":\\"$WARN_COUNT container(s) missing resource limits\\"}"\nfi\nexit 0\n',
-        'post-start': '#!/bin/bash\n# resource-monitor — post-start hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCONTAINER_COUNT=$(docker ps --format "{{.Names}}" 2>/dev/null | wc -l)\necho "{\\"plugin\\":\\"resource-monitor\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"containers_monitored\\":$CONTAINER_COUNT,\\"message\\":\\"Resource snapshot captured for $CONTAINER_COUNT containers\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'stack-analytics',
-    category: 'monitoring',
-    description: 'Records every deployment and start event to a JSONL timeline, building a complete operational history you can query and analyze.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Activity,
-    color: 'text-sky-400',
-    bgColor: 'bg-sky-500/10',
-    borderColor: 'border-sky-500/20',
-    url: '',
-    tags: ['analytics', 'metrics', 'history'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# stack-analytics — post-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nDATA_DIR="$BASE/.logs/stack-analytics"\nmkdir -p "$DATA_DIR"\nDATA_FILE="$DATA_DIR/events.jsonl"\nTIMESTAMP=$(date -Iseconds)\nCONTAINER_COUNT=$(docker ps --format "{{.Names}}" 2>/dev/null | wc -l)\necho "{\\"timestamp\\":\\"$TIMESTAMP\\",\\"stack\\":\\"$STACK\\",\\"event\\":\\"deploy\\",\\"containers\\":$CONTAINER_COUNT}" >> "$DATA_FILE"\nTOTAL=$(wc -l < "$DATA_FILE" 2>/dev/null || echo 0)\necho "{\\"plugin\\":\\"stack-analytics\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"total_events\\":$TOTAL,\\"message\\":\\"Deployment #$TOTAL recorded\\"}"\nexit 0\n',
-        'post-start': '#!/bin/bash\n# stack-analytics — post-start hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nDATA_DIR="$BASE/.logs/stack-analytics"\nmkdir -p "$DATA_DIR"\nDATA_FILE="$DATA_DIR/events.jsonl"\nTIMESTAMP=$(date -Iseconds)\necho "{\\"timestamp\\":\\"$TIMESTAMP\\",\\"stack\\":\\"$STACK\\",\\"event\\":\\"start\\"}" >> "$DATA_FILE"\necho "{\\"plugin\\":\\"stack-analytics\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"Start event recorded\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'uptime-ping',
-    category: 'monitoring',
-    description: 'Pings Healthchecks.io, Uptime Kuma, or any webhook URL after successful starts. Set UPTIME_PING_URL in your .env to connect your monitoring stack.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Radio,
-    color: 'text-lime-400',
-    bgColor: 'bg-lime-500/10',
-    borderColor: 'border-lime-500/20',
-    url: '',
-    tags: ['uptime', 'integrations', 'webhooks'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-start': '#!/bin/bash\n# uptime-ping — post-start hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nPING_URL="${UPTIME_PING_URL:-}"\nHEALTHCHECK_URL="${HEALTHCHECKS_PING_URL:-}"\nURL="${PING_URL:-$HEALTHCHECK_URL}"\nif [[ -z "$URL" ]]; then\n    echo "{\\"plugin\\":\\"uptime-ping\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"skip\\",\\"message\\":\\"No ping URL configured (set UPTIME_PING_URL or HEALTHCHECKS_PING_URL)\\"}"\n    exit 0\nfi\nHTTP_CODE=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "$URL" 2>/dev/null)\nif [[ "$HTTP_CODE" =~ ^2 ]]; then\n    echo "{\\"plugin\\":\\"uptime-ping\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"http_code\\":$HTTP_CODE,\\"message\\":\\"Uptime ping sent successfully\\"}"\nelse\n    echo "{\\"plugin\\":\\"uptime-ping\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"http_code\\":${HTTP_CODE:-0},\\"message\\":\\"Uptime ping failed (HTTP $HTTP_CODE)\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'disk-watchdog',
-    category: 'monitoring',
-    description: 'Monitors disk usage after every deployment and start event. Alerts when any mount point exceeds 85% usage, tracks Docker volume growth rate, and predicts when you\'ll run out of space based on current trends.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: HardDrive,
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-500/10',
-    borderColor: 'border-orange-500/20',
-    url: '',
-    tags: ['disk', 'monitoring', 'alerts', 'storage'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# disk-watchdog — monitors disk after deployment\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nTHRESHOLD=${DISK_WARN_THRESHOLD:-85}\nALERTS=""\nALERT_COUNT=0\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    USAGE=$(echo "$line" | awk \'{print $5}\' | tr -d \'%\')\n    MOUNT=$(echo "$line" | awk \'{print $6}\')\n    if [[ "$USAGE" -ge "$THRESHOLD" ]]; then\n        ALERT_COUNT=$((ALERT_COUNT+1))\n        [[ -n "$ALERTS" ]] && ALERTS+=","\n        ALERTS+="{\\"mount\\":\\"$MOUNT\\",\\"usage\\":$USAGE,\\"threshold\\":$THRESHOLD}"\n    fi\ndone < <(df -h 2>/dev/null | grep -vE "^Filesystem|tmpfs|udev|overlay" | head -20)\nDOCKER_SIZE=$(docker system df --format \'{{.Type}}\\t{{.Size}}\' 2>/dev/null | awk \'{total+=$2} END {print total+0}\')\necho "{\\"plugin\\":\\"disk-watchdog\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $ALERT_COUNT -eq 0 ] && echo ok || echo warn)\\",\\"alerts\\":[$ALERTS],\\"alert_count\\":$ALERT_COUNT,\\"message\\":\\"$([ $ALERT_COUNT -eq 0 ] && echo "All mounts below ${THRESHOLD}%" || echo "$ALERT_COUNT mount(s) above ${THRESHOLD}%")\\"}"\nexit 0\n',
-        'post-start': '#!/bin/bash\n# disk-watchdog — quick disk check on start\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nROOT_USAGE=$(df / 2>/dev/null | tail -1 | awk \'{print $5}\' | tr -d \'%\')\nDOCKER_USAGE=$(df /var/lib/docker 2>/dev/null | tail -1 | awk \'{print $5}\' | tr -d \'%\' || echo "$ROOT_USAGE")\necho "{\\"plugin\\":\\"disk-watchdog\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"root_usage\\":${ROOT_USAGE:-0},\\"docker_usage\\":${DOCKER_USAGE:-0},\\"message\\":\\"Root: ${ROOT_USAGE:-?}%, Docker: ${DOCKER_USAGE:-?}%\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'response-timer',
-    category: 'monitoring',
-    description: 'Measures HTTP response time for every exposed service after deployment. Detects slow-starting containers, tracks response time baselines, and flags services that take longer than 5 seconds to respond — catching performance issues before users notice.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Flame,
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10',
-    borderColor: 'border-red-500/20',
-    url: '',
-    tags: ['performance', 'latency', 'monitoring', 'http'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# response-timer — measures service response time\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nSLOW_THRESHOLD=5\nRESULTS=""\nSLOW_COUNT=0\nTOTAL=0\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    CONTAINER=$(echo "$line" | cut -d"|" -f1)\n    PORTS=$(echo "$line" | cut -d"|" -f2)\n    for port in $(echo "$PORTS" | grep -oE \'0\\.0\\.0\\.0:[0-9]+\' | cut -d: -f2 | head -3); do\n        TOTAL=$((TOTAL+1))\n        START=$(date +%s%N)\n        HTTP_CODE=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "http://127.0.0.1:$port" 2>/dev/null)\n        END=$(date +%s%N)\n        MS=$(( (END-START) / 1000000 ))\n        [[ -n "$RESULTS" ]] && RESULTS+=","\n        RESULTS+="{\\"container\\":\\"$CONTAINER\\",\\"port\\":$port,\\"ms\\":$MS,\\"http\\":$HTTP_CODE}"\n        if [[ $MS -gt $((SLOW_THRESHOLD*1000)) ]]; then\n            SLOW_COUNT=$((SLOW_COUNT+1))\n        fi\n    done\ndone < <(docker ps --format "{{.Names}}|{{.Ports}}" 2>/dev/null | grep "0.0.0.0" | head -20)\necho "{\\"plugin\\":\\"response-timer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $SLOW_COUNT -eq 0 ] && echo pass || echo warn)\\",\\"total\\":$TOTAL,\\"slow\\":$SLOW_COUNT,\\"results\\":[$RESULTS],\\"message\\":\\"$TOTAL endpoints checked, $SLOW_COUNT slow (>${SLOW_THRESHOLD}s)\\"}"\nexit 0\n',
-      },
-    },
-  },
-  // ── Operations & Maintenance ─────────────────────────────────────────
-  {
-    name: 'port-guard',
-    category: 'operations',
-    description: 'Scans host ports before stack startup to detect conflicts that would cause silent bind failures. Catches the problem before Docker does.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Lock,
-    color: 'text-fuchsia-400',
-    bgColor: 'bg-fuchsia-500/10',
-    borderColor: 'border-fuchsia-500/20',
-    url: '',
-    tags: ['ports', 'conflicts', 'prevention'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-start': '#!/bin/bash\n# port-guard — pre-start hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCONFLICT_COUNT=0\nPORTS_LIST=""\nfor port in $(ss -tlnp 2>/dev/null | awk \'NR>1 {print $4}\' | grep -oE \'[0-9]+$\' | sort -un); do\n    [[ "$port" -ge 32768 ]] && continue\n    CONFLICT_COUNT=$((CONFLICT_COUNT+1))\n    [[ -n "$PORTS_LIST" ]] && PORTS_LIST+=","\n    PORTS_LIST+="$port"\ndone\necho "{\\"plugin\\":\\"port-guard\\",\\"event\\":\\"pre-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"ports_in_use\\":$CONFLICT_COUNT,\\"message\\":\\"$CONFLICT_COUNT ports in use on host\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'log-archiver',
-    category: 'operations',
-    description: 'Archives the last 500 lines of every container log with timestamps before stacks stop. Debug context preserved, even after containers are gone.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Archive,
-    color: 'text-indigo-400',
-    bgColor: 'bg-indigo-500/10',
-    borderColor: 'border-indigo-500/20',
-    url: '',
-    tags: ['logs', 'archival', 'debugging'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-stop': '#!/bin/bash\n# log-archiver — pre-stop hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nARCHIVE_DIR="$BASE/.logs/archive"\nmkdir -p "$ARCHIVE_DIR"\nTIMESTAMP=$(date +%Y%m%d_%H%M%S)\nCOUNT=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    LOG_FILE="$ARCHIVE_DIR/${container}_${TIMESTAMP}.log"\n    docker logs --tail 500 "$container" > "$LOG_FILE" 2>&1 && COUNT=$((COUNT+1))\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null)\necho "{\\"plugin\\":\\"log-archiver\\",\\"event\\":\\"pre-stop\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"archived\\":$COUNT,\\"path\\":\\"$ARCHIVE_DIR\\",\\"message\\":\\"Archived logs for $COUNT containers\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'dns-verify',
-    category: 'operations',
-    description: 'Tests HTTP connectivity on every exposed port after deployment, confirming services are actually reachable — not just running.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Wifi,
-    color: 'text-teal-400',
-    bgColor: 'bg-teal-500/10',
-    borderColor: 'border-teal-500/20',
-    url: '',
-    tags: ['connectivity', 'verification', 'networking'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# dns-verify — post-deploy hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCHECKED=0\nREACHABLE=0\nUNREACHABLE=""\nwhile IFS= read -r line; do\n    [[ -z "$line" ]] && continue\n    CONTAINER=$(echo "$line" | cut -d\'|\' -f1)\n    PORTS=$(echo "$line" | cut -d\'|\' -f2)\n    for port in $(echo "$PORTS" | grep -oE \'0\\.0\\.0\\.0:[0-9]+\' | cut -d: -f2); do\n        CHECKED=$((CHECKED+1))\n        if curl -s --max-time 3 -o /dev/null -w "%{http_code}" "http://127.0.0.1:$port" 2>/dev/null | grep -qE \'^[1-5][0-9]{2}$\'; then\n            REACHABLE=$((REACHABLE+1))\n        else\n            [[ -n "$UNREACHABLE" ]] && UNREACHABLE+=", "\n            UNREACHABLE+="$CONTAINER:$port"\n        fi\n    done\ndone < <(docker ps --format "{{.Names}}|{{.Ports}}" 2>/dev/null | head -20)\nif [[ $CHECKED -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"dns-verify\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"skip\\",\\"message\\":\\"No exposed ports to verify\\"}"\nelif [[ -z "$UNREACHABLE" ]]; then\n    echo "{\\"plugin\\":\\"dns-verify\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"pass\\",\\"checked\\":$CHECKED,\\"reachable\\":$REACHABLE,\\"message\\":\\"All $REACHABLE endpoints reachable\\"}"\nelse\n    echo "{\\"plugin\\":\\"dns-verify\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"checked\\":$CHECKED,\\"reachable\\":$REACHABLE,\\"unreachable\\":\\"$UNREACHABLE\\",\\"message\\":\\"$((CHECKED-REACHABLE)) of $CHECKED endpoints unreachable\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'cleanup-sweeper',
-    category: 'operations',
-    description: 'Prunes dangling images and detects orphaned networks after stacks stop. Keeps your Docker environment lean without manual intervention.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Eraser,
-    color: 'text-pink-400',
-    bgColor: 'bg-pink-500/10',
-    borderColor: 'border-pink-500/20',
-    url: '',
-    tags: ['cleanup', 'disk', 'maintenance'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-stop': '#!/bin/bash\n# cleanup-sweeper — post-stop hook\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCLEANED=0\nDANGLING=$(docker images -f "dangling=true" -q 2>/dev/null | wc -l)\nif [[ "$DANGLING" -gt 0 ]]; then\n    docker image prune -f >/dev/null 2>&1\n    CLEANED=$((CLEANED+DANGLING))\nfi\nORPHAN_NETS=$(docker network ls --filter "type=custom" -q 2>/dev/null | while read -r net; do\n    CONNECTED=$(docker network inspect "$net" --format \'{{len .Containers}}\' 2>/dev/null)\n    [[ "${CONNECTED:-0}" == "0" ]] && echo "$net"\ndone | wc -l)\nCACHE_SIZE=$(docker system df --format \'{{.Type}}\\t{{.Reclaimable}}\' 2>/dev/null | grep "Build Cache" | awk \'{print $2}\')\necho "{\\"plugin\\":\\"cleanup-sweeper\\",\\"event\\":\\"post-stop\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"dangling_images\\":$DANGLING,\\"orphan_networks\\":$ORPHAN_NETS,\\"cache_reclaimable\\":\\"${CACHE_SIZE:-0B}\\",\\"message\\":\\"Cleaned $CLEANED dangling images, found $ORPHAN_NETS orphan networks\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'crash-responder',
-    category: 'operations',
-    description: 'Detects containers that exited with non-zero codes after start events. Captures the last 50 lines of logs from crashed containers, saves them with timestamps, and optionally auto-restarts failed services up to 3 times.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Flame,
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10',
-    borderColor: 'border-red-500/20',
-    url: '',
-    tags: ['crash', 'recovery', 'auto-restart', 'operations'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-start': '#!/bin/bash\n# crash-responder — detects and logs crashed containers\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBASE="${BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"\nCRASH_DIR="$BASE/.logs/crash-responder"\nmkdir -p "$CRASH_DIR"\nCRASHED=0\nRESTARTED=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    EXIT_CODE=$(docker inspect "$container" --format "{{.State.ExitCode}}" 2>/dev/null)\n    STATUS=$(docker inspect "$container" --format "{{.State.Status}}" 2>/dev/null)\n    if [[ "$STATUS" == "exited" && "${EXIT_CODE:-0}" != "0" ]]; then\n        CRASHED=$((CRASHED+1))\n        TIMESTAMP=$(date +%Y%m%d_%H%M%S)\n        docker logs --tail 50 "$container" > "$CRASH_DIR/${container}_${TIMESTAMP}.log" 2>&1\n        # Auto-restart (max 3 per container per hour)\n        RESTART_COUNT=$(ls -1 "$CRASH_DIR/${container}_"*.log 2>/dev/null | wc -l)\n        if [[ $RESTART_COUNT -le 3 ]]; then\n            docker start "$container" >/dev/null 2>&1 && RESTARTED=$((RESTARTED+1))\n        fi\n    fi\ndone < <(docker ps -a --format "{{.Names}}" 2>/dev/null | head -50)\nif [[ $CRASHED -gt 0 ]]; then\n    echo "{\\"plugin\\":\\"crash-responder\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"alert\\",\\"crashed\\":$CRASHED,\\"restarted\\":$RESTARTED,\\"message\\":\\"$CRASHED crashed container(s), $RESTARTED auto-restarted\\"}"\nelse\n    echo "{\\"plugin\\":\\"crash-responder\\",\\"event\\":\\"post-start\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"message\\":\\"No crashed containers detected\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'volume-sizer',
-    category: 'operations',
-    description: 'Scans all Docker volumes after deployment, measures their disk usage, identifies volumes not attached to any running container, and reports the top 10 largest volumes. Helps you find where your disk space is going.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Database,
-    color: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/10',
-    borderColor: 'border-cyan-500/20',
-    url: '',
-    tags: ['volumes', 'disk', 'cleanup', 'operations'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# volume-sizer — reports volume disk usage\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nTOTAL_VOLS=0\nORPHAN_VOLS=0\nVOL_DATA=""\nwhile IFS= read -r vol; do\n    [[ -z "$vol" ]] && continue\n    TOTAL_VOLS=$((TOTAL_VOLS+1))\n    MOUNT=$(docker volume inspect "$vol" --format "{{.Mountpoint}}" 2>/dev/null)\n    SIZE=$(du -sh "$MOUNT" 2>/dev/null | cut -f1 || echo "?")\n    # Check if any container uses this volume\n    USERS=$(docker ps -a --filter "volume=$vol" --format "{{.Names}}" 2>/dev/null | wc -l)\n    if [[ "$USERS" -eq 0 ]]; then\n        ORPHAN_VOLS=$((ORPHAN_VOLS+1))\n    fi\n    [[ -n "$VOL_DATA" ]] && VOL_DATA+=","\n    VOL_DATA+="{\\"name\\":\\"$vol\\",\\"size\\":\\"$SIZE\\",\\"containers\\":$USERS}"\ndone < <(docker volume ls -q 2>/dev/null | head -30)\necho "{\\"plugin\\":\\"volume-sizer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"total\\":$TOTAL_VOLS,\\"orphaned\\":$ORPHAN_VOLS,\\"volumes\\":[$VOL_DATA],\\"message\\":\\"$TOTAL_VOLS volumes ($ORPHAN_VOLS orphaned)\\"}"\nexit 0\n',
-      },
-    },
-  },
-  // ── Advanced / Sophisticated ──────────────────────────────────────────
-  {
-    name: 'security-audit',
-    category: 'advanced',
-    description: 'Deep security scanner — checks for writable root filesystems, excessive capabilities, host PID/IPC namespace sharing, missing seccomp profiles, and containers running as UID 0. Generates a security score per service.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Shield,
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10',
-    borderColor: 'border-red-500/20',
-    url: '',
-    tags: ['security', 'audit', 'hardening'],
-    hookCount: 2,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# security-audit — pre-deploy deep scan\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then\n    echo "{\\"plugin\\":\\"security-audit\\",\\"status\\":\\"skip\\",\\"message\\":\\"No compose content\\"}"\n    exit 0\nfi\nSCORE=100\nFINDINGS=""\nFIND_COUNT=0\nadd_finding() {\n    local sev="$1" svc="$2" rule="$3" msg="$4" penalty="$5"\n    FIND_COUNT=$((FIND_COUNT+1))\n    SCORE=$((SCORE-penalty))\n    [[ -n "$FINDINGS" ]] && FINDINGS+=","\n    FINDINGS+="{\\"severity\\":\\"$sev\\",\\"service\\":\\"$svc\\",\\"rule\\":\\"$rule\\",\\"message\\":\\"$msg\\"}"\n}\nSERVICES=$(echo "$COMPOSE" | grep -E "^  [a-zA-Z_-][a-zA-Z0-9_-]*:" | sed "s/^  //;s/://")\nfor SVC in $SERVICES; do\n    BLOCK=$(echo "$COMPOSE" | sed -n "/^  ${SVC}:/,/^  [a-zA-Z_-]/p")\n    # Privileged mode\n    echo "$BLOCK" | grep -q "privileged:[[:space:]]*true" && add_finding "critical" "$SVC" "privileged" "Privileged mode — full host access" 25\n    # Docker socket mount\n    echo "$BLOCK" | grep -q "/var/run/docker.sock" && add_finding "critical" "$SVC" "docker-socket" "Docker socket mounted — daemon control" 20\n    # Host PID namespace\n    echo "$BLOCK" | grep -q "pid:[[:space:]]*host" && add_finding "high" "$SVC" "host-pid" "Host PID namespace — process visibility" 15\n    # Host IPC namespace\n    echo "$BLOCK" | grep -q "ipc:[[:space:]]*host" && add_finding "high" "$SVC" "host-ipc" "Host IPC namespace shared" 10\n    # Host network\n    echo "$BLOCK" | grep -q "network_mode:[[:space:]]*host" && add_finding "medium" "$SVC" "host-network" "Host network — no isolation" 10\n    # CAP_ADD ALL\n    echo "$BLOCK" | grep -q "ALL" && echo "$BLOCK" | grep -q "cap_add" && add_finding "critical" "$SVC" "cap-all" "ALL capabilities granted" 20\n    # No read_only root filesystem\n    if ! echo "$BLOCK" | grep -q "read_only:[[:space:]]*true"; then\n        add_finding "info" "$SVC" "writable-rootfs" "Root filesystem is writable" 2\n    fi\n    # No user directive (runs as root)\n    if ! echo "$BLOCK" | grep -q "user:"; then\n        add_finding "low" "$SVC" "root-user" "Runs as root (no user: set)" 3\n    fi\n    # No security_opt\n    if ! echo "$BLOCK" | grep -q "security_opt:"; then\n        add_finding "info" "$SVC" "no-seccomp" "No seccomp/apparmor profile" 1\n    fi\ndone\n[[ $SCORE -lt 0 ]] && SCORE=0\nGRADE="F"\n[[ $SCORE -ge 90 ]] && GRADE="A"\n[[ $SCORE -ge 80 ]] && [[ $SCORE -lt 90 ]] && GRADE="B"\n[[ $SCORE -ge 70 ]] && [[ $SCORE -lt 80 ]] && GRADE="C"\n[[ $SCORE -ge 50 ]] && [[ $SCORE -lt 70 ]] && GRADE="D"\necho "{\\"plugin\\":\\"security-audit\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"score\\":$SCORE,\\"grade\\":\\"$GRADE\\",\\"finding_count\\":$FIND_COUNT,\\"findings\\":[$FINDINGS],\\"message\\":\\"Security score: $SCORE/100 (Grade $GRADE) — $FIND_COUNT finding(s)\\"}"\nexit 0\n',
-        'post-deploy': '#!/bin/bash\n# security-audit — post-deploy runtime check\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nRUNTIME_ISSUES=""\nISSUE_COUNT=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    # Check if running as root\n    USER=$(docker inspect "$container" --format "{{.Config.User}}" 2>/dev/null)\n    if [[ -z "$USER" ]] || [[ "$USER" == "0" ]] || [[ "$USER" == "root" ]]; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n "$RUNTIME_ISSUES" ]] && RUNTIME_ISSUES+=","\n        RUNTIME_ISSUES+="{\\"container\\":\\"$container\\",\\"issue\\":\\"running-as-root\\"}"\n    fi\n    # Check if privileged\n    PRIV=$(docker inspect "$container" --format "{{.HostConfig.Privileged}}" 2>/dev/null)\n    if [[ "$PRIV" == "true" ]]; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n "$RUNTIME_ISSUES" ]] && RUNTIME_ISSUES+=","\n        RUNTIME_ISSUES+="{\\"container\\":\\"$container\\",\\"issue\\":\\"privileged-runtime\\"}"\n    fi\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\necho "{\\"plugin\\":\\"security-audit\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"runtime_issues\\":$ISSUE_COUNT,\\"issues\\":[$RUNTIME_ISSUES],\\"message\\":\\"$ISSUE_COUNT runtime security issue(s)\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'network-policy',
-    category: 'advanced',
-    description: 'Analyzes Docker network topology after deployment — detects services sharing the default bridge network, identifies containers with no network isolation, and maps inter-service connectivity.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Eye,
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10',
-    borderColor: 'border-blue-500/20',
-    url: '',
-    tags: ['networking', 'security', 'topology'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# network-policy — post-deploy network analysis\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nBRIDGE_CONTAINERS=""\nISOLATED=0\nNON_ISOLATED=0\nNETWORK_MAP=""\n# Check each running container network assignments\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    NETWORKS=$(docker inspect "$container" --format \'{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}\' 2>/dev/null)\n    ON_BRIDGE=false\n    NET_LIST=""\n    for net in $NETWORKS; do\n        [[ -n "$NET_LIST" ]] && NET_LIST+=","\n        NET_LIST+="\\"$net\\""\n        [[ "$net" == "bridge" ]] && ON_BRIDGE=true\n    done\n    if $ON_BRIDGE; then\n        NON_ISOLATED=$((NON_ISOLATED+1))\n        [[ -n "$BRIDGE_CONTAINERS" ]] && BRIDGE_CONTAINERS+=","\n        BRIDGE_CONTAINERS+="{\\"name\\":\\"$container\\",\\"networks\\":[$NET_LIST]}"\n    else\n        ISOLATED=$((ISOLATED+1))\n    fi\n    [[ -n "$NETWORK_MAP" ]] && NETWORK_MAP+=","\n    NETWORK_MAP+="{\\"container\\":\\"$container\\",\\"networks\\":[$NET_LIST]}"\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\nTOTAL=$((ISOLATED+NON_ISOLATED))\necho "{\\"plugin\\":\\"network-policy\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"ok\\",\\"total_containers\\":$TOTAL,\\"isolated\\":$ISOLATED,\\"on_default_bridge\\":$NON_ISOLATED,\\"bridge_containers\\":[$BRIDGE_CONTAINERS],\\"network_map\\":[$NETWORK_MAP],\\"message\\":\\"$ISOLATED isolated, $NON_ISOLATED on default bridge out of $TOTAL containers\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'dependency-checker',
-    category: 'advanced',
-    description: 'Validates service dependency chains — detects circular depends_on references, missing dependency targets, and services that depend on containers without health checks (which makes depends_on unreliable).',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Code,
-    color: 'text-purple-400',
-    bgColor: 'bg-purple-500/10',
-    borderColor: 'border-purple-500/20',
-    url: '',
-    tags: ['validation', 'dependencies', 'compose'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': "#!/bin/bash\n# dependency-checker — validates depends_on chains\nCONTEXT=$(cat)\nSTACK=$(echo \"$CONTEXT\" | jq -r '.stack // \"unknown\"' 2>/dev/null)\nCOMPOSE=$(echo \"$CONTEXT\" | jq -r '.compose // empty' 2>/dev/null)\nif [[ -z \"$COMPOSE\" ]]; then\n    echo '{\"plugin\":\"dependency-checker\",\"status\":\"skip\",\"message\":\"No compose content\"}'\n    exit 0\nfi\nISSUES=\"\"\nISSUE_COUNT=0\nSERVICES=$(echo \"$COMPOSE\" | grep -E '^  [a-zA-Z_-][a-zA-Z0-9_-]*:' | sed 's/^  //;s/://')\nDEPS_FILE=$(mktemp)\nHC_FILE=$(mktemp)\ntrap 'rm -f $DEPS_FILE $HC_FILE' EXIT\n# Build dependency + healthcheck maps using temp files\nfor SVC in $SERVICES; do\n    BLOCK=$(echo \"$COMPOSE\" | sed -n \"/^  ${SVC}:/,/^  [a-zA-Z_-]/p\")\n    echo \"$BLOCK\" | grep -q 'healthcheck:' && echo \"$SVC\" >> \"$HC_FILE\"\n    echo \"$BLOCK\" | grep -A20 'depends_on:' | grep -E '^      - ' | sed 's/^      - //' | tr -d ' ' | while read -r DEP; do\n        echo \"$SVC $DEP\" >> \"$DEPS_FILE\"\n    done\ndone\n# Validate\nwhile read -r SVC DEP; do\n    [[ -z \"$DEP\" ]] && continue\n    if ! echo \"$SERVICES\" | grep -qw \"$DEP\"; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"missing-dep\\\",\\\"message\\\":\\\"Depends on $DEP which is not defined\\\"}\"\n    elif ! grep -qw \"$DEP\" \"$HC_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"warning\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"no-hc-dep\\\",\\\"message\\\":\\\"Depends on $DEP which has no healthcheck\\\"}\"\n    fi\n    # Circular check\n    if grep -q \"^$DEP $SVC\" \"$DEPS_FILE\" 2>/dev/null; then\n        ISSUE_COUNT=$((ISSUE_COUNT+1))\n        [[ -n \"$ISSUES\" ]] && ISSUES+=\",\"\n        ISSUES+=\"{\\\"severity\\\":\\\"error\\\",\\\"service\\\":\\\"$SVC\\\",\\\"rule\\\":\\\"circular\\\",\\\"message\\\":\\\"Circular: $SVC <-> $DEP\\\"}\"\n    fi\ndone < \"$DEPS_FILE\"\nif [[ $ISSUE_COUNT -eq 0 ]]; then\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"pass\\\",\\\"issues\\\":[],\\\"message\\\":\\\"All dependency chains valid\\\"}\"\nelse\n    echo \"{\\\"plugin\\\":\\\"dependency-checker\\\",\\\"event\\\":\\\"pre-deploy\\\",\\\"stack\\\":\\\"$STACK\\\",\\\"status\\\":\\\"warn\\\",\\\"issue_count\\\":$ISSUE_COUNT,\\\"issues\\\":[$ISSUES],\\\"message\\\":\\\"$ISSUE_COUNT dependency issue(s)\\\"}\"\nfi\nexit 0\n",
-      },
-    },
-  },
-  {
-    name: 'secret-scanner',
-    category: 'advanced',
-    description: 'Scans compose files and environment variables for accidentally committed secrets — API keys, passwords, tokens, and private keys. Uses pattern matching for AWS keys, GitHub tokens, JWT secrets, database passwords, and 20+ secret formats.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Fingerprint,
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/10',
-    borderColor: 'border-amber-500/20',
-    url: '',
-    tags: ['secrets', 'scanning', 'security', 'credentials'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# secret-scanner — detects hardcoded secrets in compose\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"status\\":\\"skip\\",\\"message\\":\\"No compose content\\"}"\n    exit 0\nfi\nFINDINGS=""\nFIND_COUNT=0\nadd_finding() {\n    FIND_COUNT=$((FIND_COUNT+1))\n    [[ -n "$FINDINGS" ]] && FINDINGS+=","\n    FINDINGS+="{\\"rule\\":\\"$1\\",\\"pattern\\":\\"$2\\",\\"severity\\":\\"$3\\"}"\n}\n# Pattern checks\necho "$COMPOSE" | grep -qiE \'AKIA[0-9A-Z]{16}\' && add_finding "aws-access-key" "AKIA..." "critical"\necho "$COMPOSE" | grep -qiE \'ghp_[a-zA-Z0-9]{36}\' && add_finding "github-token" "ghp_..." "critical"\necho "$COMPOSE" | grep -qiE \'sk-[a-zA-Z0-9]{32,}\' && add_finding "openai-key" "sk-..." "critical"\necho "$COMPOSE" | grep -qiE \'-----BEGIN (RSA |EC |DSA )?PRIVATE KEY\' && add_finding "private-key" "PEM key" "critical"\necho "$COMPOSE" | grep -qiE \'password[=:][[:space:]]*[^${}\\n]{8,}\' && add_finding "hardcoded-password" "password=..." "high"\necho "$COMPOSE" | grep -qiE \'secret[=:][[:space:]]*[^${}\\n]{8,}\' && add_finding "hardcoded-secret" "secret=..." "high"\necho "$COMPOSE" | grep -qiE \'token[=:][[:space:]]*[a-zA-Z0-9._-]{20,}\' && add_finding "hardcoded-token" "token=..." "medium"\necho "$COMPOSE" | grep -qiE \'mysql://|postgres://|mongodb://.*:.*@\' && add_finding "connection-string" "db://user:pass@..." "high"\nif [[ $FIND_COUNT -eq 0 ]]; then\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"pass\\",\\"findings\\":[],\\"message\\":\\"No secrets detected\\"}"\nelse\n    echo "{\\"plugin\\":\\"secret-scanner\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"warn\\",\\"finding_count\\":$FIND_COUNT,\\"findings\\":[$FINDINGS],\\"message\\":\\"$FIND_COUNT potential secret(s) found — use environment variables instead\\"}"\nfi\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'network-firewall',
-    category: 'advanced',
-    description: 'Verifies that no container exposes sensitive internal ports (databases, caches, message queues) to the host network. Blocks deployments where MySQL 3306, PostgreSQL 5432, Redis 6379, or MongoDB 27017 are bound to 0.0.0.0 instead of internal-only.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: Network,
-    color: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/10',
-    borderColor: 'border-cyan-500/20',
-    url: '',
-    tags: ['firewall', 'ports', 'security', 'databases'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'pre-deploy': '#!/bin/bash\n# network-firewall — blocks exposed internal ports\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nCOMPOSE=$(echo "$CONTEXT" | jq -r \'.compose // empty\' 2>/dev/null)\nif [[ -z "$COMPOSE" ]]; then echo "{\\"plugin\\":\\"network-firewall\\",\\"status\\":\\"skip\\"}"; exit 0; fi\nDANGEROUS_PORTS="3306 5432 6379 27017 5672 9200 2181 8529 9042 11211"\nFLAGS=""\nFLAG_COUNT=0\nfor port in $DANGEROUS_PORTS; do\n    if echo "$COMPOSE" | grep -qE "0\\.0\\.0\\.0:${port}|\\\"${port}:${port}"; then\n        FLAG_COUNT=$((FLAG_COUNT+1))\n        [[ -n "$FLAGS" ]] && FLAGS+=","\n        SVC_NAME="unknown"\n        for svc in $(echo "$COMPOSE" | grep -E "^  [a-zA-Z]" | sed "s/://;s/^  //"); do\n            BLOCK=$(echo "$COMPOSE" | sed -n "/^  ${svc}:/,/^  [a-zA-Z]/p")\n            if echo "$BLOCK" | grep -q "$port"; then SVC_NAME="$svc"; break; fi\n        done\n        FLAGS+="{\\"port\\":$port,\\"service\\":\\"$SVC_NAME\\",\\"severity\\":\\"critical\\",\\"message\\":\\"Port $port exposed to host — use internal networking\\"}"\n    fi\ndone\necho "{\\"plugin\\":\\"network-firewall\\",\\"event\\":\\"pre-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $FLAG_COUNT -eq 0 ] && echo pass || echo warn)\\",\\"flags\\":[$FLAGS],\\"flag_count\\":$FLAG_COUNT,\\"message\\":\\"$([ $FLAG_COUNT -eq 0 ] && echo "No dangerous ports exposed" || echo "$FLAG_COUNT internal port(s) exposed to host")\\"}"\nexit 0\n',
-      },
-    },
-  },
-  {
-    name: 'label-enforcer',
-    category: 'advanced',
-    description: 'Enforces organizational labeling standards on all deployed containers. Checks for required labels like maintainer, version, stack-category, and backup-policy. Generates compliance reports and blocks deployments missing critical labels.',
-    author: 'DCS Community',
-    version: '1.0.0',
-    icon: ScrollText,
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/10',
-    borderColor: 'border-emerald-500/20',
-    url: '',
-    tags: ['labels', 'compliance', 'governance', 'standards'],
-    hookCount: 1,
-    templateCount: 0,
-    scaffold: {
-      hooks: {
-        'post-deploy': '#!/bin/bash\n# label-enforcer — checks container labels for compliance\nCONTEXT=$(cat)\nSTACK=$(echo "$CONTEXT" | jq -r \'.stack // "unknown"\' 2>/dev/null)\nREQUIRED_LABELS="maintainer"\nMISSING=""\nMISS_COUNT=0\nCHECKED=0\nwhile IFS= read -r container; do\n    [[ -z "$container" ]] && continue\n    CHECKED=$((CHECKED+1))\n    LABELS=$(docker inspect "$container" --format \'{{json .Config.Labels}}\' 2>/dev/null || echo "{}")\n    for label in $REQUIRED_LABELS; do\n        HAS=$(echo "$LABELS" | grep -c "\\"$label\\"" 2>/dev/null || echo 0)\n        if [[ "$HAS" -eq 0 ]]; then\n            MISS_COUNT=$((MISS_COUNT+1))\n            [[ -n "$MISSING" ]] && MISSING+=","\n            MISSING+="{\\"container\\":\\"$container\\",\\"label\\":\\"$label\\"}"\n        fi\n    done\ndone < <(docker ps --format "{{.Names}}" 2>/dev/null | head -50)\necho "{\\"plugin\\":\\"label-enforcer\\",\\"event\\":\\"post-deploy\\",\\"stack\\":\\"$STACK\\",\\"status\\":\\"$([ $MISS_COUNT -eq 0 ] && echo pass || echo info)\\",\\"checked\\":$CHECKED,\\"missing\\":$MISS_COUNT,\\"issues\\":[$MISSING],\\"message\\":\\"$CHECKED containers checked, $MISS_COUNT missing label(s)\\"}"\nexit 0\n',
-      },
-    },
-  },
-  // ── Dashboard Cards ────────────────────────────────────────────────────
   {
     name: 'example-card',
     category: 'cards',
@@ -581,6 +111,55 @@ const FEATURED_PLUGINS: FeaturedPlugin[] = [
   },
 ]
 
+const CATEGORY_STYLE: Record<string, { icon: React.ElementType; color: string; bgColor: string; borderColor: string }> = {
+  safety: { icon: Shield, color: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/20' },
+  monitoring: { icon: Activity, color: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/20' },
+  operations: { icon: Wrench, color: 'text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/20' },
+  advanced: { icon: Lock, color: 'text-rose-400', bgColor: 'bg-rose-500/10', borderColor: 'border-rose-500/20' },
+  cards: { icon: LayoutTemplate, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/20' },
+}
+
+const PLUGIN_ICONS: Record<string, React.ElementType> = {
+  'env-validator': FileSearch,
+  'deploy-guard': Shield,
+  'auto-backup': Archive,
+  'rollback-sentinel': RotateCcw,
+  'container-notifier': Bell,
+  'resource-monitor': Gauge,
+  'uptime-ping': Activity,
+  'disk-watchdog': HardDrive,
+  'response-timer': Timer,
+  'port-guard': Network,
+  'cleanup-sweeper': Trash2,
+  'crash-responder': RefreshCw,
+  'volume-sizer': Database,
+  'dependency-checker': GitBranch,
+  'network-firewall': Lock
+}
+
+/** Display shape for a catalogue entry delivered by the server */
+function catalogToDisplay(entry: PluginCatalogEntry): FeaturedPlugin {
+  const cat = (entry.category || 'operations') as FeaturedPlugin['category']
+  const style = CATEGORY_STYLE[cat || 'operations'] || CATEGORY_STYLE.operations
+  return {
+    name: entry.name,
+    description: entry.description,
+    author: entry.author || 'DCS Community',
+    version: entry.version,
+    icon: PLUGIN_ICONS[entry.name] || style.icon,
+    color: style.color,
+    bgColor: style.bgColor,
+    borderColor: style.borderColor,
+    url: '',
+    tags: entry.tags || [],
+    hookCount: entry.hooks?.length ?? 0,
+    templateCount: 0,
+    category: cat,
+    env: entry.env,
+    fromCatalog: true,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plugin creation guide content
 // ---------------------------------------------------------------------------
@@ -608,8 +187,13 @@ const GUIDE_SECTIONS = [
   "version": "1.0.0",
   "description": "What your plugin does",
   "author": "Your Name",
-  "enabled": true
-}`,
+  "enabled": true,
+  "hooks": ["post-start"],
+  "env": ["NOTIFY_WEBHOOK_URL"],
+  "config": { "threshold": 85 }
+}
+// "env": root .env values the hooks may read
+// "config": editable from the UI, passed as DCS_PLUGIN_CONFIG`,
   },
   {
     title: 'Example Hook',
@@ -620,32 +204,34 @@ const GUIDE_SECTIONS = [
 
 CONTEXT=$(cat)
 STACK=$(echo "$CONTEXT" | jq -r '.stack // "unknown"')
-STATUS=$(echo "$CONTEXT" | jq -r '.success // false')
+OK=$(echo "$CONTEXT" | jq -r '.success // true')
+[ "\${DCS_DRY_RUN:-false}" = "true" ] && { echo "dry run: skipping side effects"; exit 0; }
 
-if [ "$STATUS" = "true" ]; then
-  echo "✓ $STACK deployed successfully"
+if [ "$OK" = "true" ]; then
+  echo "✓ $STACK deployed" >> "$PLUGIN_STATE_DIR/log.txt"
 else
-  echo "✗ $STACK deployment failed"
-  exit 1
+  curl -s -H "Title: DCS" -d "$STACK deployment failed" "$DCS_NTFY_URL"
 fi`,
   },
   {
     title: 'Available Hooks',
     icon: Zap,
-    content: `pre-start      Before stacks start
-post-start     After stacks start
-pre-stop       Before stacks stop
-post-stop      After stacks stop
-pre-update     Before stack image update
-post-update    After stack image update
-pre-deploy     Before template deployment
-post-deploy    After template deployment
-pre-backup     Before backup operation
-post-backup    After backup completes
-pre-restore    Before snapshot restore
-post-restore   After snapshot restore
-health-check   After health check runs
-on-error       When a stack operation fails`,
+    content: `pre-start      Before a stack starts (stack, batch, template auto-start)
+post-start     After the start finished — context.success tells the outcome
+pre-stop       Before a stack stops
+post-stop      After the stop finished
+pre-update     Before a stack's images are pulled
+post-update    After the update — with changed_images
+pre-deploy     Before a template is merged (context.compose = the template;
+               dry runs set dry_run: true and show your output in the preview)
+post-deploy    After the deployment (and its auto-start) — with success
+
+Context arrives as JSON on stdin: {event, stack, project, compose_file,
+action, success, containers[], template, compose, dry_run}.
+Environment: BASE_DIR COMPOSE_DIR DCS_EVENT PLUGIN_NAME PLUGIN_DIR
+PLUGIN_STATE_DIR DCS_PLUGIN_CONFIG DCS_DRY_RUN DCS_NTFY_URL NTFY_TOKEN
+DOCKER_COMPOSE_CMD TZ, plus the .env names listed under "env" in
+plugin.json. 30 s timeout, 64 KB output, logs on the plugin's page.`,
   },
 ]
 
@@ -654,7 +240,7 @@ on-error       When a stack operation fails`,
 // ---------------------------------------------------------------------------
 
 export default function Plugins() {
-  const { plugins, loading, installing, error, fetchPlugins, installPlugin, scaffoldPlugin, removePlugin, togglePlugin } = usePluginStore()
+  const { plugins, catalog, catalogLoading, loading, installing, error, fetchPlugins, fetchCatalog, installPlugin, installFromCatalog, scaffoldPlugin, removePlugin, togglePlugin } = usePluginStore()
   const [showInstall, setShowInstall] = useState(false)
   const [gitUrl, setGitUrl] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
@@ -664,7 +250,14 @@ export default function Plugins() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
 
-  useEffect(() => { if (isConnected) fetchPlugins() }, [fetchPlugins, isConnected])
+  useEffect(() => { if (isConnected) { fetchPlugins(); fetchCatalog() } }, [fetchPlugins, fetchCatalog, isConnected])
+
+  // Everything the page can offer: the two UI-side entries plus the server catalogue
+  const displayPlugins = useMemo<FeaturedPlugin[]>(() => {
+    const fromServer = catalog.map(catalogToDisplay)
+    const names = new Set(fromServer.map((p) => p.name))
+    return [...SPECIAL_PLUGINS.filter((sp) => !names.has(sp.name)), ...fromServer]
+  }, [catalog])
 
   // Close topmost modal on Escape
   useEffect(() => {
@@ -696,7 +289,9 @@ export default function Plugins() {
     }
     setInstallingFeatured(fp.name)
     let ok: boolean
-    if (fp.scaffold) {
+    if (fp.fromCatalog) {
+      ok = await installFromCatalog(fp.name)
+    } else if (fp.scaffold) {
       // Scaffold bundled plugin directly on disk (no git clone needed)
       ok = await scaffoldPlugin({
         name: fp.name,
@@ -711,20 +306,24 @@ export default function Plugins() {
     }
     setInstallingFeatured(null)
     if (ok) {
-      addToast({ type: 'success', message: `${fp.name} installed successfully` })
+      addToast({ type: 'success', message: `${fp.name} installed — enable it to activate its hooks` })
+    } else {
+      addToast({ type: 'error', message: usePluginStore.getState().error || `Failed to install ${fp.name}` })
     }
-  }, [installingFeatured, plugins, installPlugin, scaffoldPlugin, addToast])
+  }, [installingFeatured, plugins, installPlugin, installFromCatalog, scaffoldPlugin, addToast])
 
   const installedNames = new Set(plugins.map(p => p.name))
 
   // Built-in plugin toggle — just calls the store (which handles localStorage persistence)
   const handleBuiltInToggle = useCallback((name: string) => {
-    togglePlugin(name)
-  }, [togglePlugin])
+    togglePlugin(name).then((ok) => {
+      if (!ok) addToast({ type: 'error', message: usePluginStore.getState().error || `Could not toggle ${name}` })
+    })
+  }, [togglePlugin, addToast])
 
   // Read built-in toggle state from the store (reactive — re-renders on toggle)
   const builtInToggles: Record<string, boolean> = {}
-  for (const fp of FEATURED_PLUGINS) {
+  for (const fp of displayPlugins) {
     if (fp.builtIn) {
       const p = plugins.find(pl => pl.name === fp.name)
       builtInToggles[fp.name] = p ? p.enabled : true
@@ -832,7 +431,7 @@ export default function Plugins() {
 
       {/* Featured Plugins — grouped by category */}
       {(['safety', 'monitoring', 'operations', 'advanced', 'cards'] as const).map((cat) => {
-        const catPlugins = FEATURED_PLUGINS.filter((fp) => (fp.category || 'safety') === cat)
+        const catPlugins = displayPlugins.filter((fp) => (fp.category || 'safety') === cat)
         if (catPlugins.length === 0) return null
         const catInfo = CATEGORY_LABELS[cat]
         const CatIcon = catInfo.icon

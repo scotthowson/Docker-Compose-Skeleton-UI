@@ -6,11 +6,14 @@ import React, { useCallback, useRef, useState, useEffect } from 'react'
 import {
   X, RotateCcw, Settings2, Plus, Check, Move,
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
-  TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket,
+  TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DashboardCard } from '../../../shared/types'
 import { getCardEntry, clampW, clampH, clampCardSize, getCardConstraints, H_UNIT, GRID_COLS } from './cardRegistry'
+
+// The CSS grid gap (px); the real row pitch is H_UNIT + GRID_GAP
+const GRID_GAP = 8
 
 import { fetchPluginCards } from '../../api/endpoints'
 import { apiClient } from '../../api/client'
@@ -34,10 +37,11 @@ import NotificationStatus from './NotificationStatus'
 import ActiveAutomations from './ActiveAutomations'
 import RecentEvents from './RecentEvents'
 import QuickActions from './QuickActions'
+import CrowdSecStatus from './CrowdSecStatus'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
-  TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket,
+  TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
 }
 
 const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
@@ -49,7 +53,7 @@ const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   'backup-status': BackupStatusCard, 'log-health': LogHealthSummary,
   'maintenance': MaintenanceSummary, 'notifications': NotificationStatus,
   'automations': ActiveAutomations, 'recent-events': RecentEvents,
-  'quick-actions': QuickActions,
+  'quick-actions': QuickActions, 'crowdsec': CrowdSecStatus,
 }
 
 /** Plugin card iframe — fetches HTML from API and renders via srcdoc */
@@ -141,11 +145,16 @@ export default function DashboardGrid({
   React.useEffect(() => {
     if (!editMode) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDiscardEdit()
+      if (e.key !== 'Escape') return
+      const t = e.target as HTMLElement | null
+      // Typing a divider title or using a picker must not throw the session away
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (showPicker) { setShowPicker(false); return }
+      onDiscardEdit()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editMode, onDiscardEdit])
+  }, [editMode, onDiscardEdit, showPicker])
 
   // Calculate total grid height
   const visibleCards = cards.filter((c) => c.visible)
@@ -165,7 +174,7 @@ export default function DashboardGrid({
     function onMove(ev: MouseEvent) {
       ev.preventDefault()
       const dw = Math.round((ev.clientX - startX) / colPx)
-      const dh = Math.round((ev.clientY - startY) / H_UNIT)
+      const dh = Math.round((ev.clientY - startY) / (H_UNIT + GRID_GAP))
       const clamped = clampCardSize(id, startW + dw, startH + dh)
       onResizeCard(id, clamped.w, clamped.h)
     }
@@ -191,7 +200,7 @@ export default function DashboardGrid({
     function onMove(ev: MouseEvent) {
       ev.preventDefault()
       const dx = Math.round((ev.clientX - startMouseX) / colPx)
-      const dy = Math.round((ev.clientY - startMouseY) / H_UNIT)
+      const dy = Math.round((ev.clientY - startMouseY) / (H_UNIT + GRID_GAP))
       const newX = Math.max(0, Math.min(GRID_COLS - 1, startCardX + dx))
       const newY = Math.max(0, startCardY + dy)
       onMoveCard(id, newX, newY)

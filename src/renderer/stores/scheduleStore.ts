@@ -74,10 +74,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   toggleSchedule: async (id) => {
     try {
-      const updated = await api.toggleSchedule(id)
-      set(prev => ({ schedules: prev.schedules.map(s => s.id === id ? updated : s) }))
+      const res = await api.toggleSchedule(id)
+      // The server answers {success, id, enabled}: merge the flag, keep the entry
+      const enabled = (res as { enabled?: boolean }).enabled
+      set(prev => ({ schedules: prev.schedules.map(s => s.id === id ? { ...s, enabled: enabled ?? !s.enabled } : s) }))
       return true
-    } catch { return false }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to toggle schedule' })
+      return false
+    }
   },
 
   runSchedule: async (id) => {

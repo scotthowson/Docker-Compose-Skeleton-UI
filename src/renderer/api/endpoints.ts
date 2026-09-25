@@ -126,6 +126,7 @@ import type {
   SecretSetResponse,
   SecretDeleteResponse,
   SecretExistsResponse,
+  SecretReferencesResponse,
   ScheduleListResponse,
   ScheduleCreateResponse,
   Schedule,
@@ -134,6 +135,8 @@ import type {
   StackHealthScore,
   HealthScoreHistoryResponse,
   PluginListResponse,
+  PluginCatalogResponse,
+  CrowdSecStatusResponse,
   PluginInstallResponse,
   PluginDeleteResponse,
   PluginHooksListResponse,
@@ -892,7 +895,7 @@ export function captureMetricsSnapshot(): Promise<MetricsSnapshotResponse> {
 }
 
 /** GET /metrics/trends — Query historical metrics */
-export function fetchMetricsTrends(range: '1h' | '6h' | '24h' | '7d' = '1h'): Promise<MetricsTrendsResponse> {
+export function fetchMetricsTrends(range: string = '1h'): Promise<MetricsTrendsResponse> {
   return apiClient.get<MetricsTrendsResponse>(`/metrics/trends?range=${range}`)
 }
 
@@ -1190,6 +1193,11 @@ export function deleteAutomation(id: string): Promise<{ success: boolean; delete
   return apiClient.delete<{ success: boolean; deleted: string }>(`/automations/${encodeURIComponent(id)}`)
 }
 
+/** POST /automations/:id/run — Run an automation now (admin) */
+export function runAutomation(id: string): Promise<{ success: boolean; id: string; action: string; message: string }> {
+  return apiClient.post(`/automations/${encodeURIComponent(id)}/run`)
+}
+
 /** GET /automations/:id/history — Automation run history */
 export function fetchAutomationHistory(id: string): Promise<AutomationHistoryResponse> {
   return apiClient.get<AutomationHistoryResponse>(`/automations/${encodeURIComponent(id)}/history`)
@@ -1286,6 +1294,11 @@ export function checkSecretExists(key: string): Promise<SecretExistsResponse> {
   return apiClient.get<SecretExistsResponse>(`/secrets/${encodeURIComponent(key)}/exists`)
 }
 
+/** GET /secrets/:key/references — Stacks and env files that reference a secret */
+export function fetchSecretReferences(key: string): Promise<SecretReferencesResponse> {
+  return apiClient.get<SecretReferencesResponse>(`/secrets/${encodeURIComponent(key)}/references`)
+}
+
 // ---------------------------------------------------------------------------
 // Schedules
 // ---------------------------------------------------------------------------
@@ -1333,6 +1346,16 @@ export function fetchHealthScoreHistory(range: string = '24h'): Promise<HealthSc
 // ---------------------------------------------------------------------------
 // Plugins
 // ---------------------------------------------------------------------------
+
+/** GET /plugins/catalog — Plugins shipped with DCS that can be installed */
+export function fetchPluginCatalog(): Promise<PluginCatalogResponse> {
+  return apiClient.get<PluginCatalogResponse>('/plugins/catalog')
+}
+
+/** POST /plugins/catalog/:name/install — Install a catalogue plugin (installed disabled) */
+export function installCatalogPlugin(name: string): Promise<{ success: boolean; plugin: Plugin; message: string }> {
+  return apiClient.post(`/plugins/catalog/${encodeURIComponent(name)}/install`)
+}
 
 export function fetchPlugins(): Promise<PluginListResponse> {
   return apiClient.get<PluginListResponse>('/plugins')
@@ -1517,4 +1540,28 @@ export function applyOsUpdates(terminalToken: string, password?: string): Promis
 /** GET /system/os-update/status — Poll background OS update status */
 export function getOsUpdateStatus(): Promise<OsUpdateStatusResponse> {
   return apiClient.get<OsUpdateStatusResponse>('/system/os-update/status')
+}
+
+// ---------------------------------------------------------------------------
+// CrowdSec
+// ---------------------------------------------------------------------------
+
+/** GET /crowdsec/status — presence, whitelist state and active decisions */
+export function crowdsecStatus(): Promise<CrowdSecStatusResponse> {
+  return apiClient.get<CrowdSecStatusResponse>('/crowdsec/status')
+}
+
+/** POST /crowdsec/unban-me — remove bans on the caller's and the home public address */
+export function crowdsecUnbanMe(): Promise<{ success: boolean; addresses: string[]; message: string }> {
+  return apiClient.post('/crowdsec/unban-me')
+}
+
+/** POST /crowdsec/trust — whitelist an address (defaults to the home public address and the caller) */
+export function crowdsecTrust(ip?: string): Promise<{ success: boolean; addresses: string[]; synced: boolean; message?: string }> {
+  return apiClient.post('/crowdsec/trust', ip ? { ip } : {})
+}
+
+/** DELETE /crowdsec/decisions/:ip — unban one address */
+export function crowdsecUnban(ip: string): Promise<{ success: boolean; ip: string; message: string }> {
+  return apiClient.delete(`/crowdsec/decisions/${encodeURIComponent(ip)}`)
 }

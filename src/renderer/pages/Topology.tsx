@@ -410,7 +410,7 @@ function DetailPanel({
 export default function Topology() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
-  const { data: topoData, loading, refresh } = usePolling<TopologyResponse>(
+  const { data: topoData, loading, error, refresh } = usePolling<TopologyResponse>(
     fetchTopology, 15000, { enabled: isConnected },
   )
 
@@ -475,8 +475,8 @@ export default function Topology() {
   }, [layout])
 
   // --- Zoom handlers ---
-  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + ZOOM_STEP, MAX_ZOOM)), [])
-  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - ZOOM_STEP, MIN_ZOOM)), [])
+  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z * 1.25, MAX_ZOOM)), [])
+  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z / 1.25, MIN_ZOOM)), [])
   const handleReset = useCallback(() => {
     if (!layout || !containerRef.current) { setZoom(1); setPan({ x: 0, y: 0 }); return }
     const rect = containerRef.current.getBoundingClientRect()
@@ -487,11 +487,30 @@ export default function Topology() {
     setPan({ x: (rect.width - layout.w * fitZoom) / 2, y: (rect.height - layout.h * fitZoom) / 2 })
   }, [layout])
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const d = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-    setZoom((z) => Math.min(Math.max(z + d, MIN_ZOOM), MAX_ZOOM))
-  }, [])
+  // React's onWheel is passive (preventDefault is ignored and the page scrolls),
+  // so the wheel is handled natively: multiplicative zoom centred on the cursor.
+  const zoomRef = useRef(zoom); zoomRef.current = zoom
+  const panRef = useRef(pan); panRef.current = pan
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const factor = e.deltaY > 0 ? 0.9 : 1.1
+      const z0 = zoomRef.current
+      const z1 = Math.min(Math.max(z0 * factor, MIN_ZOOM), MAX_ZOOM)
+      if (z1 === z0) return
+      const p0 = panRef.current
+      setPan({ x: cx - (cx - p0.x) * (z1 / z0), y: cy - (cy - p0.y) * (z1 / z0) })
+      setZoom(z1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [layout])
+  const reduceMotion = useMemo(() => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, [])
 
   // --- Pan handlers ---
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -694,6 +713,13 @@ export default function Topology() {
           <div className="flex items-center justify-center py-24">
             <Loader2 size={28} className="animate-spin text-slate-500" />
           </div>
+        ) : error && !topoData ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+            <Network size={40} className="text-rose-500/50 mb-4" />
+            <p className="text-sm text-slate-400 mb-1">Could not load the topology</p>
+            <p className="text-xs text-slate-500 mb-4">{error.message}</p>
+            <button onClick={refresh} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors">Retry</button>
+          </div>
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
             <Network size={40} className="text-slate-500 mb-4" />
@@ -709,7 +735,6 @@ export default function Topology() {
               cursor: isPanning ? 'grabbing' : 'grab',
               touchAction: 'none',
             }}
-            onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -730,14 +755,14 @@ export default function Topology() {
 
                   {/* Network color gradients (for wires) */}
                   {NETWORK_COLORS.map((color, i) => (
-                    <linearGradient key={`ng${i}`} id={`netGrad${i}`} x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient key={`ng${i}`} id={`netGrad${i}`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={layout?.h ?? 1000}>
                       <stop offset="0%" stopColor={color} stopOpacity={0.5} />
                       <stop offset="100%" stopColor={color} stopOpacity={0.8} />
                     </linearGradient>
                   ))}
 
                   {/* Structural wire gradient (stack → container) */}
-                  <linearGradient id="structGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="structGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={layout?.h ?? 1000}>
                     <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.5} />
                     <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.2} />
                   </linearGradient>
@@ -793,7 +818,7 @@ export default function Topology() {
                         style={{ transition: 'opacity 0.2s, stroke-width 0.2s' }}
                       />
                       {/* Animated flow dot when highlighted */}
-                      {isHigh && (
+                      {isHigh && !reduceMotion && (
                         <circle r={2.2} fill={wireColor} opacity={0.8}>
                           <animateMotion dur="2s" repeatCount="indefinite" path={path} />
                         </circle>
@@ -984,6 +1009,7 @@ export default function Topology() {
                       onMouseEnter={() => setHoveredContainer(c.node.id)}
                       onMouseLeave={() => setHoveredContainer(null)}
                     >
+                      <title>{`${c.node.id} — ${c.node.state || 'unknown'}${c.node.health && c.node.health !== 'none' ? ` (${c.node.health})` : ''} · ${c.node.image}`}</title>
                       {/* Outer glow rings on hover */}
                       {(isHigh || isSel) && (
                         <>

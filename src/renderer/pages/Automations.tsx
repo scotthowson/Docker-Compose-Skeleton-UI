@@ -8,11 +8,13 @@ import {
   CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
   AlertTriangle, Box, Layers, HardDrive, Bell, Archive,
   X, History, CheckCircle, XCircle, ChevronDown, ChevronUp,
-  BookOpen, ChevronRight, Terminal,
+  BookOpen, ChevronRight, Terminal, Pencil, PlayCircle,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
+import { ErrorState } from '../components/common/PageState'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import {
@@ -21,6 +23,7 @@ import {
   updateAutomation,
   deleteAutomation,
   fetchAutomationHistory,
+  runAutomation,
 } from '../api/endpoints'
 import type { AutomationRule, AutomationHistoryEntry } from '../../shared/types'
 
@@ -38,10 +41,10 @@ const CRON_PRESETS: { label: string; cron: string }[] = [
 
 const CONDITION_OPTIONS = [
   { value: 'container_unhealthy', label: 'Container Unhealthy' },
-  { value: 'container_stopped', label: 'Container Stopped Unexpectedly' },
-  { value: 'high_cpu', label: 'High CPU Usage (>90%)' },
-  { value: 'high_memory', label: 'High Memory Usage (>90%)' },
-  { value: 'disk_full', label: 'Disk Full (>90%)' },
+  { value: 'container_stopped', label: 'Container Exited With An Error' },
+  { value: 'high_cpu', label: 'High CPU Usage (≥90%)' },
+  { value: 'high_memory', label: 'High Memory Usage (≥90%)' },
+  { value: 'disk_full', label: 'Disk Full (≥90%)' },
 ]
 
 const ACTION_TYPES = [
@@ -50,6 +53,7 @@ const ACTION_TYPES = [
   { value: 'stack_start', label: 'Start Stack' },
   { value: 'stack_stop', label: 'Stop Stack' },
   { value: 'docker_prune', label: 'Docker Prune' },
+  { value: 'backup_trigger', label: 'Trigger Backup' },
   { value: 'notification_send', label: 'Send Notification' },
 ]
 
@@ -128,7 +132,10 @@ at specific intervals. Common patterns:
 0 */6 * * *    Every 6 hours
 0 3 * * *      Daily at 3 AM
 
-Fields: minute hour day-of-month month day-of-week`,
+Fields: minute hour day-of-month month day-of-week
+
+The DCS server evaluates every enabled rule once a
+minute in the server's time zone (TZ) — no crontab.`,
   },
   {
     title: 'Condition-Based Rules',
@@ -136,12 +143,17 @@ Fields: minute hour day-of-month month day-of-week`,
     content: `Condition rules trigger when a monitored state
 changes. Available conditions:
 
-container_unhealthy   Container fails health check
-high_cpu              CPU usage exceeds threshold
-disk_full             Disk usage exceeds threshold
+container_unhealthy   A container's health check fails
+container_stopped     A container exited with an error
+high_cpu              Load per core is at or above 90%
+high_memory           Memory usage is at or above 90%
+disk_full             The installation's disk is 90% full
 
-DCS evaluates conditions during each health check
-cycle and fires the action when matched.`,
+Conditions are checked every minute. After firing, a
+rule waits 15 minutes before it can fire again, so a
+flapping container does not trigger a restart storm.
+With target "*", container actions apply to the
+containers that matched the condition.`,
   },
   {
     title: 'Available Actions',
@@ -155,7 +167,11 @@ backup_trigger       Trigger a configuration backup
 notification_send    Send a notification alert
 
 Set target to * to apply to all, or specify
-a stack/container name.`,
+a stack/container name. For "Send Notification"
+the target is the message text.
+
+"Run now" on a card executes the action immediately
+and records the outcome in its history.`,
   },
   {
     title: 'Example: Nightly Cleanup',
@@ -179,8 +195,11 @@ export default function Automations() {
   const { addToast } = useToast()
 
   // Modal & form state
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [runningId, setRunningId] = useState<string | null>(null)
   const [formName, setFormName] = useState('')
   const [formTriggerType, setFormTriggerType] = useState<'schedule' | 'condition'>('schedule')
   const [formCron, setFormCron] = useState('0 * * * *')
@@ -207,7 +226,7 @@ export default function Automations() {
   const [expandedHistoryIdx, setExpandedHistoryIdx] = useState<number | null>(null)
 
   // Polling
-  const { data, loading, refresh } = usePolling(
+  const { data, loading, error, refresh } = usePolling(
     fetchAutomations,
     10000,
     { enabled: isConnected },
@@ -237,10 +256,23 @@ export default function Automations() {
         message: `${rule.name} ${rule.enabled ? 'disabled' : 'enabled'}`,
       })
       refresh()
-    } catch {
-      addToast({ type: 'error', message: `Failed to toggle ${rule.name}` })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `Failed to toggle ${rule.name}` })
     } finally {
       setTogglingId(null)
+    }
+  }, [addToast, refresh])
+
+  const handleRun = useCallback(async (rule: AutomationRule) => {
+    setRunningId(rule.id)
+    try {
+      const res = await runAutomation(rule.id)
+      addToast({ type: res.success ? 'success' : 'error', message: `${rule.name}: ${res.message || (res.success ? 'done' : 'failed')}` })
+      refresh()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `Failed to run ${rule.name}` })
+    } finally {
+      setRunningId(null)
     }
   }, [addToast, refresh])
 
@@ -251,8 +283,8 @@ export default function Automations() {
       addToast({ type: 'success', message: 'Automation rule deleted' })
       setConfirmDeleteId(null)
       refresh()
-    } catch {
-      addToast({ type: 'error', message: 'Failed to delete automation rule' })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to delete automation rule' })
     } finally {
       setDeleting(false)
     }
@@ -263,26 +295,32 @@ export default function Automations() {
     setCreating(true)
     try {
       const triggerValue = formTriggerType === 'schedule' ? formCron : formCondition
-      await createAutomation({
+      const payload = {
         name: formName.trim(),
         trigger_type: formTriggerType,
         trigger_value: triggerValue,
         action_type: formActionType,
         action_target: formActionTarget.trim() || '*',
-        enabled: true,
-      })
-      addToast({ type: 'success', message: 'Automation rule created' })
+      }
+      if (editingId) {
+        await updateAutomation(editingId, payload)
+        addToast({ type: 'success', message: 'Automation rule updated' })
+      } else {
+        await createAutomation({ ...payload, enabled: true })
+        addToast({ type: 'success', message: 'Automation rule created' })
+      }
       setShowCreateModal(false)
       resetForm()
       refresh()
-    } catch {
-      addToast({ type: 'error', message: 'Failed to create automation rule' })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to save automation rule' })
     } finally {
       setCreating(false)
     }
-  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, addToast, refresh])
+  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, editingId, addToast, refresh])
 
   const resetForm = useCallback(() => {
+    setEditingId(null)
     setFormName('')
     setFormTriggerType('schedule')
     setFormCron('0 * * * *')
@@ -295,6 +333,17 @@ export default function Automations() {
     resetForm()
     setShowCreateModal(true)
   }, [resetForm])
+
+  const openEditModal = useCallback((rule: AutomationRule) => {
+    setEditingId(rule.id)
+    setFormName(rule.name)
+    setFormTriggerType(rule.trigger_type)
+    if (rule.trigger_type === 'schedule') setFormCron(rule.trigger_value || '0 * * * *')
+    else setFormCondition(rule.trigger_value || 'container_unhealthy')
+    setFormActionType(rule.action_type)
+    setFormActionTarget(rule.action_target === '*' ? '' : rule.action_target)
+    setShowCreateModal(true)
+  }, [])
 
   // Open history panel for a rule
   const openHistory = useCallback(async (rule: AutomationRule) => {
@@ -368,13 +417,15 @@ export default function Automations() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          {isAdmin && (
+<button
             onClick={openCreateModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
           >
             <Plus size={13} />
             Add Automation
           </button>
+)}
           <button
             onClick={() => setShowGuide(!showGuide)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200"
@@ -485,6 +536,9 @@ export default function Automations() {
           <Loader2 size={24} className="animate-spin text-slate-500" />
         </div>
       )}
+      {error && !data && (
+        <ErrorState title="Could not load this page" error={error} onRetry={refresh} />
+      )}
 
       {/* Empty state */}
       {data && automations.length === 0 && (
@@ -523,8 +577,8 @@ export default function Automations() {
                   <h3 className="text-sm font-bold text-slate-100 truncate">{rule.name}</h3>
                 </div>
                 <button
-                  onClick={() => handleToggle(rule)}
-                  disabled={togglingId === rule.id}
+                  onClick={() => isAdmin && handleToggle(rule)}
+                  disabled={togglingId === rule.id || !isAdmin}
                   className="shrink-0 transition-colors"
                   title={rule.enabled ? 'Disable rule' : 'Enable rule'}
                   aria-label={rule.enabled ? 'Disable rule' : 'Enable rule'}
@@ -599,6 +653,26 @@ export default function Automations() {
 
               {/* Actions row */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.03]">
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => handleRun(rule)}
+                      disabled={runningId === rule.id}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      title="Run the action now"
+                    >
+                      {runningId === rule.id ? <Loader2 size={11} className="animate-spin" /> : <PlayCircle size={11} />}
+                      Run now
+                    </button>
+                    <button
+                      onClick={() => openEditModal(rule)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                    >
+                      <Pencil size={11} />
+                      Edit
+                    </button>
+                  </>
+                )}
                 {/* History button */}
                 <button
                   onClick={() => openHistory(rule)}
@@ -607,7 +681,7 @@ export default function Automations() {
                   <History size={11} />
                   History
                 </button>
-                {confirmDeleteId === rule.id ? (
+                {isAdmin && (confirmDeleteId === rule.id ? (
                   <>
                     <span className="text-[11px] text-rose-400 mr-1">Delete this rule?</span>
                     <button
@@ -633,7 +707,7 @@ export default function Automations() {
                     <Trash2 size={11} />
                     Delete
                   </button>
-                )}
+                ))}
               </div>
             </div>
           ))}
@@ -782,7 +856,7 @@ export default function Automations() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
                 <Zap size={16} className="text-amber-400" />
-                <h3 className="text-sm font-semibold text-slate-200">New Automation Rule</h3>
+                <h3 className="text-sm font-semibold text-slate-200">{editingId ? 'Edit Automation' : 'New Automation Rule'}</h3>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -946,8 +1020,8 @@ export default function Automations() {
                   disabled={creating || !formName.trim()}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
                 >
-                  {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                  Create
+                  {creating ? <Loader2 size={13} className="animate-spin" /> : (editingId ? <Pencil size={13} /> : <Plus size={13} />)}
+                  {editingId ? 'Save changes' : 'Create'}
                 </button>
               </div>
             </div>

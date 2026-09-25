@@ -52,6 +52,7 @@ export const CARD_REGISTRY: CardRegistryEntry[] = [
   { id: 'automations',        title: 'Automations',       iconName: 'Zap',             defaultX: 0,  defaultY: 31, defaultW: 8,  defaultH: 7,  minW: 8,  minH: 3, maxW: 24, maxH: 12, description: 'Active automation rules' },
   { id: 'recent-events',      title: 'Recent Events',     iconName: 'Clock',           defaultX: 8,  defaultY: 31, defaultW: 8,  defaultH: 7,  minW: 8,  minH: 3, maxW: 24, maxH: 12, description: 'Docker event timeline' },
   { id: 'quick-actions',      title: 'Quick Actions',     iconName: 'Rocket',          defaultX: 16, defaultY: 31, defaultW: 8,  defaultH: 7,  minW: 8,  minH: 3, maxW: 24, maxH: 12, description: 'Common management shortcuts' },
+  { id: 'crowdsec',      title: 'Protection',     iconName: 'ShieldCheck',     defaultX: 0,  defaultY: 38, defaultW: 8,  defaultH: 6,  minW: 8,  minH: 4, maxW: 24, maxH: 12, description: 'CrowdSec bans, whitelist and one-click unban' },
 ]
 
 export function getDefaultLayout(): DashboardLayout {

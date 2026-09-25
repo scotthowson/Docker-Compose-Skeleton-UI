@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Plugin, PluginHookInfo, PluginLogEntry } from '../../shared/types'
+import type { Plugin, PluginHookInfo, PluginLogEntry, PluginCatalogEntry } from '../../shared/types'
 import * as api from '../api/endpoints'
 
 // Built-in features that act as plugins (togglable without backend installation)
@@ -48,9 +48,13 @@ function mergeWithBuiltIns(apiPlugins: Plugin[]): Plugin[] {
 
 interface PluginState {
   plugins: Plugin[]
+  catalog: PluginCatalogEntry[]
+  catalogLoading: boolean
   loading: boolean
   installing: boolean
   error: string | null
+  fetchCatalog: () => Promise<void>
+  installFromCatalog: (name: string) => Promise<boolean>
 
   // Detail panel state
   selectedPlugin: string | null
@@ -81,6 +85,8 @@ interface PluginState {
 
 export const usePluginStore = create<PluginState>((set, get) => ({
   plugins: mergeWithBuiltIns([]),
+  catalog: [],
+  catalogLoading: false,
   loading: false,
   installing: false,
   error: null,
@@ -114,6 +120,31 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return true
     } catch (err) {
       set({ installing: false, error: err instanceof Error ? err.message : 'Failed to install plugin' })
+      return false
+    }
+  },
+
+  fetchCatalog: async () => {
+    set({ catalogLoading: true })
+    try {
+      const res = await api.fetchPluginCatalog()
+      set({ catalog: res.plugins ?? [], catalogLoading: false })
+    } catch {
+      // Older servers have no catalogue; the page falls back to its built-ins
+      set({ catalog: [], catalogLoading: false })
+    }
+  },
+
+  installFromCatalog: async (name) => {
+    set({ installing: true, error: null })
+    try {
+      await api.installCatalogPlugin(name)
+      set({ installing: false })
+      await get().fetchPlugins()
+      get().fetchCatalog()
+      return true
+    } catch (err) {
+      set({ installing: false, error: err instanceof Error ? err.message : `Failed to install ${name}` })
       return false
     }
   },
@@ -155,19 +186,14 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return true
     }
 
-    // Backend plugin — call API
+    // Backend plugin — the server answers {success, name, enabled}; merge the flag
     try {
-      const updated = await api.togglePlugin(name)
-      set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? updated : p) }))
+      const res = await api.togglePlugin(name) as unknown as { enabled?: boolean }
+      set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? { ...p, enabled: typeof res.enabled === 'boolean' ? res.enabled : !p.enabled } : p) }))
       return true
-    } catch {
-      // API failed — toggle locally as fallback
-      if (current) {
-        const newEnabled = !current.enabled
-        set(prev => ({ plugins: prev.plugins.map(p => p.name === name ? { ...p, enabled: newEnabled } : p) }))
-        try { localStorage.setItem(`plugin-enabled-${name}`, String(newEnabled)) } catch {}
-      }
-      return true
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : `Failed to toggle ${name}` })
+      return false
     }
   },
 

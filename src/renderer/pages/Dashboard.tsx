@@ -10,7 +10,7 @@ import {
   fetchContainers, fetchDisks, fetchSystemInfo,
   fetchStacks, fetchImageUpdates, fetchBackupStatus,
   fetchLogStats, fetchMaintenanceReport, fetchNotificationHistory,
-  fetchAutomations, fetchMetricsTrends,
+  fetchAutomations, fetchMetricsTrends, crowdsecStatus,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -408,6 +408,11 @@ export default function Dashboard() {
     onError: onPollError,
   })
 
+  const crowdsecPoll = usePolling(crowdsecStatus, 60000, {
+    enabled: isConnected,
+    onError: onPollError,
+  })
+
   // --- Poll /metrics/trends every 60s ---
   const fetchTrends1h = React.useCallback(() => fetchMetricsTrends('1h'), [])
   const trendsPoll = usePolling(fetchTrends1h, 60000, {
@@ -471,7 +476,11 @@ export default function Dashboard() {
             onToggleCard={dashLayout.toggleCard}
             onResizeCard={dashLayout.resizeCard}
             onMoveCard={dashLayout.moveCard}
-            onExitEdit={dashLayout.exitEditMode}
+            onExitEdit={() => {
+              void dashLayout.exitEditMode().then((ok) => {
+                if (!ok) addToast({ type: 'error', message: 'Layout kept in this browser only — the server did not save it' })
+              })
+            }}
             labels={dashLayout.labels}
             onDiscardEdit={dashLayout.discardEdit}
             onResetLayout={dashLayout.resetLayout}
@@ -490,6 +499,7 @@ export default function Dashboard() {
               'maintenance': { data: maintenancePoll.data ?? null, error: maintenancePoll.error, onRetry: maintenancePoll.refresh },
               'notifications': { data: notifHistoryPoll.data ?? null, error: notifHistoryPoll.error, onRetry: notifHistoryPoll.refresh },
               'automations': { data: automationsPoll.data ?? null, error: automationsPoll.error, onRetry: automationsPoll.refresh },
+              'crowdsec': { data: crowdsecPoll.data ?? null, error: crowdsecPoll.error, onRetry: crowdsecPoll.refresh },
             }}
           />
         </>

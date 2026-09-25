@@ -42,14 +42,18 @@ import {
   Shield,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { usePluginStore } from '../stores/pluginStore'
+import { ErrorState } from '../components/common/PageState'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus } from '../api/endpoints'
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus,
+  validateCompose,
+} from '../api/endpoints'
 import type {
   TemplateInfo,
   TemplateDetailResponse,
@@ -622,7 +626,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       <div className="absolute inset-0" onClick={localDeploying ? undefined : onClose} />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+      <div className="relative w-full max-w-4xl mx-3 md:mx-4 max-h-[92vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -1212,7 +1216,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         <Loader2 size={18} className="animate-spin text-slate-500" />
                       </div>
                     ) : detail?.compose ? (
-                      <pre className="bg-slate-950 rounded-lg p-3 text-[11px] font-mono text-slate-400 overflow-x-auto max-h-64 scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
+                      <pre className="bg-slate-950 rounded-lg p-3 text-[11px] font-mono text-slate-400 overflow-x-auto max-h-[52vh] scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
                         {detail.compose}
                       </pre>
                     ) : (
@@ -1416,7 +1420,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     </p>
                     {/* Compose snippet preview */}
                     {dryRunResult.compose_preview && (
-                      <pre className="mt-1 bg-slate-950 rounded p-2 text-[10px] font-mono text-slate-500 overflow-x-auto max-h-32 scrollbar-thin whitespace-pre-wrap break-all leading-relaxed">
+                      <pre className="mt-1 bg-slate-950 rounded p-2 text-[10px] font-mono text-slate-500 overflow-x-auto max-h-[40vh] scrollbar-thin whitespace-pre-wrap break-all leading-relaxed">
                         {dryRunResult.compose_preview}
                       </pre>
                     )}
@@ -1522,7 +1526,7 @@ interface CreateEditModalProps {
   initial?: { name: string; compose: string; env: string; metadata: Record<string, unknown> }
   stacks: StackInfo[]
   onClose: () => void
-  onSave: (data: { name: string; compose: string; env: string; metadata: Record<string, unknown> }) => void
+  onSave: (data: { name: string; compose: string; env: string; metadata: Record<string, unknown> }) => void | boolean | Promise<void | boolean>
   saving: boolean
 }
 
@@ -1554,40 +1558,90 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 `)
   const [activeTab, setActiveTab] = useState<'compose' | 'env' | 'meta'>('compose')
   const [saved, setSaved] = useState(false)
+  // Baseline for change detection: reset after a successful save so the editor can stay open
+  const [baseline, setBaseline] = useState({
+    compose: initial?.compose ?? '',
+    env: initial?.env ?? '',
+    title: (initial?.metadata?.title as string) ?? '',
+    description: (initial?.metadata?.description as string) ?? '',
+    category: (initial?.metadata?.category as string) ?? 'other',
+    targetStack: (initial?.metadata?.target_stack as string) ?? '',
+  })
+  const [validation, setValidation] = useState<{ valid: boolean; errors: string[]; warnings: string[] } | null>(null)
+  const [validating, setValidating] = useState(false)
+  const lint = useComposeLinter(compose, env)
+  const envLint = useEnvLinter(env, compose)
 
   const canSave = name.trim().length > 0 && compose.trim().length > 0 && !saving
 
-  // Detect changes from initial values (edit mode)
+  // Detect changes against the last saved baseline (edit mode)
   const hasChanges = mode === 'edit' ? (
-    compose !== (initial?.compose ?? '') ||
-    env !== (initial?.env ?? '') ||
-    title !== ((initial?.metadata?.title as string) ?? '') ||
-    description !== ((initial?.metadata?.description as string) ?? '') ||
-    category !== ((initial?.metadata?.category as string) ?? 'other') ||
-    targetStack !== ((initial?.metadata?.target_stack as string) ?? '')
+    compose !== baseline.compose ||
+    env !== baseline.env ||
+    title !== baseline.title ||
+    description !== baseline.description ||
+    category !== baseline.category ||
+    targetStack !== baseline.targetStack
   ) : canSave
 
-  const handleSaveInPlace = useCallback(() => {
-    onSave({ name, compose, env, metadata: { title: title || name, description, category, target_stack: targetStack || undefined, tags: [], variables: [] } })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }, [name, compose, env, title, description, category, targetStack, onSave])
+  const handleSaveInPlace = useCallback(async () => {
+    if (!canSave) return
+    // Keep the template's own variables and tags: an edit must not wipe them
+    const ok = await onSave({
+      name, compose, env,
+      metadata: {
+        ...(initial?.metadata ?? {}),
+        title: title || name, description, category, target_stack: targetStack || undefined,
+        tags: (initial?.metadata?.tags as unknown[]) ?? [],
+        variables: (initial?.metadata?.variables as unknown[]) ?? [],
+      },
+    })
+    if (ok !== false) {
+      setBaseline({ compose, env, title, description, category, targetStack })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    }
+  }, [canSave, name, compose, env, title, description, category, targetStack, initial, onSave])
 
   const handleDiscard = useCallback(() => {
-    if (mode === 'edit' && initial) {
-      setCompose(initial.compose ?? '')
-      setEnv(initial.env ?? '')
-      setTitle((initial.metadata?.title as string) ?? '')
-      setDescription((initial.metadata?.description as string) ?? '')
-      setCategory((initial.metadata?.category as string) ?? 'other')
-      setTargetStack((initial.metadata?.target_stack as string) ?? '')
+    setCompose(baseline.compose)
+    setEnv(baseline.env)
+    setTitle(baseline.title)
+    setDescription(baseline.description)
+    setCategory(baseline.category)
+    setTargetStack(baseline.targetStack)
+  }, [baseline])
+
+  const handleValidate = useCallback(async () => {
+    setValidating(true)
+    try {
+      const res = await validateCompose({ content: compose })
+      setValidation({ valid: !!res.valid, errors: res.errors ?? [], warnings: res.warnings ?? [] })
+    } catch (err) {
+      setValidation({ valid: false, errors: [err instanceof Error ? err.message : 'Validation failed'], warnings: [] })
+    } finally {
+      setValidating(false)
     }
-  }, [mode, initial])
+  }, [compose])
+
+  // Ctrl/Cmd+S saves, Esc closes (asks first when there are unsaved changes)
+  const requestClose = useCallback(() => {
+    if (hasChanges && mode === 'edit' && !window.confirm('Discard unsaved changes to this template?')) return
+    onClose()
+  }, [hasChanges, mode, onClose])
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); handleSaveInPlace() }
+      else if (e.key === 'Escape') { e.preventDefault(); requestClose() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleSaveInPlace, requestClose])
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+      <div className="absolute inset-0" onClick={requestClose} />
+      <div className="relative w-full max-w-[95vw] xl:max-w-[1400px] mx-3 md:mx-4 max-h-[95vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
@@ -1694,20 +1748,44 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 
           <div className="px-4 md:px-5 pb-4">
             {activeTab === 'compose' && (
+              <>
               <textarea
                 value={compose}
-                onChange={(e) => setCompose(e.target.value)}
+                onChange={(e) => { setCompose(e.target.value); setValidation(null) }}
                 spellCheck={false}
-                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
+                className="w-full h-[58vh] min-h-[320px] px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="services:&#10;  app:&#10;    image: example:latest"
               />
+              {/* Live diagnostics from the compose linter (same rules as the stack editor) */}
+              <div className="mt-2 rounded-lg bg-slate-950/40 border border-white/5 px-3 py-2 text-[11px]">
+                <div className="flex items-center gap-3 text-slate-500">
+                  <span className={lint.counts.errors ? 'text-rose-400' : ''}>{lint.counts.errors} error{lint.counts.errors === 1 ? '' : 's'}</span>
+                  <span className={lint.counts.warnings ? 'text-amber-400' : ''}>{lint.counts.warnings} warning{lint.counts.warnings === 1 ? '' : 's'}</span>
+                  <span>{lint.counts.info} hint{lint.counts.info === 1 ? '' : 's'}</span>
+                  {validation && (
+                    <span className={validation.valid ? 'text-emerald-400' : 'text-rose-400'}>· compose config: {validation.valid ? 'valid' : 'invalid'}</span>
+                  )}
+                  <span className="ml-auto text-slate-600">Ctrl+S saves · Esc closes</span>
+                </div>
+                {(lint.diagnostics.length > 0 || (validation && !validation.valid)) && (
+                  <ul className="mt-1.5 space-y-0.5 max-h-28 overflow-y-auto scrollbar-thin">
+                    {validation?.errors.map((e, i) => <li key={`v${i}`} className="text-rose-300">{e}</li>)}
+                    {lint.diagnostics.slice(0, 40).map((d, i) => (
+                      <li key={i} className={d.severity === 'error' ? 'text-rose-300' : d.severity === 'warning' ? 'text-amber-300' : 'text-slate-400'}>
+                        {d.line ? `L${d.line} · ` : ''}{d.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              </>
             )}
             {activeTab === 'env' && (
               <textarea
                 value={env}
                 onChange={(e) => setEnv(e.target.value)}
                 spellCheck={false}
-                className="w-full h-72 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
+                className="w-full h-[58vh] min-h-[320px] px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="# Environment variables for this template"
               />
             )}
@@ -1761,9 +1839,30 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
+            {envLint.diagnostics.length > 0 && activeTab === 'env' && (
+              <span className="text-[10px] text-amber-400 mr-1">{envLint.diagnostics.length} .env hint{envLint.diagnostics.length === 1 ? '' : 's'}</span>
+            )}
+            <button
+              onClick={handleValidate}
+              disabled={validating || !compose.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+              title="Run docker compose config on the server"
+            >
+              {validating ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />} Validate
+            </button>
+            <button onClick={requestClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
               {mode === 'edit' ? 'Close' : 'Cancel'}
             </button>
+            {mode === 'edit' && (
+              <button
+                onClick={handleSaveInPlace}
+                disabled={!canSave || !hasChanges}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                Save
+              </button>
+            )}
             {mode === 'create' && (
               <button
                 onClick={handleSaveInPlace}
@@ -2425,7 +2524,7 @@ export default function Templates() {
   const [containerList, setContainerList] = useState<ContainerInfo[]>([])
 
   // Polling
-  const { data, loading, refresh } = usePolling<TemplateListResponse>(
+  const { data, loading, error, refresh } = usePolling<TemplateListResponse>(
     fetchTemplates,
     30000,
     { enabled: isConnected },
@@ -2707,15 +2806,17 @@ export default function Templates() {
       } else {
         const res = await updateTemplate(data.name, { compose: data.compose, metadata: data.metadata, env: data.env })
         if (res.success) {
-          addToast({ type: 'success', message: `Template "${data.name}" updated` })
-          setCreateEditMode(null)
-          refresh()
-        } else {
-          addToast({ type: 'error', message: res.message || 'Failed to update template' })
+          addToast({ type: 'success', message: `Template "${data.name}" saved` })
+          refresh()   // the editor stays open; keep editing or close with Esc
+          return true
         }
+        addToast({ type: 'error', message: res.message || 'Failed to update template' })
+        return false
       }
+      return true
     } catch (err) {
       addToast({ type: 'error', message: `Save failed: ${err instanceof Error ? err.message : String(err)}` })
+      return false
     } finally {
       setSaving(false)
     }
@@ -3060,6 +3161,9 @@ export default function Templates() {
             <div className="flex items-center justify-center py-20">
               <Loader2 size={24} className="animate-spin text-slate-500" />
             </div>
+          )}
+          {error && !data && (
+            <ErrorState title="Could not load this page" error={error} onRetry={refresh} />
           )}
 
           {/* Empty state */}
