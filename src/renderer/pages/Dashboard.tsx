@@ -5,6 +5,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown, Settings2 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
+import { ApiError, ApiNetworkError } from '../api/client'
 import {
   fetchEvents, fetchVersion,
   fetchDisks, fetchSystemInfo,
@@ -206,7 +207,10 @@ export default function Dashboard() {
   }, [reportPollSuccess])
 
   const onPollError = React.useCallback((err: Error) => {
-    reportPollFailure()
+    // Only a connection-class failure counts towards "unstable": a bad body or
+    // an application error from one endpoint says nothing about the link
+    const gateway = err instanceof ApiError && [0, 502, 503, 504].includes(err.status)
+    if (err instanceof ApiNetworkError || gateway) reportPollFailure()
   }, [reportPollFailure])
 
   // =========================================================================
