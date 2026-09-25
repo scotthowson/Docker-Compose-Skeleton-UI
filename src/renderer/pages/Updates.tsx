@@ -742,15 +742,27 @@ export default function Updates() {
               </div>
             )}
 
-            <div className="mt-4 pt-3 border-t border-white/[0.03]">
+            <div className="mt-4 pt-3 border-t border-white/[0.03] space-y-2">
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800/40">
                 <Shield size={12} className="text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   {window.electronAPI
                     ? 'App updates are delivered via new releases. Check the GitHub repository for the latest version.'
-                    : 'Running in browser mode. Update by pulling the latest source and rebuilding.'}
+                    : 'Running in browser mode: the Update button pulls the latest published image and recreates the dashboard container.'}
                 </p>
               </div>
+              <a
+                href="https://github.com/scotthowson/Docker-Compose-Skeleton-UI/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 hover:bg-slate-800/70 transition-colors group/apk"
+                title="Every release ships an Android APK and desktop installers"
+              >
+                <Download size={12} className="text-cyan-400 shrink-0" />
+                <span className="text-[10px] text-slate-400 group-hover/apk:text-slate-200 leading-relaxed">
+                  Android app and desktop installers: download from the latest GitHub release
+                </span>
+              </a>
             </div>
           </div>
         </div>

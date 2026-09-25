@@ -116,6 +116,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default list still names the retired "tools" package,
+          # which sdkmanager no longer offers; ask only for what the app needs
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          accept-android-sdk-licenses: true
 
       - name: Install dependencies
         run: npm ci
