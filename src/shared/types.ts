@@ -532,6 +532,8 @@ export interface AuthVerifyResponse {
   valid: boolean
   username: string
   role: string
+  /** Set when valid is false (older servers answer 200 instead of 401) */
+  message?: string
 }
 
 export interface AuthLogoutResponse {
@@ -1297,6 +1299,8 @@ export interface ImageCheckResponse {
   aging: number
   current: number
   updates_available?: number
+  /** When the registry digests were last compared (cache file time) */
+  registry_checked_at?: string
 }
 
 export interface ImageRegistryCheckResponse {
@@ -1310,6 +1314,10 @@ export interface ImageUpdateResponse {
   success: boolean
   image: string
   containers_restarted: string[]
+  /** Running containers that are not Compose-managed and were left alone */
+  containers_skipped?: string[]
+  /** Compose services that were recreated but are not running afterwards */
+  containers_failed?: string[]
   timestamp: string
 }
 

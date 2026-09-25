@@ -292,7 +292,13 @@ export default function Login() {
       // First check if server requires auth
       try {
         const verifyRes = await authVerify()
-        // If verify succeeds, token is valid — use the role from the response
+        // Only a token the server confirms counts as signed in. Older servers
+        // answer 200 with valid:false for a missing or dead token; treating
+        // that as "already authenticated" skipped the login request and left
+        // the dashboard polling with no token ("Session expired" loop).
+        if (verifyRes.valid === false) {
+          throw new ApiError(401, verifyRes.message || 'Token is invalid or expired')
+        }
         if (verifyRes.role) setUserRole(verifyRes.role as 'admin' | 'user', user)
         return true
       } catch (err) {

@@ -1027,21 +1027,76 @@ export interface RouteCheckResponse {
   existing_stack: string
 }
 
+export type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT' | 'MX' | 'NS' | 'SRV' | 'CAA' | 'PTR' | string
+
 export interface DnsRecord {
   id: string
+  type: DnsRecordType
   name: string
+  /** Name relative to the zone ("@" for the apex) */
   subdomain: string
   content: string
+  /** 1 = automatic */
+  ttl: number
   proxied: boolean
+  proxiable: boolean
+  priority: number | null
+  comment: string
+  tags: string[]
+  locked: boolean
+  created_on: string
+  modified_on: string
+  /** Comment mentions DCS: created by a deployment, a route change or a sync */
   managed: boolean
+  /** "stack/service" of the DCS route that uses this name, if any */
+  route: string | null
+  /** CNAME pointing at the DCS domain */
+  points_to_dcs: boolean
+  /** DCS can change or delete it (A, AAAA, CNAME, TXT, MX, NS and not locked) */
+  editable: boolean
+}
+
+export interface DnsZone {
+  id: string
+  name: string
+  status: string
+  name_servers: string[]
+  plan: string
 }
 
 export interface DnsRecordsResponse {
   total: number
+  all_total?: number
   records: DnsRecord[]
   domain: string
+  zone: { id: string; name: string } | null
   cf_configured: boolean
+  token_source: '' | 'secret' | 'env' | 'stack-env'
+  /** DCS routes under the zone that have no A/AAAA/CNAME record */
+  routes_without_dns: { fqdn: string; route: string }[]
   error?: string
+  hint?: string
+}
+
+export interface DnsStatusResponse {
+  cf_configured: boolean
+  token_source: '' | 'secret' | 'env' | 'stack-env'
+  token_status: 'active' | 'invalid' | 'unreachable' | 'unknown' | string
+  domain: string
+  zone: DnsZone | null
+  zone_found: boolean
+  hint: string
+}
+
+export interface DnsRecordInput {
+  zone?: string
+  type: DnsRecordType
+  name: string
+  content: string
+  ttl?: number
+  proxied?: boolean
+  priority?: number | null
+  comment?: string
 }
 
 /** GET /routes — List all Traefik routes */
@@ -1069,9 +1124,48 @@ export function deleteRoute(stack: string, service: string): Promise<{ success: 
   )
 }
 
-/** GET /dns/records — List Cloudflare CNAME records */
-export function fetchDnsRecords(): Promise<DnsRecordsResponse> {
-  return apiClient.get<DnsRecordsResponse>('/dns/records')
+/** GET /dns/records — Records of the zone (all types) with DCS route links */
+export function fetchDnsRecords(opts: { zone?: string; type?: string; search?: string } = {}): Promise<DnsRecordsResponse> {
+  const params = new URLSearchParams()
+  if (opts.zone) params.set('zone', opts.zone)
+  if (opts.type) params.set('type', opts.type)
+  if (opts.search) params.set('search', opts.search)
+  const qs = params.toString()
+  return apiClient.get<DnsRecordsResponse>(`/dns/records${qs ? `?${qs}` : ''}`)
+}
+
+/** GET /dns/status — Token source and validity, zone details */
+export function fetchDnsStatus(): Promise<DnsStatusResponse> {
+  return apiClient.get<DnsStatusResponse>('/dns/status')
+}
+
+/** GET /dns/zones — Zones the token can manage */
+export function fetchDnsZones(): Promise<{ zones: DnsZone[]; total: number }> {
+  return apiClient.get<{ zones: DnsZone[]; total: number }>('/dns/zones')
+}
+
+/** POST /dns/records — Create a record */
+export function createDnsRecord(input: DnsRecordInput): Promise<{ success: boolean; record: DnsRecord }> {
+  return apiClient.post<{ success: boolean; record: DnsRecord }>('/dns/records', input)
+}
+
+/** PUT /dns/records/:id — Change a record (partial body allowed) */
+export function updateDnsRecord(id: string, input: Partial<DnsRecordInput>): Promise<{ success: boolean; record: DnsRecord }> {
+  return apiClient.put<{ success: boolean; record: DnsRecord }>(`/dns/records/${encodeURIComponent(id)}`, input)
+}
+
+/** DELETE /dns/records/:id — Delete a record; force removes protected ones */
+export function deleteDnsRecord(id: string, opts: { zone?: string; force?: boolean } = {}): Promise<{ success: boolean; id: string; name: string; type: string; forced: boolean }> {
+  const params = new URLSearchParams()
+  if (opts.zone) params.set('zone', opts.zone)
+  if (opts.force) params.set('force', 'true')
+  const qs = params.toString()
+  return apiClient.delete<{ success: boolean; id: string; name: string; type: string; forced: boolean }>(`/dns/records/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`)
+}
+
+/** POST /dns/records/sync — Create the CNAMEs that DCS routes are missing */
+export function syncDnsRecords(): Promise<{ success: boolean; created: string[]; failed: { name: string; error: string }[]; zone: string }> {
+  return apiClient.post<{ success: boolean; created: string[]; failed: { name: string; error: string }[]; zone: string }>('/dns/records/sync')
 }
 
 /** GET /homarr/status — Check if Homarr is deployed with API key */

@@ -1055,7 +1055,7 @@ function FactoryResetCard() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-amber-300">Reset App Settings</p>
             <p className="text-[10px] text-amber-400/60 mt-1 leading-relaxed">
-              Clears all local data — saved credentials, sessions, connection profiles, themes, and preferences. Returns the app to its initial setup screen. <span className="text-slate-500">Server-side data (stacks, containers, compose files, server config) is not affected.</span>
+              Clears everything this browser remembers about DCS — the saved session and API token, connection profiles, theme, dashboard layout cache and preferences — and returns to the login screen. <span className="text-amber-300/70">Nothing on the server changes: users, stacks, containers, compose files and configuration all stay.</span>
             </p>
             <button
               onClick={() => setActiveMode('app')}
@@ -1080,7 +1080,7 @@ function FactoryResetCard() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-rose-300">Full Server Reset</p>
             <p className="text-[10px] text-rose-400/60 mt-1 leading-relaxed">
-              Everything in App Reset, <span className="text-rose-300 font-medium">plus</span> wipes server-side authentication — all API users, tokens, and the setup-complete flag are removed. The server returns to first-run state and the Setup Wizard will launch on next connection. <span className="text-slate-500">Docker stacks, containers, images, and your .env configuration are preserved.</span>
+              Everything in App Reset, <span className="text-rose-300 font-medium">plus</span> the server forgets every API user, token, invite and session, its setup-complete flag, and the root <span className="font-mono">.env</span> goes back to the bundled defaults — the Setup Wizard runs again on the next connection. <span className="text-rose-300/70">Stacks, containers, images, compose files, secrets, plugins, schedules and metrics are kept</span> unless you also choose to wipe the stacks below.
             </p>
             <button
               onClick={() => setActiveMode('full')}
@@ -1139,7 +1139,9 @@ function FactoryResetCard() {
             <span className={`font-mono font-bold ${styles.keyword}`}>{confirmKeyword}</span> to confirm.
             {isFullReset && (
               <span className="block mt-1 text-rose-400/60">
-                This will wipe all server authentication and return to the Setup Wizard.
+                {resetCompose
+                  ? 'Users, sessions, .env, every stack except core infrastructure and all their data will be gone. The Setup Wizard runs again afterwards.'
+                  : 'Users, sessions and the root .env are reset; stacks and containers keep running. The Setup Wizard runs again afterwards.'}
               </span>
             )}
           </p>
@@ -1194,8 +1196,10 @@ function FactoryResetCard() {
       {isFullReset && (
         <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5">
           <div>
-            <p className="text-[11px] font-medium text-slate-300">Reset Compose Files</p>
-            <p className="text-[10px] text-slate-500">Restore compose files and stack categories to defaults</p>
+            <p className="text-[11px] font-medium text-rose-300">Also wipe the stacks and their data</p>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Stops and removes every DCS stack except core infrastructure (the dashboard keeps running), deletes their App-Data, named volumes and images, removes user-created stacks and templates, installed plugins, secrets, snapshots, metrics, automations and the DNS records DCS created, then restores the bundled compose files. Other containers on this host are never touched.
+            </p>
           </div>
           <button
             type="button"

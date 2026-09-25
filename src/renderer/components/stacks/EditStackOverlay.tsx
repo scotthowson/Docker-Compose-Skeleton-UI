@@ -33,7 +33,7 @@ import {
 } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useComposeLinter, useEnvLinter } from '../../hooks/useComposeLinter'
+import { useComposeLinter, useEnvLinter, type LintDiagnostic } from '../../hooks/useComposeLinter'
 import type { StackInfo, StackAnnotation, ComposeVersion } from '../../../shared/types'
 
 interface Props {
@@ -245,6 +245,40 @@ function computeDiff(original: string, edited: string): { left: DiffLine[]; righ
 // Component
 // ---------------------------------------------------------------------------
 
+/** Live diagnostics under an editor in edit mode — the same panel the template editor shows */
+function EditorDiagnostics({ diagnostics, counts, validation, kind }: {
+  diagnostics: LintDiagnostic[]
+  counts: { errors: number; warnings: number; info: number }
+  validation?: { valid: boolean; output: string } | null
+  kind: 'compose' | 'env'
+}) {
+  return (
+    <div className="shrink-0 border-t border-white/5 bg-slate-900/60 px-5 py-2 text-[11px]">
+      <div className="flex items-center gap-3 text-slate-500">
+        <span className={counts.errors ? 'text-rose-400' : ''}>{counts.errors} error{counts.errors === 1 ? '' : 's'}</span>
+        <span className={counts.warnings ? 'text-amber-400' : ''}>{counts.warnings} warning{counts.warnings === 1 ? '' : 's'}</span>
+        <span>{counts.info} hint{counts.info === 1 ? '' : 's'}</span>
+        {validation && kind === 'compose' && (
+          <span className={validation.valid ? 'text-emerald-400' : 'text-rose-400'}>· compose config: {validation.valid ? 'valid' : 'invalid'}</span>
+        )}
+        <span className="ml-auto text-slate-600">
+          {kind === 'compose' ? 'Ctrl+S validates and saves' : 'Ctrl+S saves'} · Esc leaves edit mode
+        </span>
+      </div>
+      {diagnostics.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 max-h-28 overflow-y-auto scrollbar-thin">
+          {diagnostics.slice(0, 40).map((d, i) => (
+            <li key={`${d.line}-${i}`} className={d.severity === 'error' ? 'text-rose-300' : d.severity === 'warning' ? 'text-amber-300' : 'text-slate-400'}>
+              L{d.line} · {d.message}{d.fix ? <span className="text-slate-600"> — {d.fix}</span> : null}
+            </li>
+          ))}
+          {diagnostics.length > 40 && <li className="text-slate-600">+{diagnostics.length - 40} more</li>}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const { addToast } = useToast()
@@ -276,6 +310,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   const [showDiff, setShowDiff] = useState(false)
 
   // Validation and save states
+  const validateThenSaveRef = useRef<() => Promise<void>>(async () => {})
   const [validationResult, setValidationResult] = useState<{ valid: boolean; output: string; hasLintWarnings?: boolean } | null>(null)
   const [validating, setValidating] = useState(false)
   const [savingCompose, setSavingCompose] = useState(false)
@@ -500,7 +535,11 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        if (composeEditMode && validationResult?.valid) handleSaveCompose()
+        if (composeEditMode && activeTab === 'compose') {
+          // Validate first when needed; a valid result saves straight away
+          if (validationResult?.valid) handleSaveCompose()
+          else void validateThenSaveRef.current()
+        }
         else if (envEditMode && activeTab === 'env') handleSaveEnv()
         else if (activeTab === 'annotations') handleSaveAnnotations()
         return
@@ -537,7 +576,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
   }, [activeTab, composeContent, envContent])
 
   // Validate compose
-  const handleValidate = useCallback(async () => {
+  const handleValidate = useCallback(async (): Promise<boolean> => {
     setValidating(true)
     try {
       const res = await validateStackCompose(stack.name, composeContent)
@@ -562,9 +601,11 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       } else {
         setValidationResult({ valid: false, output: res.output })
       }
+      return !!res.valid
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Validation failed'
       setValidationResult({ valid: false, output: msg })
+      return false
     } finally {
       setValidating(false)
     }
@@ -596,6 +637,13 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       setSavingCompose(false)
     }
   }, [stack.name, composeContent, validationResult, composeDiagnostics, addToast, onSaved])
+
+  // Ctrl+S in edit mode: run the server validation, then save when it passes
+  const handleValidateThenSave = useCallback(async () => {
+    const ok = await handleValidate()
+    if (ok) await handleSaveCompose()
+  }, [handleValidate, handleSaveCompose])
+  validateThenSaveRef.current = handleValidateThenSave
 
   // Save env
   const handleSaveEnv = useCallback(async () => {
@@ -839,17 +887,20 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       )
     }
 
-    // Edit mode
+    // Edit mode — editor plus the live diagnostics panel
     if (composeEditMode) {
       return (
-        <div className="overflow-y-auto flex-1 scrollbar-thin">
-          <textarea
-            value={composeContent}
-            onChange={(e) => setComposeContent(e.target.value)}
-            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '70vh' }}
-            spellCheck={false}
-          />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="overflow-y-auto flex-1 scrollbar-thin">
+            <textarea
+              value={composeContent}
+              onChange={(e) => { setComposeContent(e.target.value); if (validationResult) setValidationResult(null) }}
+              className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
+              style={{ minHeight: '56vh' }}
+              spellCheck={false}
+            />
+          </div>
+          <EditorDiagnostics diagnostics={composeDiagnostics} counts={composeCounts} validation={validationResult} kind="compose" />
         </div>
       )
     }
@@ -935,14 +986,17 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
 
     if (envEditMode) {
       return (
-        <div className="overflow-y-auto flex-1 scrollbar-thin">
-          <textarea
-            value={envContent}
-            onChange={(e) => setEnvContent(e.target.value)}
-            className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
-            style={{ minHeight: '70vh' }}
-            spellCheck={false}
-          />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="overflow-y-auto flex-1 scrollbar-thin">
+            <textarea
+              value={envContent}
+              onChange={(e) => setEnvContent(e.target.value)}
+              className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
+              style={{ minHeight: '56vh' }}
+              spellCheck={false}
+            />
+          </div>
+          <EditorDiagnostics diagnostics={envDiagnostics} counts={envCounts} kind="env" />
         </div>
       )
     }

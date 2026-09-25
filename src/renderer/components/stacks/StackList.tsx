@@ -456,7 +456,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       {/* Lint All Results Modal */}
       {lintAllResults && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setLintAllResults(null)}>
-          <div className="glass rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto scrollbar-thin border border-white/10 animate-scale-in gradient-border" onClick={e => e.stopPropagation()}>
+          <div className="glass rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col min-h-0 border border-white/10 animate-scale-in gradient-border" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
@@ -486,8 +486,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'info').length, 0)} info
               </span>
             </div>
-            {/* Per-stack results */}
-            <div className="space-y-2">
+            {/* Per-stack results — the only scrolling region */}
+            <div className="space-y-2 overflow-y-auto scrollbar-thin min-h-0 flex-1 -mr-3 pr-3">
               {lintAllResults.map((result) => {
                 const errors = result.diagnostics.filter(d => d.severity === 'error').length
                 const warnings = result.diagnostics.filter(d => d.severity === 'warning').length

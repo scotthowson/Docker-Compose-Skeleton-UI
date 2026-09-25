@@ -16,7 +16,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup, authLogin, deployTemplate,
+  authSetup, authLogin, deployTemplate, setSecret,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
@@ -471,10 +471,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         // When API_BIND=0.0.0.0, the server enables auth automatically.
       }
 
+      // The Cloudflare token is stored as the secret CF_DNS_API_TOKEN; every
+      // file only references it as ${SECRETS_CF_DNS_API_TOKEN}, so it never
+      // sits in plain text (Traefik, DDNS and the DNS page resolve it)
+      let cfTokenValue = ''
+      let cfTokenStoredAsSecret = false
+      if (cfDnsToken.trim()) {
+        try {
+          await setSecret('CF_DNS_API_TOKEN', cfDnsToken.trim())
+          cfTokenValue = '${SECRETS_CF_DNS_API_TOKEN}'
+          cfTokenStoredAsSecret = true
+        } catch (err) {
+          console.error('[SetupWizard] storing the Cloudflare token as a secret failed:', err)
+          cfTokenValue = cfDnsToken.trim()
+        }
+      }
+
       // Add Traefik + Cloudflare vars if enabled
       if (enableTraefik && envVars.PROXY_DOMAIN) {
         allEnvVars.TRAEFIK_DOMAIN = envVars.PROXY_DOMAIN
-        if (cfDnsToken) allEnvVars.CF_DNS_API_TOKEN = cfDnsToken
+        if (cfTokenValue) allEnvVars.CF_DNS_API_TOKEN = cfTokenValue
       }
 
       // Add DDNS vars if enabled
@@ -500,6 +516,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         allEnvVars.NTFY_TOKEN = ''
       }
       const results: { label: string; ok: boolean; detail?: string }[] = []
+      if (cfDnsToken.trim()) {
+        results.push(cfTokenStoredAsSecret
+          ? { label: 'Cloudflare token stored as the secret CF_DNS_API_TOKEN', ok: true }
+          : { label: 'Cloudflare token', ok: false, detail: 'The secret store was unavailable, so the token was written to .env in plain text' })
+      }
 
       // Single setupConfigure call with everything — MUST be before setupComplete
       await setupConfigure({
@@ -517,7 +538,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               TRAEFIK_DOMAIN: envVars.PROXY_DOMAIN,
               TRAEFIK_ACME_EMAIL: traefikEmail || `admin@${envVars.PROXY_DOMAIN}`,
               TRAEFIK_TRUSTED_LAN: traefikTrustedLan,
-              ...(cfDnsToken ? { CF_DNS_API_TOKEN: cfDnsToken } : {}),
+              ...(cfTokenValue ? { CF_DNS_API_TOKEN: cfTokenValue } : {}),
             },
             auto_start: true,
             replace_services: true,
@@ -1465,7 +1486,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               placeholder="Leave empty for HTTP challenge"
                               className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">Required for wildcard certs or DNS challenge. Uses HTTP-01 challenge if empty.</p>
+                            <p className="text-[10px] text-slate-500 mt-1">Needed for the DNS challenge (wildcard certificates), dynamic DNS and the DNS &amp; Routes page. Stored encrypted as the secret <span className="font-mono text-slate-400">CF_DNS_API_TOKEN</span>; leave empty to use the HTTP-01 challenge.</p>
                           </div>
 
                           {/* Auto-routing info */}

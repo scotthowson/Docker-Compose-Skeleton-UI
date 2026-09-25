@@ -56,6 +56,44 @@ const STALENESS_STYLES: Record<string, { bg: string; text: string; dot: string }
   },
 }
 
+/** Registry path, repository and tag rendered as one readable reference that
+ *  wraps at path boundaries instead of mid-word */
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(diff) || diff < 0) return 'just now'
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} h ago`
+  return `${Math.floor(h / 24)} d ago`
+}
+
+function ImageRef({ image }: { image: string }) {
+  const at = image.indexOf('@')
+  const base = at >= 0 ? image.slice(0, at) : image
+  const lastSlash = base.lastIndexOf('/')
+  const path = lastSlash >= 0 ? base.slice(0, lastSlash + 1) : ''
+  const nameTag = base.slice(lastSlash + 1)
+  const colon = nameTag.lastIndexOf(':')
+  const name = colon > 0 ? nameTag.slice(0, colon) : nameTag
+  const tag = colon > 0 ? nameTag.slice(colon + 1) : ''
+  const segments = path.split('/').filter(Boolean)
+  return (
+    <span className="font-mono text-xs leading-5" title={image}>
+      {segments.map((seg) => (
+        <span key={seg} className="text-slate-500">{seg}/<wbr /></span>
+      ))}
+      <span className="text-slate-100 font-semibold">{name}</span>
+      {tag && (
+        <span className="ml-1.5 inline-flex items-center rounded-md bg-white/[0.06] border border-white/[0.06] px-1.5 py-px text-[10px] text-slate-300 align-middle whitespace-nowrap">
+          {tag}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function StalenessBadge({ staleness }: { staleness: string }) {
   const style = STALENESS_STYLES[staleness] ?? STALENESS_STYLES.unknown
   return (
@@ -315,6 +353,18 @@ export default function Updates() {
     [images],
   )
 
+  // Everything "Update All" touches: confirmed registry updates first, then
+  // images that are stale by age (deduplicated)
+  const bulkTargets = useMemo(() => {
+    const seen = new Set<string>()
+    const out: ImageUpdateInfo[] = []
+    for (const img of [...updatableImages, ...staleImages]) {
+      if (!seen.has(img.image)) { seen.add(img.image); out.push(img) }
+    }
+    return out
+  }, [updatableImages, staleImages])
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null)
+
   // ---- Check registry for updates (slow POST) ----
   const handleCheckRegistry = useCallback(async () => {
     if (registryChecking) return
@@ -346,9 +396,14 @@ export default function Updates() {
       try {
         const result = await updateImage(imageName)
         if (result.success) {
+          const parts: string[] = []
+          if (result.containers_restarted.length > 0) parts.push(`recreated ${result.containers_restarted.join(', ')}`)
+          if (result.containers_failed?.length) parts.push(`${result.containers_failed.join(', ')} did not come back up`)
+          if (result.containers_skipped?.length) parts.push(`${result.containers_skipped.join(', ')} skipped (not Compose-managed)`)
           addToast({
-            type: 'success',
-            message: `Updated ${imageName}${result.containers_restarted.length > 0 ? ` — restarted ${result.containers_restarted.join(', ')}` : ''}`,
+            type: result.containers_failed?.length ? 'warning' : 'success',
+            message: `Pulled ${imageName}${parts.length ? ` — ${parts.join('; ')}` : ' — no running container uses it'}`,
+            duration: 6000,
           })
           refresh()
         } else {
@@ -370,18 +425,26 @@ export default function Updates() {
     [updatingImages, addToast, refresh],
   )
 
-  // ---- Update all stale images ----
+  // ---- Update every image with a confirmed update or a stale age ----
   const handleUpdateAllStale = useCallback(async () => {
-    if (bulkUpdating || staleImages.length === 0) return
+    if (bulkUpdating || bulkTargets.length === 0) return
     setBulkUpdating(true)
     let successCount = 0
     let failCount = 0
+    const restarted: string[] = []
+    const skipped: string[] = []
+    const failedContainers: string[] = []
 
-    for (const img of staleImages) {
+    for (let i = 0; i < bulkTargets.length; i++) {
+      const img = bulkTargets[i]
+      setBulkProgress({ done: i, total: bulkTargets.length, current: img.image })
       try {
         const result = await updateImage(img.image)
         if (result.success) {
           successCount++
+          restarted.push(...result.containers_restarted)
+          skipped.push(...(result.containers_skipped ?? []))
+          failedContainers.push(...(result.containers_failed ?? []))
         } else {
           failCount++
         }
@@ -389,12 +452,17 @@ export default function Updates() {
         failCount++
       }
     }
+    setBulkProgress(null)
 
     if (successCount > 0) {
+      const parts: string[] = []
+      if (restarted.length) parts.push(`recreated ${restarted.join(', ')}`)
+      if (failedContainers.length) parts.push(`${failedContainers.join(', ')} did not come back up`)
+      if (skipped.length) parts.push(`${skipped.length} not Compose-managed, left running`)
       addToast({
-        type: 'success',
-        message: `Updated ${successCount} stale image${successCount !== 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}`,
-        duration: 5000,
+        type: failedContainers.length ? 'warning' : 'success',
+        message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
+        duration: 8000,
       })
     }
     if (failCount > 0 && successCount === 0) {
@@ -406,7 +474,7 @@ export default function Updates() {
 
     refresh()
     setBulkUpdating(false)
-  }, [bulkUpdating, staleImages, addToast, refresh])
+  }, [bulkUpdating, bulkTargets, addToast, refresh])
 
   // ---- Disconnected ----
   if (!isConnected) {
@@ -708,10 +776,11 @@ export default function Updates() {
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Update All — prioritizes images with confirmed registry updates */}
-          {isAdmin && (updatableImages.length > 0 || staleImages.length > 0) && (
+          {isAdmin && bulkTargets.length > 0 && (
             <button
               onClick={handleUpdateAllStale}
               disabled={bulkUpdating}
+              title="Pulls each image and recreates the Compose services that use it"
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
                 border backdrop-blur-sm transition-all duration-200
@@ -726,9 +795,11 @@ export default function Updates() {
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              {updatableImages.length > 0
-                ? `Update All (${updatableImages.length})`
-                : `Update All Stale (${staleImages.length})`}
+              {bulkProgress
+                ? `Updating ${bulkProgress.done + 1}/${bulkProgress.total}…`
+                : updatableImages.length > 0
+                  ? `Update All (${bulkTargets.length})`
+                  : `Update All Stale (${bulkTargets.length})`}
             </button>
           )}
 
@@ -752,6 +823,11 @@ export default function Updates() {
             )}
             Check Registry for Updates
           </button>
+          {data?.registry_checked_at && (
+            <span className="text-[10px] text-slate-500 whitespace-nowrap" title={new Date(data.registry_checked_at).toLocaleString()}>
+              Registry checked {formatRelative(data.registry_checked_at)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -888,10 +964,8 @@ export default function Updates() {
                       className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors duration-150"
                     >
                       {/* Image name */}
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-slate-200 break-all">
-                          {img.image}
-                        </span>
+                      <td className="px-4 py-3 min-w-[240px]">
+                        <ImageRef image={img.image} />
                         {img.size && (
                           <span className="block text-[10px] text-slate-500 mt-0.5">
                             {img.size}
@@ -899,17 +973,25 @@ export default function Updates() {
                         )}
                       </td>
 
-                      {/* Container(s) */}
+                      {/* Container(s) — one chip per container */}
                       <td className="px-4 py-3">
-                        <span className="text-xs text-slate-400 font-mono">
-                          {img.containers || '-'}
-                        </span>
+                        {img.containers && img.containers !== '-' ? (
+                          <div className="flex flex-wrap gap-1 max-w-[380px]">
+                            {img.containers.split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
+                              <span key={c} className="inline-flex rounded-md bg-white/[0.05] border border-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-slate-300 whitespace-nowrap">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500">-</span>
+                        )}
                       </td>
 
                       {/* Stack (hidden on mobile) */}
-                      <td className="px-4 py-3 hidden sm:table-cell">
+                      <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
                         {img.stack ? (
-                          <span className="inline-flex rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                          <span className="inline-flex rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-slate-300 whitespace-nowrap">
                             {img.stack}
                           </span>
                         ) : (
@@ -918,14 +1000,14 @@ export default function Updates() {
                       </td>
 
                       {/* Age (days) */}
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <span className="text-xs font-mono text-slate-300">
                           {img.age_days >= 0 ? img.age_days : '-'}
                         </span>
                       </td>
 
                       {/* Staleness badge + update indicator */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <StalenessBadge staleness={img.staleness} />
                           {img.update_available === true && (
@@ -944,13 +1026,14 @@ export default function Updates() {
                       </td>
 
                       {/* Update button */}
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         {isAdmin ? (
                           <button
                             onClick={() => handleUpdateImage(img.image)}
                             disabled={isUpdating || (img.staleness === 'current' && img.update_available !== true)}
+                            title={img.update_available === true ? 'A newer digest is published — pull it and recreate the containers' : img.staleness === 'stale' ? 'Pull the tag again and recreate the containers' : 'Nothing newer is known for this image'}
                             className={`
-                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
+                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap
                               transition-all duration-200
                               ${img.update_available === true
                                 ? isUpdating
