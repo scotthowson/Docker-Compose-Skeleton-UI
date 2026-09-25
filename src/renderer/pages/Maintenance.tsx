@@ -23,6 +23,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { MaintenanceReport, OrphanReport, DiskAnalysis } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -493,9 +494,7 @@ export default function Maintenance() {
         <h3 className="text-sm font-semibold text-slate-200 mb-3">System Report</h3>
 
         {reportLoading && !report ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 size={20} className="animate-spin text-slate-500" />
-          </div>
+          <LoadingState compact label="Loading…" />
         ) : report ? (
           <div className="space-y-4">
             {/* 2x4 stat grid */}
@@ -614,9 +613,7 @@ export default function Maintenance() {
         </div>
 
         {orphansLoading && !orphans ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 size={20} className="animate-spin text-slate-500" />
-          </div>
+          <LoadingState compact label="Loading…" />
         ) : orphans ? (
           <div className="space-y-4">
             {/* Orphaned Containers */}
@@ -736,9 +733,7 @@ export default function Maintenance() {
         <h3 className="text-sm font-semibold text-slate-200 mb-3">Disk Analysis</h3>
 
         {diskLoading && !disk ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 size={20} className="animate-spin text-slate-500" />
-          </div>
+          <LoadingState compact label="Loading…" />
         ) : disk ? (
           <div className="space-y-5">
             {/* Total app data */}

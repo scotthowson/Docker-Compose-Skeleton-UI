@@ -482,7 +482,10 @@ export default function Dashboard() {
             onAddSpecial={dashLayout.addSpecial}
             onAddPluginCard={dashLayout.addPluginCard}
             onSetLabel={dashLayout.setLabel}
+            cardConfig={dashLayout.cardConfig}
+            onSaveCardConfig={dashLayout.saveCardConfig}
             cardProps={{
+              'stack-controls': { stacks: stacksPoll.data?.stacks ?? null, error: stacksPoll.error, onRetry: stacksPoll.refresh, onRefresh: stacksPoll.refresh },
               'stack-grid': { stacks: stacksPoll.data?.stacks ?? null, error: stacksPoll.error, onRetry: stacksPoll.refresh },
               'resource-chart': { history: resourceHistoryRef.current },
               'container-overview': { containers },

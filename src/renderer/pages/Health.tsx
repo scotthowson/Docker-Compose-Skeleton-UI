@@ -15,6 +15,7 @@ import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -714,10 +715,7 @@ export default function Health() {
               )}
               {loading && enrichedContainers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
-                    <RefreshCw size={16} className="inline animate-spin mr-2" />
-                    Loading health data...
-                  </td>
+                  <td colSpan={6}><LoadingState compact label="Loading health data…" /></td>
                 </tr>
               )}
               {filteredContainers.map((c) => (
@@ -767,12 +765,7 @@ export default function Health() {
               No container data available
             </div>
           )}
-          {loading && enrichedContainers.length === 0 && (
-            <div className="px-4 py-8 text-center text-slate-500 text-xs">
-              <RefreshCw size={14} className="inline animate-spin mr-2" />
-              Loading health data...
-            </div>
-          )}
+          {loading && enrichedContainers.length === 0 && <LoadingState compact label="Loading health data…" />}
           {filteredContainers.map((c) => {
             const isExpanded = expandedRow === c.name
             return (

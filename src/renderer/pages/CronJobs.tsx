@@ -4,11 +4,28 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
-  CalendarClock, Clock, Terminal, User, Server,
-  Plus, Trash2, Edit3, Save, X, RefreshCw,
-  Search, Filter, FileText, AlertTriangle,
-  Loader2, WifiOff, ChevronDown, ChevronRight,
-  Copy, Check, BookOpen, Zap, Code,
+  CalendarClock,
+  Clock,
+  Terminal,
+  User,
+  Server,
+  Plus,
+  Trash2,
+  Edit3,
+  Save,
+  X,
+  RefreshCw,
+  Search,
+  Filter,
+  FileText,
+  AlertTriangle,
+  Loader2,
+  WifiOff,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+  BookOpen,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -17,6 +34,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { CronEntry, CrontabResponse } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -498,11 +516,7 @@ export default function CronJobs() {
       )}
 
       {/* Loading */}
-      {loading && !data && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-slate-500" />
-        </div>
-      )}
+      {loading && !data && <LoadingState label="Loading cron entries…" />}
 
       {/* Empty state */}
       {data && entries.length === 0 && (

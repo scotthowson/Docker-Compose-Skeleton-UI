@@ -5,9 +5,21 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
-  TrendingUp, Clock, Cpu, HardDrive, MemoryStick,
-  RefreshCw, Loader2, Database, WifiOff, Camera,
-  Activity, BarChart3, Timer, Settings2, X, Save,
+  TrendingUp,
+  Clock,
+  Cpu,
+  HardDrive,
+  MemoryStick,
+  RefreshCw,
+  Loader2,
+  Database,
+  WifiOff,
+  Camera,
+  BarChart3,
+  Timer,
+  Settings2,
+  X,
+  Save,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -21,6 +33,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -598,30 +611,12 @@ export default function Trends() {
       {/* ----------------------------------------------------------------- */}
       {/* Loading state (initial load only)                                  */}
       {/* ----------------------------------------------------------------- */}
-      {loading && !data && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <Loader2 size={28} className="animate-spin text-emerald-500/60" />
-          <p className="text-sm text-slate-500">Loading trend data...</p>
-        </div>
-      )}
+      {loading && !data && <LoadingState label="Loading trend data…" />}
 
       {/* ----------------------------------------------------------------- */}
       {/* Error state                                                        */}
       {/* ----------------------------------------------------------------- */}
-      {error && !data && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/15 rounded-xl p-6 text-center animate-fade-in">
-          <Activity size={28} className="text-rose-500/40 mx-auto mb-3" />
-          <p className="text-sm text-slate-400 mb-1">Failed to load trend data</p>
-          <p className="text-xs text-slate-500 mb-4">{error.message}</p>
-          <button
-            onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
-          >
-            <RefreshCw size={13} />
-            Retry
-          </button>
-        </div>
-      )}
+      {error && !data && <ErrorState title="Failed to load trend data" error={error} onRetry={handleRefresh} />}
 
       {/* ----------------------------------------------------------------- */}
       {/* Empty state                                                        */}

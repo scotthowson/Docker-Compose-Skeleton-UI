@@ -416,6 +416,26 @@ export function updateContainerEnv(name: string, opts: { set?: Record<string, st
   return apiClient.post<ContainerEnvUpdateResponse>(`/containers/${encodeURIComponent(name)}/env`, opts, 180000)
 }
 
+/** GET / — The API's own endpoint catalogue (public) */
+export function fetchApiCatalogue(): Promise<{ name: string; version: string; endpoints: { method: string; path: string; access: string; description: string }[] }> {
+  return apiClient.get('/')
+}
+
+/** GET /plugins/:plugin/cards/:card/source — A card's manifest and raw HTML for editing */
+export function fetchCardSource(plugin: string, card: string): Promise<{ plugin: string; card: string; meta: Record<string, unknown>; html: string; files: string[] }> {
+  return apiClient.get(`/plugins/${encodeURIComponent(plugin)}/cards/${encodeURIComponent(card)}/source`)
+}
+
+/** POST /plugins/:plugin/cards/:card — Create or replace a dashboard card (the plugin is created when missing) */
+export function saveCard(plugin: string, card: string, body: { meta: Record<string, unknown>; html: string }): Promise<{ success: boolean; plugin: string; card: string; id: string }> {
+  return apiClient.post(`/plugins/${encodeURIComponent(plugin)}/cards/${encodeURIComponent(card)}`, body)
+}
+
+/** DELETE /plugins/:plugin/cards/:card — Remove a dashboard card */
+export function deleteCard(plugin: string, card: string): Promise<{ success: boolean }> {
+  return apiClient.delete(`/plugins/${encodeURIComponent(plugin)}/cards/${encodeURIComponent(card)}`)
+}
+
 /** POST /networks — Create a new Docker network */
 export function createNetwork(opts: NetworkCreateOptions): Promise<NetworkCreateResponse> {
   return apiClient.post<NetworkCreateResponse>('/networks', opts)

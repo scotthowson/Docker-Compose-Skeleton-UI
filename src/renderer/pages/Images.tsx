@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 const IMAGE_POLL_INTERVAL = 60_000
 
@@ -540,11 +541,7 @@ const Images: React.FC = () => {
             </form>
 
             {/* Loading */}
-            {hubSearchLoading && (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 size={24} className="animate-spin text-slate-500" />
-              </div>
-            )}
+            {hubSearchLoading && <LoadingState compact label="Searching Docker Hub…" />}
 
             {/* No results */}
             {!hubSearchLoading && hubSearched && hubSearchResults.length === 0 && (

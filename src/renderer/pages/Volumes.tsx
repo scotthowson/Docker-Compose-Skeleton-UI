@@ -30,6 +30,7 @@ import { useToast } from '../components/common/Toast'
 import { fetchVolumes, deleteVolume } from '../api/endpoints'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -503,13 +504,7 @@ export default function Volumes() {
   // Not connected state
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-24 animate-fade-in">
-        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
-        <p className="text-sm text-slate-500">Waiting for server connection...</p>
-        <p className="text-xs text-slate-500 mt-1">
-          Ensure the Docker Compose Skeleton API server is running
-        </p>
-      </div>
+      <LoadingState label="Waiting for the server connection…" hint="Make sure the Docker Compose Skeleton API is running" />
     )
   }
 

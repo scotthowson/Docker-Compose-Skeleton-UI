@@ -41,6 +41,7 @@ import type {
   BackupConfigResponse,
   BackupListResponse,
 } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -284,13 +285,7 @@ export default function Backup() {
   // ---- Not connected ----
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-24">
-        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
-        <p className="text-sm text-slate-500">Waiting for server connection...</p>
-        <p className="text-xs text-slate-500 mt-1">
-          Ensure the Docker Compose Skeleton API server is running
-        </p>
-      </div>
+      <LoadingState label="Waiting for the server connection…" hint="Make sure the Docker Compose Skeleton API is running" />
     )
   }
 

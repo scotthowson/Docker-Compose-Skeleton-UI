@@ -29,6 +29,24 @@ function mergeRegistry(layout: DashboardLayout): DashboardLayout {
   }
 }
 
+/**
+ * First grid position where a w×h card fits without covering a visible card.
+ * The preferred spot (where the card was before it was hidden) wins when it
+ * is still free; otherwise the grid is scanned top-down, left-to-right.
+ */
+function findFreeSpot(cards: DashboardCard[], skipId: string, w: number, h: number, px?: number, py?: number): { x: number; y: number } {
+  const visible = cards.filter((c) => c.visible && c.id !== skipId)
+  const maxY = Math.max(0, ...visible.map((c) => c.y + c.h))
+  const free = (x: number, y: number) => !visible.some((o) => x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y)
+  if (px !== undefined && py !== undefined && px >= 0 && px + w <= GRID_COLS && free(px, py)) return { x: px, y: py }
+  for (let y = 0; y <= maxY; y++) {
+    for (let x = 0; x + w <= GRID_COLS; x++) {
+      if (free(x, y)) return { x, y }
+    }
+  }
+  return { x: 0, y: maxY }
+}
+
 function stamped(layout: DashboardLayout): DashboardLayout {
   return { ...layout, updated_at: Date.now() }
 }
@@ -55,7 +73,18 @@ function repairCards(layout: DashboardLayout): DashboardLayout {
     maxY += h
     return fixed
   })
-  return changed ? { ...layout, cards } : layout
+  // Visible cards covering each other (every card added by a newer build used
+  // to be shown at the same spot) are spread into the first free gaps
+  const placed: DashboardCard[] = []
+  const spread = cards.map((c) => {
+    if (!c.visible) return c
+    const spot = findFreeSpot(placed, c.id, c.w, c.h, c.x, c.y)
+    const fixed = spot.x === c.x && spot.y === c.y ? c : { ...c, ...spot }
+    if (fixed !== c) changed = true
+    placed.push(fixed)
+    return fixed
+  })
+  return changed ? { ...layout, cards: spread } : layout
 }
 
 /** Read layout from localStorage (auto-migrates old versions) */
@@ -163,9 +192,12 @@ export function useDashboardLayout() {
   const toggleCard = useCallback((id: string) => {
     setLayout((prev) => ({
       ...prev,
-      cards: prev.cards.map((c) =>
-        c.id === id ? { ...c, visible: !c.visible } : c,
-      ),
+      cards: prev.cards.map((c) => {
+        if (c.id !== id) return c
+        if (c.visible) return { ...c, visible: false }
+        // A card being shown lands in the first gap instead of on top of another card
+        return { ...c, visible: true, ...findFreeSpot(prev.cards, id, c.w, c.h, c.x, c.y) }
+      }),
     }))
   }, [])
 
@@ -283,6 +315,12 @@ export function useDashboardLayout() {
     addPluginCard,
     discardEdit,
     labels: layout.labels || {},
+    cardConfig: layout.config || {},
+    /** Save one card's settings right away (outside edit mode) */
+    saveCardConfig: useCallback((id: string, cfg: unknown): Promise<boolean> => {
+      const current = layoutRef.current
+      return persistLayout({ ...current, config: { ...(current.config || {}), [id]: cfg } })
+    }, [persistLayout]),
     setLabel: useCallback((id: string, title: string) => {
       setLayout((prev) => ({
         ...prev,

@@ -4,3 +4,6 @@ release/
 .vite/
 *.tsbuildinfo
 .DS_Store
+
+# Claude Code local permission settings
+.claude/settings.local.json

@@ -21,6 +21,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMaintenanceDisk, fetchDisks, triggerDeepPrune } from '../api/endpoints'
 import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize, DiskInfo } from '../../shared/types'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -323,10 +324,7 @@ export default function DiskAnalysis() {
             <div className="w-48 h-3 rounded skeleton" />
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 size={28} className="animate-spin text-cyan-500/60" />
-          <p className="text-sm text-slate-500">Analyzing disk usage...</p>
-        </div>
+        <LoadingState label="Analyzing disk usage…" />
       </div>
     )
   }
@@ -347,18 +345,7 @@ export default function DiskAnalysis() {
             <p className="text-sm text-slate-400 mt-0.5">Docker disk usage breakdown</p>
           </div>
         </div>
-        <div className="glass border border-rose-500/15 rounded-xl p-6 text-center">
-          <PieChart size={28} className="text-rose-500/40 mx-auto mb-3" />
-          <p className="text-sm text-slate-400 mb-1">Failed to load disk analysis</p>
-          <p className="text-xs text-slate-500 mb-4">{error.message}</p>
-          <button
-            onClick={refresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
-          >
-            <RefreshCw size={13} />
-            Retry
-          </button>
-        </div>
+        <ErrorState title="Failed to load disk analysis" error={error} onRetry={refresh} />
       </div>
     )
   }

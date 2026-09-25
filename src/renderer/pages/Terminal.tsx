@@ -5,14 +5,23 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  TerminalSquare, AlertTriangle, Play, Trash2, RefreshCw,
-  Clock, Copy, Check, Shield, Lock, Loader2,
+  TerminalSquare,
+  AlertTriangle,
+  Play,
+  Trash2,
+  Clock,
+  Copy,
+  Check,
+  Shield,
+  Lock,
+  Loader2,
 } from 'lucide-react'
 import { execTerminalCommandAuth, terminalAuthVerify, terminalLogout } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import TerminalAuthGate from '../components/terminal/TerminalAuthGate'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -357,9 +366,8 @@ export default function Terminal() {
   // Checking auth
   if (authChecking) {
     return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-3">
-        <RefreshCw size={20} className="text-slate-500 animate-spin" />
-        <p className="text-xs text-slate-500">Verifying terminal session...</p>
+      <div className="flex flex-col items-center justify-center h-[70vh]">
+        <LoadingState label="Verifying terminal session…" />
       </div>
     )
   }

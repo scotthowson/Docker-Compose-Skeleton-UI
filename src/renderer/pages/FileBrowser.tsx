@@ -23,6 +23,7 @@ import type {
   ContainerFileContentResponse,
   ContainerInfo,
 } from '../../shared/types'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -453,33 +454,12 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       {/* Loading state                                                      */}
       {/* ----------------------------------------------------------------- */}
-      {selectedContainer && loading && entries.length === 0 && !error && (
-        <div className="flex items-center justify-center py-16 animate-fade-in">
-          <Loader2 size={24} className="animate-spin text-slate-500" />
-        </div>
-      )}
+      {selectedContainer && loading && entries.length === 0 && !error && <LoadingState label="Reading the container's files…" />}
 
       {/* ----------------------------------------------------------------- */}
       {/* Error state                                                        */}
       {/* ----------------------------------------------------------------- */}
-      {selectedContainer && error && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/15 rounded-xl p-6 text-center animate-fade-in">
-          <AlertTriangle size={28} className="text-rose-500/40 mx-auto mb-3" />
-          <p className="text-sm text-slate-400 mb-1">
-            Failed to browse files
-          </p>
-          <p className="text-xs text-slate-500 mb-4 max-w-md mx-auto">
-            {error}
-          </p>
-          <button
-            onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
-          >
-            <RefreshCw size={13} />
-            Retry
-          </button>
-        </div>
-      )}
+      {selectedContainer && error && <ErrorState title="Failed to browse files" error={error} onRetry={handleRefresh} />}
 
       {/* ----------------------------------------------------------------- */}
       {/* Directory listing table                                            */}

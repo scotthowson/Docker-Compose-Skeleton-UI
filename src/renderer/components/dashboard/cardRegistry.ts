@@ -53,6 +53,11 @@ export const CARD_REGISTRY: CardRegistryEntry[] = [
   { id: 'recent-events',      title: 'Recent Events',     iconName: 'Clock',           defaultX: 8,  defaultY: 31, defaultW: 8,  defaultH: 7,  minW: 4,  minH: 2, maxW: 24, maxH: 12, description: 'Docker event timeline' },
   { id: 'quick-actions',      title: 'Quick Actions',     iconName: 'Rocket',          defaultX: 16, defaultY: 31, defaultW: 8,  defaultH: 7,  minW: 4,  minH: 2, maxW: 24, maxH: 12, description: 'Common management shortcuts' },
   { id: 'crowdsec',      title: 'Protection',     iconName: 'ShieldCheck',     defaultX: 0,  defaultY: 38, defaultW: 8,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 12, description: 'CrowdSec bans, whitelist and one-click unban' },
+  { id: 'stack-controls',     title: 'Stack Controls',    iconName: 'Boxes',           defaultX: 8,  defaultY: 38, defaultW: 8,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Start, stop, restart or update any stack without leaving the dashboard' },
+  { id: 'container-spotlight', title: 'Container Spotlight', iconName: 'Crosshair',     defaultX: 16, defaultY: 38, defaultW: 8,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Pin the containers you care about and watch their state, health and load live' },
+  { id: 'routes-dns',         title: 'Routes & DNS',      iconName: 'Globe',           defaultX: 0,  defaultY: 44, defaultW: 12, defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Every Traefik route one click away, with Cloudflare DNS status' },
+  { id: 'notes',              title: 'Notes',             iconName: 'StickyNote',      defaultX: 12, defaultY: 44, defaultW: 6,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'A scratchpad that stays on your dashboard' },
+  { id: 'bookmarks',          title: 'Bookmarks',         iconName: 'Bookmark',        defaultX: 18, defaultY: 44, defaultW: 6,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Your saved bookmarks as tiles' },
 ]
 
 export function getDefaultLayout(): DashboardLayout {

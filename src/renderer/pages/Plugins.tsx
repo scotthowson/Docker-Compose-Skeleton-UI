@@ -6,17 +6,49 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import type { PluginCatalogEntry } from '../../shared/types'
 import { createPortal } from 'react-dom'
 import {
-  Puzzle, Plus, Trash2, ToggleLeft, ToggleRight, GitBranch, LayoutTemplate,
-  Zap, Package, X, Loader2, AlertCircle, CheckCircle, RefreshCw, Download,
-  Shield, Activity, Code, ChevronDown, ChevronRight, FileJson, FolderTree, Terminal,
-  BookOpen, ExternalLink, Sparkles, Clock, Eye, Bell, FileCheck, Gauge,
-  Archive, Lock, Wifi, FileSearch, Radio, Eraser, Wrench,
-  HardDrive, RotateCcw, Timer, Network, Fingerprint, Database, Flame, ScrollText,
+  Puzzle,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  GitBranch,
+  LayoutTemplate,
+  Zap,
+  Package,
+  X,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  RefreshCw,
+  Download,
+  Shield,
+  Activity,
+  Code,
+  ChevronDown,
+  ChevronRight,
+  FileJson,
+  FolderTree,
+  Terminal,
+  BookOpen,
+  Sparkles,
+  Clock,
+  Bell,
+  FileCheck,
+  Gauge,
+  Archive,
+  Lock,
+  FileSearch,
+  Wrench,
+  HardDrive,
+  RotateCcw,
+  Timer,
+  Network,
+  Database,
 } from 'lucide-react'
 import { usePluginStore } from '../stores/pluginStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
+import CardStudio from '../components/plugins/CardStudio'
 
 // ---------------------------------------------------------------------------
 // Featured plugins catalog
@@ -245,6 +277,7 @@ export default function Plugins() {
   const [gitUrl, setGitUrl] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [showGuide, setShowGuide] = useState(false)
+  const [showStudio, setShowStudio] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
   const [installingFeatured, setInstallingFeatured] = useState<string | null>(null)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
@@ -360,6 +393,14 @@ export default function Plugins() {
           >
             <BookOpen size={14} />
             <span className="hidden sm:inline">Create Guide</span>
+          </button>
+          <button
+            onClick={() => setShowStudio(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium text-violet-300 bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all"
+            title="Build a dashboard card from an endpoint, or write one"
+          >
+            <LayoutTemplate size={14} />
+            <span>Card Studio</span>
           </button>
           <button
             onClick={() => setShowInstall(true)}
@@ -707,6 +748,8 @@ export default function Plugins() {
           </div>
         )}
       </div>
+
+      {showStudio && <CardStudio onClose={() => setShowStudio(false)} onSaved={() => { void fetchPlugins() }} />}
 
       {/* Install from Git Modal */}
       {showInstall && createPortal(

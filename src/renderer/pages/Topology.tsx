@@ -6,8 +6,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Network, RefreshCw, Loader2, ZoomIn, ZoomOut, Maximize2,
-  Box, X, Layers, ExternalLink,
+  Network,
+  RefreshCw,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Box,
+  X,
+  Layers,
+  ExternalLink,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -17,6 +24,7 @@ import { fetchTopology } from '../api/endpoints'
 import type {
   TopologyResponse, TopologyNode, TopologyNetwork,
 } from '../../shared/types'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -710,16 +718,9 @@ export default function Topology() {
 
         {/* Canvas */}
         {loading && !topoData ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-slate-500" />
-          </div>
+          <LoadingState label="Mapping the network…" />
         ) : error && !topoData ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-            <Network size={40} className="text-rose-500/50 mb-4" />
-            <p className="text-sm text-slate-400 mb-1">Could not load the topology</p>
-            <p className="text-xs text-slate-500 mb-4">{error.message}</p>
-            <button onClick={refresh} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors">Retry</button>
-          </div>
+          <ErrorState title="Could not load the topology" error={error} onRetry={refresh} />
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
             <Network size={40} className="text-slate-500 mb-4" />

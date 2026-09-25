@@ -26,6 +26,7 @@ import type {
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { CopyButton } from '../components/common/CopyButton'
 import { useToast } from '../components/common/Toast'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -431,9 +432,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={24} className="animate-spin text-slate-500" />
-          </div>
+          <LoadingState label="Inspecting the network…" />
         ) : !detail ? (
           <div className="p-8">
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">

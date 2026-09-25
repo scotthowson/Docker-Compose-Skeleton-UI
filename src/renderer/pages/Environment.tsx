@@ -20,6 +20,7 @@ import type {
   RootEnvResponse, StackEnvResponse, StackListResponse,
   EnvValidateResponse,
 } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -556,12 +557,7 @@ export default function Environment() {
           {rootValidation && <ValidationResults result={rootValidation} />}
 
           {/* Loading */}
-          {rootLoading && !rootEnvData && (
-            <div className="glass rounded-xl border border-white/5 p-8 text-center">
-              <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
-              <span className="text-sm text-slate-500">Loading environment variables...</span>
-            </div>
-          )}
+          {rootLoading && !rootEnvData && <LoadingState label="Loading environment variables…" />}
 
           {/* Content */}
           {rootEnvData && (
@@ -704,12 +700,7 @@ export default function Environment() {
           )}
 
           {/* Loading stack env */}
-          {selectedStack && stackEnvLoading && (
-            <div className="glass rounded-xl border border-white/5 p-8 text-center">
-              <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
-              <span className="text-sm text-slate-500">Loading stack environment...</span>
-            </div>
-          )}
+          {selectedStack && stackEnvLoading && <LoadingState label="Loading stack environment…" />}
 
           {/* No .env file */}
           {selectedStack && !stackEnvLoading && stackEnvEmpty && (

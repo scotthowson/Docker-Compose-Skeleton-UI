@@ -1204,6 +1204,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           </p>
                         </div>
                       )}
+                      <div className="pt-3 mt-1 border-t border-white/[0.03] animate-fade-in">
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Discord webhook <span className="text-slate-600">(optional)</span></label>
+                        <input
+                          type="text"
+                          value={envVars.DISCORD_WEBHOOK_URL || ''}
+                          onChange={(e) => setEnvVars({ ...envVars, DISCORD_WEBHOOK_URL: e.target.value.trim() })}
+                          placeholder="https://discord.com/api/webhooks/…"
+                          spellCheck={false}
+                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-amber-500/40 transition-colors"
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">Server Settings → Integrations → Webhooks in Discord. Every notification also lands in that channel as a rich embed, whether or not ntfy is on.</p>
+                      </div>
                       {notifyMode === 'external' && (
                         <div className="space-y-3 animate-fade-in">
                           <div>

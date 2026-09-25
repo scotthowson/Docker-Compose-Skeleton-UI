@@ -309,6 +309,7 @@ export default function Config() {
     NTFY_URL: d.ntfy_url ?? '',
     NTFY_TOPIC: d.ntfy_topic ?? '',
     NTFY_PRIORITY: d.ntfy_priority ?? 'default',
+    DISCORD_WEBHOOK_URL: '',
     NOTIFICATION_STACKS: d.notification_stacks ?? '',
     ENABLE_COLORS: d.enable_colors ?? true,
     COLOR_MODE: d.color_mode ?? 'auto',
@@ -826,11 +827,11 @@ export default function Config() {
             <NumberRow label="Terminal Session Expiry" description="Terminal session validity in seconds (14400 = 4h)" configKey="TERMINAL_SESSION_EXPIRY" value={Number(edits.TERMINAL_SESSION_EXPIRY ?? 14400)} onChange={handleNumberChange} min={300} max={86400} />
           </GroupCard>
 
-          {/* Push Notifications (NTFY) */}
+          {/* Notifications */}
           <GroupCard
             icon={<Bell size={16} className="text-amber-400" />}
-            title="Push Notifications (NTFY)"
-            description="Configure NTFY push notification service"
+            title="Notifications"
+            description="ntfy push notifications and the Discord webhook"
 
           >
             <div className="flex items-center gap-2 py-3 border-b border-white/[0.03]">
@@ -864,6 +865,14 @@ export default function Config() {
               value={String(edits.NTFY_TOPIC ?? cfg.ntfy_topic ?? '')}
               onChange={handleStringChange}
               placeholder="docker-updates"
+            />
+            <TextRow
+              label="Discord webhook"
+              description={cfg.discord_configured ? `Set (webhook ${cfg.discord_webhook_hint || ''}). Paste a new URL to replace it, or a \${SECRETS_…} reference.` : 'Channel webhook URL — every notification is also posted there as a rich embed'}
+              configKey="DISCORD_WEBHOOK_URL"
+              value={String(edits.DISCORD_WEBHOOK_URL ?? '')}
+              onChange={handleStringChange}
+              placeholder={cfg.discord_configured ? 'configured' : 'https://discord.com/api/webhooks/…'}
             />
             <SelectRow
               label="Priority"

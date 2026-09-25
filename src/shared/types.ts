@@ -244,6 +244,10 @@ export interface ServerConfig {
   api_port: number
   api_bind: string
   ntfy_configured: boolean
+  /** A Discord channel webhook is set (DISCORD_WEBHOOK_URL) */
+  discord_configured?: boolean
+  /** Last characters of the webhook, to recognise it without exposing it */
+  discord_webhook_hint?: string
   ntfy_url: string
   ntfy_topic: string
   ntfy_priority: string
@@ -364,6 +368,10 @@ export interface ConfigUpdateResponse {
 export interface SystemInfo {
   hostname: string
   kernel: string
+  /** What the host runs on: bare metal, or a hypervisor/container name from systemd-detect-virt */
+  virtualization?: string
+  /** QEMU guest agent (Proxmox/KVM guests): package present, daemon running, VM channel exposed */
+  guest_agent?: { installed: boolean; active: boolean; channel: boolean }
   cpu_count: number
   memory_total_mb: number
   swap_total_mb: number
@@ -2236,6 +2244,8 @@ export interface DashboardLayout {
   updated_at?: number
   cards: DashboardCard[]
   labels: Record<string, string>  // card ID → custom title (for dividers)
+  /** Per-card settings (quick actions, spotlight picks, notes text…), keyed by card ID */
+  config?: Record<string, unknown>
   version: number
 }
 
@@ -2262,7 +2272,6 @@ export interface PluginCardMeta {
   maxH?: number
   // Behavior
   isScrollable?: boolean
-  refreshInterval?: number
   dataEndpoint?: string | null
 }
 

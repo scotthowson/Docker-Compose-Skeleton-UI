@@ -19,9 +19,6 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
-  Layers,
-  Settings2,
-  FolderTree,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -35,6 +32,7 @@ import {
 } from '../api/endpoints'
 import { apiClient } from '../api/client'
 import type { SnapshotEntry, SnapshotListResponse } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -808,12 +806,7 @@ export default function Snapshots() {
         </div>
 
         {/* Loading state */}
-        {loading && snapshots.length === 0 && (
-          <div className="glass border border-white/5 rounded-xl p-8 md:p-12 text-center">
-            <Loader2 size={24} className="text-slate-500 animate-spin mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Loading snapshots...</p>
-          </div>
-        )}
+        {loading && snapshots.length === 0 && <LoadingState label="Loading snapshots…" />}
 
         {/* Empty state */}
         {!loading && snapshots.length === 0 && (

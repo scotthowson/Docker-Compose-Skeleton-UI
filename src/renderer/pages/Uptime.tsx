@@ -14,7 +14,6 @@ import {
   RefreshCw,
   ArrowUp,
   Timer,
-  Wifi,
   Server,
   ChevronRight,
 } from 'lucide-react'
@@ -23,6 +22,7 @@ import { fetchContainers, fetchHealthReport, fetchEvents } from '../api/endpoint
 import { useConnectionStore } from '../stores/connectionStore'
 import type { ContainerInfo, HealthReport, EventEntry } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -533,19 +533,11 @@ export default function Uptime() {
         </div>
 
         {/* Loading state */}
-        {loading && containers.length === 0 && (
-          <div className="px-5 py-12 text-center text-slate-500">
-            <RefreshCw size={16} className="inline animate-spin mr-2" />
-            Loading uptime data...
-          </div>
-        )}
+        {loading && containers.length === 0 && <LoadingState label="Loading uptime data…" />}
 
         {/* No containers */}
         {!loading && containers.length === 0 && (
-          <div className="px-5 py-12 text-center text-slate-500">
-            <Server size={20} className="inline mr-2 opacity-40" />
-            No containers found
-          </div>
+          <EmptyState compact icon={<Server size={22} />} title="No containers found" hint="Uptime is tracked for every container Docker reports on this host." />
         )}
 
         {/* Container rows */}

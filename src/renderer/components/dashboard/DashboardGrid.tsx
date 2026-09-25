@@ -7,6 +7,7 @@ import {
   X, RotateCcw, Settings2, Plus, Check, Move,
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
   TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
+  Boxes, Crosshair, Globe, StickyNote, Bookmark,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DashboardCard } from '../../../shared/types'
@@ -16,7 +17,7 @@ import { getCardEntry, clampW, clampH, clampCardSize, getCardConstraints, H_UNIT
 const GRID_GAP = 8
 
 import { fetchPluginCards } from '../../api/endpoints'
-import { apiClient } from '../../api/client'
+import { PluginCardFrame } from './PluginFrame'
 import type { PluginCardMeta } from '../../../shared/types'
 import { useConnectionStore } from '../../stores/connectionStore'
 
@@ -38,10 +39,16 @@ import ActiveAutomations from './ActiveAutomations'
 import RecentEvents from './RecentEvents'
 import QuickActions from './QuickActions'
 import CrowdSecStatus from './CrowdSecStatus'
+import StackControls from './StackControls'
+import ContainerSpotlight from './ContainerSpotlight'
+import RoutesDns from './RoutesDns'
+import NotesCard from './NotesCard'
+import BookmarksCard from './BookmarksCard'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
   TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
+  Boxes, Crosshair, Globe, StickyNote, Bookmark,
 }
 
 const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
@@ -54,97 +61,8 @@ const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   'maintenance': MaintenanceSummary, 'notifications': NotificationStatus,
   'automations': ActiveAutomations, 'recent-events': RecentEvents,
   'quick-actions': QuickActions, 'crowdsec': CrowdSecStatus,
-}
-
-// Injected ahead of every plugin card. The card runs sandboxed at a null
-// origin, so it can neither reach the API nor hold a session; instead any
-// fetch("/path") (or window.dcs.fetch) is relayed to the dashboard, which
-// performs the GET with the signed-in session and posts the JSON back.
-const PLUGIN_BRIDGE = `<script>(function(){var n=0,p={};window.addEventListener('message',function(e){var m=e.data;if(!m||m.type!=='dcs-api-response'||!p[m.id])return;var r=p[m.id];delete p[m.id];r({ok:!!m.ok,status:m.status||0,json:function(){return Promise.resolve(m.data)},text:function(){return Promise.resolve(JSON.stringify(m.data))}})});function bridge(path){return new Promise(function(res){var id=++n;p[id]=res;parent.postMessage({type:'dcs-api-request',id:id,path:path},'*')})}window.dcs={fetch:bridge};window.__DCS_TOKEN='';var f=window.fetch;window.fetch=function(u,o){var s=typeof u==='string'?u:(u&&u.url)||'';if(/^\\/(?!\\/)/.test(s))return bridge(s);return f.apply(this,arguments)};})();</script>`
-
-/** Plugin card iframe — fetches HTML from API and renders it from a blob URL */
-function PluginCardFrame({ pluginName, cardName, title, refreshInterval = 0 }: { pluginName: string; cardName: string; title: string; refreshInterval?: number }) {
-  const [src, setSrc] = useState<string>('')
-  const [error, setError] = useState(false)
-  const [tick, setTick] = useState(0)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    apiClient.get<{ html: string }>(`/plugins/${pluginName}/cards/${cardName}`)
-      .then((res) => {
-        if (cancelled) return
-        // Blob URL has null origin — CSP of parent page does NOT apply
-        // Scripts execute freely inside blob URL iframes
-        const blob = new Blob([PLUGIN_BRIDGE + res.html], { type: 'text/html' })
-        setSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
-        setError(false)
-      })
-      .catch(() => { if (!cancelled) setError(true) })
-    return () => { cancelled = true }
-  }, [pluginName, cardName, tick])
-
-  // Cards that declare a refresh interval are reloaded on that cadence
-  useEffect(() => {
-    if (!refreshInterval || refreshInterval <= 0) return
-    const timer = setInterval(() => setTick((n) => n + 1), Math.max(10, refreshInterval) * 1000)
-    return () => clearInterval(timer)
-  }, [refreshInterval])
-
-  // Answer the card's data requests with the dashboard's own session (GET only)
-  useEffect(() => {
-    const onMessage = async (e: MessageEvent) => {
-      const win = iframeRef.current?.contentWindow
-      if (!win || e.source !== win) return
-      const msg = e.data as { type?: string; id?: number; path?: string } | null
-      if (!msg || msg.type !== 'dcs-api-request' || typeof msg.path !== 'string') return
-      const path = msg.path.replace(/^\/api(?=\/)/, '')
-      if (!path.startsWith('/') || path.includes('..')) {
-        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: false, status: 400, data: { error: 'Only API paths like /routes are allowed' } }, '*')
-        return
-      }
-      try {
-        const data = await apiClient.get<unknown>(path)
-        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: true, status: 200, data }, '*')
-      } catch (err) {
-        const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500
-        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: false, status, data: { error: err instanceof Error ? err.message : 'request failed' } }, '*')
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
-
-  if (error) {
-    return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to load card</span>
-      </div>
-    )
-  }
-
-  if (!src) {
-    return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: '20px', height: '20px', border: '2px solid rgba(139,92,246,0.3)', borderTop: '2px solid #8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-      </div>
-    )
-  }
-
-  return (
-    <iframe
-      ref={iframeRef}
-      src={src}
-      title={title}
-      // SECURITY: Sandbox plugin iframes — allow scripts (for dynamic cards) but block
-      // top-navigation, forms, popups, and same-origin access to parent window.
-      // This prevents malicious plugins from accessing the parent app's DOM, cookies, or auth tokens.
-      sandbox="allow-scripts"
-      // @ts-ignore — allowtransparency is a valid HTML attribute but not in React types
-      allowtransparency="true"
-      style={{ width: '100%', height: '100%', border: 'none', borderRadius: '12px', display: 'block', background: 'transparent' }}
-    />
-  )
+  'stack-controls': StackControls, 'container-spotlight': ContainerSpotlight,
+  'routes-dns': RoutesDns, 'notes': NotesCard, 'bookmarks': BookmarksCard,
 }
 
 interface Props {
@@ -161,11 +79,15 @@ interface Props {
   onAddPluginCard: (id: string, w: number, h: number) => void
   onSetLabel: (id: string, title: string) => void
   cardProps?: Record<string, Record<string, unknown>>
+  /** Per-card settings from the layout, and how a card saves its own */
+  cardConfig?: Record<string, unknown>
+  onSaveCardConfig?: (id: string, cfg: unknown) => Promise<boolean> | void
 }
 
 export default function DashboardGrid({
   cards, editMode, labels, onToggleCard, onResizeCard, onMoveCard,
   onExitEdit, onDiscardEdit, onResetLayout, onAddSpecial, onAddPluginCard, onSetLabel, cardProps = {},
+  cardConfig = {}, onSaveCardConfig,
 }: Props) {
   const [showPicker, setShowPicker] = useState(false)
   const [resizingId, setResizingId] = useState<string | null>(null)
@@ -512,7 +434,12 @@ export default function DashboardGrid({
               <div className={`dash-card-body h-full rounded-xl overflow-hidden [&>*]:h-full [&>*]:overflow-y-auto [&>*]:scrollbar-thin ${
                 editMode ? 'pointer-events-none select-none border border-dashed border-white/10' : ''
               }`}>
-                <Comp {...props} />
+                <Comp
+                  {...props}
+                  cardConfig={cardConfig[card.id]}
+                  onSaveConfig={onSaveCardConfig ? (cfg: unknown) => onSaveCardConfig(card.id, cfg) : undefined}
+                  dashboardEditMode={editMode}
+                />
               </div>
             </div>
           )

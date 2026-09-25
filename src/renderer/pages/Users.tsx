@@ -4,9 +4,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Users as UsersIcon, UserPlus, Shield, ShieldCheck, ShieldX,
-  Copy, Check, Trash2, Clock, Loader2, RefreshCw, Plus,
-  AlertTriangle, KeyRound, Mail,
+  Users as UsersIcon,
+  UserPlus,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  Copy,
+  Check,
+  Trash2,
+  Clock,
+  Loader2,
+  RefreshCw,
+  Plus,
+  AlertTriangle,
+  KeyRound,
 } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
@@ -18,6 +29,7 @@ import {
   authListSessions, authRevokeSession,
 } from '../api/endpoints'
 import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,10 +179,7 @@ export default function Users() {
   // Disconnected state
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-24">
-        <Loader2 className="w-8 h-8 text-slate-500 animate-spin mb-4" />
-        <p className="text-sm text-slate-500">Waiting for server connection...</p>
-      </div>
+      <LoadingState label="Waiting for the server connection…" hint="Make sure the Docker Compose Skeleton API is running" />
     )
   }
 
@@ -237,9 +246,7 @@ export default function Users() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 text-slate-500 animate-spin" />
-            </div>
+            <LoadingState compact label="Loading users…" />
           ) : users.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <UsersIcon className="h-8 w-8 mb-3 text-slate-500" />

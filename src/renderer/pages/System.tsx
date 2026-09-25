@@ -4,10 +4,25 @@
 
 import React, { useState, useEffect } from 'react'
 import {
-  Monitor, Cpu, MemoryStick, HardDrive, Server, RefreshCw,
-  Trash2, AlertTriangle, CheckCircle, XCircle, Loader2,
-  Gauge, Database, Zap, Wrench, ChevronDown, Download,
-  Lock, User, Eye, EyeOff, Package, Shield,
+  Monitor,
+  Cpu,
+  HardDrive,
+  Server,
+  RefreshCw,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Database,
+  Wrench,
+  Download,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  Package,
+  Shield,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { fetchSystemInfo, runDockerPrune, runImagePrune, terminalAuth, checkOsUpdates, applyOsUpdates, getOsUpdateStatus } from '../api/endpoints'
@@ -17,6 +32,7 @@ import { useAuthStore } from '../stores/authStore'
 import type { SystemInfo, DockerDiskUsage, OsUpdateCheckResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,11 +65,39 @@ function SectionCard({ icon, title, children }: {
   )
 }
 
+/** QEMU guest agent state for a Proxmox/KVM guest, with the fix when something is missing */
+function GuestAgentStatus({ ga }: { ga: { installed: boolean; active: boolean; channel: boolean } }) {
+  const hint = (text: string) => <span className="block text-[11px] leading-snug text-slate-500 font-sans mt-0.5">{text}</span>
+  if (ga.active && ga.channel) return <span className="text-emerald-400">Running</span>
+  if (ga.active) {
+    return (
+      <span className="inline-block text-right max-w-[260px] text-amber-300">
+        Running, no channel from the VM
+        {hint('Turn on Options → QEMU Guest Agent for this VM in Proxmox, then power-cycle it')}
+      </span>
+    )
+  }
+  if (ga.installed) {
+    return (
+      <span className="inline-block text-right max-w-[260px] text-amber-300">
+        Installed, not running
+        {hint('sudo systemctl enable --now qemu-guest-agent')}
+      </span>
+    )
+  }
+  return (
+    <span className="inline-block text-right max-w-[260px] text-slate-400">
+      Not installed
+      {hint('sudo apt install qemu-guest-agent — lets the hypervisor freeze the filesystem for consistent backups, read this VM\'s IP and shut it down cleanly')}
+    </span>
+  )
+}
+
 function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-white/[0.03] last:border-b-0">
-      <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</span>
-      <span className="text-sm text-slate-200 font-mono">{value}</span>
+    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-white/[0.03] last:border-b-0">
+      <span className="text-xs font-medium text-slate-500 uppercase tracking-wider shrink-0">{label}</span>
+      <span className="text-sm text-slate-200 font-mono text-right">{value}</span>
     </div>
   )
 }
@@ -541,12 +585,7 @@ export default function System() {
       )}
 
       {/* Loading placeholder */}
-      {loading && !info && (
-        <div className="glass rounded-xl border border-white/5 p-8 text-center">
-          <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
-          <span className="text-sm text-slate-500">Loading system information...</span>
-        </div>
-      )}
+      {loading && !info && <LoadingState label="Loading system information…" />}
 
       {/* Info cards grid */}
       {info && (
@@ -558,6 +597,10 @@ export default function System() {
           >
             <KvRow label="Hostname" value={info.hostname} />
             <KvRow label="Kernel" value={info.kernel} />
+            <KvRow label="Runs on" value={!info.virtualization || info.virtualization === 'unknown' ? 'Unknown' : info.virtualization === 'none' ? 'Bare metal' : `${info.virtualization} (virtual machine or container)`} />
+            {info.guest_agent && (info.virtualization === 'kvm' || info.virtualization === 'qemu' || info.guest_agent.installed) && (
+              <KvRow label="QEMU agent" value={<GuestAgentStatus ga={info.guest_agent} />} />
+            )}
             <KvRow label="Docker Version" value={info.docker_version} />
           </SectionCard>
 

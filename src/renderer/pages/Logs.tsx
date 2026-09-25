@@ -16,6 +16,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import LiveLogViewer from '../components/logs/LiveLogViewer'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Log level config
@@ -362,9 +363,7 @@ export default function Logs() {
           </div>
 
           <div className="p-5">
-            {statsError && (
-              <p className="text-sm text-rose-400">Failed to load stats: {statsError.message}</p>
-            )}
+            {statsError && <ErrorState title="Failed to load log statistics" error={statsError} />}
 
             {statsLoading && !stats && (
               <p className="text-sm text-slate-500">Loading statistics...</p>
@@ -710,7 +709,7 @@ export default function Logs() {
           <div className="flex-1 overflow-auto">
             {archivesError && (
               <div className="p-5">
-                <p className="text-sm text-rose-400">Failed to load archives: {archivesError.message}</p>
+                <ErrorState title="Failed to load archived logs" error={archivesError} />
               </div>
             )}
 

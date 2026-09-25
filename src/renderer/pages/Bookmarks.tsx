@@ -44,6 +44,7 @@ function loadBookmarks(): BookmarkItem[] {
 
 function saveBookmarks(items: BookmarkItem[]) {
   localStorage.setItem('user-bookmarks', JSON.stringify(items))
+  window.dispatchEvent(new Event('bookmarks-changed'))
 }
 
 // ---------------------------------------------------------------------------

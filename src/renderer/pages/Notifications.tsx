@@ -10,9 +10,11 @@ import {
   Clock, Shield, Cpu, HardDrive, Box, Layers, Package,
   Webhook, ExternalLink, Zap, ChevronDown, Play, Power,
   HeartPulse, Archive,
+  MessageCircle,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -29,6 +31,7 @@ import {
   testWebhook,
 } from '../api/endpoints'
 import type { NotificationRule, NotificationHistoryEntry, Webhook as WebhookType } from '../../shared/types'
+import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants & Helpers
@@ -305,7 +308,10 @@ export default function Notifications() {
   const rules: NotificationRule[] = useMemo(() => rulesData?.rules ?? [], [rulesData])
   const history: NotificationHistoryEntry[] = useMemo(() => historyData?.history ?? [], [historyData])
   const webhooks: WebhookType[] = useMemo(() => webhooksData?.webhooks ?? [], [webhooksData])
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const ntfyConfigured = configData?.ntfy_configured ?? false
+  const discordConfigured = configData?.discord_configured ?? false
+  const discordHint = configData?.discord_webhook_hint ?? ''
   const ntfyUrl = configData?.ntfy_url ?? ''
 
   // ---------------------------------------------------------------------------
@@ -511,9 +517,9 @@ export default function Notifications() {
           </button>
           <button
             onClick={handleSendTest}
-            disabled={sendingTest || !ntfyConfigured}
+            disabled={sendingTest || (!ntfyConfigured && !discordConfigured)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 disabled:opacity-50 press"
-            title={ntfyConfigured ? 'Send a test notification via NTFY' : 'NTFY is not configured'}
+            title={ntfyConfigured || discordConfigured ? 'Send a test notification on every configured channel' : 'No channel is configured yet'}
           >
             {sendingTest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             Send Test
@@ -651,52 +657,94 @@ export default function Notifications() {
         </div>
       </div>
 
-      {/* ── NTFY Connection Status ──────────────────────────────────────── */}
-      <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className={`w-3 h-3 rounded-full ${ntfyConfigured ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              {ntfyConfigured && (
-                <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-30" />
-              )}
+      {/* ── Channels: NTFY and Discord, side by side ──────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* ── NTFY Connection Status ──────────────────────────────────────── */}
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className={`w-3 h-3 rounded-full ${ntfyConfigured ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                {ntfyConfigured && (
+                  <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-30" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">NTFY Status</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {ntfyConfigured
+                    ? 'Connected and ready to send notifications'
+                    : 'NTFY is not configured on this server'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-200">NTFY Status</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {ntfyConfigured
-                  ? 'Connected and ready to send notifications'
-                  : 'NTFY is not configured on this server'}
-              </p>
-            </div>
+            {ntfyConfigured && ntfyUrl && (
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Endpoint</span>
+                <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                  {ntfyUrl}
+                </code>
+              </div>
+            )}
           </div>
           {ntfyConfigured && ntfyUrl && (
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Endpoint</span>
-              <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+            <div className="sm:hidden mt-3 pt-3 border-t border-white/[0.03]">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Endpoint</span>
+              <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5 break-all">
                 {ntfyUrl}
               </code>
             </div>
           )}
-        </div>
-        {ntfyConfigured && ntfyUrl && (
-          <div className="sm:hidden mt-3 pt-3 border-t border-white/[0.03]">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Endpoint</span>
-            <code className="text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5 break-all">
-              {ntfyUrl}
-            </code>
-          </div>
-        )}
-        {!ntfyConfigured && (
-          <div className="mt-3 pt-3 border-t border-white/[0.03]">
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
-              <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-amber-400/90">
-                Configure NTFY_URL and NTFY_TOPIC in your server .env file to enable push notifications.
-              </p>
+          {!ntfyConfigured && (
+            <div className="mt-3 pt-3 border-t border-white/[0.03]">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
+                <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-400/90">
+                  Configure NTFY_URL and NTFY_TOPIC in your server .env file to enable push notifications.
+                </p>
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* Discord channel */}
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className={`w-3 h-3 rounded-full ${discordConfigured ? 'bg-indigo-400' : 'bg-slate-600'}`} />
+                {discordConfigured && (
+                  <div className="absolute inset-0 w-3 h-3 rounded-full bg-indigo-400 animate-ping opacity-30" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">Discord</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {discordConfigured
+                    ? 'Every rule also posts a rich embed to your channel'
+                    : 'Post every notification to a Discord channel as a rich embed'}
+                </p>
+              </div>
+            </div>
+            {discordConfigured && discordHint && (
+              <code className="whitespace-nowrap hidden sm:inline text-xs font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5" title="The end of the webhook URL">webhook {discordHint}</code>
+            )}
           </div>
-        )}
+          <div className="mt-3 pt-3 border-t border-white/[0.03]">
+            {discordConfigured ? (
+              <p className="text-[11px] text-slate-500">
+                Messages carry the event, stack, container, status and host as fields, a colour per event, and a link back to this dashboard. Change the webhook under <button onClick={() => setCurrentPage('config')} className="text-cyan-400 hover:underline">Server Config → Notifications</button>. Commands from Discord are a separate integration: the DCS Discord bot template.
+              </p>
+            ) : (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15">
+                <MessageCircle size={14} className="text-indigo-300 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-indigo-200/90">
+                  In Discord: Server Settings → Integrations → Webhooks → New Webhook, copy its URL and paste it as <span className="font-mono">DISCORD_WEBHOOK_URL</span> under <button onClick={() => setCurrentPage('config')} className="text-cyan-300 hover:underline">Server Config → Notifications</button> (a <span className="font-mono">{'${SECRETS_…}'}</span> reference works too).
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── Rule List ───────────────────────────────────────────────────── */}
@@ -704,11 +752,7 @@ export default function Notifications() {
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Notification Rules</h3>
 
         {/* Loading */}
-        {rulesLoading && !rulesData && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-slate-500" />
-          </div>
-        )}
+        {rulesLoading && !rulesData && <LoadingState label="Loading notification rules…" />}
 
         {/* Empty state */}
         {rulesData && rules.length === 0 && (
@@ -851,11 +895,7 @@ export default function Notifications() {
         {historyExpanded && (
           <div className="animate-fade-in">
             {/* Loading */}
-            {historyLoading && !historyData && (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={20} className="animate-spin text-slate-500" />
-              </div>
-            )}
+            {historyLoading && !historyData && <LoadingState compact label="Loading history…" />}
 
             {/* Empty state */}
             {historyData && history.length === 0 && (
