@@ -56,10 +56,18 @@ const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   'quick-actions': QuickActions, 'crowdsec': CrowdSecStatus,
 }
 
-/** Plugin card iframe — fetches HTML from API and renders via srcdoc */
-function PluginCardFrame({ pluginName, cardName, title }: { pluginName: string; cardName: string; title: string }) {
+// Injected ahead of every plugin card. The card runs sandboxed at a null
+// origin, so it can neither reach the API nor hold a session; instead any
+// fetch("/path") (or window.dcs.fetch) is relayed to the dashboard, which
+// performs the GET with the signed-in session and posts the JSON back.
+const PLUGIN_BRIDGE = `<script>(function(){var n=0,p={};window.addEventListener('message',function(e){var m=e.data;if(!m||m.type!=='dcs-api-response'||!p[m.id])return;var r=p[m.id];delete p[m.id];r({ok:!!m.ok,status:m.status||0,json:function(){return Promise.resolve(m.data)},text:function(){return Promise.resolve(JSON.stringify(m.data))}})});function bridge(path){return new Promise(function(res){var id=++n;p[id]=res;parent.postMessage({type:'dcs-api-request',id:id,path:path},'*')})}window.dcs={fetch:bridge};window.__DCS_TOKEN='';var f=window.fetch;window.fetch=function(u,o){var s=typeof u==='string'?u:(u&&u.url)||'';if(/^\\/(?!\\/)/.test(s))return bridge(s);return f.apply(this,arguments)};})();</script>`
+
+/** Plugin card iframe — fetches HTML from API and renders it from a blob URL */
+function PluginCardFrame({ pluginName, cardName, title, refreshInterval = 0 }: { pluginName: string; cardName: string; title: string; refreshInterval?: number }) {
   const [src, setSrc] = useState<string>('')
   const [error, setError] = useState(false)
+  const [tick, setTick] = useState(0)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -68,12 +76,44 @@ function PluginCardFrame({ pluginName, cardName, title }: { pluginName: string; 
         if (cancelled) return
         // Blob URL has null origin — CSP of parent page does NOT apply
         // Scripts execute freely inside blob URL iframes
-        const blob = new Blob([res.html], { type: 'text/html' })
-        setSrc(URL.createObjectURL(blob))
+        const blob = new Blob([PLUGIN_BRIDGE + res.html], { type: 'text/html' })
+        setSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
+        setError(false)
       })
       .catch(() => { if (!cancelled) setError(true) })
     return () => { cancelled = true }
-  }, [pluginName, cardName])
+  }, [pluginName, cardName, tick])
+
+  // Cards that declare a refresh interval are reloaded on that cadence
+  useEffect(() => {
+    if (!refreshInterval || refreshInterval <= 0) return
+    const timer = setInterval(() => setTick((n) => n + 1), Math.max(10, refreshInterval) * 1000)
+    return () => clearInterval(timer)
+  }, [refreshInterval])
+
+  // Answer the card's data requests with the dashboard's own session (GET only)
+  useEffect(() => {
+    const onMessage = async (e: MessageEvent) => {
+      const win = iframeRef.current?.contentWindow
+      if (!win || e.source !== win) return
+      const msg = e.data as { type?: string; id?: number; path?: string } | null
+      if (!msg || msg.type !== 'dcs-api-request' || typeof msg.path !== 'string') return
+      const path = msg.path.replace(/^\/api(?=\/)/, '')
+      if (!path.startsWith('/') || path.includes('..')) {
+        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: false, status: 400, data: { error: 'Only API paths like /routes are allowed' } }, '*')
+        return
+      }
+      try {
+        const data = await apiClient.get<unknown>(path)
+        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: true, status: 200, data }, '*')
+      } catch (err) {
+        const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500
+        win.postMessage({ type: 'dcs-api-response', id: msg.id, ok: false, status, data: { error: err instanceof Error ? err.message : 'request failed' } }, '*')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   if (error) {
     return (
@@ -93,6 +133,7 @@ function PluginCardFrame({ pluginName, cardName, title }: { pluginName: string; 
 
   return (
     <iframe
+      ref={iframeRef}
       src={src}
       title={title}
       // SECURITY: Sandbox plugin iframes — allow scripts (for dynamic cards) but block
@@ -413,7 +454,7 @@ export default function DashboardGrid({
                   </>
                 )}
                 <div className={`rounded-xl overflow-hidden bg-slate-900/60 backdrop-blur-md border border-white/[0.05] ${editMode ? 'pointer-events-none select-none border-dashed border-violet-500/10' : ''}`} style={{ height: '100%' }}>
-                  <PluginCardFrame pluginName={pluginName} cardName={cardName} title={pluginMeta?.title || cardName} />
+                  <PluginCardFrame pluginName={pluginName} cardName={cardName} title={pluginMeta?.title || cardName} refreshInterval={pluginMeta?.refreshInterval} />
                 </div>
               </div>
             )
@@ -468,7 +509,7 @@ export default function DashboardGrid({
                   </div>
                 </>
               )}
-              <div className={`h-full rounded-xl overflow-hidden [&>*]:h-full [&>*]:overflow-y-auto [&>*]:scrollbar-thin ${
+              <div className={`dash-card-body h-full rounded-xl overflow-hidden [&>*]:h-full [&>*]:overflow-y-auto [&>*]:scrollbar-thin ${
                 editMode ? 'pointer-events-none select-none border border-dashed border-white/10' : ''
               }`}>
                 <Comp {...props} />
@@ -524,7 +565,7 @@ export default function DashboardGrid({
                     <button
                       key={pc.id}
                       onClick={() => {
-                        onAddPluginCard(pc.id, pc.defaultW, pc.defaultH)
+                        onAddPluginCard(pc.id, Number.isFinite(pc.defaultW) ? pc.defaultW : 8, Number.isFinite(pc.defaultH) ? pc.defaultH : 5)
                         setShowPicker(false)
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-500/[0.03] border border-violet-500/10 hover:bg-violet-500/[0.08] hover:border-violet-500/20 transition-all text-left"

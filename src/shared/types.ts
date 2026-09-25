@@ -2253,6 +2253,8 @@ export interface PluginCardMeta {
   plugin: string
   author?: string
   version?: string
+  /** Seconds between reloads of the card (0 = never) */
+  refreshInterval?: number
   // Size constraints (omit for free resizing)
   minW?: number
   minH?: number

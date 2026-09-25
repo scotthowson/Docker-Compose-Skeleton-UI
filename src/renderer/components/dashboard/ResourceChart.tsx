@@ -56,7 +56,7 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '', 
         {title}
       </p>
       {subtitle && <p className="mb-1 text-[8px] text-slate-500 truncate max-w-[100px] text-center" title={subtitle}>{subtitle}</p>}
-      <div className="relative h-[5.5rem] w-[5.5rem] sm:h-24 sm:w-24 md:h-28 md:w-28">
+      <div className="donut-box relative h-[5.5rem] w-[5.5rem] sm:h-24 sm:w-24 md:h-28 md:w-28">
         {/* Tooltip rendered outside/above the donut */}
         <div
           className={`
@@ -446,7 +446,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       {/* Tab content */}
       {activeTab === 'gauges' ? (
         <>
-          <div className="grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:items-start sm:justify-around sm:gap-3">
+          <div className="gauge-grid grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:items-start sm:justify-around sm:gap-3">
             <DonutChart
               title="CPU"
               subtitle={systemInfo ? `${cpuCount}-core` : undefined}

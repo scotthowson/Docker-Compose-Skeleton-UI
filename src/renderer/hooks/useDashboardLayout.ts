@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DashboardCard, DashboardLayout } from '../../shared/types'
-import { getDefaultLayout, GRID_COLS, clampCardSize, CARD_REGISTRY } from '../components/dashboard/cardRegistry'
+import { getDefaultLayout, GRID_COLS, clampCardSize, CARD_REGISTRY, getCardEntry } from '../components/dashboard/cardRegistry'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -35,6 +35,29 @@ function stamped(layout: DashboardLayout): DashboardLayout {
 
 const CURRENT_VERSION = 9
 
+/**
+ * A card saved without a usable position or size (a plugin card added from a
+ * manifest with no dimensions) would break the whole grid; give it a place
+ * below everything else instead of trusting the saved numbers.
+ */
+function repairCards(layout: DashboardLayout): DashboardLayout {
+  const usable = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0
+  let maxY = 0
+  for (const c of layout.cards) if (usable(c.y) && usable(c.h)) maxY = Math.max(maxY, c.y + c.h)
+  let changed = false
+  const cards = layout.cards.map((c) => {
+    if (usable(c.x) && usable(c.y) && usable(c.w) && usable(c.h) && c.w > 0 && c.h > 0) return c
+    changed = true
+    const entry = getCardEntry(c.id)
+    const w = entry?.defaultW ?? 8
+    const h = entry?.defaultH ?? 5
+    const fixed = { ...c, x: 0, y: maxY, w, h }
+    maxY += h
+    return fixed
+  })
+  return changed ? { ...layout, cards } : layout
+}
+
 /** Read layout from localStorage (auto-migrates old versions) */
 function loadFromCache(): DashboardLayout | null {
   try {
@@ -45,7 +68,7 @@ function loadFromCache(): DashboardLayout | null {
     if (!parsed.version || parsed.version < CURRENT_VERSION) return null
     // Validate cards have x,y,w,h fields (v9+ uses free placement)
     if (parsed.cards?.length > 0 && typeof parsed.cards[0].x !== 'number') return null
-    return mergeRegistry(parsed)
+    return repairCards(mergeRegistry(parsed))
   } catch {}
   return null
 }
@@ -106,7 +129,7 @@ export function useDashboardLayout() {
       const local = layoutRef.current
       const serverNewer = (serverLayout.updated_at ?? 0) >= (local.updated_at ?? 0)
       if (serverNewer) {
-        const merged = mergeRegistry(serverLayout)
+        const merged = repairCards(mergeRegistry(serverLayout))
         setLayout(merged)
         saveToCache(merged)
       } else {
@@ -225,7 +248,9 @@ export function useDashboardLayout() {
   }, [])
 
   /** Add a plugin card to the layout at the bottom (re-adding a removed one just shows it again) */
-  const addPluginCard = useCallback((id: string, w: number, h: number) => {
+  const addPluginCard = useCallback((id: string, rawW: number, rawH: number) => {
+    const w = Number.isFinite(rawW) && rawW > 0 ? Math.min(GRID_COLS, Math.round(rawW)) : 8
+    const h = Number.isFinite(rawH) && rawH > 0 ? Math.min(16, Math.round(rawH)) : 5
     setLayout((prev) => {
       const existing = prev.cards.find((c) => c.id === id)
       if (existing) {
