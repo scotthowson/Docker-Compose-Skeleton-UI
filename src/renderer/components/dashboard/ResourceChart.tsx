@@ -56,7 +56,7 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '', 
         {title}
       </p>
       {subtitle && <p className="mb-1 text-[8px] text-slate-500 truncate max-w-[100px] text-center" title={subtitle}>{subtitle}</p>}
-      <div className="relative h-24 w-24 md:h-28 md:w-28">
+      <div className="relative h-[5.5rem] w-[5.5rem] sm:h-24 sm:w-24 md:h-28 md:w-28">
         {/* Tooltip rendered outside/above the donut */}
         <div
           className={`
@@ -95,8 +95,8 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '', 
               data={data}
               cx="50%"
               cy="50%"
-              innerRadius={38}
-              outerRadius={52}
+              innerRadius="68%"
+              outerRadius="94%"
               paddingAngle={2}
               dataKey="value"
               stroke="none"
@@ -446,7 +446,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       {/* Tab content */}
       {activeTab === 'gauges' ? (
         <>
-          <div className="flex items-start justify-around gap-1 md:gap-3">
+          <div className="grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:items-start sm:justify-around sm:gap-3">
             <DonutChart
               title="CPU"
               subtitle={systemInfo ? `${cpuCount}-core` : undefined}
@@ -457,7 +457,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               unit="%"
             />
             {hasGpu && (
-              <div className="flex items-start gap-0.5">
+              <>
                 <DonutChart
                   title="GPU"
                   subtitle={gpuInfo?.name?.replace('NVIDIA ', '').replace('GeForce ', '') ?? undefined}
@@ -471,8 +471,8 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                   unit="%"
                 />
                 <div className="flex flex-col items-center mt-0.5" title={`VRAM: ${gpuMemUsed} MB / ${gpuMemTotal} MB | Temp: ${gpuTemp}°C`}>
-                  <p className="mb-1 text-[8px] font-semibold uppercase tracking-wider text-slate-400">VRAM</p>
-                  <div className="relative h-12 w-12 md:h-14 md:w-14">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">VRAM</p>
+                  <div className="relative h-14 w-14 sm:h-12 sm:w-12 md:h-14 md:w-14">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                       <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3" />
                       <circle
@@ -488,11 +488,11 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                       <span className="text-[10px] font-bold text-white">{gpuMemPercent}%</span>
                     </div>
                   </div>
-                  <p className="text-[7px] text-slate-500 mt-0.5">{gpuTemp}°C</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{gpuTemp}°C</p>
                 </div>
-              </div>
+              </>
             )}
-            <div className={`flex items-start ${hasSwap ? 'gap-0.5' : ''}`}>
+            <>
               <DonutChart
                 title="Memory"
                 data={memoryData}
@@ -503,8 +503,8 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               />
               {hasSwap && (
                 <div className="flex flex-col items-center mt-0.5" title={`Swap: ${swapUsed > 1024 ? (swapUsed / 1024).toFixed(1) + ' GB' : swapUsed + ' MB'} used of ${swapTotal > 1024 ? (swapTotal / 1024).toFixed(0) + ' GB' : swapTotal + ' MB'}`}>
-                  <p className="mb-1 text-[8px] font-semibold uppercase tracking-wider text-slate-400">Swap</p>
-                  <div className="relative h-12 w-12 md:h-14 md:w-14">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Swap</p>
+                  <div className="relative h-14 w-14 sm:h-12 sm:w-12 md:h-14 md:w-14">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                       <circle cx="18" cy="18" r="14" fill="none" stroke="#1e293b" strokeWidth="3" />
                       <circle
@@ -522,7 +522,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                   </div>
                 </div>
               )}
-            </div>
+            </>
             <DonutChart
               title="Disk"
               data={diskData}

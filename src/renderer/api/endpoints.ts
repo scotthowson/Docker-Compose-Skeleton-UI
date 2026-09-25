@@ -28,6 +28,8 @@ import type {
   NetworkListResponse,
   NetworkDetail,
   NetworkCreateResponse,
+  NetworkCreateOptions,
+  NetworkRecreateResponse,
   NetworkDeleteResponse,
   NetworkActionResponse,
   VolumeListResponse,
@@ -405,14 +407,17 @@ export function fetchNetworkDetail(name: string): Promise<NetworkDetail> {
 }
 
 /** POST /networks — Create a new Docker network */
-export function createNetwork(opts: {
-  name: string
-  driver?: string
-  subnet?: string
-  gateway?: string
-  internal?: boolean
-}): Promise<NetworkCreateResponse> {
+export function createNetwork(opts: NetworkCreateOptions): Promise<NetworkCreateResponse> {
   return apiClient.post<NetworkCreateResponse>('/networks', opts)
+}
+
+/**
+ * POST /networks/:name/recreate — Docker cannot change a network in place: the
+ * API disconnects its containers, removes it, creates it again with these
+ * settings (Compose ownership labels kept) and reconnects the containers.
+ */
+export function recreateNetwork(name: string, opts: Omit<NetworkCreateOptions, 'name'>): Promise<NetworkRecreateResponse> {
+  return apiClient.post<NetworkRecreateResponse>(`/networks/${encodeURIComponent(name)}/recreate`, opts, 120000)
 }
 
 /** POST /networks/:name/delete — Remove a Docker network */
@@ -915,9 +920,9 @@ export function checkImageRegistry(): Promise<ImageRegistryCheckResponse> {
   return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates', undefined, 120000)
 }
 
-/** POST /images/update — Pull image and restart containers (name in body, not URL) */
-export function updateImage(name: string): Promise<ImageUpdateResponse> {
-  return apiClient.post<ImageUpdateResponse>('/images/update', { image: name }, 120000)
+/** POST /images/update — Pull an image; recreate the Compose services that use it unless recreate is false */
+export function updateImage(name: string, opts: { recreate?: boolean } = {}): Promise<ImageUpdateResponse> {
+  return apiClient.post<ImageUpdateResponse>('/images/update', { image: name, recreate: opts.recreate ?? true }, 600000)
 }
 
 /** GET /notifications/rules — List notification rules */
@@ -1214,6 +1219,8 @@ export function deployTemplate(name: string, opts: {
   resource_limits?: { mem_limit?: string; cpus?: number }
   add_to_homarr?: boolean
   allow_privileged?: boolean
+  /** Container names chosen on the deploy screen, keyed by service */
+  container_names?: Record<string, string>
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }

@@ -133,6 +133,16 @@ export default function DashboardGrid({
   const gridRef = useRef<HTMLDivElement>(null)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
 
+  // Phones get one column: 24 columns squeeze a quarter-width card to a few pixels
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  const stacked = isNarrow && !editMode
+
   // Discover plugin cards from enabled plugins
   useEffect(() => {
     if (!isConnected) return
@@ -158,6 +168,13 @@ export default function DashboardGrid({
 
   // Calculate total grid height
   const visibleCards = cards.filter((c) => c.visible)
+  // Stacked order is top to bottom, left to right; spacers only pad the wide grid
+  const renderCards = stacked
+    ? visibleCards.filter((c) => !c.id.startsWith('spacer-')).sort((a, b) => a.y - b.y || a.x - b.x)
+    : visibleCards
+  const placeCard = (card: DashboardCard): React.CSSProperties => stacked
+    ? { gridColumn: '1 / -1', gridRow: `span ${card.h}` }
+    : { gridColumn: `${card.x + 1} / span ${Math.min(card.w, GRID_COLS - card.x)}`, gridRow: `${card.y + 1} / span ${card.h}` }
   const hiddenCards = cards.filter((c) => !c.visible)
   const maxRow = Math.max(...visibleCards.map((c) => c.y + c.h), 1)
 
@@ -258,7 +275,7 @@ export default function DashboardGrid({
         className="dashboard-grid relative"
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
+          gridTemplateColumns: stacked ? '1fr' : `repeat(${GRID_COLS}, 1fr)`,
           gridAutoRows: `${H_UNIT}px`,
           gap: '8px',
           minHeight: editMode ? `${(maxRow + 4) * H_UNIT}px` : undefined,
@@ -288,7 +305,7 @@ export default function DashboardGrid({
             }}
           />
         )}
-        {visibleCards.filter((c) => c.id).map((card) => {
+        {renderCards.filter((c) => c.id).map((card) => {
           const isSpacer = card.id.startsWith('spacer-')
           const isDivider = card.id.startsWith('divider-')
           const isSpecial = isSpacer || isDivider
@@ -301,10 +318,7 @@ export default function DashboardGrid({
               <div
                 key={card.id}
                 className={`relative transition-all duration-150 ${isMoving ? 'opacity-60 z-20 scale-[0.98]' : ''} ${isResizing ? 'ring-2 ring-cyan-500/30 rounded-xl z-10' : ''}`}
-                style={{
-                  gridColumn: `${card.x + 1} / span ${Math.min(card.w, GRID_COLS - card.x)}`,
-                  gridRow: `${card.y + 1} / span ${card.h}`,
-                }}
+                style={placeCard(card)}
               >
                 {editMode && (
                   <>
@@ -369,10 +383,7 @@ export default function DashboardGrid({
               <div
                 key={card.id}
                 className={`relative transition-all duration-150 ${isMoving ? 'opacity-60 z-20 scale-[0.98]' : ''} ${isResizing ? 'ring-2 ring-cyan-500/30 rounded-xl z-10' : ''} ${editMode && !isMoving && !isResizing ? 'hover:ring-1 hover:ring-emerald-500/20 hover:rounded-xl' : ''}`}
-                style={{
-                  gridColumn: `${card.x + 1} / span ${Math.min(card.w, GRID_COLS - card.x)}`,
-                  gridRow: `${card.y + 1} / span ${card.h}`,
-                }}
+                style={placeCard(card)}
               >
                 {editMode && (
                   <>
@@ -424,10 +435,7 @@ export default function DashboardGrid({
                 ${isResizing ? 'ring-2 ring-cyan-500/30 rounded-xl z-10' : ''}
                 ${editMode && !isMoving && !isResizing ? 'hover:ring-1 hover:ring-emerald-500/20 hover:rounded-xl' : ''}
               `}
-              style={{
-                gridColumn: `${card.x + 1} / span ${Math.min(card.w, GRID_COLS - card.x)}`,
-                gridRow: `${card.y + 1} / span ${card.h}`,
-              }}
+              style={placeCard(card)}
             >
               {editMode && (
                 <>

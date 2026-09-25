@@ -14,6 +14,7 @@ import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useToast } from '../components/common/Toast'
 
 const CONTAINER_POLL_INTERVAL = 10_000
 
@@ -24,6 +25,7 @@ const Containers: React.FC = () => {
   const containers = useContainerStore((s) => s.containers)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
+  const { addToast } = useToast()
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
@@ -97,10 +99,11 @@ const Containers: React.FC = () => {
 
     if (selectedName && !selectedContainer && containers.length > 0) {
       if (pendingFocusRef.current) {
-        // Still waiting — retry every 2 seconds, give up after 10 tries (20s)
-        if (retryCountRef.current >= 10) {
+        // Still waiting — retry every 2 seconds, give up after 60 tries (2 min)
+        if (retryCountRef.current >= 60) {
           pendingFocusRef.current = null
           retryCountRef.current = 0
+          addToast({ type: 'warning', message: `${selectedName} has not been created yet — check the stack's activity, then open it from the list` })
           setSelectedName(null)
           return
         }
@@ -113,7 +116,7 @@ const Containers: React.FC = () => {
         setSelectedName(null)
       }
     }
-  }, [selectedName, selectedContainer, containers, refresh])
+  }, [selectedName, selectedContainer, containers, refresh, addToast])
 
   const handleSelect = useCallback((name: string) => {
     setSelectedName(name)
@@ -166,9 +169,10 @@ const Containers: React.FC = () => {
             <Loader2 size={28} className="text-cyan-400 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold text-slate-200">Loading {selectedName}</p>
-            <p className="text-xs text-slate-400 mt-1">Container is starting up — this may take a moment</p>
+            <p className="text-sm font-semibold text-slate-200">Waiting for {selectedName}</p>
+            <p className="text-xs text-slate-400 mt-1">The container has not been created yet — images may still be pulling. This view updates by itself.</p>
           </div>
+          <button onClick={handleBack} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">Back to the list</button>
         </div>
       ) : (
         <ContainerList

@@ -302,7 +302,7 @@ export default function OverviewCards() {
   const healthLoading = !hasReport && connectionStatus === 'connected'
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <StatCard
         icon={<Layers className="h-5 w-5" />}
         label="Total Stacks"

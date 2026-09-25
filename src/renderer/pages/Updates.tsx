@@ -320,6 +320,16 @@ export default function Updates() {
   const [registryChecking, setRegistryChecking] = useState(false)
   const [updatingImages, setUpdatingImages] = useState<Set<string>>(new Set())
   const [bulkUpdating, setBulkUpdating] = useState(false)
+  // Recreate the Compose services right after a pull. Off = pull only: the
+  // containers keep running on the old image until someone recreates them.
+  const [recreate, setRecreate] = useState<boolean>(() => {
+    try { return localStorage.getItem('updates.recreate') !== 'false' } catch { return true }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('updates.recreate', recreate ? 'true' : 'false') } catch { /* storage unavailable */ }
+  }, [recreate])
+  // Outcome of the last bulk run per image, shown in the row until the next registry check
+  const [bulkResults, setBulkResults] = useState<Record<string, 'done' | 'failed'>>({})
 
   // ---- Polling: local staleness data ----
   const {
@@ -369,6 +379,7 @@ export default function Updates() {
   const handleCheckRegistry = useCallback(async () => {
     if (registryChecking) return
     setRegistryChecking(true)
+    setBulkResults({})
     try {
       const result = await checkImageRegistry()
       addToast({
@@ -394,17 +405,21 @@ export default function Updates() {
       if (updatingImages.has(imageName)) return
       setUpdatingImages((prev) => new Set(prev).add(imageName))
       try {
-        const result = await updateImage(imageName)
+        const result = await updateImage(imageName, { recreate })
         if (result.success) {
           const parts: string[] = []
           if (result.containers_restarted.length > 0) parts.push(`recreated ${result.containers_restarted.join(', ')}`)
           if (result.containers_failed?.length) parts.push(`${result.containers_failed.join(', ')} did not come back up`)
           if (result.containers_skipped?.length) parts.push(`${result.containers_skipped.join(', ')} skipped (not Compose-managed)`)
+          const tail = parts.length
+            ? ` — ${parts.join('; ')}`
+            : recreate ? ' — no running container uses it' : ' — containers keep running on the old image until they are recreated'
           addToast({
             type: result.containers_failed?.length ? 'warning' : 'success',
-            message: `Pulled ${imageName}${parts.length ? ` — ${parts.join('; ')}` : ' — no running container uses it'}`,
+            message: `Pulled ${imageName}${tail}`,
             duration: 6000,
           })
+          setBulkResults((prev) => ({ ...prev, [imageName]: 'done' }))
           refresh()
         } else {
           addToast({ type: 'error', message: `Failed to update ${imageName}` })
@@ -422,13 +437,14 @@ export default function Updates() {
         })
       }
     },
-    [updatingImages, addToast, refresh],
+    [updatingImages, addToast, refresh, recreate],
   )
 
   // ---- Update every image with a confirmed update or a stale age ----
   const handleUpdateAllStale = useCallback(async () => {
     if (bulkUpdating || bulkTargets.length === 0) return
     setBulkUpdating(true)
+    setBulkResults({})
     let successCount = 0
     let failCount = 0
     const restarted: string[] = []
@@ -439,17 +455,20 @@ export default function Updates() {
       const img = bulkTargets[i]
       setBulkProgress({ done: i, total: bulkTargets.length, current: img.image })
       try {
-        const result = await updateImage(img.image)
+        const result = await updateImage(img.image, { recreate })
         if (result.success) {
           successCount++
           restarted.push(...result.containers_restarted)
           skipped.push(...(result.containers_skipped ?? []))
           failedContainers.push(...(result.containers_failed ?? []))
+          setBulkResults((prev) => ({ ...prev, [img.image]: 'done' }))
         } else {
           failCount++
+          setBulkResults((prev) => ({ ...prev, [img.image]: 'failed' }))
         }
       } catch {
         failCount++
+        setBulkResults((prev) => ({ ...prev, [img.image]: 'failed' }))
       }
     }
     setBulkProgress(null)
@@ -459,6 +478,7 @@ export default function Updates() {
       if (restarted.length) parts.push(`recreated ${restarted.join(', ')}`)
       if (failedContainers.length) parts.push(`${failedContainers.join(', ')} did not come back up`)
       if (skipped.length) parts.push(`${skipped.length} not Compose-managed, left running`)
+      if (!recreate) parts.push('containers keep running on the old image until they are recreated')
       addToast({
         type: failedContainers.length ? 'warning' : 'success',
         message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
@@ -474,7 +494,7 @@ export default function Updates() {
 
     refresh()
     setBulkUpdating(false)
-  }, [bulkUpdating, bulkTargets, addToast, refresh])
+  }, [bulkUpdating, bulkTargets, addToast, refresh, recreate])
 
   // ---- Disconnected ----
   if (!isConnected) {
@@ -787,12 +807,28 @@ export default function Updates() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* What happens after a pull */}
+          {isAdmin && (
+            <label
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium text-slate-400 bg-white/[0.03] border border-white/5 cursor-pointer select-none hover:text-slate-200 hover:border-white/10 transition-all"
+              title="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them."
+            >
+              <input
+                type="checkbox"
+                checked={recreate}
+                onChange={(e) => setRecreate(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-emerald-500"
+              />
+              Recreate containers
+            </label>
+          )}
+
           {/* Update All — prioritizes images with confirmed registry updates */}
           {isAdmin && bulkTargets.length > 0 && (
             <button
               onClick={handleUpdateAllStale}
               disabled={bulkUpdating}
-              title="Pulls each image and recreates the Compose services that use it"
+              title={recreate ? 'Pulls each image and recreates the Compose services that use it' : 'Pulls each image; the containers are not recreated'}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
                 border backdrop-blur-sm transition-all duration-200
@@ -969,7 +1005,11 @@ export default function Updates() {
               </thead>
               <tbody className="divide-y divide-white/[0.03]">
                 {images.map((img: ImageUpdateInfo) => {
-                  const isUpdating = updatingImages.has(img.image) || bulkUpdating
+                  // Only the image being pulled right now is "updating"; the rest
+                  // of a bulk run is queued, finished or failed
+                  const isUpdating = updatingImages.has(img.image) || bulkProgress?.current === img.image
+                  const bulkState = bulkResults[img.image]
+                  const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => t.image === img.image)
                   return (
                     <tr
                       key={img.image}
@@ -1034,6 +1074,22 @@ export default function Updates() {
                               Latest
                             </span>
                           )}
+                          {bulkState === 'done' && !isUpdating && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 animate-fade-in" title={recreate ? 'Pulled and recreated in this run' : 'Pulled in this run (containers not recreated)'}>
+                              <CheckCircle size={10} />
+                              Updated
+                            </span>
+                          )}
+                          {bulkState === 'failed' && !isUpdating && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-rose-500/15 text-rose-400 animate-fade-in">
+                              Failed
+                            </span>
+                          )}
+                          {queued && (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
+                              Queued
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -1042,8 +1098,8 @@ export default function Updates() {
                         {isAdmin ? (
                           <button
                             onClick={() => handleUpdateImage(img.image)}
-                            disabled={isUpdating || (img.staleness === 'current' && img.update_available !== true)}
-                            title={img.update_available === true ? 'A newer digest is published — pull it and recreate the containers' : img.staleness === 'stale' ? 'Pull the tag again and recreate the containers' : 'Nothing newer is known for this image'}
+                            disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true)}
+                            title={img.update_available === true ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated') : img.staleness === 'stale' ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated') : 'Nothing newer is known for this tag'}
                             className={`
                               inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap
                               transition-all duration-200
@@ -1068,7 +1124,9 @@ export default function Updates() {
                             )}
                             {isUpdating
                               ? 'Updating...'
-                              : img.staleness === 'current'
+                              : queued
+                                ? 'Queued'
+                                : img.staleness === 'current'
                                 ? 'Up to date'
                                 : 'Update'}
                           </button>

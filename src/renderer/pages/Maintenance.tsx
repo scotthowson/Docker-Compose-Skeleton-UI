@@ -412,7 +412,82 @@ export default function Maintenance() {
       )}
 
       {/* ================================================================== */}
-      {/* 1. System Report */}
+      {/* 1. Actions */}
+      {/* ================================================================== */}
+      <div className="glass rounded-xl p-5 border border-white/5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-3">Actions</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Safe Prune */}
+          <button
+            onClick={handleSafePrune}
+            disabled={pruning || imagePruning || deepPruning || rotating}
+            className="
+              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+              text-sm font-medium
+              bg-cyan-500/10 text-cyan-400 border border-cyan-500/20
+              hover:bg-cyan-500/20 hover:border-cyan-500/30
+              disabled:opacity-50 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            {pruning ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
+            Safe Prune
+          </button>
+
+          {/* Image Prune */}
+          <button
+            onClick={handleImagePrune}
+            disabled={pruning || imagePruning || deepPruning || rotating}
+            className="
+              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+              text-sm font-medium
+              bg-amber-500/10 text-amber-400 border border-amber-500/20
+              hover:bg-amber-500/20 hover:border-amber-500/30
+              disabled:opacity-50 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            {imagePruning ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
+            Image Prune
+          </button>
+
+          {/* Deep Prune */}
+          <button
+            onClick={() => setShowDeepPruneModal(true)}
+            disabled={pruning || imagePruning || deepPruning || rotating}
+            className="
+              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+              text-sm font-medium
+              bg-rose-500/10 text-rose-400 border border-rose-500/20
+              hover:bg-rose-500/20 hover:border-rose-500/30
+              disabled:opacity-50 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            {deepPruning ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Deep Prune
+          </button>
+
+          {/* Rotate Logs */}
+          <button
+            onClick={handleLogRotate}
+            disabled={pruning || imagePruning || deepPruning || rotating}
+            className="
+              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+              text-sm font-medium
+              bg-violet-500/10 text-violet-400 border border-violet-500/20
+              hover:bg-violet-500/20 hover:border-violet-500/30
+              disabled:opacity-50 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            {rotating ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+            Rotate Logs
+          </button>
+        </div>
+      </div>
+
+      {/* 2. System Report */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
         <h3 className="text-sm font-semibold text-slate-200 mb-3">System Report</h3>
@@ -525,7 +600,7 @@ export default function Maintenance() {
       </div>
 
       {/* ================================================================== */}
-      {/* 2. Orphan Detection */}
+      {/* 3. Orphan Detection */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
         <div className="flex items-center justify-between mb-3">
@@ -655,7 +730,7 @@ export default function Maintenance() {
       </div>
 
       {/* ================================================================== */}
-      {/* 3. Disk Analysis */}
+      {/* 4. Disk Analysis */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
         <h3 className="text-sm font-semibold text-slate-200 mb-3">Disk Analysis</h3>
@@ -738,80 +813,6 @@ export default function Maintenance() {
       </div>
 
       {/* ================================================================== */}
-      {/* 4. Actions */}
-      {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3">Actions</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* Safe Prune */}
-          <button
-            onClick={handleSafePrune}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-cyan-500/10 text-cyan-400 border border-cyan-500/20
-              hover:bg-cyan-500/20 hover:border-cyan-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
-            {pruning ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
-            Safe Prune
-          </button>
-
-          {/* Image Prune */}
-          <button
-            onClick={handleImagePrune}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-amber-500/10 text-amber-400 border border-amber-500/20
-              hover:bg-amber-500/20 hover:border-amber-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
-            {imagePruning ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
-            Image Prune
-          </button>
-
-          {/* Deep Prune */}
-          <button
-            onClick={() => setShowDeepPruneModal(true)}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-rose-500/10 text-rose-400 border border-rose-500/20
-              hover:bg-rose-500/20 hover:border-rose-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
-            {deepPruning ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Deep Prune
-          </button>
-
-          {/* Rotate Logs */}
-          <button
-            onClick={handleLogRotate}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-violet-500/10 text-violet-400 border border-violet-500/20
-              hover:bg-violet-500/20 hover:border-violet-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
-            {rotating ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-            Rotate Logs
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

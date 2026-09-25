@@ -172,7 +172,7 @@ app.whenReady().then(() => {
     }
 
     headers['Content-Security-Policy'] = [
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://*:* ws://*:* https://*:* wss://*:*; font-src 'self' data:; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; connect-src 'self' http://*:* ws://*:* https://*:* wss://*:*; font-src 'self' data:; frame-ancestors 'none'",
     ]
 
     callback({ responseHeaders: headers })

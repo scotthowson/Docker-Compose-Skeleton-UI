@@ -314,6 +314,25 @@ ${middlewares}
 }
 
 /** Parse services with ports from a compose file for route generation */
+const CONTAINER_NAME_OK = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/
+
+/** Every service of a compose file with the container_name it declares ('' when Compose names it) */
+function parseComposeServices(compose: string): { name: string; containerName: string }[] {
+  const out: { name: string; containerName: string }[] = []
+  let inServices = false
+  let current: { name: string; containerName: string } | null = null
+  for (const line of compose.split('\n')) {
+    if (/^services:\s*$/.test(line)) { inServices = true; current = null; continue }
+    if (/^[A-Za-z]/.test(line)) { inServices = false; current = null; continue }
+    if (!inServices) continue
+    const svc = line.match(/^  ([A-Za-z0-9_.-]+):\s*$/)
+    if (svc) { current = { name: svc[1], containerName: '' }; out.push(current); continue }
+    const cn = current ? line.match(/^    container_name:\s*["']?([^"'#]+?)["']?\s*(?:#.*)?$/) : null
+    if (cn && current) current.containerName = cn[1].trim()
+  }
+  return out
+}
+
 function parseServicesWithPorts(compose: string): { name: string; containerName: string; port: string }[] {
   const results: { name: string; containerName: string; port: string }[] = []
   const lines = compose.split('\n')
@@ -389,7 +408,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -502,6 +521,11 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({})
   const [creatingSecret, setCreatingSecret] = useState<string | null>(null)
   const [storeAsSecret, setStoreAsSecret] = useState<Set<string>>(new Set())
+  // Secret-store names for lock-toggled values (default: the variable name)
+  const [secretNames, setSecretNames] = useState<Record<string, string>>({})
+  // Container names typed on the deploy screen, keyed by service
+  const [containerNames, setContainerNames] = useState<Record<string, string>>({})
+  const [existingContainerNames, setExistingContainerNames] = useState<Set<string>>(new Set())
   // F5: Dry-run state
   const [dryRunResult, setDryRunResult] = useState<TemplateDryRunResponse | null>(null)
   const [dryRunLoading, setDryRunLoading] = useState(false)
@@ -559,6 +583,54 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       .catch(() => {})
   }, [isConnected, template.name])
 
+  // Services of the template and the container names they would get
+  const composeServices = useMemo(() => (detail?.compose ? parseComposeServices(detail.compose) : []), [detail])
+  useEffect(() => {
+    if (!isConnected) return
+    let cancelled = false
+    fetchContainers()
+      .then((r) => { if (!cancelled) setExistingContainerNames(new Set(r.containers.map((c) => c.name))) })
+      .catch(() => { /* the API refuses duplicates anyway */ })
+    return () => { cancelled = true }
+  }, [isConnected])
+  const containerNameFor = useCallback(
+    (svc: { name: string; containerName: string }) => (containerNames[svc.name] ?? '').trim() || svc.containerName,
+    [containerNames],
+  )
+  // Names that would break the deployment (blocking) or collide with a container that exists (warning)
+  const containerNameIssues = useMemo(() => {
+    const blocking: Record<string, string> = {}
+    const warnings: Record<string, string> = {}
+    const seen = new Map<string, string>()
+    for (const svc of composeServices) {
+      if (excludedServices.has(svc.name)) continue
+      const name = containerNameFor(svc)
+      if (!name) continue
+      if (!CONTAINER_NAME_OK.test(name)) { blocking[svc.name] = 'Letters, digits, dot, dash and underscore only'; continue }
+      const other = seen.get(name)
+      if (other) { blocking[svc.name] = `Same name as the ${other} service`; continue }
+      seen.set(name, svc.name)
+      if ((containerNames[svc.name] ?? '').trim() && existingContainerNames.has(name)) {
+        warnings[svc.name] = 'A container with this name exists — the deploy fails unless it belongs to this stack'
+      }
+    }
+    return { blocking, warnings }
+  }, [composeServices, excludedServices, containerNameFor, existingContainerNames, containerNames])
+  // Only names that differ from the template go to the API
+  const customContainerNames = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const svc of composeServices) {
+      if (excludedServices.has(svc.name)) continue
+      const typed = (containerNames[svc.name] ?? '').trim()
+      if (typed && typed !== svc.containerName) out[svc.name] = typed
+    }
+    return out
+  }, [composeServices, excludedServices, containerNames])
+  const badSecretNames = useMemo(
+    () => Array.from(storeAsSecret).filter((n) => !SECRET_NAME_OK.test((secretNames[n] ?? n).trim())),
+    [storeAsSecret, secretNames],
+  )
+
   // Parse services with ports when compose detail loads
   useEffect(() => {
     if (!traefikActive || !traefikDomain || traefikDomain === 'example.com' || !detail?.compose) return
@@ -579,10 +651,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const routes: Record<string, string> = {}
     for (const svc of routeServices) {
       if (!svc.enabled) continue
-      routes[svc.name] = generateRouteYaml(svc.subdomain, svc.containerName, svc.port, traefikDomain, enableAuthelia)
+      routes[svc.name] = generateRouteYaml(svc.subdomain, containerNameFor(svc), svc.port, traefikDomain, enableAuthelia)
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain, enableAuthelia])
+  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, containerNameFor])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -638,9 +710,11 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   }, [detail, variables])
   const willCreateSecrets = useMemo(() => {
     const out = new Set<string>()
-    for (const name of storeAsSecret) if ((variables[name] ?? '').trim() && !SECRET_REF_ONE.test(variables[name].trim())) out.add(name)
+    for (const name of storeAsSecret) {
+      if ((variables[name] ?? '').trim() && !SECRET_REF_ONE.test(variables[name].trim())) out.add((secretNames[name] ?? name).trim() || name)
+    }
     return out
-  }, [storeAsSecret, variables])
+  }, [storeAsSecret, variables, secretNames])
   const missingSecrets = useMemo(
     () => requiredSecrets.filter((n) => !(existingSecrets?.has(n) ?? true) && !willCreateSecrets.has(n)),
     [requiredSecrets, existingSecrets, willCreateSecrets],
@@ -777,13 +851,19 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const varsToSend: Record<string, string> = { ...variables }
     for (const name of storeAsSecret) {
       const val = (variables[name] ?? '').trim()
-      if (!val || SECRET_REF_ONE.test(val) || !SECRET_NAME_OK.test(name)) continue
+      if (!val || SECRET_REF_ONE.test(val)) continue
+      const secretName = (secretNames[name] ?? name).trim() || name
+      if (!SECRET_NAME_OK.test(secretName)) {
+        addToast({ type: 'error', message: `${secretName} is not a valid secret name — letters, digits and underscores, starting with a letter` })
+        setLocalDeploying(false)
+        return
+      }
       try {
-        await setSecret(name, val)
-        varsToSend[name] = `\${SECRETS_${name}}`
-        setExistingSecrets((prev) => new Set([...(prev ?? []), name]))
+        await setSecret(secretName, val)
+        varsToSend[name] = `\${SECRETS_${secretName}}`
+        setExistingSecrets((prev) => new Set([...(prev ?? []), secretName]))
       } catch (err) {
-        addToast({ type: 'error', message: `Could not store ${name} as a secret: ${err instanceof Error ? err.message : 'request failed'}` })
+        addToast({ type: 'error', message: `Could not store ${secretName} as a secret: ${err instanceof Error ? err.message : 'request failed'}` })
         setLocalDeploying(false)
         return
       }
@@ -795,14 +875,15 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       ? { mem_limit: memLimit || undefined, cpus: cpuLimit ? Number(cpuLimit) : undefined }
       : undefined
     const homarrFlag = homarrActive && addToHomarr ? true : undefined
-    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag)
+    const names = Object.keys(customContainerNames).length > 0 ? customContainerNames : undefined
+    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names)
     if (result) {
       setDeployResult(result)
       setOutcome(result.started ? 'pending' : 'not-started')
       setShowOutput(true)
     }
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, addToast])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -1275,15 +1356,73 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 </button>
                               )}
                             </div>
-                            {storeAsSecret.has(v.name) && (value ?? '').trim() && !SECRET_REF_ONE.test((value ?? '').trim()) && (
-                              <p className="text-[10px] text-violet-300/70 mt-1">Saved as secret <span className="font-mono">{v.name}</span> when you deploy — the stack&apos;s .env will reference it</p>
-                            )}
+                            {storeAsSecret.has(v.name) && (value ?? '').trim() && !SECRET_REF_ONE.test((value ?? '').trim()) && (() => {
+                              const sn = secretNames[v.name] ?? v.name
+                              const ok = SECRET_NAME_OK.test(sn)
+                              return (
+                                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1 text-[10px] text-violet-300/70">
+                                  <span>Saved as secret</span>
+                                  <input
+                                    type="text"
+                                    value={sn}
+                                    onChange={(e) => setSecretNames((prev) => ({ ...prev, [v.name]: e.target.value.replace(/[^A-Za-z0-9_]/g, '') }))}
+                                    spellCheck={false}
+                                    title="Name of the secret in the store — you can pick any name"
+                                    className={`w-44 px-1.5 py-0.5 rounded bg-white/5 border text-[10px] font-mono text-violet-200 focus:outline-none transition-colors ${ok ? 'border-violet-500/30 focus:border-violet-500/60' : 'border-rose-500/50'}`}
+                                  />
+                                  <span>when you deploy — the stack&apos;s .env will hold <span className="font-mono">{`\${SECRETS_${sn || '…'}}`}</span></span>
+                                  {!ok && <span className="basis-full text-rose-400">Letters, digits and underscores, starting with a letter</span>}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )
                       })}
                     </div>
                   </div>
                 ) : null
+              })()}
+
+              {/* Container names — what Docker calls each service's container */}
+              {composeServices.filter((svc) => !excludedServices.has(svc.name)).length > 0 && (() => {
+                const active = composeServices.filter((svc) => !excludedServices.has(svc.name))
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container names</label>
+                      <span className="text-[10px] text-slate-500">{active.length} service{active.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {active.map((svc) => {
+                        const typed = containerNames[svc.name] ?? ''
+                        const fallback = svc.containerName || `${(targetStack || 'stack').toLowerCase()}-${svc.name}-1`
+                        const blocking = containerNameIssues.blocking[svc.name]
+                        const warning = containerNameIssues.warnings[svc.name]
+                        return (
+                          <div key={svc.name}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-28 shrink-0 truncate text-[11px] font-mono text-slate-400" title={`service ${svc.name}`}>{svc.name}</span>
+                              <input
+                                type="text"
+                                value={typed}
+                                onChange={(e) => setContainerNames((prev) => ({ ...prev, [svc.name]: e.target.value.replace(/\s+/g, '') }))}
+                                placeholder={fallback}
+                                spellCheck={false}
+                                className={`flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white/5 border text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 transition-all ${blocking ? 'border-rose-500/50 focus:border-rose-500/60 focus:ring-rose-500/20' : warning ? 'border-amber-500/40 focus:border-amber-500/50 focus:ring-amber-500/20' : 'border-white/5 focus:border-emerald-500/40 focus:ring-emerald-500/20'}`}
+                              />
+                            </div>
+                            {(blocking || warning) && (
+                              <p className={`text-[10px] mt-1 ml-[7.5rem] ${blocking ? 'text-rose-400' : 'text-amber-300/80'}`}>{blocking || warning}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1.5">
+                      Leave a name empty to keep the template&apos;s default{traefikActive && traefikDomain ? '; HTTPS routes follow the name you choose' : ''}.
+                    </p>
+                  </div>
+                )
               })()}
 
               {renderSecretsPanel()}
@@ -1401,7 +1540,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                           />
                           <span className="text-[10px] text-slate-500">.{traefikDomain}</span>
                           <span className="text-[10px] text-slate-500 ml-auto">:{svc.port}</span>
-                          <span className="text-[10px] text-slate-500 truncate max-w-[80px]" title={svc.containerName}>{svc.containerName}</span>
+                          <span className="text-[10px] text-slate-500 truncate max-w-[80px]" title={containerNameFor(svc)}>{containerNameFor(svc)}</span>
                         </div>
                       ))}
 
@@ -1841,8 +1980,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {isAdmin && (
                 <button
                   onClick={handleDeployClick}
-                  disabled={!canDeploy || (autoStart && missingSecrets.length > 0)}
-                  title={autoStart && missingSecrets.length > 0 ? `Store ${missingSecrets.join(', ')} first, or turn auto-start off` : undefined}
+                  disabled={!canDeploy || (autoStart && missingSecrets.length > 0) || badSecretNames.length > 0 || Object.keys(containerNameIssues.blocking).length > 0}
+                  title={autoStart && missingSecrets.length > 0 ? `Store ${missingSecrets.join(', ')} first, or turn auto-start off` : badSecretNames.length > 0 ? 'Fix the secret names first' : Object.keys(containerNameIssues.blocking).length > 0 ? 'Fix the container names first' : undefined}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
                     confirming
                       ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'
@@ -3029,7 +3168,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -3046,6 +3185,7 @@ export default function Templates() {
           resource_limits: resourceLimits,
           add_to_homarr: addToHomarr,
           allow_privileged: needsPrivileged,
+          container_names: containerNames,
         })
         if (res.success) {
           refresh()

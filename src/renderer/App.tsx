@@ -6,6 +6,7 @@ import { pageTitles } from './constants/pageTitles'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import UpdateBanner from './components/common/UpdateBanner'
 import OnboardingOverlay from './components/common/OnboardingOverlay'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
@@ -549,6 +550,9 @@ export default function App() {
         {backgroundImage && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm z-0" />
         )}
+
+        {/* A newer dashboard build is being served (web only) */}
+        <UpdateBanner />
 
         {/* Lock screen overlay — preserves app state, just requires password to continue */}
         {isLocked && (

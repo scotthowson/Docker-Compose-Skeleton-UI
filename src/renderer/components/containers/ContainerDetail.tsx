@@ -7,6 +7,7 @@ import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, 
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
 import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, recreateContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
+import { apiClient } from '../../api/client'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import { CopyButton } from '../common/CopyButton'
 import LiveLogViewer from '../logs/LiveLogViewer'
@@ -327,6 +328,23 @@ function parseMemoryToMB(memStr: string): number {
 }
 
 // Network color palette for badge variety
+/**
+ * Host for links to a container's published ports. The desktop and Android
+ * apps run from file:// or localhost, so the page's own host means nothing
+ * there: the configured API server is the machine that publishes the port.
+ */
+function serverHostname(): string {
+  try {
+    const base = apiClient.getBaseUrl()
+    if (base && !base.startsWith('/')) {
+      const h = new URL(base).hostname
+      if (h && h !== 'localhost' && h !== '127.0.0.1') return h
+    }
+  } catch { /* relative or malformed base URL: use the page host */ }
+  const host = window.location.hostname
+  return host && host !== 'localhost' ? host : (host || '127.0.0.1')
+}
+
 const NETWORK_COLORS = [
   { bg: 'bg-purple-500/10', text: 'text-purple-300', ring: 'ring-purple-500/20' },
   { bg: 'bg-cyan-500/10', text: 'text-cyan-300', ring: 'ring-cyan-500/20' },
@@ -1628,23 +1646,26 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 const portUrl = port.hostPort ? (() => {
                   const addr = port.bindAddress || ''
                   const host = addr === '127.0.0.1' ? 'localhost'
-                    : (addr === '0.0.0.0' || addr === '[::]' || addr === '::' || !addr) ? window.location.hostname
+                    : (addr === '0.0.0.0' || addr === '[::]' || addr === '::' || !addr) ? serverHostname()
                     : addr
                   const proto = ['443', '8443', '9443'].includes(String(port.hostPort)) ? 'https' : 'http'
                   return `${proto}://${host}:${port.hostPort}`
                 })() : null
+                // A real link: the browser opens a tab, Electron hands it to the
+                // system browser, the Android WebView launches the browser app
+                const Tile: React.ElementType = portUrl ? 'a' : 'div'
                 return (
-                <div
+                <Tile
                   key={`${port.hostPort || 'exposed'}-${port.containerPort}-${port.protocol}`}
                   className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg
                     bg-white/[0.03] border border-white/[0.03]
                     hover:bg-white/5 transition-colors duration-200
-                    animate-fade-in
+                    animate-fade-in no-underline
                     ${portUrl ? 'cursor-pointer group' : ''}
                   `}
                   style={{ animationDelay: `${idx * 0.05}s` }}
-                  onClick={portUrl ? () => window.open(portUrl, '_blank', 'noopener') : undefined}
+                  {...(portUrl ? { href: portUrl, target: '_blank', rel: 'noopener noreferrer' } : {})}
                   title={portUrl ? `Open ${portUrl}` : undefined}
                 >
                   {/* Host port (or "exposed" label if no host binding) */}
@@ -1694,7 +1715,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       <ExternalLink className="h-3.5 w-3.5 text-slate-600 group-hover:text-cyan-400 transition-colors" />
                     )}
                   </div>
-                </div>
+                </Tile>
                 )
               })}
             </div>

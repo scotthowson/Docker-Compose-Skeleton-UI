@@ -399,12 +399,44 @@ export interface NetworkDetail {
   subnet: string
   gateway: string
   containers: NetworkContainer[]
+  /** Containers may join it with `docker network connect` / compose external */
+  attachable?: boolean
+  ipv6?: boolean
+  ip_range?: string
+  labels?: Record<string, string>
+  created?: string
+  /** Compose project that owns the network (from its label), if any */
+  compose_project?: string
 }
 
 export interface NetworkContainer {
   id: string
   name: string
   ipv4: string
+}
+
+// POST /networks (create) and POST /networks/:name/recreate
+export interface NetworkCreateOptions {
+  name: string
+  driver?: string
+  subnet?: string
+  gateway?: string
+  ip_range?: string
+  internal?: boolean
+  attachable?: boolean
+  ipv6?: boolean
+  labels?: Record<string, string>
+}
+
+export interface NetworkRecreateResponse {
+  success: boolean
+  name: string
+  id: string
+  /** Containers connected again after the network was rebuilt */
+  reconnected: string[]
+  /** Containers that could not be reconnected (still running, detached) */
+  failed: string[]
+  message: string
 }
 
 // POST /networks (create)
@@ -1318,6 +1350,8 @@ export interface ImageUpdateResponse {
   containers_skipped?: string[]
   /** Compose services that were recreated but are not running afterwards */
   containers_failed?: string[]
+  /** False when the request asked for a pull only */
+  recreate?: boolean
   timestamp: string
 }
 
