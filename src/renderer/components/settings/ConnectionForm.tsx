@@ -7,6 +7,7 @@ import { Link2, Check, X, Loader2, Save } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { discoverServer, type DiscoveredServer } from '../../lib/discover'
+import { useServerStore } from '../../stores/serverStore'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'failed'
 
@@ -66,6 +67,9 @@ export default function ConnectionForm() {
   const handleSave = useCallback(() => {
     setServerUrl(urlInput)
     updateSetting('serverUrl', urlInput)
+    // The sidebar's active profile is this connection: keep them the same
+    const { activeServerId, updateServer } = useServerStore.getState()
+    if (activeServerId) updateServer(activeServerId, { url: urlInput })
     setDirty(false)
     connect()
   }, [urlInput, setServerUrl, updateSetting, connect])

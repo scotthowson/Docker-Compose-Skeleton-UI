@@ -347,7 +347,12 @@ interface AuthState {
   checkAccountExists: () => Promise<void>
   register: (username: string, password: string) => Promise<boolean>
   login: (username: string, password: string, rememberMe: boolean) => Promise<boolean>
-  logout: () => Promise<void>
+  /** keepOtherServers: an expired token on one server leaves the sessions saved for other servers alone */
+  logout: (opts?: { keepOtherServers?: boolean }) => Promise<void>
+  /** Continue as this user with a token saved for the active server (server switch) */
+  adoptSession: (username: string, token: string) => void
+  /** Drop the current session locally without telling the server (server switch to one with no saved session) */
+  suspendSession: () => void
   clearError: () => void
   /** Set the API Bearer token (from server auth) */
   setApiToken: (token: string | null) => void
@@ -547,7 +552,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ userRole: role })
   },
 
-  logout: async () => {
+  adoptSession: (username, token) => {
+    apiClient.setAuthToken(token)
+    persistApiToken(token)
+    setPersistedSession(username)
+    sessionStorage.setItem('currentUser', username)
+    set({ isAuthenticated: true, currentUser: username, apiToken: token, userRole: getPersistedUserRole(username), error: null })
+  },
+
+  suspendSession: () => {
+    apiClient.setAuthToken(null)
+    persistApiToken(null)
+    clearPersistedSession()
+    sessionStorage.removeItem('currentUser')
+    set({ isAuthenticated: false, currentUser: null, userRole: null, apiToken: null, error: null })
+  },
+
+  logout: async (opts) => {
     // ── SYNCHRONOUS cleanup first — prevents api-auth-expired race ──
     // Setting isAuthenticated=false immediately ensures that any 401
     // responses from in-flight requests won't trigger a second logout.
@@ -568,13 +589,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Stop heartbeat, reconnect timers, and all polling
     useConnectionStore.getState().disconnect()
 
-    // SECURITY: Clear API tokens from stored server profiles to prevent token reuse
+    // SECURITY: Clear API tokens from stored server profiles to prevent token reuse.
+    // A token that merely expired on the active server leaves the other
+    // servers' saved sessions in place (keepOtherServers).
     try {
       const raw = localStorage.getItem('dcs-servers')
       if (raw) {
         const data = JSON.parse(raw)
         if (data?.servers) {
-          data.servers = data.servers.map((s: Record<string, unknown>) => ({ ...s, apiToken: null }))
+          const activeId = data.activeServerId
+          data.servers = data.servers.map((s: Record<string, unknown>) =>
+            opts?.keepOtherServers && s.id !== activeId ? s : { ...s, apiToken: null })
           localStorage.setItem('dcs-servers', JSON.stringify(data))
         }
       }
@@ -699,7 +724,7 @@ window.addEventListener('api-auth-expired', () => {
   const { isAuthenticated } = useAuthStore.getState()
   if (isAuthenticated) {
     // This is a genuine server-side token expiry (not a manual logout)
-    useAuthStore.getState().logout()
+    useAuthStore.getState().logout({ keepOtherServers: true })
     // Show expiry notice AFTER logout sets isAuthenticated=false,
     // so subsequent api-auth-expired events are no-ops.
     useAuthStore.setState({ error: 'Session expired — please sign in again' })

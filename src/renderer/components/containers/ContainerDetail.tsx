@@ -6,10 +6,12 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
-import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, recreateContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer } from '../../api/endpoints'
+import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, recreateContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer, updateContainerEnv } from '../../api/endpoints'
 import { apiClient } from '../../api/client'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import { CopyButton } from '../common/CopyButton'
+import { FloatingSaveBar } from '../common/FloatingSaveBar'
+import { useSettingsStore } from '../../stores/settingsStore'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import {
   AreaChart,
@@ -55,6 +57,7 @@ import {
   X,
   Trash2,
   ExternalLink,
+  FileCode, Plus, Undo2,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -497,6 +500,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const [envSearch, setEnvSearch] = useState('')
   const [envCollapsed, setEnvCollapsed] = useState(false)
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set())
+  // Environment editing: draft values, removals and new rows, saved together
+  const [envDrafts, setEnvDrafts] = useState<Record<string, string>>({})
+  const [envRemovals, setEnvRemovals] = useState<Set<string>>(new Set())
+  const [envAdditions, setEnvAdditions] = useState<{ key: string; value: string }[]>([])
+  const [envEditingKey, setEnvEditingKey] = useState<string | null>(null)
+  const [envSaving, setEnvSaving] = useState(false)
+  const [envRecreate, setEnvRecreate] = useState(true)
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
   const mountedRef = useRef(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -601,6 +612,67 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       setActionLoading(null)
     }
   }, [containerName, fetchStats, addToast, onRefreshList, onBack])
+
+  // ---- Environment editing (Compose-managed containers only) ----
+  const composeService = detail?.compose_service || ''
+  const composeProject = detail?.compose_project || ''
+  const canEditEnv = isAdmin && !!composeService && !!detail?.compose_dir
+  const currentEnv = useMemo(() => (detail ? parseEnvString(detail.environment) : []), [detail])
+  const envDirty = useMemo(() => {
+    if (envRemovals.size > 0) return true
+    if (envAdditions.some((a) => a.key.trim())) return true
+    return Object.entries(envDrafts).some(([k, v]) => v !== (currentEnv.find((e) => e.key === k)?.value ?? ''))
+  }, [envDrafts, envRemovals, envAdditions, currentEnv])
+  const discardEnv = useCallback(() => {
+    setEnvDrafts({})
+    setEnvRemovals(new Set())
+    setEnvAdditions([])
+    setEnvEditingKey(null)
+  }, [])
+  const handleSaveEnv = useCallback(async () => {
+    if (!detail || envSaving) return
+    const set: Record<string, string> = {}
+    for (const [k, v] of Object.entries(envDrafts)) {
+      if (envRemovals.has(k)) continue
+      if (v !== (currentEnv.find((e) => e.key === k)?.value ?? '')) set[k] = v
+    }
+    for (const a of envAdditions) {
+      const k = a.key.trim()
+      if (!k) continue
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+        addToast({ type: 'error', message: `${k} is not a valid variable name (letters, digits and underscores)` })
+        return
+      }
+      set[k] = a.value
+    }
+    const unset = Array.from(envRemovals)
+    if (Object.keys(set).length === 0 && unset.length === 0) return
+    setEnvSaving(true)
+    try {
+      const res = await updateContainerEnv(containerName, { set, unset, recreate: envRecreate })
+      const parts: string[] = []
+      if (res.compose_changed.length) parts.push(`${res.compose_changed.join(', ')} in docker-compose.yml`)
+      if (res.env_changed.length) parts.push(`${res.env_changed.map((e) => e.split('=')[1] || e).join(', ')} in the stack .env`)
+      if (res.removed.length) parts.push(`${res.removed.join(', ')} removed`)
+      const tail = res.recreated
+        ? ' — container recreated'
+        : envRecreate
+          ? ` — recreate did not finish: ${(res.output || '').trim().split('\n').slice(-1)[0] || 'see the stack activity'}`
+          : ' — takes effect when the container is recreated'
+      addToast({ type: res.success ? 'success' : 'warning', message: `${res.stack} / ${res.service}: ${parts.join('; ')}${tail}`, duration: 9000 })
+      discardEnv()
+      onRefreshList?.()
+      setTimeout(() => { fetchDetail(); fetchStats() }, res.recreated ? 1500 : 300)
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not save the environment', duration: 9000 })
+    } finally {
+      setEnvSaving(false)
+    }
+  }, [detail, envSaving, envDrafts, envRemovals, envAdditions, currentEnv, containerName, envRecreate, addToast, discardEnv, onRefreshList, fetchDetail, fetchStats])
+  const openComposeEditor = useCallback(() => {
+    if (!composeProject) return
+    setCurrentPage('stacks', { highlight: composeProject, editCompose: true, focusService: composeService })
+  }, [composeProject, composeService, setCurrentPage])
 
   // Fetch container logs
   const handleFetchLogs = useCallback(async () => {
@@ -881,6 +953,16 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
             Logs
           </button>
+          {isAdmin && composeProject && (
+            <button
+              onClick={openComposeEditor}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-all"
+              title={`Open ${composeProject}/docker-compose.yml in the stack editor at the ${composeService} service`}
+            >
+              <FileCode className="h-3.5 w-3.5" />
+              Edit compose
+            </button>
+          )}
           {isAdmin && (
             <button
               onClick={() => handleAction('remove')}
@@ -1462,7 +1544,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       )}
 
       {/* ---- Environment Variables (Enhanced) ---- */}
-      {envEntries.length > 0 && (
+      {(envEntries.length > 0 || canEditEnv) && (
         <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
             {/* Header with collapse toggle */}
@@ -1475,6 +1557,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 Environment Variables
               </h2>
               <span className="text-xs text-slate-600 ml-1">({envEntries.length})</span>
+              {canEditEnv ? (
+                <span className="ml-2 text-[10px] text-slate-500 hidden sm:inline">click a value to change it · saved to {composeProject}/docker-compose.yml</span>
+              ) : isAdmin && detail && !composeService ? (
+                <span className="ml-2 text-[10px] text-slate-600 hidden sm:inline">read-only: not managed by a stack</span>
+              ) : null}
               <ChevronDown
                 className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${
                   envCollapsed ? '-rotate-90' : 'rotate-0'
@@ -1501,6 +1588,38 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     "
                   />
                 </div>
+
+                {/* New variables (saved with the other changes) */}
+                {canEditEnv && envAdditions.length > 0 && (
+                  <div className="space-y-1.5">
+                    {envAdditions.map((a, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2">
+                        <Plus className="h-3 w-3 text-emerald-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={a.key}
+                          onChange={(e) => setEnvAdditions((prev) => prev.map((x, j) => (j === i ? { ...x, key: e.target.value.replace(/[^A-Za-z0-9_]/g, '').toUpperCase() } : x)))}
+                          placeholder="VARIABLE"
+                          spellCheck={false}
+                          autoFocus={!a.key}
+                          className="w-32 md:w-56 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40"
+                        />
+                        <span className="text-xs text-slate-600">=</span>
+                        <input
+                          type="text"
+                          value={a.value}
+                          onChange={(e) => setEnvAdditions((prev) => prev.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                          placeholder="value"
+                          spellCheck={false}
+                          className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40"
+                        />
+                        <button onClick={() => setEnvAdditions((prev) => prev.filter((_, j) => j !== i))} className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Remove this row">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Variable table */}
                 <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-lg border border-white/[0.03]">
@@ -1530,12 +1649,48 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                             {entry.key}
                           </span>
                           <span className="text-xs text-slate-600 flex-shrink-0">=</span>
-                          <span
-                            className="text-xs font-mono text-slate-300 truncate flex-1 min-w-0"
-                            title={sensitive && !revealed ? '(hidden)' : entry.value}
-                          >
-                            {sensitive && !revealed ? maskValue(entry.value) : entry.value}
-                          </span>
+                          {canEditEnv && envEditingKey === entry.key ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              value={envDrafts[entry.key] ?? entry.value}
+                              onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [entry.key]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); setEnvEditingKey(null) }
+                                if (e.key === 'Escape') setEnvDrafts((prev) => { const next = { ...prev }; delete next[entry.key]; return next })
+                              }}
+                              onBlur={() => setEnvEditingKey(null)}
+                              spellCheck={false}
+                              className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-amber-500/40 text-xs font-mono text-slate-100 focus:outline-none focus:border-amber-500/60"
+                            />
+                          ) : (
+                            <span
+                              onClick={canEditEnv && !envRemovals.has(entry.key) ? () => setEnvEditingKey(entry.key) : undefined}
+                              className={`text-xs font-mono truncate flex-1 min-w-0 ${envRemovals.has(entry.key) ? 'line-through text-slate-600' : envDrafts[entry.key] !== undefined && envDrafts[entry.key] !== entry.value ? 'text-amber-300' : 'text-slate-300'} ${canEditEnv && !envRemovals.has(entry.key) ? 'cursor-text hover:text-white' : ''}`}
+                              title={envRemovals.has(entry.key) ? 'Removed when you save' : sensitive && !revealed ? '(hidden)' : (envDrafts[entry.key] ?? entry.value)}
+                            >
+                              {sensitive && !revealed ? maskValue(envDrafts[entry.key] ?? entry.value) : (envDrafts[entry.key] ?? entry.value)}
+                            </span>
+                          )}
+                          {canEditEnv && envDrafts[entry.key] !== undefined && envDrafts[entry.key] !== entry.value && !envRemovals.has(entry.key) && (
+                            <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300" title={`Was: ${entry.value}`}>changed</span>
+                          )}
+                          {canEditEnv && envEditingKey !== entry.key && (
+                            envRemovals.has(entry.key) ? (
+                              <button onClick={() => setEnvRemovals((prev) => { const next = new Set(prev); next.delete(entry.key); return next })} className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-emerald-400 transition-colors" title="Keep this variable">
+                                <Undo2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : (
+                              <>
+                                <button onClick={() => setEnvEditingKey(entry.key)} className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-amber-300 transition-colors" title="Change value">
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => { setEnvRemovals((prev) => new Set(prev).add(entry.key)); setEnvDrafts((prev) => { const next = { ...prev }; delete next[entry.key]; return next }) }} className="flex-shrink-0 p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors" title="Remove from the compose file">
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )
+                          )}
                           {sensitive && (
                             <button
                               onClick={() => toggleSecret(entry.key)}
@@ -1554,9 +1709,33 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     })
                   )}
                 </div>
+                {canEditEnv && (
+                  <button
+                    onClick={() => setEnvAdditions((prev) => [...prev, { key: '', value: '' }])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add variable
+                  </button>
+                )}
               </div>
             )}
           </div>
+          <FloatingSaveBar
+            hasChanges={canEditEnv && envDirty}
+            saving={envSaving}
+            onSave={handleSaveEnv}
+            onDiscard={discardEnv}
+            message={`Environment changes for ${containerName}`}
+            saveLabel={envRecreate ? 'Save & recreate' : 'Save'}
+            savingLabel={envRecreate ? 'Saving & recreating…' : 'Saving…'}
+            extra={(
+              <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none" title="Recreate the container right away so the new values apply">
+                <input type="checkbox" checked={envRecreate} onChange={(e) => setEnvRecreate(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-emerald-500" />
+                Recreate to apply
+              </label>
+            )}
+          />
         </section>
       )}
 

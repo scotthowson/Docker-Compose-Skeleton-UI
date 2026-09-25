@@ -352,6 +352,20 @@ export default function App() {
     }
   }, [autoLockMinutes, isAuthenticated, isLocked])
 
+  // Signing in (again) is an unlock: a lock that fired while the session was
+  // dead must not greet the user right after the login page
+  const wasAuthenticatedRef = useRef(isAuthenticated)
+  useEffect(() => {
+    if (isAuthenticated && !wasAuthenticatedRef.current) {
+      setIsLocked(false)
+      setLockPassword('')
+      setLockError('')
+      setLockAttempts(0)
+      setLockLockedUntil(0)
+    }
+    wasAuthenticatedRef.current = isAuthenticated
+  }, [isAuthenticated])
+
   // Unlock handler — verifies password locally with rate limiting
   const handleUnlock = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault()

@@ -10,11 +10,15 @@ import {
   Camera, Save, Key, AlertTriangle, XCircle, Plus, FolderPlus,
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
   Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff, Loader2,
+  Star, CheckCircle,
 } from 'lucide-react'
 import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useServerStore } from '../stores/serverStore'
+import { discoverServer } from '../lib/discover'
+import { useToast } from '../components/common/Toast'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useNotificationStore } from '../stores/notificationStore'
@@ -1848,128 +1852,147 @@ function ExportImportSettings() {
 // ---------------------------------------------------------------------------
 
 function ConnectionProfiles() {
-  const profiles = useSettingsStore((s) => s.connectionProfiles) ?? []
-  const serverUrl = useConnectionStore((s) => s.serverUrl)
+  // The same list the sidebar's server switcher shows; nothing lives only here
+  const servers = useServerStore((s) => s.servers)
+  const activeServerId = useServerStore((s) => s.activeServerId)
   const connectionStatus = useConnectionStore((s) => s.status)
-  const setServerUrl = useConnectionStore((s) => s.setServerUrl)
-  const connect = useConnectionStore((s) => s.connect)
-  const updateSetting = useSettingsStore((s) => s.updateSetting)
+  const currentUser = useAuthStore((s) => s.currentUser)
+  const { addToast } = useToast()
 
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newUrl, setNewUrl] = useState('')
   const [addError, setAddError] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
 
-  const handleAdd = useCallback(() => {
+  useEffect(() => {
+    const store = useServerStore.getState()
+    store.loadServers()
+    store.importLegacyProfiles()
+  }, [])
+
+  const active = servers.find((s) => s.id === activeServerId) ?? null
+
+  const handleAdd = useCallback(async (connectNow: boolean) => {
     const name = newName.trim()
-    const url = newUrl.trim()
+    let url = newUrl.trim()
     setAddError('')
-
     if (!name) { setAddError('Name is required'); return }
-    if (!url) { setAddError('URL is required'); return }
-    if (profiles.some((p) => p.url === url)) { setAddError('A profile with this URL already exists'); return }
-
-    const profile: ConnectionProfile = {
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-      name,
-      url,
-      isDefault: profiles.length === 0,
+    if (!url) { setAddError('Address is required'); return }
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) url = `http://${url}`
+    if (servers.some((s) => s.url === url)) { setAddError('A profile with this address already exists'); return }
+    setTesting(true)
+    const found = await discoverServer(url)
+    setTesting(false)
+    if (!found) { setAddError('No DCS API answered there — check the address and that the server is running'); return }
+    const profile = useServerStore.getState().addServer({ name, url: found.url })
+    setShowAdd(false); setNewName(''); setNewUrl(''); setAddError('')
+    addToast({ type: 'success', message: `Saved ${name} (${found.url})` })
+    if (connectNow) {
+      setBusyId(profile.id)
+      const ok = await useServerStore.getState().switchServer(profile.id)
+      setBusyId(null)
+      if (!ok) addToast({ type: 'error', message: `Could not connect to ${name}` })
     }
-    updateSetting('connectionProfiles', [...profiles, profile])
-    setNewName('')
-    setNewUrl('')
-    setShowAdd(false)
-  }, [newName, newUrl, profiles, updateSetting])
+  }, [newName, newUrl, servers, addToast])
 
-  const handleRemove = useCallback((id: string) => {
-    const updated = profiles.filter((p) => p.id !== id)
-    // If we removed the default, make the first one default
-    if (updated.length > 0 && !updated.some((p) => p.isDefault)) {
-      updated[0].isDefault = true
-    }
-    updateSetting('connectionProfiles', updated)
-  }, [profiles, updateSetting])
+  const handleSwitch = useCallback(async (id: string) => {
+    if (id === activeServerId && connectionStatus === 'connected') return
+    const target = servers.find((s) => s.id === id)
+    setBusyId(id)
+    const ok = await useServerStore.getState().switchServer(id)
+    setBusyId(null)
+    if (ok) addToast({ type: 'success', message: `Connected to ${target?.name ?? 'server'}` })
+    else addToast({ type: 'error', message: `Could not connect to ${target?.name ?? 'server'} — check the address and that it is running` })
+  }, [activeServerId, connectionStatus, servers, addToast])
 
-  const handleSwitch = useCallback((profile: ConnectionProfile) => {
-    // Update last connected timestamp
-    const updated = profiles.map((p) => ({
-      ...p,
-      isDefault: p.id === profile.id,
-      lastConnected: p.id === profile.id ? Date.now() : p.lastConnected,
-    }))
-    updateSetting('connectionProfiles', updated)
-    updateSetting('serverUrl', profile.url)
-    setServerUrl(profile.url)
-    connect()
-  }, [profiles, updateSetting, setServerUrl, connect])
+  const commitRename = useCallback((id: string) => {
+    const name = editName.trim()
+    if (name) useServerStore.getState().updateServer(id, { name })
+    setEditingId(null)
+  }, [editName])
 
-  const isActive = (url: string) => url === serverUrl
+  const statusTone = connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-amber-400' : 'text-rose-400'
 
   return (
     <div className="space-y-4">
       <p className="text-[11px] text-slate-500">
-        Save and switch between multiple Docker Compose Skeleton servers.
+        Save and switch between DCS servers. The list is the same one the server menu in the sidebar shows; each server keeps its own sign-in.
       </p>
 
-      {/* Current connection */}
+      {/* Active server */}
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {connectionStatus === 'connected' ? (
-              <Wifi size={12} className="text-emerald-400" />
-            ) : (
-              <WifiOff size={12} className="text-slate-500" />
-            )}
-            <span className="text-[11px] text-slate-500">Active Server</span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            {connectionStatus === 'connected' ? <Wifi size={12} className="text-emerald-400 shrink-0" /> : <WifiOff size={12} className="text-slate-500 shrink-0" />}
+            <span className="text-[11px] text-slate-500 shrink-0">Active</span>
+            <span className="text-xs font-medium text-slate-200 truncate">{active?.name ?? 'No server'}</span>
           </div>
-          <span className="text-[11px] text-slate-300 font-mono">{serverUrl}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`text-[10px] font-medium ${statusTone}`}>{connectionStatus}</span>
+            <span className="text-[11px] text-slate-300 font-mono truncate">{active?.url ?? ''}</span>
+            {currentUser && <span className="text-[10px] text-slate-500 shrink-0">as {currentUser}</span>}
+          </div>
         </div>
       </div>
 
-      {/* Profile list */}
-      {profiles.length > 0 && (
+      {/* Profiles */}
+      {servers.length > 0 && (
         <div className="space-y-1.5">
-          {profiles.map((profile) => {
-            const active = isActive(profile.url)
+          {servers.map((profile) => {
+            const isActive = profile.id === activeServerId
+            const busy = busyId === profile.id
+            const editing = editingId === profile.id
             return (
-              <div
-                key={profile.id}
-                className={`
-                  flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all
-                  ${active
-                    ? 'bg-emerald-500/[0.04] border-emerald-500/15'
-                    : 'bg-slate-800/30 border-white/[0.03] hover:border-white/5'
-                  }
-                `}
-              >
-                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-800/60 shrink-0">
-                  <Server size={12} className={active ? 'text-emerald-400' : 'text-slate-500'} />
-                </div>
+              <div key={profile.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors ${isActive ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+                <Server size={14} className={isActive ? 'text-emerald-400 shrink-0' : 'text-slate-500 shrink-0'} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-200 truncate">{profile.name}</p>
-                  <p className="text-[10px] font-mono text-slate-500 truncate">{profile.url}</p>
+                  {editing ? (
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => commitRename(profile.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitRename(profile.id); if (e.key === 'Escape') setEditingId(null) }}
+                      className="w-full px-2 py-0.5 rounded bg-black/30 border border-emerald-500/30 text-xs text-slate-100 focus:outline-none"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-xs font-medium text-slate-200 truncate">{profile.name}</span>
+                      {profile.isDefault && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300 shrink-0">default</span>}
+                      {profile.apiToken && <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-400 shrink-0" title="A session is saved for this server">signed in{profile.username ? ` as ${profile.username}` : ''}</span>}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-slate-500 font-mono truncate">{profile.url}{profile.lastConnected ? ` · last connected ${new Date(profile.lastConnected).toLocaleString()}` : ''}</div>
                 </div>
-
-                {active ? (
-                  <span className="text-[10px] text-emerald-400 font-medium px-2 py-0.5 rounded bg-emerald-500/10 shrink-0">
-                    Active
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => handleSwitch(profile)}
-                    className="text-[10px] text-slate-400 font-medium px-2 py-1 rounded hover:bg-white/5 hover:text-slate-200 transition-all shrink-0 press"
-                  >
-                    Connect
+                <div className="flex items-center gap-1 shrink-0">
+                  {!isActive || connectionStatus !== 'connected' ? (
+                    <button
+                      onClick={() => handleSwitch(profile.id)}
+                      disabled={busy}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-all"
+                    >
+                      {busy ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
+                      Connect
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-400"><CheckCircle size={11} /> Connected</span>
+                  )}
+                  <button onClick={() => { setEditingId(profile.id); setEditName(profile.name) }} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Rename">
+                    <Pencil size={12} />
                   </button>
-                )}
-
-                <button
-                  onClick={() => handleRemove(profile.id)}
-                  className="p-1 text-slate-500 hover:text-rose-400 transition-colors shrink-0"
-                  title="Remove profile"
-                >
-                  <Trash2 size={11} />
-                </button>
+                  <button onClick={() => useServerStore.getState().setDefaultServer(profile.id)} className={`p-1.5 rounded-md transition-colors ${profile.isDefault ? 'text-amber-300' : 'text-slate-500 hover:text-amber-300 hover:bg-white/5'}`} title="Use as the default server">
+                    <Star size={12} />
+                  </button>
+                  {servers.length > 1 && (
+                    <button onClick={() => useServerStore.getState().removeServer(profile.id)} className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Remove profile">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -1981,48 +2004,55 @@ function ConnectionProfiles() {
         <div className="rounded-lg bg-white/[0.03] border border-white/5 p-4 space-y-3 animate-fade-in">
           <div className="flex items-center gap-2">
             <Plus size={14} className="text-emerald-400" />
-            <span className="text-xs font-semibold text-slate-200">New Profile</span>
+            <span className="text-xs font-semibold text-slate-200">New server</span>
           </div>
-
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Name</label>
             <input
               type="text"
               value={newName}
               onChange={(e) => { setNewName(e.target.value); setAddError('') }}
-              placeholder="Production Server"
+              placeholder="Home server"
               autoFocus
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
           </div>
-
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Server URL</label>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Address</label>
             <input
               type="text"
+              inputMode="url"
               value={newUrl}
               onChange={(e) => { setNewUrl(e.target.value); setAddError('') }}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="http://192.168.1.100:9876"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleAdd(true) }}
+              placeholder="192.168.1.10:9876 or https://ui.example.com"
+              spellCheck={false}
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
+            <p className="text-[10px] text-slate-500 mt-1">The API port, or the dashboard address behind Traefik — the address that answers is kept.</p>
           </div>
-
           {addError && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-[11px] text-rose-400">
               <XCircle size={12} />
               {addError}
             </div>
           )}
-
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
-              onClick={handleAdd}
-              disabled={!newName.trim() || !newUrl.trim()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20 press"
+              onClick={() => void handleAdd(true)}
+              disabled={!newName.trim() || !newUrl.trim() || testing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all"
+            >
+              {testing ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+              Save & connect
+            </button>
+            <button
+              onClick={() => void handleAdd(false)}
+              disabled={!newName.trim() || !newUrl.trim() || testing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-all"
             >
               <Plus size={12} />
-              Save Profile
+              Save for later
             </button>
             <button
               onClick={() => { setShowAdd(false); setNewName(''); setNewUrl(''); setAddError('') }}
@@ -2035,19 +2065,11 @@ function ConnectionProfiles() {
       ) : (
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all"
         >
           <Plus size={12} />
-          Add Server Profile
+          Add server
         </button>
-      )}
-
-      {profiles.length === 0 && !showAdd && (
-        <div className="rounded-lg bg-slate-800/20 border border-dashed border-white/5 p-4 text-center">
-          <Server size={20} className="text-slate-500 mx-auto mb-2" />
-          <p className="text-[11px] text-slate-500">No saved profiles</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Save server connections for quick switching</p>
-        </div>
       )}
     </div>
   )

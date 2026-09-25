@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Clock,
   Activity,
@@ -186,14 +187,21 @@ function buildSegments(
 // Tooltip component
 // ---------------------------------------------------------------------------
 
-function SegmentTooltip({ text, x, y }: { text: string; x: number; y: number }) {
-  return (
+function SegmentTooltip({ text, status, x, y }: { text: string; status: Segment['status']; x: number; y: number }) {
+  // Rendered on document.body: the timeline cards animate in with a transform,
+  // and a fixed tooltip inside one would be positioned against the card
+  const tone = status === 'running' ? 'text-emerald-300' : status === 'stopped' ? 'text-rose-300' : 'text-slate-400'
+  const label = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'no data'
+  return createPortal(
     <div
-      className="fixed z-50 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-[11px] text-slate-200 shadow-xl pointer-events-none whitespace-nowrap"
-      style={{ left: x, top: y - 36 }}
+      className="uptime-tip fixed z-[9999] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-[11px] text-slate-200 shadow-xl shadow-black/40 pointer-events-none whitespace-nowrap"
+      style={{ left: x, top: y + 8, transform: 'translateX(-50%)' }}
     >
-      {text}
-    </div>
+      <span className="font-mono">{text.split(' - ')[0]}</span>
+      <span className="text-slate-600"> · </span>
+      <span className={tone}>{label}</span>
+    </div>,
+    document.body,
   )
 }
 
@@ -202,7 +210,7 @@ function SegmentTooltip({ text, x, y }: { text: string; x: number; y: number }) 
 // ---------------------------------------------------------------------------
 
 function UptimeBar({ segments }: { segments: Segment[] }) {
-  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [tooltip, setTooltip] = useState<{ text: string; status: Segment['status']; x: number; y: number } | null>(null)
 
   return (
     <>
@@ -216,14 +224,14 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
             style={{ backgroundColor: COLORS[seg.status], animationDelay: `${i * 18}ms` }}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect()
-              setTooltip({ text: seg.label, x: rect.left + rect.width / 2, y: rect.top })
+              setTooltip({ text: seg.label, status: seg.status, x: rect.left + rect.width / 2, y: rect.bottom })
             }}
             onMouseLeave={() => setTooltip(null)}
           />
           )
         })}
       </div>
-      {tooltip && <SegmentTooltip text={tooltip.text} x={tooltip.x} y={tooltip.y} />}
+      {tooltip && <SegmentTooltip text={tooltip.text} status={tooltip.status} x={tooltip.x} y={tooltip.y} />}
     </>
   )
 }

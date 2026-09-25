@@ -253,6 +253,7 @@ export default function Login() {
               const setupRes = await authSetup(user, pass)
               if (setupRes.success && setupRes.token) {
                 setApiToken(setupRes.token)
+                useServerStore.getState().rememberSession(setupRes.token, user)
                 if (setupRes.role) setUserRole(setupRes.role, user)
                 return true
               }
@@ -277,6 +278,7 @@ export default function Login() {
           : await authLogin(user, pass)
         if (loginRes.success && loginRes.token) {
           setApiToken(loginRes.token)
+          useServerStore.getState().rememberSession(loginRes.token, user)
           if (loginRes.role) setUserRole(loginRes.role, user)
           return true
         }
@@ -369,6 +371,7 @@ export default function Login() {
       if (res.success && res.token) {
         // Store the API Bearer token and role
         setApiToken(res.token)
+        useServerStore.getState().rememberSession(res.token, username.trim())
         if (res.role) setUserRole(res.role, username.trim())
 
         // Persist session — use dynamic duration from settings
@@ -416,6 +419,7 @@ export default function Login() {
       const res = await totpValidate(totpToken, totpCode)
       if (res.success && res.token) {
         setApiToken(res.token)
+        useServerStore.getState().rememberSession(res.token, res.username || username)
         if (res.role) setUserRole(res.role as 'admin' | 'user', res.username || username)
         setShowTotpInput(false)
         setTotpCode('')

@@ -55,6 +55,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
   validateCompose,
 } from '../api/endpoints'
@@ -2130,6 +2131,14 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      <FloatingSaveBar
+        hasChanges={mode === 'edit' && hasChanges}
+        saving={saving}
+        onSave={handleSaveInPlace}
+        onDiscard={handleDiscard}
+        message={`Unsaved changes to template ${name || 'untitled'}`}
+        zIndex={10000}
+      />
       <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative w-full max-w-[95vw] xl:max-w-[1400px] mx-3 md:mx-4 max-h-[95vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}

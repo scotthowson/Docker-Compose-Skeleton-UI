@@ -166,6 +166,10 @@ export interface ContainerDetail extends ContainerInfo {
   environment: string
   mounts: string
   networks: string
+  /** Compose ownership (empty when the container is not Compose-managed) */
+  compose_project?: string
+  compose_service?: string
+  compose_dir?: string
   ip_addresses?: string
   platform?: string
   hostname?: string
@@ -426,6 +430,21 @@ export interface NetworkCreateOptions {
   attachable?: boolean
   ipv6?: boolean
   labels?: Record<string, string>
+}
+
+// POST /containers/:name/env
+export interface ContainerEnvUpdateResponse {
+  success: boolean
+  container: string
+  stack: string
+  service: string
+  /** Variables written into docker-compose.yml */
+  compose_changed: string[]
+  /** "KEY=VAR" pairs whose value was written to the stack .env (KEY referenced ${VAR}) */
+  env_changed: string[]
+  removed: string[]
+  recreated: boolean
+  output: string
 }
 
 export interface NetworkRecreateResponse {
@@ -2086,7 +2105,9 @@ export interface ServerProfile {
   id: string
   name: string
   url: string
+  /** Session saved for this server, so switching back needs no sign-in */
   apiToken?: string
+  username?: string
   lastConnected?: number
   color?: string
   isDefault?: boolean

@@ -32,6 +32,7 @@ import {
   rollbackCompose,
 } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
+import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useComposeLinter, useEnvLinter, type LintDiagnostic } from '../../hooks/useComposeLinter'
 import type { StackInfo, StackAnnotation, ComposeVersion } from '../../../shared/types'
@@ -40,6 +41,8 @@ interface Props {
   stack: StackInfo
   onClose: () => void
   onSaved: () => void
+  /** Open in compose edit mode with this service's block selected */
+  initialService?: string
 }
 
 /** Pretty-print stack category names */
@@ -279,8 +282,10 @@ function EditorDiagnostics({ diagnostics, counts, validation, kind }: {
   )
 }
 
-export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
+export default function EditStackOverlay({ stack, onClose, onSaved, initialService }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  const composeTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const focusedServiceRef = useRef<string | null>(null)
   const { addToast } = useToast()
 
   const isRunning = stack.status === 'running'
@@ -495,6 +500,28 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
     if (!showDiff || !composeEditMode) return null
     return computeDiff(originalCompose, composeContent)
   }, [showDiff, composeEditMode, originalCompose, composeContent])
+
+  // Coming from a container page: jump straight into the editor at that service
+  useEffect(() => {
+    if (!initialService || composeLoading || !composeContent || focusedServiceRef.current === initialService) return
+    focusedServiceRef.current = initialService
+    setComposeEditMode(true)
+    const lines = composeContent.split('\n')
+    const idx = lines.findIndex((l) => new RegExp(`^  ${initialService.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*$`).test(l))
+    if (idx < 0) return
+    const pos = lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)
+    // The textarea mounts after the mode switch; give it a frame
+    setTimeout(() => {
+      const ta = composeTextareaRef.current
+      if (!ta) return
+      ta.focus()
+      ta.setSelectionRange(pos, pos + lines[idx].length)
+      const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 20
+      const target = Math.max(0, idx * lineHeight - 48)
+      ta.scrollTop = target
+      if (ta.parentElement) ta.parentElement.scrollTop = target
+    }, 60)
+  }, [initialService, composeLoading, composeContent])
 
   // Change detection + safe close (must be above keyboard handler)
   const hasComposeChanges = composeContent !== originalCompose
@@ -893,6 +920,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="overflow-y-auto flex-1 scrollbar-thin">
             <textarea
+              ref={composeTextareaRef}
               value={composeContent}
               onChange={(e) => { setComposeContent(e.target.value); if (validationResult) setValidationResult(null) }}
               className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
@@ -1222,6 +1250,25 @@ export default function EditStackOverlay({ stack, onClose, onSaved }: Props) {
       onClick={handleOverlayClick}
       className="fixed inset-0 z-[9999] flex items-start justify-center pt-[4vh] animate-fade-in"
     >
+      {/* Floating save bars: the same control every editor in the app uses */}
+      <FloatingSaveBar
+        hasChanges={activeTab === 'compose' && composeEditMode && hasComposeChanges}
+        saving={savingCompose}
+        onSave={handleValidateThenSave}
+        onDiscard={() => { setComposeContent(originalCompose); setValidationResult(null) }}
+        message={`Unsaved changes to ${stack.name}/docker-compose.yml`}
+        saveLabel="Validate & save"
+        savingLabel="Saving…"
+        zIndex={10000}
+      />
+      <FloatingSaveBar
+        hasChanges={activeTab === 'env' && envEditMode && hasEnvChanges}
+        saving={savingEnv}
+        onSave={handleSaveEnv}
+        onDiscard={() => setEnvContent(originalEnv)}
+        message={`Unsaved changes to ${stack.name}/.env`}
+        zIndex={10000}
+      />
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 

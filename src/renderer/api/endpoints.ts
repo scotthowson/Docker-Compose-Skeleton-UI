@@ -30,6 +30,7 @@ import type {
   NetworkCreateResponse,
   NetworkCreateOptions,
   NetworkRecreateResponse,
+  ContainerEnvUpdateResponse,
   NetworkDeleteResponse,
   NetworkActionResponse,
   VolumeListResponse,
@@ -404,6 +405,15 @@ export function fetchNetworks(): Promise<NetworkListResponse> {
 /** GET /networks/:name — Network detail with containers and IPAM */
 export function fetchNetworkDetail(name: string): Promise<NetworkDetail> {
   return apiClient.get<NetworkDetail>(`/networks/${encodeURIComponent(name)}`)
+}
+
+/**
+ * POST /containers/:name/env — Change a Compose service's environment in its
+ * stack files (compose entry, or the .env variable it references) and recreate
+ * the container unless recreate is false.
+ */
+export function updateContainerEnv(name: string, opts: { set?: Record<string, string>; unset?: string[]; recreate?: boolean }): Promise<ContainerEnvUpdateResponse> {
+  return apiClient.post<ContainerEnvUpdateResponse>(`/containers/${encodeURIComponent(name)}/env`, opts, 180000)
 }
 
 /** POST /networks — Create a new Docker network */

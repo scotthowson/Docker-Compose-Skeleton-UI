@@ -55,6 +55,11 @@ export default function Stacks() {
       useSettingsStore.getState().consumeNavigationPayload()
       if (payload.highlight && typeof payload.highlight === 'string') {
         setSelectedStackName(payload.highlight)
+        // "Edit compose" from a container page: open the editor at that service
+        if (payload.editCompose) {
+          setEditingStackName(payload.highlight)
+          setFocusService(typeof payload.focusService === 'string' ? payload.focusService : null)
+        }
       } else if (payload.resetView) {
         setSelectedStackName(null)
       }
@@ -87,6 +92,7 @@ export default function Stacks() {
   // Overlay states
   const [showCreateOverlay, setShowCreateOverlay] = useState(false)
   const [editingStackName, setEditingStackName] = useState<string | null>(null)
+  const [focusService, setFocusService] = useState<string | null>(null)
 
   // Batch mode state
   const [batchMode, setBatchMode] = useState(false)
@@ -341,7 +347,8 @@ export default function Stacks() {
       {editingStack && (
         <EditStackOverlay
           stack={editingStack}
-          onClose={() => setEditingStackName(null)}
+          initialService={focusService ?? undefined}
+          onClose={() => { setEditingStackName(null); setFocusService(null) }}
           onSaved={refresh}
         />
       )}

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { create } from 'zustand'
-import type { ServerProfile } from '../../shared/types'
+import type { ServerProfile, ConnectionProfile } from '../../shared/types'
 import { apiClient } from '../api/client'
 import { useConnectionStore } from './connectionStore'
 import { useSettingsStore } from './settingsStore'
@@ -13,6 +13,7 @@ import { useHealthStore } from './healthStore'
 import { useSystemStore } from './systemStore'
 import { useImageStore } from './imageStore'
 import { useLogStore } from './logStore'
+import { useAuthStore } from './authStore'
 import { getDefaultServerUrl } from '../lib/env'
 
 const STORAGE_KEY = 'dcs-servers'
@@ -22,6 +23,10 @@ interface ServerState {
   activeServerId: string | null
   loading: boolean
   loadServers: () => void
+  /** One-time import of the profiles the Settings page used to keep on its own */
+  importLegacyProfiles: () => void
+  /** Keep the session obtained on the active server so switching back is seamless */
+  rememberSession: (token: string, username: string) => void
   addServer: (server: Omit<ServerProfile, 'id'>) => ServerProfile
   removeServer: (id: string) => void
   updateServer: (id: string, updates: Partial<ServerProfile>) => void
@@ -63,7 +68,28 @@ export const useServerStore = create<ServerState>((set, get) => ({
         set({ servers: [defaultServer], activeServerId: defaultServer.id })
         persistServers([defaultServer], defaultServer.id)
       }
+      get().importLegacyProfiles()
     } catch { /* ignore */ }
+  },
+
+  importLegacyProfiles: () => {
+    const legacy = useSettingsStore.getState().connectionProfiles ?? []
+    if (legacy.length === 0) return
+    const known = new Set(get().servers.map((s) => s.url))
+    const extra: ServerProfile[] = legacy
+      .filter((p: ConnectionProfile) => p.url && !known.has(p.url))
+      .map((p: ConnectionProfile) => ({ id: generateId(), name: p.name || p.url, url: p.url, isDefault: false, lastConnected: p.lastConnected }))
+    if (extra.length > 0) {
+      const servers = [...get().servers, ...extra]
+      set({ servers })
+      persistServers(servers, get().activeServerId)
+    }
+    useSettingsStore.getState().updateSetting('connectionProfiles', [])
+  },
+
+  rememberSession: (token, username) => {
+    const id = get().activeServerId
+    if (id) get().updateServer(id, { apiToken: token, username })
   },
 
   addServer: (server) => {
@@ -109,10 +135,13 @@ export const useServerStore = create<ServerState>((set, get) => ({
     useLogStore.getState().setEvents([])
 
     apiClient.setBaseUrl(server.url)
+    // Sessions are per server: continue with the one saved for this profile,
+    // otherwise the login page for this server takes over
+    const auth = useAuthStore.getState()
     if (server.apiToken) {
-      apiClient.setAuthToken(server.apiToken)
+      auth.adoptSession(server.username || auth.currentUser || 'admin', server.apiToken)
     } else {
-      apiClient.setAuthToken(null)
+      auth.suspendSession()
     }
 
     useConnectionStore.getState().setServerUrl(server.url)
