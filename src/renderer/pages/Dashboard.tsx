@@ -7,12 +7,13 @@ import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown, Settings2 } fro
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchEvents, fetchVersion,
-  fetchContainers, fetchDisks, fetchSystemInfo,
+  fetchDisks, fetchSystemInfo,
   fetchStacks, fetchImageUpdates, fetchBackupStatus,
   fetchLogStats, fetchMaintenanceReport, fetchNotificationHistory,
   fetchAutomations, fetchMetricsTrends, crowdsecStatus,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useContainerStore } from '../stores/containerStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useLogStore } from '../stores/logStore'
@@ -39,8 +40,7 @@ import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useStackStore } from '../stores/stackStore'
 import { useToast } from '../components/common/Toast'
-import type { ContainerInfo, DiskInfo, HealthReport } from '../../shared/types'
-import type { ContainerListResponse } from '../api/endpoints'
+import type { DiskInfo, HealthReport } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Disconnected hero — gorgeous animated illustration
@@ -339,13 +339,8 @@ export default function Dashboard() {
     }
   }, [systemInfoPoll.data, setSystemInfo, onPollSuccess])
 
-  // --- Poll /containers every 10s ---
-  const containersPoll = usePolling<ContainerListResponse>(fetchContainers, 10000, {
-    enabled: isConnected,
-    onError: onPollError,
-  })
-
-  const containers: ContainerInfo[] = containersPoll.data?.containers ?? []
+  // Containers come from the global poller: one request serves every page
+  const containers = useContainerStore((s) => s.containers)
 
   // --- Poll /disks every 30s ---
   const disksPoll = usePolling(fetchDisks, 30000, {

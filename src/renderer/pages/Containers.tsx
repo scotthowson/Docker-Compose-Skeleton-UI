@@ -7,8 +7,6 @@ import { useContainerStore } from '../stores/containerStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
-import { useApi } from '../hooks/useApi'
-import { fetchContainers } from '../api/endpoints'
 import { Box, RefreshCw, Loader2 } from 'lucide-react'
 import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
@@ -16,11 +14,7 @@ import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 
-const CONTAINER_POLL_INTERVAL = 10_000
-
 const Containers: React.FC = () => {
-  const setContainers = useContainerStore((s) => s.setContainers)
-  const setLoading = useContainerStore((s) => s.setLoading)
   const loading = useContainerStore((s) => s.loading)
   const containers = useContainerStore((s) => s.containers)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
@@ -31,33 +25,14 @@ const Containers: React.FC = () => {
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
   const pendingFocusRef = useRef<string | null>(null)
 
-  const setStats = useContainerStore((s) => s.setStats)
-
-  // Fetch containers via the connection-aware polling hook
-  const handleFetch = useCallback(async () => {
-    setLoading(true)
-    const result = await fetchContainers()
-    setContainers(result.containers)
-    // Populate stats store from bulk cpu_percent/mem_percent in the response
-    for (const c of result.containers) {
-      if (c.cpu_percent != null || c.mem_percent != null) {
-        setStats(c.name, {
-          cpu_percent: c.cpu_percent != null ? `${c.cpu_percent}%` : '--',
-          memory_percent: c.mem_percent != null ? `${c.mem_percent}%` : '--',
-          memory_usage: '',
-          network_io: '',
-          block_io: '',
-          pids: '',
-        })
-      }
-    }
-    setLoading(false)
-    return result
-  }, [setContainers, setLoading, setStats])
-
-  const { refresh } = useApi(handleFetch, CONTAINER_POLL_INTERVAL, {
-    enabled: isConnected,
-  })
+  // The global poller keeps the list current, so the page opens with data
+  // already in the store; opening it and finishing an action ask for a fresh
+  // copy right away
+  const refreshContainers = useContainerStore((s) => s.refresh)
+  useEffect(() => {
+    if (isConnected) void refreshContainers()
+  }, [isConnected, refreshContainers])
+  const refresh = useCallback(() => { void refreshContainers() }, [refreshContainers])
 
   // React to navigation payloads: resetView (sidebar re-click) or focusContainer (from Stacks)
   useEffect(() => {

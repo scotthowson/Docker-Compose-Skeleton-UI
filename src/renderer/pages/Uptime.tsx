@@ -206,19 +206,22 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
 
   return (
     <>
-      <div className="flex gap-[2px] h-7 items-center">
-        {segments.map((seg, i) => (
+      <div className="uptime-bar flex gap-[2px] h-7 items-center">
+        {segments.map((seg, i) => {
+          const live = i === segments.length - 1 && seg.status === 'running'
+          return (
           <div
             key={`${seg.status}-${i}`}
-            className="flex-1 h-full rounded-[3px] transition-all duration-300 ease-out hover:scale-y-125 hover:brightness-125 cursor-default"
-            style={{ backgroundColor: COLORS[seg.status] }}
+            className={`uptime-seg flex-1 h-full rounded-[3px] transition-all duration-300 ease-out hover:scale-y-125 hover:brightness-125 cursor-default ${seg.status === 'running' ? 'uptime-seg-up' : ''} ${live ? 'uptime-seg-live' : ''}`}
+            style={{ backgroundColor: COLORS[seg.status], animationDelay: `${i * 18}ms` }}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect()
               setTooltip({ text: seg.label, x: rect.left + rect.width / 2, y: rect.top })
             }}
             onMouseLeave={() => setTooltip(null)}
           />
-        ))}
+          )
+        })}
       </div>
       {tooltip && <SegmentTooltip text={tooltip.text} x={tooltip.x} y={tooltip.y} />}
     </>

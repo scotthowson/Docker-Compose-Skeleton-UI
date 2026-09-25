@@ -390,7 +390,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2.5 stagger-children">
+          <div className="grid grid-cols-1 gap-2.5 animate-fade-in">
             {sorted.map((container) => (
               <ContainerCard
                 key={container.name}

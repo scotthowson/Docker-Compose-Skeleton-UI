@@ -13,6 +13,13 @@ interface ContainerState {
   statsHistory: Record<string, StatsHistoryEntry[]>
   favorites: string[]
   loading: boolean
+  /** Epoch ms of the last successful list fetch; 0 until the first one lands */
+  fetchedAt: number
+  /** Registered by GlobalPoller: fetches the list (and bulk stats) once, now */
+  refresher: (() => Promise<void>) | null
+  setRefresher: (fn: (() => Promise<void>) | null) => void
+  /** Fetch the list now through the global poller (no-op until it is registered) */
+  refresh: () => Promise<void>
   setContainers: (containers: ContainerInfo[]) => void
   setStats: (name: string, stats: ContainerStats) => void
   pushStatsHistory: (name: string, cpu: number, mem: number) => void
@@ -35,14 +42,22 @@ function loadFavorites(): string[] {
   }
 }
 
-export const useContainerStore = create<ContainerState>((set) => ({
+export const useContainerStore = create<ContainerState>((set, get) => ({
   containers: [],
   stats: {},
   statsHistory: {},
   favorites: loadFavorites(),
-  loading: false,
+  // True until the first list arrives, so an empty list is never shown as "no containers"
+  loading: true,
+  fetchedAt: 0,
+  refresher: null,
 
-  setContainers: (containers) => set({ containers }),
+  setRefresher: (fn) => set({ refresher: fn }),
+  refresh: async () => {
+    const fn = get().refresher
+    if (fn) await fn()
+  },
+  setContainers: (containers) => set({ containers, loading: false, fetchedAt: Date.now() }),
   setStats: (name, stats) =>
     set((state) => ({
       stats: { ...state.stats, [name]: stats },
