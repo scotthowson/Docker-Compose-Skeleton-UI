@@ -168,6 +168,7 @@ import type {
   SystemUpdateCheckResponse,
   SystemUpdateApplyResponse,
   SystemUpdateRollbackResponse,
+  SystemRestartResponse,
   OsUpdateCheckResponse,
   OsUpdateApplyResponse,
   OsUpdateStatusResponse,
@@ -1656,19 +1657,24 @@ export function pullImage(image: string): Promise<ImagePullResponse> {
 // System Updates
 // ---------------------------------------------------------------------------
 
-/** GET /system/update/check — Check for DCS framework updates */
+/** GET /system/update/check — Newer DCS release on the channel, release notes, local edits, restart support */
 export function checkSystemUpdate(): Promise<SystemUpdateCheckResponse> {
   return apiClient.get<SystemUpdateCheckResponse>('/system/update/check')
 }
 
-/** POST /system/update/apply — Apply DCS framework update (git pull --ff-only) */
-export function applySystemUpdate(): Promise<SystemUpdateApplyResponse> {
-  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: 'true' }, 120000)
+/** POST /system/update/apply — Update to the channel's release; user files are kept, a backup tag allows rollback */
+export function applySystemUpdate(opts: { replaceLocal?: boolean; restart?: boolean } = {}): Promise<SystemUpdateApplyResponse> {
+  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: true, replace_local: !!opts.replaceLocal, restart: !!opts.restart }, 180000)
 }
 
-/** POST /system/update/rollback — Rollback to previous version */
-export function rollbackSystemUpdate(backupTag: string): Promise<SystemUpdateRollbackResponse> {
-  return apiClient.post<SystemUpdateRollbackResponse>('/system/update/rollback', { backup_tag: backupTag })
+/** POST /system/update/rollback — Return to a backup tag; user files are kept */
+export function rollbackSystemUpdate(backupTag: string, restart = false): Promise<SystemUpdateRollbackResponse> {
+  return apiClient.post<SystemUpdateRollbackResponse>('/system/update/rollback', { backup_tag: backupTag, restart }, 120000)
+}
+
+/** POST /system/restart — Restart the API listener without root (re-exec, or a systemd relaunch for older listeners) */
+export function restartApiServer(): Promise<SystemRestartResponse> {
+  return apiClient.post<SystemRestartResponse>('/system/restart', {}, 20000)
 }
 
 /** POST /system/ui-update/apply — Pull latest DCS-UI image and recreate container */

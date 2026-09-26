@@ -489,6 +489,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const defaultStack = template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
   const [targetStack, setTargetStack] = useState(defaultStack)
+  // The suggested stack may not exist on this server (renamed or removed):
+  // never preview or deploy into a stack that is not in the list
+  const suggestedExists = stacks.some((s) => s.name === defaultStack)
+  useEffect(() => {
+    if (stacks.length === 0) return
+    if (targetStack && stacks.some((s) => s.name === targetStack)) return
+    setTargetStack(suggestedExists ? defaultStack : stacks.length === 1 ? stacks[0].name : '')
+  }, [stacks, targetStack, defaultStack, suggestedExists])
   const [variables, setVariables] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     const vars = detail?.template.variables ?? template.variables ?? []
@@ -909,7 +917,16 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     setDryRunError(null)
     try {
       const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
-      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables, exclude_services: exclude })
+      // Preview exactly what the deployment writes: a value marked "store as
+      // secret" appears as its ${SECRETS_NAME} reference, never as the value
+      const previewVars: Record<string, string> = { ...variables }
+      for (const name of storeAsSecret) {
+        const val = (variables[name] ?? '').trim()
+        if (!val || SECRET_REF_ONE.test(val)) continue
+        const secretName = (secretNames[name] ?? name).trim() || name
+        previewVars[name] = `\${SECRETS_${secretName}}`
+      }
+      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables: previewVars, exclude_services: exclude })
       setDryRunResult(res)
     } catch (err) {
       setDryRunResult(null)
@@ -917,7 +934,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     } finally {
       setDryRunLoading(false)
     }
-  }, [template.name, targetStack, variables, excludedServices])
+  }, [template.name, targetStack, variables, excludedServices, storeAsSecret, secretNames])
 
   const headerTone = deployResult
     ? (outcome === 'running' ? 'ok' : outcome === 'failed' ? 'bad' : outcome === 'not-started' ? 'held' : 'busy')
@@ -1226,7 +1243,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     </div>
                   )}
                 </div>
-                {defaultStack && targetStack !== defaultStack && (
+                {defaultStack && suggestedExists && targetStack !== defaultStack && (
                   <p className="text-[10px] text-amber-400/70 mt-1">
                     Suggested stack for this template: <span className="font-mono">{defaultStack}</span>
                   </p>
@@ -1913,6 +1930,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <pre className="mt-1 bg-slate-950 rounded p-2 text-[10px] font-mono text-slate-500 overflow-x-auto max-h-[40vh] scrollbar-thin whitespace-pre-wrap break-all leading-relaxed">
                         {dryRunResult.compose_preview}
                       </pre>
+                    )}
+                    {storeAsSecret.size > 0 && (
+                      <p className="mt-1 text-[10px] text-slate-500 flex items-start gap-1.5">
+                        <Lock size={10} className="shrink-0 mt-px text-violet-400" />
+                        <span>{'${SECRETS_…}'} stands for a value in the encrypted store: the compose file and .env only ever hold the reference, and DCS exports the secret to Compose when the stack starts.</span>
+                      </p>
                     )}
                   </div>
                 </div>

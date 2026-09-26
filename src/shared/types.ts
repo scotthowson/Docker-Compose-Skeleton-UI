@@ -236,6 +236,7 @@ export interface ImageInfo {
 // GET /config
 export interface ServerConfig {
   environment: string
+  update_channel?: string
   log_level: string
   compose_dir: string
   app_data_dir: string
@@ -991,27 +992,74 @@ export interface ContainerExecResponse {
 }
 
 // System Update Check
+export interface SystemUpdateLocalChanges {
+  /** tracked files with local edits under Stacks/, .templates/, .api-auth/, .plugins/ (always kept) */
+  user: string[]
+  /** tracked framework files with local edits */
+  framework: string[]
+  /** user files the update touches: put back byte for byte afterwards */
+  kept: string[]
+  /** framework files the update touches: need replace_local */
+  conflicts: string[]
+}
+
+export type SystemRestartMethod = 'reexec' | 'systemd' | 'manual'
+
 export interface SystemUpdateCheckResponse {
   available: boolean
+  /** current | behind | ahead | diverged | unknown */
+  state?: string
+  /** false when GitHub could not be reached; `error` says why */
+  checked?: boolean
+  error?: string
+  channel?: string
+  branch: string
   current_version: string
+  current_commit?: string
   latest_version: string
+  latest_name?: string
+  latest_commit?: string
   commits_behind: number
   changelog: { hash: string; message: string; author: string; date: string }[]
+  release_notes?: string
+  local_changes?: SystemUpdateLocalChanges
+  /** true only when edited framework files block the update */
   has_local_changes: boolean
-  branch: string
   last_backup_tag?: string
+  restart_method?: SystemRestartMethod
+  api_pid?: number
+  ui_update?: { available: boolean; current?: string; latest?: string }
+}
+
+export interface SystemRestartInfo {
+  method: SystemRestartMethod | ''
+  eta_seconds: number
+  hint: string
 }
 
 export interface SystemUpdateApplyResponse {
   success?: boolean
   updated?: boolean
+  state?: string
+  channel?: string
+  branch?: string
   previous_version: string
+  previous_commit?: string
   updated_to?: string
   new_version?: string
+  new_commit?: string
   changelog: { hash: string; message: string }[]
+  release_notes?: string
   backup_tag: string
   commits_applied?: number
+  kept_local?: string[]
+  replaced_local?: string[]
+  backup_dir?: string
+  new_settings?: string[]
+  service_definition_changed?: boolean
   restart_required?: boolean
+  restart_scheduled?: boolean
+  restart?: SystemRestartInfo
   message?: string
 }
 
@@ -1019,10 +1067,22 @@ export interface SystemUpdateRollbackResponse {
   success?: boolean
   rolled_back?: boolean
   restored_version?: string
+  restored_commit?: string
   previous_version?: string
   backup_tag?: string
-  branch?: string
+  kept_local?: string[]
+  replaced_local?: string[]
+  restart_required?: boolean
+  restart_scheduled?: boolean
+  restart?: SystemRestartInfo
   message?: string
+}
+
+export interface SystemRestartResponse {
+  restarting: boolean
+  method: SystemRestartMethod
+  eta_seconds: number
+  hint: string
 }
 
 export interface OsUpdateCheckResponse {

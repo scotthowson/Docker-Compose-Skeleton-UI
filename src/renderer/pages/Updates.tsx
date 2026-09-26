@@ -18,6 +18,8 @@ import {
   RotateCcw,
   Server,
   Monitor,
+  Power,
+  Info,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -25,8 +27,8 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate } from '../api/endpoints'
-import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, APIVersion } from '../../shared/types'
+import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer } from '../api/endpoints'
+import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, APIVersion } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
 // ---------------------------------------------------------------------------
@@ -176,6 +178,47 @@ function formatRelativeTime(ts: number): string {
 // Updates Page Component
 // ---------------------------------------------------------------------------
 
+function UpdateStatusBadge({ res }: { res: SystemUpdateCheckResponse }) {
+  if (res.checked === false) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full">
+        <AlertTriangle size={10} />
+        Check failed
+      </span>
+    )
+  }
+  if (res.available) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+        {res.latest_name ? `${res.latest_name} available` : 'Update available'}
+      </span>
+    )
+  }
+  if (res.state === 'ahead') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full" title="This checkout has commits newer than the release">
+        <GitBranch size={10} />
+        Ahead of the release
+      </span>
+    )
+  }
+  if (res.state === 'diverged') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-full">
+        <AlertTriangle size={10} />
+        Diverged
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
+      <CheckCircle size={10} />
+      Up to date
+    </span>
+  )
+}
+
 export default function Updates() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const userRole = useAuthStore((s) => s.userRole)
@@ -191,6 +234,11 @@ export default function Updates() {
   const [sysChecking, setSysChecking] = useState(false)
   const [sysApplying, setSysApplying] = useState(false)
   const [sysRollingBack, setSysRollingBack] = useState(false)
+  const [replaceLocal, setReplaceLocal] = useState(false)
+  const [restartAfter, setRestartAfter] = useState(true)
+  const [restartingApi, setRestartingApi] = useState<string | null>(null)
+  const [restartHint, setRestartHint] = useState<string | null>(null)
+  const [applyReport, setApplyReport] = useState<SystemUpdateApplyResponse | null>(null)
   const [lastBackupTag, setLastBackupTag] = useState<string | null>(() => {
     // Persist across navigation — load from sessionStorage
     try { return sessionStorage.getItem('dcs-last-backup-tag') } catch { return null }
@@ -211,24 +259,50 @@ export default function Updates() {
   // API version info
   const [apiVersionInfo, setApiVersionInfo] = useState<APIVersion | null>(null)
 
+  const ingestCheck = useCallback((res: SystemUpdateCheckResponse) => {
+    setSysUpdate(res)
+    setUiUpdateAvailable(!!res.ui_update?.available)
+    useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? Math.max(1, res.commits_behind) : 0)
+    if (res.last_backup_tag) {
+      setLastBackupTag(res.last_backup_tag)
+      try { sessionStorage.setItem('dcs-last-backup-tag', res.last_backup_tag) } catch {}
+    } else if (res.last_backup_tag === '') {
+      setLastBackupTag(null)
+      try { sessionStorage.removeItem('dcs-last-backup-tag') } catch {}
+    }
+    setLastChecked(Date.now())
+  }, [])
+
+  /** After a restart: wait for the API to answer again (up to ~1 min), then re-check */
+  const waitForApi = useCallback(async (etaSeconds: number) => {
+    const deadline = Date.now() + (Math.max(5, etaSeconds) + 50) * 1000
+    await new Promise((r) => setTimeout(r, Math.min(Math.max(2, etaSeconds), 8) * 1000))
+    while (Date.now() < deadline) {
+      try {
+        const res = await checkSystemUpdate()
+        ingestCheck(res)
+        fetchVersion().then(setApiVersionInfo).catch(() => {})
+        return true
+      } catch {
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+    }
+    return false
+  }, [ingestCheck])
+
   const handleCheckSystemUpdate = useCallback(async () => {
     if (sysChecking) return
     setSysChecking(true)
     try {
       const result = await checkSystemUpdate()
-      setSysUpdate(result)
-      // Check for UI image update
-      const uiUp = (result as Record<string, unknown>).ui_update as { available?: boolean } | undefined
-      setUiUpdateAvailable(!!uiUp?.available)
-      useSettingsStore.getState().updateSetting('updatesAvailable', result.available ? result.commits_behind : 0)
-      setLastChecked(Date.now())
-      if (uiUp?.available) {
+      ingestCheck(result)
+      if (result.checked === false) {
+        addToast({ type: 'error', message: `Could not check for updates: ${result.error || 'GitHub is unreachable'}` })
+      } else if (result.available) {
+        addToast({ type: 'info', message: `DCS ${result.latest_version || result.latest_name || ''} is available (${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''})` })
+      } else if (result.ui_update?.available) {
         addToast({ type: 'info', message: 'DCS Manager UI update available' })
-      }
-      if (result.available) {
-        addToast({ type: 'info', message: `DCS update available: ${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''} behind` })
-      }
-      if (!result.available && !uiUp?.available) {
+      } else {
         addToast({ type: 'success', message: 'Everything is up to date' })
       }
     } catch (err) {
@@ -236,44 +310,73 @@ export default function Updates() {
     } finally {
       setSysChecking(false)
     }
-  }, [sysChecking, addToast])
+  }, [sysChecking, addToast, ingestCheck])
 
   const handleApplySystemUpdate = useCallback(async () => {
     if (sysApplying || !sysUpdate?.available) return
+    const blocking = sysUpdate.local_changes?.conflicts ?? []
+    if (blocking.length > 0 && !replaceLocal) {
+      addToast({ type: 'error', message: 'Tick "Replace them with the release versions" first, or revert those files.' })
+      return
+    }
     setSysApplying(true)
+    setApplyReport(null)
+    setRestartHint(null)
     try {
-      const result = await applySystemUpdate()
-      if (result.success || result.updated) {
+      const result = await applySystemUpdate({ replaceLocal, restart: restartAfter })
+      if (result.updated) {
+        setApplyReport(result)
         const tag = result.backup_tag
         setLastBackupTag(tag)
         try { if (tag) sessionStorage.setItem('dcs-last-backup-tag', tag) } catch {}
-        const newVersion = result.updated_to || result.new_version || 'latest'
-        addToast({ type: 'success', message: `Updated to ${newVersion}${result.restart_required ? ' — API server restart may be needed' : ''}`, duration: 6000 })
         useSettingsStore.getState().updateSetting('updatesAvailable', 0)
-        // Re-check to update UI
-        const fresh = await checkSystemUpdate()
-        setSysUpdate(fresh)
+        addToast({ type: 'success', message: `Updated to ${result.new_version || 'the latest release'}`, duration: 6000 })
+        if (result.restart_scheduled && result.restart) {
+          setRestartingApi(result.restart.method === 'systemd' ? 'Restarting the API through systemd (about 10 s)…' : 'Restarting the API…')
+          const back = await waitForApi(result.restart.eta_seconds)
+          setRestartingApi(null)
+          addToast(back
+            ? { type: 'success', message: 'The API is back on the new version' }
+            : { type: 'error', message: 'The API did not answer after the restart — check the dcs-api service' })
+        } else {
+          if (result.restart?.hint) setRestartHint(result.restart.hint)
+          const fresh = await checkSystemUpdate()
+          ingestCheck(fresh)
+          fetchVersion().then(setApiVersionInfo).catch(() => {})
+        }
       } else {
-        addToast({ type: 'error', message: result.message || 'Update failed' })
+        addToast({ type: result.state === 'current' ? 'info' : 'error', message: result.message || 'Nothing to apply' })
+        const fresh = await checkSystemUpdate()
+        ingestCheck(fresh)
       }
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Update failed' })
     } finally {
       setSysApplying(false)
     }
-  }, [sysApplying, sysUpdate, addToast])
+  }, [sysApplying, sysUpdate, replaceLocal, restartAfter, addToast, ingestCheck, waitForApi])
 
   const handleRollback = useCallback(async () => {
     if (sysRollingBack || !lastBackupTag) return
+    if (!window.confirm(`Roll back to ${lastBackupTag}?\n\nYour stack, template and plugin files are kept as they are.`)) return
     setSysRollingBack(true)
+    setRestartHint(null)
     try {
-      const result = await rollbackSystemUpdate(lastBackupTag)
-      if (result.success || result.rolled_back) {
-        addToast({ type: 'success', message: `Rolled back to ${result.restored_version || 'previous version'}` })
+      const result = await rollbackSystemUpdate(lastBackupTag, restartAfter)
+      if (result.rolled_back) {
+        addToast({ type: 'success', message: `Rolled back to ${result.restored_version || 'the previous version'}` })
         setLastBackupTag(null)
         try { sessionStorage.removeItem('dcs-last-backup-tag') } catch {}
-        const fresh = await checkSystemUpdate()
-        setSysUpdate(fresh)
+        setApplyReport(null)
+        if (result.restart_scheduled && result.restart) {
+          setRestartingApi('Restarting the API…')
+          await waitForApi(result.restart.eta_seconds)
+          setRestartingApi(null)
+        } else {
+          if (result.restart?.hint) setRestartHint(result.restart.hint)
+          const fresh = await checkSystemUpdate()
+          ingestCheck(fresh)
+        }
       } else {
         addToast({ type: 'error', message: result.message || 'Rollback failed' })
       }
@@ -282,24 +385,36 @@ export default function Updates() {
     } finally {
       setSysRollingBack(false)
     }
-  }, [sysRollingBack, lastBackupTag, addToast])
+  }, [sysRollingBack, lastBackupTag, restartAfter, addToast, ingestCheck, waitForApi])
+
+  const handleRestartApi = useCallback(async () => {
+    if (restartingApi) return
+    if (!window.confirm('Restart the API now?\n\nOpen pages reconnect by themselves. A deploy, backup or image pull running at this moment would be interrupted.')) return
+    setRestartHint(null)
+    try {
+      const res = await restartApiServer()
+      if (!res.restarting) {
+        setRestartHint(res.hint)
+        addToast({ type: 'info', message: 'DCS cannot restart this listener by itself — see the hint' })
+        return
+      }
+      setRestartingApi(res.method === 'systemd' ? 'Restarting the API through systemd (about 10 s)…' : 'Restarting the API…')
+      const back = await waitForApi(res.eta_seconds)
+      setRestartingApi(null)
+      addToast(back ? { type: 'success', message: 'API restarted' } : { type: 'error', message: 'The API did not answer after the restart' })
+    } catch (err) {
+      setRestartingApi(null)
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Restart failed' })
+    }
+  }, [restartingApi, addToast, waitForApi])
+
+  const conflicts = sysUpdate?.local_changes?.conflicts ?? []
+  const userEdits = sysUpdate?.local_changes?.user.length ?? 0
 
   // Auto-check for system + UI updates on mount
   useEffect(() => {
     if (isConnected && !sysUpdate && !sysChecking) {
-      checkSystemUpdate().then(res => {
-        setSysUpdate(res)
-        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
-        // Load last backup tag from server if we don't have one locally
-        if (res.last_backup_tag && !lastBackupTag) {
-          setLastBackupTag(res.last_backup_tag)
-          try { sessionStorage.setItem('dcs-last-backup-tag', res.last_backup_tag) } catch {}
-        }
-        // Also check UI image update from the response
-        const uiUp = (res as Record<string, unknown>).ui_update as { available?: boolean } | undefined
-        if (uiUp?.available) setUiUpdateAvailable(true)
-        setLastChecked(Date.now())
-      }).catch(() => {})
+      checkSystemUpdate().then(ingestCheck).catch(() => {})
       fetchVersion().then(setApiVersionInfo).catch(() => {})
     }
   }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -308,13 +423,10 @@ export default function Updates() {
   useEffect(() => {
     if (!isConnected || !autoCheckUpdates || autoCheckUpdates <= 0) return
     const timer = setInterval(() => {
-      checkSystemUpdate().then(res => {
-        setSysUpdate(res)
-        useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? res.commits_behind : 0)
-      }).catch(() => {})
+      checkSystemUpdate().then(ingestCheck).catch(() => {})
     }, autoCheckUpdates)
     return () => clearInterval(timer)
-  }, [isConnected, autoCheckUpdates])
+  }, [isConnected, autoCheckUpdates, ingestCheck])
 
   // ---- Image update state ----
   const [registryChecking, setRegistryChecking] = useState(false)
@@ -584,32 +696,31 @@ export default function Updates() {
             {sysUpdate ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Current</span>
-                  <span className="text-xs font-mono text-slate-300">{sysUpdate.current_version}</span>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Installed</span>
+                  <span className="text-xs font-mono text-slate-300">
+                    {sysUpdate.current_version}
+                    {sysUpdate.current_commit && <span className="text-slate-500"> · {sysUpdate.current_commit}</span>}
+                  </span>
                 </div>
                 {sysUpdate.available && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Latest</span>
-                    <span className="text-xs font-mono text-emerald-400">{sysUpdate.latest_version}</span>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
+                    <span className="text-xs font-mono text-emerald-400">
+                      {sysUpdate.latest_version || sysUpdate.latest_name}
+                      {sysUpdate.latest_commit && <span className="text-emerald-500/60"> · {sysUpdate.latest_commit}</span>}
+                    </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Branch</span>
-                  <span className="text-xs font-mono text-slate-400">{sysUpdate.branch.replace(/^heads\//, '')}</span>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Channel</span>
+                  <span className="text-xs font-mono text-slate-400" title="Change it under Server Config → Environment → Update Channel">
+                    {sysUpdate.channel || 'stable'}
+                    <span className="text-slate-600"> · {sysUpdate.branch.replace(/^heads\//, '')}</span>
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
-                  {sysUpdate.available ? (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      {sysUpdate.commits_behind} update{sysUpdate.commits_behind !== 1 ? 's' : ''} available
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
-                      <CheckCircle size={10} />
-                      Up to date
-                    </span>
-                  )}
+                  <UpdateStatusBadge res={sysUpdate} />
                 </div>
 
                 {apiVersionInfo && (
@@ -629,19 +740,54 @@ export default function Updates() {
                   </>
                 )}
 
-                {sysUpdate.has_local_changes && (
+                {sysUpdate.checked === false && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.06] border border-rose-500/15">
+                    <AlertTriangle size={12} className="text-rose-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-rose-300">{sysUpdate.error || 'GitHub could not be reached, so nothing is known about newer releases.'}</p>
+                  </div>
+                )}
+                {sysUpdate.state === 'diverged' && (
                   <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
                     <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-amber-300">Local modifications detected. Commit or stash changes before updating.</p>
+                    <p className="text-[10px] text-amber-300">This checkout carries commits the release does not have, so it cannot be fast-forwarded. Align it once by hand (git fetch origin, then git reset --hard {sysUpdate.latest_commit}); your stack and template files are not part of that.</p>
                   </div>
                 )}
 
-                {/* Changelog */}
-                {sysUpdate.available && sysUpdate.changelog.length > 0 && (
+                {userEdits > 0 && (
+                  <p className="text-[10px] text-slate-500 flex items-start gap-1.5">
+                    <Shield size={11} className="shrink-0 mt-px" />
+                    <span>{userEdits} stack, template or plugin file{userEdits === 1 ? '' : 's'} carry your edits — updates keep them exactly as they are.</span>
+                  </p>
+                )}
+                {conflicts.length > 0 && (
+                  <div className="px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15 space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-amber-300">These framework files were edited on this server and the release changes them too:</p>
+                    </div>
+                    <ul className="pl-5 space-y-0.5 text-[10px] font-mono text-amber-200/80">
+                      {conflicts.map((f) => <li key={f}>{f}</li>)}
+                    </ul>
+                    <label className="flex items-start gap-2 text-[10px] text-amber-200 cursor-pointer">
+                      <input type="checkbox" checked={replaceLocal} onChange={(e) => setReplaceLocal(e.target.checked)} className="accent-amber-500 mt-0.5" />
+                      <span>Replace them with the release versions (the current copies are kept under .data/update-backups)</span>
+                    </label>
+                  </div>
+                )}
+
+                {sysUpdate.available && sysUpdate.release_notes && sysUpdate.release_notes.trim() && (
                   <div className="mt-3 pt-3 border-t border-white/[0.03]">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Changelog</p>
-                    <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin">
-                      {sysUpdate.changelog.slice(0, 10).map((c) => (
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">What&apos;s new</p>
+                    <pre className="text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed max-h-56 overflow-y-auto scrollbar-thin rounded-lg bg-slate-950/50 border border-white/[0.03] p-3">{sysUpdate.release_notes.trim()}</pre>
+                  </div>
+                )}
+                {sysUpdate.available && sysUpdate.changelog.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400">
+                      {sysUpdate.changelog.length} commit{sysUpdate.changelog.length !== 1 ? 's' : ''}
+                    </summary>
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin mt-2">
+                      {sysUpdate.changelog.map((c) => (
                         <div key={c.hash} className="flex items-start gap-2">
                           <GitCommit size={12} className="text-slate-500 shrink-0 mt-0.5" />
                           <div className="min-w-0">
@@ -651,38 +797,98 @@ export default function Updates() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 )}
 
-                {/* Update action button */}
-                {isAdmin && sysUpdate.available && !sysUpdate.has_local_changes && (
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.03]">
+                {isAdmin && sysUpdate.available && (
+                  <div className="mt-3 pt-3 border-t border-white/[0.03] space-y-2.5">
+                    <label className="flex items-start gap-2 text-[10px] text-slate-400 cursor-pointer">
+                      <input type="checkbox" checked={restartAfter} onChange={(e) => setRestartAfter(e.target.checked)} className="accent-emerald-500 mt-0.5" />
+                      <span>
+                        Restart the API afterwards so every part runs the new version
+                        {sysUpdate.restart_method === 'manual' && <span className="text-amber-400/80"> — not possible from here on this install; a hint follows</span>}
+                      </span>
+                    </label>
                     <button
                       onClick={handleApplySystemUpdate}
-                      disabled={sysApplying}
+                      disabled={sysApplying || !!restartingApi || (conflicts.length > 0 && !replaceLocal)}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all duration-200 press"
                     >
                       {sysApplying ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                      {sysApplying ? 'Updating...' : 'Apply Update'}
+                      {sysApplying ? 'Updating…' : `Update to ${sysUpdate.latest_version || sysUpdate.latest_name || 'latest'}`}
                     </button>
                   </div>
                 )}
 
-                {/* Rollback — always visible when a backup tag exists */}
-                {isAdmin && lastBackupTag && (
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.03]">
+                {restartingApi && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 text-[11px] text-emerald-300">
+                    <Loader2 size={12} className="animate-spin shrink-0" />
+                    {restartingApi}
+                  </div>
+                )}
+                {restartHint && !restartingApi && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
+                    <Info size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-300 break-words">{restartHint}</p>
+                  </div>
+                )}
+
+                {applyReport && (
+                  <div className="mt-3 pt-3 border-t border-white/[0.03] space-y-1 text-[10px] text-slate-400">
+                    <p className="text-slate-300 font-medium">
+                      Updated {applyReport.previous_version} → {applyReport.new_version}
+                      {typeof applyReport.commits_applied === 'number' && ` (${applyReport.commits_applied} commit${applyReport.commits_applied !== 1 ? 's' : ''})`}
+                    </p>
+                    {(applyReport.kept_local?.length ?? 0) > 0 && (
+                      <p>Kept your edits: <span className="font-mono">{applyReport.kept_local?.join(', ')}</span></p>
+                    )}
+                    {(applyReport.replaced_local?.length ?? 0) > 0 && (
+                      <p>Replaced (copies in <span className="font-mono">{applyReport.backup_dir}</span>): <span className="font-mono">{applyReport.replaced_local?.join(', ')}</span></p>
+                    )}
+                    {(applyReport.new_settings?.length ?? 0) > 0 && (
+                      <p>New settings in Server Config: <span className="font-mono">{applyReport.new_settings?.join(', ')}</span> (defaults apply until you set them)</p>
+                    )}
+                    {applyReport.service_definition_changed && (
+                      <p className="text-amber-300">The systemd unit template changed — run <span className="font-mono">sudo .scripts/install-service.sh</span> once to refresh it.</p>
+                    )}
+                  </div>
+                )}
+
+                {isAdmin && (
+                  <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/[0.03]">
                     <div className="min-w-0">
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Rollback Available</p>
-                      <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5" title={lastBackupTag}>{lastBackupTag}</p>
+                      {lastBackupTag ? (
+                        <>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Rollback available</p>
+                          <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5" title={lastBackupTag}>{lastBackupTag}</p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] text-slate-500">
+                          API listener: {sysUpdate.restart_method === 'reexec' ? 'restarts in place' : sysUpdate.restart_method === 'systemd' ? 'restarts through systemd' : 'restart by hand only'}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={handleRollback}
-                      disabled={sysRollingBack}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press shrink-0 ml-3"
-                    >
-                      {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                      {sysRollingBack ? 'Rolling back...' : 'Rollback'}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {lastBackupTag && (
+                        <button
+                          onClick={handleRollback}
+                          disabled={sysRollingBack || !!restartingApi}
+                          className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press"
+                        >
+                          {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                          {sysRollingBack ? 'Rolling back…' : 'Rollback'}
+                        </button>
+                      )}
+                      <button
+                        onClick={handleRestartApi}
+                        disabled={!!restartingApi || sysApplying}
+                        title="Restart the API listener now"
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all press"
+                      >
+                        <Power size={13} />
+                        Restart API
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

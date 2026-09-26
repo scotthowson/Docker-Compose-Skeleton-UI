@@ -562,6 +562,14 @@ export default function Config() {
               options={['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']}
               onChange={handleStringChange}
             />
+            <SelectRow
+              label="Update Channel"
+              description="stable follows the tagged releases; main follows every commit on the main branch"
+              configKey="UPDATE_CHANNEL"
+              value={String(edits.UPDATE_CHANNEL ?? cfg.update_channel ?? 'stable')}
+              options={['stable', 'main']}
+              onChange={handleStringChange}
+            />
             <TextRow
               label="Server Name"
               description="Display name for this server"
