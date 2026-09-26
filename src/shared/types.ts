@@ -2314,3 +2314,24 @@ export interface CrowdSecStatusResponse {
   decisions?: CrowdSecDecision[]
   decision_count?: number
 }
+
+// TLS state of the reverse proxy (GET /routes/certificates)
+export interface RouteCertificate {
+  resolver: string
+  domain: string
+  sans: string[]
+  not_after: string
+  days_left: number
+}
+export interface RouteCertificatesResponse {
+  traefik_stack: string
+  active: boolean
+  challenge: 'dns' | 'http' | 'none' | 'unknown'
+  email: string
+  token_set: boolean
+  acme_file: { exists: boolean; mode: string; mode_ok: boolean }
+  certificates: RouteCertificate[]
+  errors: string[]
+  hints: string[]
+  checked_at?: string
+}

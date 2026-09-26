@@ -174,6 +174,7 @@ import type {
   TotpSetupResponse,
   TotpVerifyResponse,
   TotpValidateResponse,
+  RouteCertificatesResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -1040,6 +1041,11 @@ export function saveProfileToServer(profile: Record<string, unknown>): Promise<{
 /** GET /traefik/status — Check if Traefik is deployed and get domain */
 export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string }> {
   return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
+}
+
+/** TLS state of the proxy: challenge, ACME account, certificates held, recent errors, hints */
+export function fetchRouteCertificates(): Promise<RouteCertificatesResponse> {
+  return apiClient.get<RouteCertificatesResponse>('/routes/certificates')
 }
 
 // ---------------------------------------------------------------------------

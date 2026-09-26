@@ -1,6 +1,6 @@
 {
   "name": "docker-compose-skeleton-ui",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Premium Electron desktop application for Docker Compose Skeleton management",
   "type": "module",
   "main": "dist/main/index.cjs",

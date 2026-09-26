@@ -6,12 +6,33 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
-  Globe, Search, RefreshCw, Loader2, Pencil, Check, X, Trash2,
-  AlertTriangle, Shield, ExternalLink, ArrowRight, Network, CheckCircle,
-  XCircle, CloudOff, Cloud, Plus, KeyRound, Link2, Wand2, Lock, Route,
+  Globe,
+  Search,
+  RefreshCw,
+  Loader2,
+  Pencil,
+  Check,
+  X,
+  Trash2,
+  AlertTriangle,
+  Shield,
+  ExternalLink,
+  ArrowRight,
+  Network,
+  CheckCircle,
+  XCircle,
+  CloudOff,
+  Cloud,
+  Plus,
+  KeyRound,
+  Link2,
+  Wand2,
+  Lock,
+  Route,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
+import type { RouteCertificatesResponse } from '../../shared/types'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -19,7 +40,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { LoadingState, EmptyState, ErrorState } from '../components/common/PageState'
 import {
-  fetchRoutes, fetchDnsRecords, fetchDnsStatus, fetchDnsZones, checkSubdomain, updateRoute, deleteRoute,
+  fetchRoutes, fetchDnsRecords, fetchDnsStatus, fetchDnsZones, checkSubdomain, updateRoute, deleteRoute, fetchRouteCertificates,
   fetchTraefikStatus, createDnsRecord, updateDnsRecord, deleteDnsRecord, syncDnsRecords,
   type RouteEntry, type DnsRecord, type DnsRecordInput, type DnsZone,
 } from '../api/endpoints'
@@ -364,6 +385,7 @@ export default function DNS() {
   const fetchRecords = useCallback(() => fetchDnsRecords(zoneId ? { zone: zoneId } : {}), [zoneId])
   const { data: dnsData, loading: dnsLoading, error: dnsError, refresh: refreshDns } = usePolling(fetchRecords, 60000, { enabled: isConnected })
   const { data: traefikStatus } = usePolling(fetchTraefikStatus, 60000, { enabled: isConnected })
+  const { data: certs, loading: certsLoading, error: certsError, refresh: refreshCerts } = usePolling(fetchRouteCertificates, 120000, { enabled: isConnected && !!traefikStatus?.active })
 
   const routes = routesData?.routes ?? []
   const domain = routesData?.domain ?? dnsStatus?.domain ?? traefikStatus?.domain ?? ''
@@ -642,6 +664,9 @@ export default function DNS() {
         <StatCard icon={<Shield size={16} className={traefikStatus?.active ? 'text-emerald-400' : 'text-slate-500'} />} label="Traefik" value={traefikStatus?.active ? 'Active' : 'Inactive'} tone={traefikStatus?.active ? 'ok' : undefined} />
       </div>
 
+      {/* Hidden when the API predates the endpoint (older AIO) */}
+      {traefikStatus?.active && (certs || !certsError) && <CertificatesPanel data={certs ?? null} loading={certsLoading} onRefresh={refreshCerts} />}
+
       {/* ---- Tabs + search ---- */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/5 w-fit">
@@ -688,6 +713,76 @@ export default function DNS() {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
+
+/**
+ * Certificates — what Traefik holds and why it might not: challenge in use,
+ * ACME account, every certificate with its expiry, the last ACME errors and
+ * the hints the API derives from them. The panel answers "why is my site's
+ * certificate invalid?" without a shell.
+ */
+function CertificatesPanel({ data, loading, onRefresh }: { data: RouteCertificatesResponse | null; loading: boolean; onRefresh: () => void }) {
+  const certs = data?.certificates ?? []
+  const problems = (data?.hints?.length ?? 0) + (data?.errors?.length ?? 0)
+  const tone = !data ? 'text-slate-500' : problems > 0 || certs.length === 0 ? 'text-amber-400' : 'text-emerald-400'
+  const challengeLabel = data?.challenge === 'dns' ? 'DNS-01 via Cloudflare' : data?.challenge === 'http' ? 'HTTP-01 on port 80' : data?.challenge === 'none' ? 'no resolver' : 'unknown'
+  return (
+    <div className="glass border border-white/5 rounded-xl p-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Lock size={15} className={tone} />
+          <h3 className="text-sm font-semibold text-slate-100">Certificates</h3>
+          {data && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.04] text-slate-400 border border-white/5 truncate" title="ACME challenge Traefik is configured for">{challengeLabel}</span>
+          )}
+        </div>
+        <button onClick={onRefresh} disabled={loading} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 hover:text-slate-200 transition-all disabled:opacity-50">
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Recheck
+        </button>
+      </div>
+      {!data ? (
+        <p className="text-xs text-slate-500">Reading Traefik's certificate store…</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+            <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">Account</span><span className="text-slate-200 font-mono truncate block" title={data.email}>{data.email || '—'}</span></div>
+            <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">Cloudflare token</span><span className={data.token_set ? 'text-emerald-400' : data.challenge === 'dns' ? 'text-rose-400' : 'text-slate-400'}>{data.token_set ? 'stored' : 'not set'}</span></div>
+            <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">acme.json</span><span className={data.acme_file.exists ? (data.acme_file.mode_ok ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400'}>{data.acme_file.exists ? `mode ${data.acme_file.mode}${data.acme_file.mode_ok ? '' : ' (must be 600)'}` : 'missing'}</span></div>
+            <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">Issued</span><span className={certs.length ? 'text-emerald-400' : 'text-amber-400'}>{certs.length} certificate{certs.length === 1 ? '' : 's'}</span></div>
+          </div>
+          {certs.length > 0 && (
+            <div className="divide-y divide-white/[0.04] rounded-lg border border-white/5 overflow-hidden">
+              {certs.map((c) => {
+                const exp = c.days_left < 0 ? 'text-rose-400' : c.days_left < 14 ? 'text-amber-400' : 'text-slate-400'
+                return (
+                  <div key={`${c.resolver}-${c.domain}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                    <div className="min-w-0">
+                      <span className="text-slate-200 font-mono truncate block">{c.domain}</span>
+                      {c.sans.length > 1 && <span className="text-[10px] text-slate-500">{c.sans.length} names · {c.sans.filter((n) => n !== c.domain).slice(0, 3).join(', ')}{c.sans.length > 4 ? '…' : ''}</span>}
+                    </div>
+                    <span className={`shrink-0 text-[11px] ${exp}`} title={c.not_after}>{c.days_left < 0 ? `expired ${-c.days_left}d ago` : `${c.days_left}d left`}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {data.hints.length > 0 && (
+            <ul className="space-y-1.5">
+              {data.hints.map((h, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-amber-200/80"><AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" /><span>{h}</span></li>
+              ))}
+            </ul>
+          )}
+          {data.errors.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-200">Last ACME errors from Traefik's log ({data.errors.length})</summary>
+              <pre className="mt-2 p-3 rounded-lg bg-black/30 border border-white/5 text-[10px] text-rose-300/90 whitespace-pre-wrap break-all">{data.errors.join('\n')}</pre>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function StatCard({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: string; sub?: string; tone?: 'ok' | 'warn' }) {
   return (
