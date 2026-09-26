@@ -1194,20 +1194,24 @@ function FactoryResetCard() {
 
       {/* Compose reset toggle (full reset only) */}
       {isFullReset && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5">
-          <div>
+        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-medium text-rose-300">Also wipe the stacks and their data</p>
-            <p className="text-[10px] text-slate-500 leading-relaxed">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={resetCompose}
+              onClick={() => setResetCompose(!resetCompose)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full ring-1 transition-colors duration-200 ${resetCompose ? 'bg-rose-500 ring-rose-400/40' : 'bg-slate-700 ring-white/10'}`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${resetCompose ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 leading-relaxed mt-1">
               Stops and removes every DCS stack except core infrastructure (the dashboard keeps running), deletes their App-Data, named volumes and images, removes user-created stacks and templates, installed plugins, secrets, snapshots, metrics, automations and the DNS records DCS created, then restores the bundled compose files. Other containers on this host are never touched.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setResetCompose(!resetCompose)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${resetCompose ? 'bg-rose-500' : 'bg-slate-700'}`}
-          >
-            <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${resetCompose ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
         </div>
       )}
 

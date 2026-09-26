@@ -6,7 +6,21 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
-import { fetchContainer, fetchContainerStats, fetchContainerLogs, startContainer, stopContainer, restartContainer, recreateContainer, removeContainer, fetchContainerProcesses, execContainerCommand, renameContainer, updateContainerEnv } from '../../api/endpoints'
+import {
+  fetchContainer,
+  fetchContainerStats,
+  fetchContainerLogs,
+  startContainer,
+  stopContainer,
+  restartContainer,
+  recreateContainer,
+  removeContainer,
+  fetchContainerProcesses,
+  execContainerCommand,
+  renameContainer,
+  updateContainerEnv,
+  setContainerSablier,
+} from '../../api/endpoints'
 import { apiClient } from '../../api/client'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import { CopyButton } from '../common/CopyButton'
@@ -57,7 +71,10 @@ import {
   X,
   Trash2,
   ExternalLink,
-  FileCode, Plus, Undo2,
+  FileCode,
+  Plus,
+  Undo2,
+  Moon,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -573,6 +590,29 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   }, [fetchStats])
 
   // Container action handler
+  // Sablier: on-demand start through the Traefik middleware, written by the API
+  const [sablierBusy, setSablierBusy] = useState(false)
+  const toggleSablier = useCallback(async () => {
+    if (!detail) return
+    const turningOn = !detail.on_demand
+    const ok = window.confirm(turningOn
+      ? `Start ${containerName} on demand?\n\nTraefik will start it on the first request and Sablier stops it after 30 minutes idle. Visitors see a short "starting" page meanwhile.`
+      : `Serve ${containerName} normally again?\n\nThe Sablier middleware is removed from its route; the container keeps running until you stop it.`)
+    if (!ok) return
+    setSablierBusy(true)
+    try {
+      const res = await setContainerSablier(containerName, { enabled: turningOn })
+      addToast({ type: 'success', message: res.message || (turningOn ? 'On-demand start enabled' : 'On-demand start disabled') })
+      if (res.traefik_restarted) addToast({ type: 'info', message: 'Traefik restarted to load the Sablier plugin' })
+      onRefreshList?.()
+      void fetchDetail()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not change on-demand start' })
+    } finally {
+      setSablierBusy(false)
+    }
+  }, [detail, containerName, addToast, onRefreshList])
+
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'recreate' | 'remove') => {
     const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', recreate: 'recreated', remove: 'removed' }
     const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', recreate: 'Recreating', remove: 'Removing' }
@@ -907,6 +947,17 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
         {/* Action buttons row — wraps on mobile */}
         <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => void toggleSablier()}
+              disabled={!!actionLoading || sablierBusy}
+              title={containerInfo.on_demand ? 'Sablier stops this container when idle and starts it on the first request; switch it off to serve it normally' : 'Let Traefik start this container on the first request and stop it when idle (needs the Sablier template and an HTTPS route)'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 ${containerInfo.on_demand ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/25 hover:bg-indigo-500/25' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-slate-200'}`}
+            >
+              {sablierBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Moon className="h-3.5 w-3.5" />}
+              {containerInfo.on_demand ? 'On demand: on' : 'Start on demand'}
+            </button>
+          )}
           {containerInfo.state !== 'running' && (
             <button
               onClick={() => handleAction('start')}

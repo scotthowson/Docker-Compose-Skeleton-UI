@@ -73,12 +73,16 @@ export interface HealthReport {
     healthy: number
     unhealthy: number
     stopped: number
+    /** Stopped on purpose: Sablier starts them on the first request */
+    sleeping?: number
   }
   containers: HealthContainer[]
   api?: ApiHealthMetrics
 }
 
 export interface HealthContainer {
+  /** Managed by Sablier: a stopped one is idle, not broken */
+  on_demand?: boolean
   name: string
   state: string
   health: string
@@ -148,6 +152,8 @@ export interface StackUpdateResponse {
 
 // GET /containers, /stacks/:name/containers
 export interface ContainerInfo {
+  /** Sablier starts this container on the first request and stops it when idle */
+  on_demand?: boolean
   name: string
   state: string
   health: string
@@ -2340,4 +2346,14 @@ export interface RouteCertificatesResponse {
   errors: string[]
   hints: string[]
   checked_at?: string
+}
+
+// POST /containers/{name}/sablier
+export interface SablierToggleResponse {
+  container: string
+  enabled: boolean
+  middleware: string
+  route_file: string
+  traefik_restarted: boolean
+  message?: string
 }

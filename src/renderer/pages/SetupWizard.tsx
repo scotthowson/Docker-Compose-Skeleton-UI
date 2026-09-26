@@ -224,6 +224,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [autheliaDisplay, setAutheliaDisplay] = useState('')
   const [autheliaEmail, setAutheliaEmail] = useState('')
   const [autheliaPassword, setAutheliaPassword] = useState('')
+  // Where the proxy services and ntfy land: follows the stack list the user builds
+  const [proxyStack, setProxyStack] = useState('networking-security')
+  const [notifyStack, setNotifyStack] = useState('communication-collaboration')
+  // CrowdSec: intrusion detection on Traefik's log, bouncer at the proxy, Discord alerts
+  const [enableCrowdsec, setEnableCrowdsec] = useState(true)
+  const [crowdsecBouncer, setCrowdsecBouncer] = useState(true)
 
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
@@ -262,6 +268,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Connect to server and fetch defaults
+  useEffect(() => {
+    const names = stacks.map((st) => st.name)
+    if (names.length === 0) return
+    if (!names.includes(proxyStack)) setProxyStack(names.includes('networking-security') ? 'networking-security' : names[0])
+    if (!names.includes(notifyStack)) setNotifyStack(names.includes('communication-collaboration') ? 'communication-collaboration' : names[0])
+  }, [stacks, proxyStack, notifyStack])
+
   const handleConnect = async () => {
     setError(null)
     setConnecting(true)
@@ -533,7 +546,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       if (enableTraefik && envVars.PROXY_DOMAIN) {
         try {
           const res = await deployTemplate('traefik', {
-            target_stack: 'networking-security',
+            target_stack: proxyStack,
             variables: {
               TRAEFIK_DOMAIN: envVars.PROXY_DOMAIN,
               TRAEFIK_ACME_EMAIL: traefikEmail || `admin@${envVars.PROXY_DOMAIN}`,
@@ -555,7 +568,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       if (enableAuthelia && enableTraefik && autheliaUser && autheliaPassword) {
         try {
           const res = await deployTemplate('authelia', {
-            target_stack: 'networking-security',
+            target_stack: proxyStack,
             variables: {
               AUTHELIA_ADMIN_USER: autheliaUser,
               AUTHELIA_ADMIN_DISPLAY: autheliaDisplay || autheliaUser,
@@ -573,11 +586,28 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         }
       }
 
-      // 3c. Self-hosted ntfy so DCS notifications work out of the box
+      // 3c. CrowdSec: reads Traefik's access log, bans at the proxy, alerts to Discord
+      if (enableCrowdsec && enableTraefik) {
+        try {
+          const res = await deployTemplate('crowdsec', {
+            target_stack: proxyStack,
+            variables: {
+              ENABLE_TRAEFIK_BOUNCER: crowdsecBouncer ? 'true' : 'false',
+              DISCORD_WEBHOOK_URL: (envVars.DISCORD_WEBHOOK_URL || '').trim(),
+            },
+            auto_start: true,
+            replace_services: true,
+          })
+          results.push({ label: 'CrowdSec deployed', ok: res.started !== false, detail: res.started === false ? (res as { warning?: string }).warning || 'Deployed but not started' : undefined })
+        } catch (err) {
+          console.error('[SetupWizard] CrowdSec deploy failed:', err)
+          results.push({ label: 'CrowdSec deployment', ok: false, detail: err instanceof Error ? err.message : 'failed' })
+        }
+      }
+
+      // 3d. Self-hosted ntfy so DCS notifications work out of the box
       if (notifyMode === 'self') {
-        const targetStack = stacks.some((s) => s.name === 'communication-collaboration')
-          ? 'communication-collaboration'
-          : (stacks[0]?.name || 'communication-collaboration')
+        const targetStack = notifyStack || stacks[0]?.name || 'communication-collaboration'
         try {
           const res = await deployTemplate('ntfy', {
             target_stack: targetStack,
@@ -1202,6 +1232,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <p className="col-span-2 text-[10px] text-slate-500">
                             The wizard deploys the ntfy template and starts it. On your phone, subscribe to topic <span className="font-mono text-slate-300">{(envVars.NTFY_TOPIC || 'dcs').trim() || 'dcs'}</span> on <span className="font-mono text-slate-300">http://{'<server-ip>'}:{ntfyPort || '8093'}</span>{enableTraefik && envVars.PROXY_DOMAIN ? <> or <span className="font-mono text-slate-300">https://ntfy.{envVars.PROXY_DOMAIN}</span></> : null}.
                           </p>
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Deploy into stack</label>
+                            <select
+                              value={notifyStack}
+                              onChange={(e) => setNotifyStack(e.target.value)}
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
+                            >
+                              {stacks.map((st) => <option key={st.name} value={st.name}>{st.name}</option>)}
+                            </select>
+                          </div>
                         </div>
                       )}
                       <div className="pt-3 mt-1 border-t border-white/[0.03] animate-fade-in">
@@ -1440,6 +1480,19 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             </div>
                           </div>
 
+                          {/* Where the proxy services are deployed */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Deploy into stack</label>
+                            <select
+                              value={proxyStack}
+                              onChange={(e) => setProxyStack(e.target.value)}
+                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
+                            >
+                              {stacks.map((st) => <option key={st.name} value={st.name}>{st.name}</option>)}
+                            </select>
+                            <p className="text-[10px] text-slate-500 mt-1">Traefik, Authelia and CrowdSec go here. Renaming or removing stacks in the last step keeps this in sync.</p>
+                          </div>
+
                           {/* Email for Let's Encrypt */}
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">
@@ -1657,6 +1710,56 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             After setup, enable per-service protection in your Traefik route files.
                           </p>
                         </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── CrowdSec (requires Traefik) ── */}
+                {enableTraefik && (
+                  <div className={`border rounded-xl overflow-hidden transition-all ${enableCrowdsec ? 'border-rose-500/20' : 'border-white/5'}`}>
+                    <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center">
+                          <Shield size={18} className="text-rose-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-200">CrowdSec intrusion detection</p>
+                          <p className="text-[10px] text-slate-500">Reads Traefik's access log, bans attackers, community blocklists</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {enableCrowdsec && <span className="text-[9px] text-rose-400 font-medium">Enabled</span>}
+                        <button
+                          type="button"
+                          onClick={() => setEnableCrowdsec(!enableCrowdsec)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${enableCrowdsec ? 'bg-rose-500' : 'bg-slate-700'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableCrowdsec ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    {enableCrowdsec && (
+                      <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-slate-300">Block at the proxy (Traefik bouncer)</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Banned IPs are refused by Traefik before they reach any app. No root needed.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCrowdsecBouncer(!crowdsecBouncer)}
+                            className={`relative w-10 h-5 rounded-full transition-colors ${crowdsecBouncer ? 'bg-rose-500' : 'bg-slate-700'}`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${crowdsecBouncer ? 'translate-x-5' : ''}`} />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                          {(envVars.DISCORD_WEBHOOK_URL || '').trim()
+                            ? 'Every ban is posted to the Discord webhook from the Notifications step, as an embed with the source, country, scenario and action.'
+                            : 'Add a Discord webhook in the Notifications step and every ban is posted there as an embed.'}
+                          {' '}The host firewall bouncer (nftables) is a separate, root-only install; the README explains it.
+                        </p>
                       </div>
                     )}
                   </div>

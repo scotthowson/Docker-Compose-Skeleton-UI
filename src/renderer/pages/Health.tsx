@@ -117,12 +117,20 @@ function healthBadge(health: string): React.ReactNode {
   )
 }
 
-function stateBadge(state: string): React.ReactNode {
+function stateBadge(state: string, onDemand?: boolean): React.ReactNode {
   const s = state.toLowerCase()
   if (s === 'running') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
         Running
+      </span>
+    )
+  }
+  if ((s === 'exited' || s === 'stopped' || s === 'created') && onDemand) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+        On demand
       </span>
     )
   }
@@ -472,10 +480,11 @@ export default function Health() {
             { label: 'Healthy', value: summary.healthy, color: 'text-emerald-400', icon: HeartPulse, iconColor: 'text-emerald-400' },
             { label: 'Unhealthy', value: summary.unhealthy, color: 'text-rose-400', icon: XCircle, iconColor: 'text-rose-400' },
             { label: 'Stopped', value: summary.stopped, color: 'text-slate-400', icon: Box, iconColor: 'text-slate-400' },
+            ...(summary.sleeping ? [{ label: 'On demand', value: summary.sleeping, color: 'text-indigo-300', icon: Box, iconColor: 'text-indigo-400' }] : []),
             { label: 'Restarting', value: restartingCount, color: 'text-amber-400', icon: RotateCcw, iconColor: 'text-amber-400' },
             { label: 'Total Restarts', value: totalRestarts, color: totalRestarts > 10 ? 'text-amber-400' : 'text-slate-100', icon: RefreshCw, iconColor: totalRestarts > 10 ? 'text-amber-400' : 'text-slate-400' },
-            { label: 'Running', value: summary.total - summary.stopped, color: 'text-cyan-400', icon: Activity, iconColor: 'text-cyan-400' },
-          ] as const).map((item) => (
+            { label: 'Running', value: summary.total - summary.stopped - (summary.sleeping ?? 0), color: 'text-cyan-400', icon: Activity, iconColor: 'text-cyan-400' },
+          ]).map((item) => (
             <div key={item.label} className="glass rounded-xl border border-white/5 hover:border-white/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 p-3 md:p-4">
               <div className="flex items-center gap-1.5 mb-1">
                 <item.icon size={12} className={item.iconColor} />
@@ -732,7 +741,7 @@ export default function Health() {
                       <span className="text-slate-500">:{c.image.split(':').pop()}</span>
                     )}
                   </td>
-                  <td className="px-5 py-3">{stateBadge(c.state)}</td>
+                  <td className="px-5 py-3">{stateBadge(c.state, c.on_demand)}</td>
                   <td className="px-5 py-3">{healthBadge(c.health)}</td>
                   <td className="px-5 py-3 text-xs text-slate-400">
                     <span className="inline-flex items-center gap-1">
@@ -788,7 +797,7 @@ export default function Health() {
                     <span className="font-mono text-xs text-slate-200 truncate">{c.name}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {stateBadge(c.state)}
+                    {stateBadge(c.state, c.on_demand)}
                     {isExpanded ? <ChevronUp size={12} className="text-slate-500" /> : <ChevronDown size={12} className="text-slate-500" />}
                   </div>
                 </button>

@@ -175,6 +175,7 @@ import type {
   TotpVerifyResponse,
   TotpValidateResponse,
   RouteCertificatesResponse,
+  SablierToggleResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -1041,6 +1042,11 @@ export function saveProfileToServer(profile: Record<string, unknown>): Promise<{
 /** GET /traefik/status — Check if Traefik is deployed and get domain */
 export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string }> {
   return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
+}
+
+/** Start a container on demand through Sablier (or serve it normally again): writes or removes the Traefik middleware */
+export function setContainerSablier(name: string, body: { enabled: boolean; session?: string; display_name?: string; theme?: string }): Promise<SablierToggleResponse> {
+  return apiClient.post<SablierToggleResponse>(`/containers/${encodeURIComponent(name)}/sablier`, body)
 }
 
 /** TLS state of the proxy: challenge, ACME account, certificates held, recent errors, hints */

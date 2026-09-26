@@ -694,12 +694,23 @@ export function CommandPalette() {
   // Filter commands
   const filtered = useMemo(() => {
     if (!query.trim()) return commands
-    const q = query.toLowerCase()
-    return commands.filter((cmd) => {
-      if (cmd.label.toLowerCase().includes(q)) return true
-      if (cmd.description.toLowerCase().includes(q)) return true
-      return cmd.keywords?.some((k) => k.includes(q)) ?? false
-    })
+    const q = query.toLowerCase().trim()
+    // Rank so that the page called "Settings" beats a page that merely mentions
+    // settings: exact label, label prefix, a word prefix, label substring, then
+    // description and keywords. Equal ranks keep their definition order.
+    const ranked = commands.map((cmd, order) => {
+      const label = cmd.label.toLowerCase()
+      let rank = -1
+      if (label === q) rank = 0
+      else if (label.startsWith(q)) rank = 1
+      else if (label.split(/[\s&/-]+/).some((w) => w.startsWith(q))) rank = 2
+      else if (label.includes(q)) rank = 3
+      else if (cmd.description.toLowerCase().includes(q)) rank = 4
+      else if (cmd.keywords?.some((k) => k.includes(q))) rank = 5
+      return { cmd, rank, order }
+    }).filter((r) => r.rank >= 0)
+    ranked.sort((a, b) => a.rank - b.rank || a.order - b.order)
+    return ranked.map((r) => r.cmd)
   }, [commands, query])
 
   // Reset selection on filter change

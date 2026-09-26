@@ -171,10 +171,18 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
 
       {/* State */}
       <td className="px-3 py-3">
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${sv.bg} ${sv.text} ${sv.ring}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
-          {container.state}
-        </span>
+        {container.on_demand && stateKey !== 'running' ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
+            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+            on demand
+          </span>
+        ) : (
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${sv.bg} ${sv.text} ${sv.ring}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
+            {container.state}
+            {container.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>}
+          </span>
+        )}
       </td>
 
       {/* CPU + Memory (inline stats) */}

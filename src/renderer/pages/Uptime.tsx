@@ -40,7 +40,8 @@ const COLORS = {
 // ---------------------------------------------------------------------------
 
 function calculateAvailability(container: ContainerInfo): number {
-  if (container.state !== 'running') return 0
+  // An on-demand container is available: Sablier starts it on the first request
+  if (container.state !== 'running') return container.on_demand ? 100 : 0
   if (container.restart_count === 0) return 100
   // Assume each restart caused ~30s downtime
   const estimatedDowntime = container.restart_count * 30
@@ -240,9 +241,18 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
 // StatusBadge
 // ---------------------------------------------------------------------------
 
-function StatusBadge({ state, health }: { state: string; health: string }) {
+function StatusBadge({ state, health, onDemand }: { state: string; health: string; onDemand?: boolean }) {
   const s = state.toLowerCase()
   const h = health.toLowerCase()
+
+  if (s !== 'running' && onDemand) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[10px] font-semibold text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+        On demand
+      </span>
+    )
+  }
 
   if (s === 'running' && h === 'healthy') {
     return (
@@ -566,7 +576,7 @@ export default function Uptime() {
                     <p className="text-[10px] text-slate-500 font-mono truncate max-w-[140px]">
                       {truncateImage(container.image)}
                     </p>
-                    <StatusBadge state={container.state} health={container.health} />
+                    <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
                   </div>
                 </div>
 
@@ -645,7 +655,7 @@ export default function Uptime() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-mono text-sm text-slate-200 truncate">{container.name}</p>
-                      <StatusBadge state={container.state} health={container.health} />
+                      <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-500">
                       {container.restart_count > 0 && (
