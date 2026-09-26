@@ -247,7 +247,7 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
 
   if (s !== 'running' && onDemand) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[10px] font-semibold text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[10px] font-semibold text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
         <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
         On demand
       </span>
@@ -256,7 +256,7 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
 
   if (s === 'running' && h === 'healthy') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
         Healthy
       </span>
@@ -264,7 +264,7 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
   }
   if (s === 'running' && h === 'unhealthy') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-[10px] font-semibold text-rose-400">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-[10px] font-semibold text-rose-400">
         <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
         Unhealthy
       </span>
@@ -272,7 +272,7 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
   }
   if (s === 'running') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
         Running
       </span>
@@ -280,14 +280,14 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
   }
   if (s === 'restarting') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-[10px] font-semibold text-amber-400">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-[10px] font-semibold text-amber-400">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
         Restarting
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/15 text-[10px] font-semibold text-slate-400">
+    <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/15 text-[10px] font-semibold text-slate-400">
       <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
       Stopped
     </span>
@@ -572,8 +572,8 @@ export default function Uptime() {
                       {container.name}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] text-slate-500 font-mono truncate max-w-[140px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-slate-500 font-mono truncate min-w-0" title={container.image}>
                       {truncateImage(container.image)}
                     </p>
                     <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
@@ -653,8 +653,8 @@ export default function Uptime() {
 
                   {/* Container info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-sm text-slate-200 truncate">{container.name}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-mono text-sm text-slate-200 truncate min-w-0">{container.name}</p>
                       <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-500">

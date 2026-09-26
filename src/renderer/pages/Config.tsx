@@ -538,7 +538,7 @@ export default function Config() {
       )}
 
       {cfg && (
-        <div className="lg:columns-2 lg:gap-5 space-y-5 lg:space-y-0 [&>*]:break-inside-avoid lg:[&>*]:mb-5">
+        <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
           {/* Environment */}
           <GroupCard
             icon={<Globe size={16} className="text-emerald-400" />}

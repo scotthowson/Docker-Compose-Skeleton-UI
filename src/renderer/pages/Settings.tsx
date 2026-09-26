@@ -2800,7 +2800,7 @@ export default function Settings() {
       <div className="space-y-5">
         {/* Cards keep their natural height and flow into two columns (no stretched, half-empty cards);
             full-width sections sit between the column groups */}
-        <div className="lg:columns-2 lg:gap-5 space-y-5 lg:space-y-0 [&>*]:break-inside-avoid lg:[&>*]:mb-5">
+        <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
         {/* Row 1: User Profile + Server Connection (side by side) */}
         <SectionCard
           icon={<UserCircle size={16} className="text-emerald-400" />}
@@ -2844,7 +2844,7 @@ export default function Settings() {
           <AppSettingsForm onDirtyChange={handleAppSettingsDirty} onRegisterSave={handleAppSettingsRegister} />
         </SectionCard>
 
-        <div className="lg:columns-2 lg:gap-5 space-y-5 lg:space-y-0 [&>*]:break-inside-avoid lg:[&>*]:mb-5">
+        <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
         {/* Row 4: Keyboard Shortcuts (hidden on mobile) + Disk Config */}
         {!isMobileDevice && (
           <SectionCard

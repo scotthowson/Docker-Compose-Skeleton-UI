@@ -128,7 +128,7 @@ function stateBadge(state: string, onDemand?: boolean): React.ReactNode {
   }
   if ((s === 'exited' || s === 'stopped' || s === 'created') && onDemand) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
         <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
         On demand
       </span>
