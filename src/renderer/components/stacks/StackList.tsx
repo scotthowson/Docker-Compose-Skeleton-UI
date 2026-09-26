@@ -10,6 +10,7 @@ import {
   Trash2, ListChecks,
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
+import { useContainerStore } from '../../stores/containerStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { usePluginStore } from '../../stores/pluginStore'
 import { deleteStack, fetchStackCompose } from '../../api/endpoints'
@@ -81,17 +82,39 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
     return list
   }, [stacks, sortMode, stackAnnotations])
 
+  // Containers per stack (from the global poll), so a search for a container finds its stack
+  const allContainers = useContainerStore((s) => s.containers)
+  const containersByStack = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const c of allContainers) {
+      const project = c.stack
+      if (!project) continue
+      const list = map.get(project) ?? []
+      list.push(c.name)
+      map.set(project, list)
+    }
+    return map
+  }, [allContainers])
+  const containerMatches = useCallback((stackName: string): string[] => {
+    const q = search.trim().toLowerCase()
+    if (!q) return []
+    return (containersByStack.get(stackName) ?? []).filter((n) => n.toLowerCase().includes(q))
+  }, [search, containersByStack])
+
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
     return sorted.filter((s) => {
-      const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-        (stackAnnotations[s.name]?.label ?? '').toLowerCase().includes(search.toLowerCase())
+      const matchesSearch = !q ||
+        s.name.toLowerCase().includes(q) ||
+        (stackAnnotations[s.name]?.label ?? '').toLowerCase().includes(q) ||
+        containerMatches(s.name).length > 0
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'running' && s.status === 'running') ||
         (statusFilter === 'stopped' && s.status === 'stopped')
       return matchesSearch && matchesStatus
     })
-  }, [sorted, search, statusFilter, stackAnnotations])
+  }, [sorted, search, statusFilter, stackAnnotations, containerMatches])
 
   const runningCount = stacks.filter((s) => s.status === 'running').length
   const stoppedCount = stacks.filter((s) => s.status === 'stopped').length
@@ -290,7 +313,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search stacks..."
+            placeholder="Search stacks or containers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="
@@ -393,6 +416,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               batchMode={batchMode}
               isSelected={selectedStacks?.has(stack.name)}
               onToggleSelect={onToggleSelect}
+              matchedContainers={search.trim() ? containerMatches(stack.name) : undefined}
               isAdmin={isAdmin}
             />
           ))}

@@ -200,7 +200,9 @@ function UserProfileDropdown({ onClose, onWhatsNew, hasUnseen }: { onClose: () =
   // SECURITY: Only allow http/https/data URIs for profile images — prevents javascript: XSS
   const profileIcon = profileIconRaw.length > 2 && /^(https?:|data:image\/)/.test(profileIconRaw) ? profileIconRaw : profileIconRaw.length <= 2 ? profileIconRaw : ''
   const profileEmail = profileData.email ?? ''
-  const statusEmoji = profileData.statusEmoji ?? ''
+  const statusEmojiRaw: string = profileData.statusEmoji ?? ''
+  // Older builds saved the emoji as its JSON escape text: show the emoji, not the text
+  const statusEmoji = /^(\\u[0-9A-Fa-f]{4})+$/.test(statusEmojiRaw) ? (() => { try { return JSON.parse('"' + statusEmojiRaw + '"') as string } catch { return '' } })() : statusEmojiRaw
 
   // Compute session duration from localStorage
   const sessionDuration = (() => {

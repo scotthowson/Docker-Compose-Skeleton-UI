@@ -32,6 +32,8 @@ interface Props {
   batchMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (name: string) => void
+  /** containers in this stack that match the current search */
+  matchedContainers?: string[]
   isAdmin?: boolean
 }
 
@@ -50,7 +52,7 @@ const priorityConfig = {
   low: { label: 'Low', color: 'text-slate-500', bg: 'bg-slate-500/10 border-slate-500/20', icon: Tag },
 }
 
-export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect, isAdmin = false }: Props) {
+export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect, matchedContainers, isAdmin = false }: Props) {
   const isRunning = stack.status === 'running'
   const lastActionTimestamps = useStackStore((s) => s.lastActionTimestamps)
   const lastAction = lastActionTimestamps[stack.name]
@@ -246,6 +248,17 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
         {/* Notes (if set) */}
         {annotation.notes && (
           <p className="text-[10px] text-slate-500 italic mb-2 line-clamp-2">{annotation.notes}</p>
+        )}
+
+        {/* Containers that match the search */}
+        {matchedContainers && matchedContainers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 mb-3 animate-fade-in">
+            <span className="text-[10px] text-slate-500 mr-0.5">contains</span>
+            {matchedContainers.slice(0, 6).map((n) => (
+              <span key={n} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">{n}</span>
+            ))}
+            {matchedContainers.length > 6 && <span className="text-[10px] text-slate-500">+{matchedContainers.length - 6}</span>}
+          </div>
         )}
 
         {/* Container count */}

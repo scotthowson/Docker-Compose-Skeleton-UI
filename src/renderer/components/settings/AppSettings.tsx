@@ -3,8 +3,10 @@
 // =============================================================================
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { Timer, Layout, RotateCcw } from 'lucide-react'
+import { Timer, Layout, RotateCcw, User, Gamepad2,
+} from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import type { PageId } from '../../../shared/types'
 import type { AppSettings as AppSettingsType } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -239,6 +241,12 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
         </div>
       </div>
 
+      {/* Personal */}
+      <PersonalSettings />
+
+      {/* Discord Rich Presence — desktop app only */}
+      {typeof window !== 'undefined' && window.electronAPI?.presenceStatus && <DiscordPresenceSettings />}
+
       {/* Reset to defaults */}
       <div className="flex items-center pt-2 border-t border-white/5">
         <button
@@ -254,6 +262,172 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
           <RotateCcw size={14} />
           Reset to Defaults
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Personal preferences
+// ---------------------------------------------------------------------------
+
+const LANDING_PAGES: { id: PageId; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'stacks', label: 'Stacks' },
+  { id: 'containers', label: 'Containers' },
+  { id: 'health', label: 'Health' },
+  { id: 'uptime', label: 'Uptime' },
+  { id: 'topology', label: 'Topology' },
+  { id: 'updates', label: 'Updates' },
+  { id: 'templates', label: 'Templates' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'activity', label: 'Activity' },
+]
+
+function Switch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${on ? 'bg-emerald-500' : 'bg-slate-700'}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${on ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  )
+}
+
+function PersonalSettings() {
+  const defaultPage = useSettingsStore((s) => s.defaultPage)
+  const use24hClock = useSettingsStore((s) => s.use24hClock)
+  const reduceMotion = useSettingsStore((s) => s.reduceMotion)
+  const updateSetting = useSettingsStore((s) => s.updateSetting)
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 mb-2">
+        <User size={14} className="text-emerald-400" />
+        <h4 className="text-sm font-semibold text-slate-200">Personal</h4>
+      </div>
+
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-medium text-slate-300">Start on</p>
+          <p className="text-xs text-slate-500">The page that opens right after you sign in</p>
+        </div>
+        <select
+          value={defaultPage ?? 'dashboard'}
+          onChange={(e) => updateSetting('defaultPage', e.target.value as PageId)}
+          className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+        >
+          {LANDING_PAGES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </div>
+
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-medium text-slate-300">24-hour clock</p>
+          <p className="text-xs text-slate-500">The clock in the status bar ({use24hClock !== false ? '13:05' : '1:05 PM'})</p>
+        </div>
+        <Switch on={use24hClock !== false} onChange={(v) => updateSetting('use24hClock', v)} />
+      </div>
+
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-medium text-slate-300">Reduce motion</p>
+          <p className="text-xs text-slate-500">Skip animations and transitions everywhere</p>
+        </div>
+        <Switch on={!!reduceMotion} onChange={(v) => updateSetting('reduceMotion', v)} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Discord Rich Presence (desktop app)
+// ---------------------------------------------------------------------------
+
+function DiscordPresenceSettings() {
+  const [enabled, setEnabled] = useState(false)
+  const [clientId, setClientId] = useState('')
+  const [status, setStatus] = useState<{ enabled: boolean; connected: boolean; clientId: string; error: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const refreshStatus = useCallback(async () => {
+    try { const s = await window.electronAPI?.presenceStatus?.(); if (s) setStatus(s) } catch { /* not in Electron */ }
+  }, [])
+
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+    Promise.all([api.getSetting('discordPresenceEnabled'), api.getSetting('discordClientId')])
+      .then(([en, id]) => { setEnabled(en === true); setClientId(typeof id === 'string' ? id : '') })
+      .catch(() => {})
+    void refreshStatus()
+    const t = setInterval(() => void refreshStatus(), 5000)
+    return () => clearInterval(t)
+  }, [refreshStatus])
+
+  const save = async (nextEnabled: boolean, nextId: string) => {
+    const api = window.electronAPI
+    if (!api) return
+    setSaving(true)
+    try {
+      await api.setSetting('discordClientId', nextId.trim())
+      await api.setSetting('discordPresenceEnabled', nextEnabled)
+      const s = await api.presenceConfigure?.()
+      if (s) setStatus(s)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const idOk = /^[0-9]{15,22}$/.test(clientId.trim())
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 mb-2">
+        <Gamepad2 size={14} className="text-indigo-400" />
+        <h4 className="text-sm font-semibold text-slate-200">Discord Rich Presence</h4>
+        {status && (
+          <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${status.connected ? 'bg-emerald-500/15 text-emerald-400' : status.enabled ? 'bg-amber-500/15 text-amber-400' : 'bg-white/[0.06] text-slate-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-emerald-400' : status.enabled ? 'bg-amber-400' : 'bg-slate-500'}`} />
+            {status.connected ? 'Showing on Discord' : status.enabled ? (status.error ? 'Discord not reachable' : 'Connecting…') : 'Off'}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-500 mb-2">
+        Shows “Managing {'{server}'}” with your container, stack and health counts on your Discord profile while this app is open. It talks to the Discord app on this computer; nothing is sent anywhere else.
+      </p>
+
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-medium text-slate-300">Show my server on Discord</p>
+          <p className="text-xs text-slate-500">Needs the Discord desktop app running and an Application ID below</p>
+        </div>
+        <Switch on={enabled} onChange={(v) => { setEnabled(v); void save(v, clientId) }} />
+      </div>
+
+      <div className="py-2">
+        <p className="text-sm font-medium text-slate-300 mb-1">Discord Application ID</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value.replace(/[^0-9]/g, ''))}
+            placeholder="123456789012345678"
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+          />
+          <button
+            type="button"
+            onClick={() => void save(enabled, clientId)}
+            disabled={saving || (!!clientId && !idOk)}
+            className="px-3 py-2 rounded-lg text-xs font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/25 disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+          Create an application at <span className="font-mono">discord.com/developers/applications</span> named “DCS Manager”, copy its Application ID here, and under Rich Presence → Art Assets upload three images named <span className="font-mono">dcs</span> (the big icon), <span className="font-mono">healthy</span> and <span className="font-mono">warning</span> (the small badge).
+        </p>
+        {status?.error && <p className="text-[11px] text-amber-400 mt-1">{status.error}</p>}
       </div>
     </div>
   )

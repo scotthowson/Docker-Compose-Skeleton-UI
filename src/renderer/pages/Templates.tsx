@@ -287,6 +287,17 @@ function lintCompose(compose: string): LintWarning[] {
 // Traefik route generation helper
 // ---------------------------------------------------------------------------
 
+interface SablierOptions {
+  /** idle time before the container is stopped, Go duration ("30m", "2h") */
+  session: string
+  /** waiting page: ghost, shuffle, hacker-terminal, matrix */
+  theme: string
+  showDetails: boolean
+}
+const SABLIER_DEFAULTS: SablierOptions = { session: '30m', theme: 'ghost', showDetails: true }
+const SABLIER_SESSIONS = ['5m', '15m', '30m', '1h', '2h', '6h', '12h']
+const SABLIER_THEMES = ['ghost', 'shuffle', 'hacker-terminal', 'matrix']
+
 function generateRouteYaml(
   serviceName: string,
   containerName: string,
@@ -295,6 +306,7 @@ function generateRouteYaml(
   autheliaProtected = false,
   autheliaMiddleware = 'authelia-forwardauth',
   onDemand = false,
+  sablier: SablierOptions = SABLIER_DEFAULTS,
 ): string {
   const routeId = serviceName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
   const protocol = ['443', '9443', '8443'].includes(containerPort) ? 'https' : 'http'
@@ -312,11 +324,11 @@ function generateRouteYaml(
         sablier:
           names: ${containerName}
           sablierUrl: http://Sablier:10000
-          sessionDuration: 30m
+          sessionDuration: ${sablier.session}
           dynamic:
             displayName: ${serviceName}
-            theme: ghost
-            showDetails: true
+            theme: ${sablier.theme}
+            showDetails: ${sablier.showDetails ? 'true' : 'false'}
             refreshFrequency: 5s
 `
     : ''
@@ -589,6 +601,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // What this install can offer per route: the Authelia middleware name and Sablier
   const [autheliaMw, setAutheliaMw] = useState('')
   const [sablierPresent, setSablierPresent] = useState(false)
+  const [sablierOpts, setSablierOpts] = useState<SablierOptions>(SABLIER_DEFAULTS)
+  const [showSablierOptions, setShowSablierOptions] = useState(false)
   // Homarr integration state
   const [homarrActive, setHomarrActive] = useState(false)
   const [addToHomarr, setAddToHomarr] = useState(false)
@@ -702,10 +716,11 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         (enableAuthelia || svc.authelia) && !!autheliaMw,
         autheliaMw || 'authelia-forwardauth',
         svc.onDemand && sablierPresent,
+        sablierOpts,
       )
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, autheliaMw, sablierPresent, containerNameFor])
+  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, autheliaMw, sablierPresent, sablierOpts, containerNameFor])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -1632,6 +1647,66 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                           )}
                         </div>
                       ))}
+
+                      {/* Start on demand (Sablier): which services, and how they sleep */}
+                      {sablierPresent && (() => {
+                        const enabledSvcs = routeServices.filter((s) => s.enabled)
+                        const onDemandCount = enabledSvcs.filter((s) => s.onDemand).length
+                        const setAll = (v: boolean) => setRouteServices((prev) => prev.map((s) => s.enabled ? { ...s, onDemand: v } : s))
+                        return (
+                          <div className="rounded-lg border border-indigo-500/15 bg-indigo-500/[0.04] overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setShowSablierOptions((v) => !v)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-indigo-500/[0.06] transition-colors"
+                            >
+                              <Moon size={12} className="text-indigo-300 shrink-0" />
+                              <span className="text-[11px] font-medium text-slate-200 flex-1">Start on demand (Sablier)</span>
+                              <span className="text-[10px] text-slate-500 shrink-0">
+                                {onDemandCount === 0 ? 'off' : `${onDemandCount} of ${enabledSvcs.length}`} · sleeps after {sablierOpts.session}
+                              </span>
+                              <ChevronDown size={12} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showSablierOptions ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showSablierOptions && (
+                              <div className="px-3 pb-3 space-y-2.5 animate-fade-in">
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                  Sablier stops a service after it has been idle for the sleep time and starts it on the next request, showing a waiting page meanwhile. Pick the services with the <span className="text-indigo-300">On demand</span> chips above, or all at once here.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <button type="button" onClick={() => setAll(true)} className="px-2 py-1 rounded text-[10px] font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/25 transition-colors">All on demand</button>
+                                  <button type="button" onClick={() => setAll(false)} className="px-2 py-1 rounded text-[10px] font-medium bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 transition-colors">None</button>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <label className="text-[10px] text-slate-400">
+                                    <span className="block mb-1">Sleep after idle</span>
+                                    <select
+                                      value={sablierOpts.session}
+                                      onChange={(e) => setSablierOpts((o) => ({ ...o, session: e.target.value }))}
+                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
+                                    >
+                                      {SABLIER_SESSIONS.map((s) => <option key={s} value={s}>{s.replace('m', ' minutes').replace('h', ' hours').replace('1 hours', '1 hour')}</option>)}
+                                    </select>
+                                  </label>
+                                  <label className="text-[10px] text-slate-400">
+                                    <span className="block mb-1">Waiting page</span>
+                                    <select
+                                      value={sablierOpts.theme}
+                                      onChange={(e) => setSablierOpts((o) => ({ ...o, theme: e.target.value }))}
+                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
+                                    >
+                                      {SABLIER_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                  </label>
+                                </div>
+                                <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
+                                  <input type="checkbox" checked={sablierOpts.showDetails} onChange={(e) => setSablierOpts((o) => ({ ...o, showDetails: e.target.checked }))} className="accent-indigo-500" />
+                                  Show the container name and status on the waiting page
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
 
                       {/* Advanced: raw YAML toggle */}
                       <button

@@ -11,6 +11,7 @@ import OnboardingOverlay from './components/common/OnboardingOverlay'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
 import { GlobalPoller } from './components/GlobalPoller'
+import DiscordPresence from './components/DiscordPresence'
 import { useSettingsStore } from './stores/settingsStore'
 import { useConnectionStore } from './stores/connectionStore'
 import { useAuthStore } from './stores/authStore'
@@ -148,6 +149,20 @@ export default function App() {
     }
     prevAuthRef.current = isAuthenticated
   }, [isAuthenticated])
+
+  // Personal preferences: reduced motion (a class the stylesheet honours) and the page after sign-in
+  const reduceMotion = useSettingsStore((s) => s.reduceMotion)
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', !!reduceMotion)
+  }, [reduceMotion])
+  const defaultPage = useSettingsStore((s) => s.defaultPage)
+  const prevAuthForPageRef = useRef(isAuthenticated)
+  useEffect(() => {
+    if (!prevAuthForPageRef.current && isAuthenticated && defaultPage && defaultPage !== 'dashboard') {
+      setCurrentPage(defaultPage)
+    }
+    prevAuthForPageRef.current = isAuthenticated
+  }, [isAuthenticated, defaultPage, setCurrentPage])
 
   // Load settings first, then sync server URL to the connection layer
   useEffect(() => {
@@ -617,6 +632,7 @@ export default function App() {
 
         {/* Global data polling (sidebar badges, status bar) */}
         <GlobalPoller />
+        <DiscordPresence />
 
         {/* Command Palette + Keyboard Shortcuts */}
         <CommandPalette />

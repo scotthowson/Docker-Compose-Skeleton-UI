@@ -14,11 +14,13 @@ import {
   Box,
   X,
   Layers,
-  ExternalLink,
+  ExternalLink, Download, Copy, Expand, Shrink, Link2,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchTopology } from '../api/endpoints'
 import type {
@@ -422,8 +424,14 @@ export default function Topology() {
     fetchTopology, 15000, { enabled: isConnected },
   )
 
+  const { addToast } = useToast()
+  const hostForExport = useSystemStore((s) => s.status?.hostname)
+  const reduceMotionPref = useSettingsStore((s) => s.reduceMotion)
   // Zoom & pan
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
@@ -495,6 +503,93 @@ export default function Topology() {
     setPan({ x: (rect.width - layout.w * fitZoom) / 2, y: (rect.height - layout.h * fitZoom) / 2 })
   }, [layout])
 
+  // --- Fullscreen: the map fills the screen, then re-fits ---
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void el.requestFullscreen?.()
+  }, [])
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+      setTimeout(() => handleReset(), 60)
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [handleReset])
+
+  // --- Export: the whole map as a PNG (download or clipboard), with a caption ---
+  const exportImage = useCallback(async (mode: 'download' | 'copy') => {
+    const svg = svgRef.current
+    if (!svg || !layout || exporting) return
+    setExporting(true)
+    try {
+      const PADX = 48, PADY = 48, FOOT = 44
+      const w = Math.ceil(layout.w + PADX * 2)
+      const h = Math.ceil(layout.h + PADY * 2 + FOOT)
+      const clone = svg.cloneNode(true) as SVGSVGElement
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      clone.setAttribute('width', String(w))
+      clone.setAttribute('height', String(h))
+      clone.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      clone.removeAttribute('class')
+      clone.removeAttribute('style')
+      const rootGroup = clone.querySelector('g')
+      if (rootGroup) rootGroup.setAttribute('transform', `translate(${PADX},${PADY}) scale(1)`)
+      const ns = 'http://www.w3.org/2000/svg'
+      const style = document.createElementNS(ns, 'style')
+      style.textContent = 'text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; } .topo-flow, .topo-pulse { animation: none; }'
+      const bg = document.createElementNS(ns, 'rect')
+      bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#0b1220')
+      clone.insertBefore(bg, clone.firstChild)
+      clone.insertBefore(style, clone.firstChild)
+      const xml = new XMLSerializer().serializeToString(clone)
+      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }))
+      const img = new Image()
+      try {
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('The map could not be rendered to an image'))
+          img.src = url
+        })
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+      const scale = 2
+      const canvas = document.createElement('canvas')
+      canvas.width = w * scale
+      canvas.height = h * scale
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Canvas is not available')
+      ctx.scale(scale, scale)
+      ctx.drawImage(img, 0, 0, w, h)
+      const host = hostForExport || 'DCS'
+      ctx.fillStyle = 'rgba(148,163,184,0.9)'
+      ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif'
+      ctx.fillText(`DCS Manager · ${host} · ${new Date().toLocaleString()} · ${totalContainers} containers · ${totalNetworks} networks · ${totalEdges} links`, PADX, h - 18)
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error('PNG encoding failed')
+      if (mode === 'copy') {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        addToast({ type: 'success', message: 'Topology copied to the clipboard' })
+      } else {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `dcs-topology-${host.replace(/[^A-Za-z0-9_-]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+        addToast({ type: 'success', message: 'Topology saved as PNG' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Export failed' })
+    } finally {
+      setExporting(false)
+    }
+  }, [layout, exporting, hostForExport, totalContainers, totalNetworks, totalEdges, addToast])
+
   // React's onWheel is passive (preventDefault is ignored and the page scrolls),
   // so the wheel is handled natively: multiplicative zoom centred on the cursor.
   const zoomRef = useRef(zoom); zoomRef.current = zoom
@@ -518,7 +613,7 @@ export default function Topology() {
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [layout])
-  const reduceMotion = useMemo(() => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, [])
+  const reduceMotion = useMemo(() => reduceMotionPref || (typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches), [reduceMotionPref])
 
   // --- Pan handlers ---
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -673,11 +768,12 @@ export default function Topology() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {[
           { icon: Layers, label: 'Stacks', value: layout?.stacks.length ?? 0, color: 'text-violet-400' },
           { icon: Box, label: 'Containers', value: totalContainers, color: 'text-emerald-400' },
           { icon: Network, label: 'Networks', value: totalNetworks, color: 'text-cyan-400' },
+          { icon: Link2, label: 'Links', value: totalEdges, color: 'text-amber-400' },
         ].map((s) => (
           <div key={s.label} className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-4">
             <div className="flex items-center gap-1.5 mb-1">
@@ -693,21 +789,31 @@ export default function Topology() {
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-6">
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-3 md:mb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <Network size={15} className="text-cyan-400" />
             <h3 className="text-xs md:text-sm font-semibold text-slate-300">Topology Map</h3>
             <span className="text-[10px] text-slate-500 ml-1">{Math.round(zoom * 100)}%</span>
+            {(hoveredContainer || hoveredNetwork || hoveredStack) && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-mono text-cyan-300 truncate max-w-[220px] animate-fade-in">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                {hoveredContainer || hoveredNetwork || hoveredStack}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-0.5">
             {[
-              { fn: handleZoomIn, icon: ZoomIn, title: 'Zoom in' },
-              { fn: handleZoomOut, icon: ZoomOut, title: 'Zoom out' },
-              { fn: handleReset, icon: Maximize2, title: 'Fit to view' },
+              { fn: handleZoomIn, icon: ZoomIn, title: 'Zoom in', disabled: false },
+              { fn: handleZoomOut, icon: ZoomOut, title: 'Zoom out', disabled: false },
+              { fn: handleReset, icon: Maximize2, title: 'Fit to view', disabled: false },
+              { fn: () => void exportImage('download'), icon: Download, title: 'Save as PNG', disabled: exporting || !layout },
+              { fn: () => void exportImage('copy'), icon: Copy, title: 'Copy image to clipboard', disabled: exporting || !layout },
+              { fn: toggleFullscreen, icon: isFullscreen ? Shrink : Expand, title: isFullscreen ? 'Leave fullscreen' : 'Fullscreen', disabled: !layout },
             ].map((btn) => (
               <button
                 key={btn.title}
                 onClick={btn.fn}
-                className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+                disabled={btn.disabled}
+                className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all disabled:opacity-40"
                 title={btn.title}
               >
                 <btn.icon size={14} />
@@ -730,9 +836,9 @@ export default function Topology() {
         ) : layout ? (
           <div
             ref={containerRef}
-            className="relative overflow-hidden rounded-lg border border-white/[0.03] bg-slate-950/50"
+            className={`relative overflow-hidden rounded-lg border border-white/[0.03] ${isFullscreen ? 'bg-[#0b1220]' : 'bg-slate-950/50'}`}
             style={{
-              height: 'clamp(300px, 55vh, 640px)',
+              height: isFullscreen ? '100vh' : 'clamp(300px, 55vh, 640px)',
               cursor: isPanning ? 'grabbing' : 'grab',
               touchAction: 'none',
             }}
@@ -744,7 +850,7 @@ export default function Topology() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <svg width="100%" height="100%" className="select-none" style={{ overflow: 'visible' }}>
+            <svg ref={svgRef} width="100%" height="100%" className="select-none" style={{ overflow: 'visible' }}>
               <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
 
                 {/* =========== SVG DEFS =========== */}
@@ -808,6 +914,19 @@ export default function Topology() {
                           filter="url(#wireGlow)"
                         />
                       )}
+                      {/* Flow along the wire while it is highlighted */}
+                      {isHigh && !reduceMotion && (
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke={wireColor}
+                          strokeWidth={2.4}
+                          strokeOpacity={0.55}
+                          strokeLinecap="round"
+                          strokeDasharray="5 14"
+                          className="topo-flow"
+                        />
+                      )}
                       {/* Main wire */}
                       <path
                         d={path}
@@ -857,6 +976,18 @@ export default function Topology() {
                             strokeWidth={5}
                             strokeOpacity={0.12}
                             filter="url(#wireGlow)"
+                          />
+                        )}
+                        {isHigh && !reduceMotion && (
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke={net.color}
+                            strokeWidth={2.4}
+                            strokeOpacity={0.6}
+                            strokeLinecap="round"
+                            strokeDasharray="5 14"
+                            className="topo-flow"
                           />
                         )}
                         {/* Main wire */}
@@ -1036,6 +1167,19 @@ export default function Topology() {
                             strokeWidth={1}
                             strokeOpacity={0.3}
                           />
+                          {hoveredContainer === c.node.id && !reduceMotion && (
+                            <rect
+                              x={c.x - CONTAINER_W / 2 - 2}
+                              y={c.y - 2}
+                              width={CONTAINER_W + 4}
+                              height={CONTAINER_H + 4}
+                              rx={CONTAINER_RX + 2}
+                              fill="none"
+                              stroke={stroke}
+                              strokeWidth={1.5}
+                              className="topo-pulse"
+                            />
+                          )}
                         </>
                       )}
 
@@ -1351,7 +1495,7 @@ export default function Topology() {
           <div className="mt-3 md:mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 md:gap-x-4 md:gap-y-2">
             <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider mr-1">Networks:</span>
             {layout.networks.map((n) => (
-              <div key={n.network.name} className="flex items-center gap-1.5">
+              <div key={n.network.name} className="flex items-center gap-1.5 rounded-full bg-white/[0.03] border border-white/5 px-2 py-0.5 hover:border-white/10 transition-colors">
                 <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shrink-0" style={{ backgroundColor: n.color }} />
                 <span className="text-[10px] md:text-[11px] text-slate-400 font-mono">{n.network.name}</span>
                 <span className="text-[9px] md:text-[10px] text-slate-500">({n.network.container_count})</span>
@@ -1365,7 +1509,7 @@ export default function Topology() {
               { label: 'Warning', color: '#f59e0b' },
               { label: 'Stopped', color: '#ef4444' },
             ].map((h) => (
-              <div key={h.label} className="flex items-center gap-1">
+              <div key={h.label} className="flex items-center gap-1 rounded-full bg-white/[0.03] border border-white/5 px-2 py-0.5">
                 <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} />
                 <span className="text-[9px] md:text-[10px] text-slate-500">{h.label}</span>
               </div>

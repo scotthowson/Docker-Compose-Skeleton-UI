@@ -99,6 +99,10 @@ function getProfileData(): ProfileData {
     let raw = localStorage.getItem(key)
     if (!raw && key !== 'user-profile') raw = localStorage.getItem('user-profile')
     const parsed = raw ? JSON.parse(raw) : {}
+    // Older builds stored the emoji as its JSON escape text ("\\uD83D\\uDFE2"): decode it once
+    if (typeof parsed.statusEmoji === 'string' && /^(\\u[0-9A-Fa-f]{4})+$/.test(parsed.statusEmoji)) {
+      try { parsed.statusEmoji = JSON.parse('"' + parsed.statusEmoji + '"') } catch { parsed.statusEmoji = '' }
+    }
     return { ...defaults, ...parsed }
   } catch {
     return defaults
@@ -133,6 +137,9 @@ function ProfileSettings() {
       .then((res) => {
         if (cancelled || !res.profile) return
         const serverProfile = res.profile as unknown as Partial<ProfileData>
+        if (typeof serverProfile.statusEmoji === 'string' && /^(\\u[0-9A-Fa-f]{4})+$/.test(serverProfile.statusEmoji)) {
+          try { serverProfile.statusEmoji = JSON.parse('"' + serverProfile.statusEmoji + '"') } catch { serverProfile.statusEmoji = '' }
+        }
         const localProfile = getProfileData()
         // Server wins for all fields, but keep local if server field is empty
         const merged: ProfileData = { ...localProfile }
@@ -348,12 +355,12 @@ function ProfileSettings() {
             "
           >
             <option value="">Select status...</option>
-            <option value="\uD83D\uDFE2">{'\uD83D\uDFE2'} Online</option>
-            <option value="\uD83D\uDFE1">{'\uD83D\uDFE1'} Away</option>
-            <option value="\uD83D\uDD34">{'\uD83D\uDD34'} Busy</option>
-            <option value="\u26AB">{'\u26AB'} Do Not Disturb</option>
-            <option value="\uD83D\uDFE3">{'\uD83D\uDFE3'} In a Meeting</option>
-            <option value="\uD83D\uDCA4">{'\uD83D\uDCA4'} Offline</option>
+            <option value={'\uD83D\uDFE2'}>{'\uD83D\uDFE2'} Online</option>
+            <option value={'\uD83D\uDFE1'}>{'\uD83D\uDFE1'} Away</option>
+            <option value={'\uD83D\uDD34'}>{'\uD83D\uDD34'} Busy</option>
+            <option value={'\u26AB'}>{'\u26AB'} Do Not Disturb</option>
+            <option value={'\uD83D\uDFE3'}>{'\uD83D\uDFE3'} In a Meeting</option>
+            <option value={'\uD83D\uDCA4'}>{'\uD83D\uDCA4'} Offline</option>
           </select>
           <input
             type="text"

@@ -13,6 +13,28 @@ export interface ElectronAPI {
   checkServer: (serverUrl: string) => Promise<{ reachable: boolean; initialized: boolean; error?: string }>
   /** Generic JSON fetch via Node.js http (bypasses all browser security) */
   netFetchJson: (url: string) => Promise<{ ok: boolean; status: number; data: unknown; error?: string }>
+  /** Discord Rich Presence (desktop app only): push the latest facts */
+  presenceUpdate?: (payload: DiscordPresencePayload) => Promise<boolean>
+  presenceStatus?: () => Promise<DiscordPresenceStatus>
+  presenceConfigure?: () => Promise<DiscordPresenceStatus>
+}
+
+export interface DiscordPresencePayload {
+  details: string
+  state: string
+  largeImageKey?: string
+  largeImageText?: string
+  smallImageKey?: string
+  smallImageText?: string
+  startTimestamp?: number
+  buttons?: { label: string; url: string }[]
+}
+
+export interface DiscordPresenceStatus {
+  enabled: boolean
+  connected: boolean
+  clientId: string
+  error: string
 }
 
 declare global {
@@ -156,6 +178,8 @@ export interface StackUpdateResponse {
 export interface ContainerInfo {
   /** Sablier starts this container on the first request and stops it when idle */
   on_demand?: boolean
+  /** Compose project (the stack) this container belongs to, "" for containers Compose does not manage */
+  stack?: string
   name: string
   state: string
   health: string
@@ -757,6 +781,12 @@ export interface AppSettings {
   lastUsername: string
   /** Session duration in minutes (0 = indefinite) */
   sessionDurationMinutes: number
+  /** Page shown right after sign-in */
+  defaultPage: PageId
+  /** Status-bar clock: 24-hour (true) or 12-hour */
+  use24hClock: boolean
+  /** Turn off animations and transitions */
+  reduceMotion: boolean
 }
 
 // ---------------------------------------------------------------------------

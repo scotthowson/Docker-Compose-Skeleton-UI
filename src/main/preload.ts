@@ -9,6 +9,12 @@ export interface ElectronAPI {
   checkServer: (serverUrl: string) => Promise<{ reachable: boolean; initialized: boolean; error?: string }>
   /** Generic JSON fetch via Node.js http (bypasses all browser security) */
   netFetchJson: (url: string) => Promise<{ ok: boolean; status: number; data: unknown; error?: string }>
+  /** Discord Rich Presence: push the latest facts (details/state lines, images, buttons) */
+  presenceUpdate: (payload: Record<string, unknown>) => Promise<boolean>
+  /** Discord Rich Presence: connection state for the Settings page */
+  presenceStatus: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string }>
+  /** Re-read the discord* settings and reconnect */
+  presenceConfigure: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string }>
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -18,4 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkServer: (serverUrl: string) => ipcRenderer.invoke('check-server', serverUrl),
   netFetchJson: (url: string) => ipcRenderer.invoke('net-fetch-json', url),
+  presenceUpdate: (payload: Record<string, unknown>) => ipcRenderer.invoke('presence-update', payload),
+  presenceStatus: () => ipcRenderer.invoke('presence-status'),
+  presenceConfigure: () => ipcRenderer.invoke('presence-configure'),
 } satisfies ElectronAPI)

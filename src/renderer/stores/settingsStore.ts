@@ -29,6 +29,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rememberUsername: true,
   lastUsername: '',
   sessionDurationMinutes: 240,
+  defaultPage: 'dashboard',
+  use24hClock: true,
+  reduceMotion: false,
 }
 
 interface SettingsState extends AppSettings {

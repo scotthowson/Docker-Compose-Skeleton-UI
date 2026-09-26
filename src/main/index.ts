@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, session, Menu } from 'electron'
 import path from 'path'
 import http from 'http'
 import Store from 'electron-store'
+import { configurePresence, updatePresence, presenceStatus, shutdownPresence, type PresencePayload } from './presence'
 
 // Disable Chromium's Private Network Access preflight checks so the renderer
 // can fetch() to local/private IPs without CORS preflight blocking.
@@ -119,9 +120,24 @@ ipcMain.handle('set-setting', (_event, key: string, value: unknown) => {
   } else {
     store.set(key, value)
   }
+  if (key.startsWith('discord')) void applyPresenceSettings()
   return true
 })
 ipcMain.handle('get-version', () => app.getVersion())
+
+// Discord Rich Presence (local Discord client over IPC; off until turned on in Settings)
+function applyPresenceSettings() {
+  return configurePresence({
+    enabled: store.get('discordPresenceEnabled') === true,
+    clientId: String(store.get('discordClientId') ?? ''),
+  })
+}
+ipcMain.handle('presence-update', (_event, payload: PresencePayload) => {
+  if (payload && typeof payload.details === 'string' && typeof payload.state === 'string') updatePresence(payload)
+  return true
+})
+ipcMain.handle('presence-status', () => presenceStatus())
+ipcMain.handle('presence-configure', () => applyPresenceSettings().then(() => presenceStatus()))
 
 // Combined server check: tests connectivity AND setup status in one call.
 // Uses Node.js http module (NOT Chromium net.fetch) — zero browser security
@@ -207,9 +223,11 @@ app.whenReady().then(() => {
   }
 
   createWindow()
+  void applyPresenceSettings()
 })
 
 app.on('before-quit', () => {
+  void shutdownPresence()
   if (mainWindow) {
     mainWindow.removeAllListeners('close')
   }

@@ -67,6 +67,13 @@ function gaugeColor(pctVal: number): string {
   return '#f43f5e'
 }
 
+/** For gauges where 100 % is the good end (containers running, images current) */
+function healthGaugeColor(pctVal: number): string {
+  if (pctVal >= 90) return '#10b981'
+  if (pctVal >= 70) return '#f59e0b'
+  return '#f43f5e'
+}
+
 // =============================================================================
 // SVG Health Score Ring
 // =============================================================================
@@ -137,9 +144,11 @@ function HealthScoreRing({ score }: { score: number }) {
 // =============================================================================
 
 function SemiGauge({
-  label, value, icon, suffix = '%',
+  label, value, icon, suffix = '%', mode = 'usage',
 }: {
   label: string; value: number; icon: React.ReactNode; suffix?: string
+  /** usage: high is bad (CPU, memory); health: high is good (containers up, images current) */
+  mode?: 'usage' | 'health'
 }) {
   const clamped = clamp(value, 0, 100)
   const radius = 52
@@ -147,7 +156,7 @@ function SemiGauge({
   // Semi-circle: PI * r
   const halfCircumference = Math.PI * radius
   const dashOffset = halfCircumference - (clamped / 100) * halfCircumference
-  const color = gaugeColor(clamped)
+  const color = mode === 'health' ? healthGaugeColor(clamped) : gaugeColor(clamped)
 
   return (
     <div className="flex flex-col items-center glass border border-white/5 rounded-xl px-5 py-5 hover:border-white/10 transition-all duration-300">
@@ -1585,11 +1594,13 @@ export default function Diagnostics() {
                     label="Containers"
                     value={containerRunPct}
                     icon={<Box size={12} />}
+                    mode="health"
                   />
                   <SemiGauge
                     label="Image Health"
                     value={imageHealthPct}
                     icon={<HardDrive size={12} />}
+                    mode="health"
                   />
                 </div>
               </div>
