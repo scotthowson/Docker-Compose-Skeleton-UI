@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   CalendarClock, Plus, Trash2, Play, Pause, Clock, History, RefreshCw,
   Archive, Wrench, HeartPulse, RotateCcw, X, Loader2, ChevronDown,
-  ChevronRight, CheckCircle, XCircle, AlertTriangle, Pencil, Activity, Zap,
+  ChevronRight, CheckCircle, XCircle, AlertTriangle, Pencil, Activity, Zap, ArrowUpCircle, LifeBuoy,
 } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -14,11 +14,18 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 const actionIcons: Record<string, React.ElementType> = {
   backup: Archive, update: RefreshCw, prune: Wrench, 'health-check': HeartPulse,
   restart: RotateCcw, 'metrics-snapshot': Activity, custom: Play,
+  'dcs-update': ArrowUpCircle, recovery: LifeBuoy,
 }
 const actionLabels: Record<string, string> = {
   backup: 'Backup', update: 'Update Stack', prune: 'Docker Prune',
   'health-check': 'Health Check', restart: 'Restart Stack',
   'metrics-snapshot': 'Metrics Snapshot', custom: 'Custom Script',
+  'dcs-update': 'DCS Self-Update', recovery: 'Recovery Bundle',
+}
+/** What the target field means per action (empty: no target) */
+const actionTargetHints: Record<string, string> = {
+  'dcs-update': 'Leave empty, or "images" to pull image updates for every stack as well. Rolls back by itself when the health score drops.',
+  recovery: 'No target. Needs the RECOVERY_PASSPHRASE secret (Backup page); copies to RECOVERY_REMOTE when set.',
 }
 
 const scheduleOptions = [
@@ -32,7 +39,7 @@ const scheduleOptions = [
   { value: '@monthly', label: 'Every month' },
 ]
 
-const actionOptions = ['backup', 'update', 'prune', 'health-check', 'restart', 'metrics-snapshot', 'custom']
+const actionOptions = ['backup', 'update', 'prune', 'health-check', 'restart', 'metrics-snapshot', 'dcs-update', 'recovery', 'custom']
 
 export default function Schedules() {
   const { schedules, history, loading, saving, error, fetchSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runSchedule, fetchHistory } = useScheduleStore()
@@ -270,6 +277,9 @@ export default function Schedules() {
                 <select value={form.action} onChange={e => setForm({ ...form, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
                   {actionOptions.map(a => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
                 </select>
+                {actionTargetHints[form.action] && (
+                  <p className="text-[10px] text-slate-500 mt-1.5">{actionTargetHints[form.action]}</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">

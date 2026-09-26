@@ -9,14 +9,14 @@ import {
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
   Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight, Palette,
-  AlertTriangle,
+  AlertTriangle, LifeBuoy,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup, authLogin, deployTemplate, setSecret,
+  authSetup, authLogin, deployTemplate, setSecret, setupRestore,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
@@ -241,6 +241,34 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // Pre-flight validation
   const [alreadyConfigured, setAlreadyConfigured] = useState(false)
   const [needsAdmin, setNeedsAdmin] = useState(true)
+  // Restore a recovery bundle instead of setting up from scratch
+  const [restoreOpen, setRestoreOpen] = useState(false)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [restorePass, setRestorePass] = useState('')
+  const [restoring, setRestoring] = useState(false)
+  const [restoreDone, setRestoreDone] = useState<string | null>(null)
+  const [restoreError, setRestoreError] = useState<string | null>(null)
+  const handleRestoreBundle = useCallback(async () => {
+    if (!restoreFile || !restorePass || restoring) return
+    setRestoring(true)
+    setRestoreError(null)
+    try {
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => { const r = String(reader.result || ''); resolve(r.includes(',') ? r.slice(r.indexOf(',') + 1) : r) }
+        reader.onerror = () => reject(new Error('Could not read the file'))
+        reader.readAsDataURL(restoreFile)
+      })
+      const res = await setupRestore(b64, restorePass)
+      setRestoreDone(res.message || 'Restored')
+      // the restored accounts and settings take over: reload into the sign-in page
+      setTimeout(() => window.location.reload(), res.restart_scheduled ? 7000 : 2500)
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : 'Restore failed')
+    } finally {
+      setRestoring(false)
+    }
+  }, [restoreFile, restorePass, restoring])
 
   // Server URL from settings
   const { setServerUrl } = useConnectionStore()
@@ -950,6 +978,57 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <p className="text-[10px] text-cyan-400/80">
                     A previous setup was interrupted. Sign in with your admin credentials to pick up where you left off.
                   </p>
+                </div>
+              )}
+
+              {needsAdmin && (
+                <div className="mb-5 rounded-xl border border-white/5 bg-white/[0.02]">
+                  <button
+                    type="button"
+                    onClick={() => setRestoreOpen((v) => !v)}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left"
+                  >
+                    <LifeBuoy size={14} className="text-rose-300 shrink-0" />
+                    <span className="text-xs font-medium text-slate-300 flex-1">Moving from another server? Restore a recovery bundle</span>
+                    <ChevronDown size={14} className={`text-slate-500 transition-transform ${restoreOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {restoreOpen && (
+                    <div className="px-4 pb-4 space-y-3 animate-fade-in">
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        A bundle made on the Backup page brings back the accounts, settings, secrets, stacks, routes, templates and plugins. Afterwards sign in with the account you had before and start the stacks.
+                      </p>
+                      <input
+                        type="file"
+                        accept=".enc,application/octet-stream"
+                        onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
+                        className="block w-full text-[11px] text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-white/10 file:text-slate-200 file:text-xs hover:file:bg-white/15"
+                      />
+                      <div className="relative">
+                        <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input
+                          type="password"
+                          value={restorePass}
+                          onChange={(e) => setRestorePass(e.target.value)}
+                          placeholder="Bundle passphrase"
+                          className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                        />
+                      </div>
+                      {restoreError && <p className="text-[10px] text-rose-400">{restoreError}</p>}
+                      {restoreDone ? (
+                        <p className="text-[11px] text-emerald-400">{restoreDone} Reloading…</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRestoreBundle}
+                          disabled={!restoreFile || restorePass.length < 8 || restoring}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-rose-500/90 text-white hover:bg-rose-400 disabled:opacity-50 transition-all"
+                        >
+                          {restoring ? <Loader2 size={13} className="animate-spin" /> : <LifeBuoy size={13} />}
+                          {restoring ? 'Restoring…' : 'Restore this bundle'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

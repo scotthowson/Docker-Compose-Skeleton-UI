@@ -75,6 +75,8 @@ export interface HealthReport {
     stopped: number
     /** Stopped on purpose: Sablier starts them on the first request */
     sleeping?: number
+    /** On-demand containers that no longer exist (a prune removed them): POST /sablier/repair recreates them */
+    on_demand_missing?: string[]
   }
   containers: HealthContainer[]
   api?: ApiHealthMetrics
@@ -237,6 +239,23 @@ export interface ImageInfo {
 export interface ServerConfig {
   environment: string
   update_channel?: string
+  update_auto_rollback?: boolean
+  update_health_grace?: number
+  update_rollback_drop?: number
+  ups_enabled?: boolean
+  ups_source?: string
+  ups_nut_host?: string
+  ups_nut_port?: number
+  ups_name?: string
+  ups_poll_interval?: number
+  ups_shutdown_charge?: number
+  ups_shutdown_runtime?: number
+  ups_on_battery_action?: string
+  ups_host_shutdown_cmd?: string
+  ups_start_on_power?: boolean
+  recovery_dest_dir?: string
+  recovery_remote?: string
+  recovery_retention_count?: number
   log_level: string
   compose_dir: string
   app_data_dir: string
@@ -1003,7 +1022,7 @@ export interface SystemUpdateLocalChanges {
   conflicts: string[]
 }
 
-export type SystemRestartMethod = 'reexec' | 'systemd' | 'manual'
+export type SystemRestartMethod = 'reexec' | 'systemd' | 'relaunch' | 'manual'
 
 export interface SystemUpdateCheckResponse {
   available: boolean
@@ -1083,6 +1102,102 @@ export interface SystemRestartResponse {
   method: SystemRestartMethod
   eta_seconds: number
   hint: string
+}
+
+// GET /traefik/status
+export interface TraefikStatusResponse {
+  active: boolean
+  domain: string
+  /** forward-auth middleware name this install defines ("" when Authelia is not set up) */
+  authelia_middleware?: string
+  authelia?: boolean
+  sablier?: boolean
+}
+
+// GET /power
+export interface PowerStatus {
+  enabled: boolean
+  source: 'nut' | 'apcupsd' | 'none' | string
+  ups?: string
+  ok?: boolean
+  error?: string
+  status?: string
+  on_battery?: boolean
+  low_battery?: boolean
+  charge?: number | null
+  runtime_seconds?: number | null
+  load?: number | null
+  input_voltage?: number | null
+  model?: string
+  sampled_at?: string
+  stacks_stopped?: boolean
+  last_event?: string
+  loop_running?: boolean
+  stale?: boolean
+  hint?: string
+}
+
+// GET /recovery
+export interface RecoveryBundleEntry {
+  file: string
+  size: number
+  size_human: string
+  created: string
+  checksum: boolean
+}
+
+export interface RecoveryListResponse {
+  dest_dir: string
+  remote: string
+  retention: number
+  passphrase_set: boolean
+  stacks: string[]
+  bundles: RecoveryBundleEntry[]
+}
+
+export interface RecoveryBundleResponse {
+  success: boolean
+  file: string
+  path: string
+  size: number
+  size_human: string
+  stacks: number
+  app_data: string[]
+  remote_copied: boolean
+  note: string
+  message: string
+}
+
+export interface RecoveryRestoreResponse {
+  success: boolean
+  file?: string
+  stacks: number
+  users: number
+  initialized?: boolean
+  restart_scheduled: boolean
+  restart: SystemRestartInfo
+  message: string
+}
+
+// GET /system/update/history
+export interface SystemUpdateHistoryEntry {
+  type: string
+  timestamp: string
+  /** updated | rolled-back | failed | needs-consent | check-failed | images */
+  result: string
+  message: string
+  from: string
+  to: string
+  channel: string
+}
+
+export interface SystemUpdateHistoryResponse {
+  running: boolean
+  entries: SystemUpdateHistoryEntry[]
+  log_tail: string
+  auto_rollback: boolean
+  health_grace: number
+  rollback_drop: number
 }
 
 export interface OsUpdateCheckResponse {
@@ -1612,6 +1727,10 @@ export interface TemplateDeployResponse {
   containers?: Record<string, string>
   /** Set when the start runs in the background: poll GET /stacks/{stack}/activity */
   activity_id?: string
+  /** services deployed with a Sablier middleware */
+  on_demand?: string[]
+  /** true when the Sablier plugin had to be declared and Traefik was restarted once */
+  traefik_restarted?: boolean
 }
 
 // GET /stacks/:stack/activity — progress of a background action on a stack

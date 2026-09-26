@@ -1,0 +1,240 @@
+// =============================================================================
+// RecoveryBundleCard — one encrypted archive that rebuilds this install
+// anywhere: make it, download it, keep the passphrase in the secret store,
+// restore one, upload one from another box.
+// =============================================================================
+
+import { useCallback, useState } from 'react'
+import { LifeBuoy, Download, Loader2, Upload, RotateCcw, KeyRound, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { usePolling } from '../../hooks/usePolling'
+import { useConnectionStore } from '../../stores/connectionStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useToast } from '../common/Toast'
+import { apiClient } from '../../api/client'
+import { fetchRecovery, createRecoveryBundle, restoreRecoveryBundle, uploadRecoveryBundle, setSecret } from '../../api/endpoints'
+import type { RecoveryBundleEntry } from '../../../shared/types'
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => { const r = String(reader.result || ''); resolve(r.includes(',') ? r.slice(r.indexOf(',') + 1) : r) }
+    reader.onerror = () => reject(new Error('Could not read the file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+export default function RecoveryBundleCard() {
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
+  const { addToast } = useToast()
+  const { data, refetch } = usePolling(fetchRecovery, 30000, { enabled: isConnected && isAdmin })
+  const [passphrase, setPassphrase] = useState('')
+  const [storePass, setStorePass] = useState(true)
+  const [appData, setAppData] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState<string | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<RecoveryBundleEntry | null>(null)
+  const [restorePass, setRestorePass] = useState('')
+  const [result, setResult] = useState<string | null>(null)
+
+  const create = useCallback(async () => {
+    if (busy) return
+    if (!data?.passphrase_set && passphrase.length < 8) { addToast({ type: 'error', message: 'Choose a passphrase of at least 8 characters' }); return }
+    setBusy('create')
+    setResult(null)
+    try {
+      if (passphrase && storePass && !data?.passphrase_set) {
+        await setSecret('RECOVERY_PASSPHRASE', passphrase)
+      }
+      const res = await createRecoveryBundle({ passphrase: passphrase || undefined, include_app_data: Array.from(appData), copy_remote: true })
+      setResult(res.message)
+      addToast({ type: 'success', message: `Bundle written (${res.size_human})` })
+      setPassphrase('')
+      refetch()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Bundle failed' })
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, data, passphrase, storePass, appData, addToast, refetch])
+
+  const download = useCallback(async (entry: RecoveryBundleEntry) => {
+    setBusy(`dl:${entry.file}`)
+    try {
+      const token = apiClient.getAuthToken()
+      const res = await fetch(`${apiClient.getBaseUrl()}/recovery/${encodeURIComponent(entry.file)}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = entry.file
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Download failed' })
+    } finally {
+      setBusy(null)
+    }
+  }, [addToast])
+
+  const upload = useCallback(async (file: File | null) => {
+    if (!file) return
+    setBusy('upload')
+    try {
+      const b64 = await readAsBase64(file)
+      const res = await uploadRecoveryBundle(file.name, b64)
+      addToast({ type: 'success', message: `Uploaded ${res.file}` })
+      refetch()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
+    } finally {
+      setBusy(null)
+    }
+  }, [addToast, refetch])
+
+  const restore = useCallback(async () => {
+    if (!restoreTarget || busy) return
+    if (!window.confirm(`Restore ${restoreTarget.file}?\n\nThe configuration on this server is replaced (a pre-restore snapshot is kept under .snapshots). Running containers are not touched; start the stacks afterwards.`)) return
+    setBusy('restore')
+    try {
+      const res = await restoreRecoveryBundle(restoreTarget.file, restorePass, true)
+      setResult(res.message)
+      addToast({ type: 'success', message: res.message, duration: 8000 })
+      setRestoreTarget(null)
+      setRestorePass('')
+      if (res.restart_scheduled) setTimeout(() => window.location.reload(), 8000)
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Restore failed' })
+    } finally {
+      setBusy(null)
+    }
+  }, [restoreTarget, restorePass, busy, addToast])
+
+  if (!isAdmin) return null
+
+  return (
+    <div className="glass rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+        <LifeBuoy size={16} className="text-rose-300" />
+        <h3 className="text-sm font-semibold text-slate-200">Recovery Bundle</h3>
+        <span className="text-[10px] text-slate-500 ml-1">rebuilds this install anywhere</span>
+        <button onClick={() => refetch()} className="ml-auto text-slate-500 hover:text-slate-300" title="Refresh"><RefreshCw size={13} /></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-slate-400 leading-relaxed">
+          One encrypted archive with the root <code className="font-mono bg-white/5 px-1 rounded">.env</code>, the secret store and its key, accounts, rules, layouts, schedules, every stack&apos;s files, Traefik and Authelia data, templates and plugins. Keep a copy off this box; the setup wizard of a fresh install restores it in one step.
+        </p>
+
+        {data && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="glass border border-white/5 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Destination</p>
+              <p className="text-xs font-mono text-slate-300 truncate mt-1" title={data.dest_dir}>{data.dest_dir}</p>
+            </div>
+            <div className="glass border border-white/5 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Off-box copy</p>
+              <p className="text-xs font-mono text-slate-300 truncate mt-1" title={data.remote || 'not set'}>{data.remote || <span className="text-slate-500">not set (Server Config → Recovery)</span>}</p>
+            </div>
+            <div className="glass border border-white/5 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Passphrase</p>
+              <p className="text-xs mt-1 flex items-center gap-1.5">{data.passphrase_set ? <><CheckCircle size={12} className="text-emerald-400" /><span className="text-emerald-300">stored (schedules can run)</span></> : <><AlertTriangle size={12} className="text-amber-400" /><span className="text-amber-300">not stored yet</span></>}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <KeyRound size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder={data?.passphrase_set ? 'Stored passphrase is used (type one to override)' : 'Passphrase for the bundle (8+ characters)'}
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
+              />
+            </div>
+            <button
+              onClick={create}
+              disabled={busy !== null || (!data?.passphrase_set && passphrase.length < 8)}
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-rose-500/90 text-white hover:bg-rose-400 disabled:opacity-50 transition-all press"
+            >
+              {busy === 'create' ? <Loader2 size={13} className="animate-spin" /> : <LifeBuoy size={13} />}
+              {busy === 'create' ? 'Writing…' : 'Create bundle now'}
+            </button>
+          </div>
+          {!data?.passphrase_set && (
+            <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={storePass} onChange={(e) => setStorePass(e.target.checked)} className="accent-rose-500" />
+              Store it as the secret RECOVERY_PASSPHRASE so a schedule can make bundles on its own
+            </label>
+          )}
+          {data && data.stacks.length > 0 && (
+            <div>
+              <p className="text-[10px] text-slate-500 mb-1.5">Include App-Data (container data) of these stacks — large, slow, but complete:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {data.stacks.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setAppData((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n })}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all ${appData.has(s) ? 'bg-rose-500/15 border-rose-500/30 text-rose-200' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {result && <p className="text-[11px] text-emerald-300">{result}</p>}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Bundles on this box{data ? ` (${data.bundles.length}, keeps ${data.retention})` : ''}</p>
+            <label className={`flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+              {busy === 'upload' ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />} Upload a bundle
+              <input type="file" accept=".enc,application/octet-stream" className="hidden" onChange={(e) => { upload(e.target.files?.[0] ?? null); e.target.value = '' }} />
+            </label>
+          </div>
+          {data && data.bundles.length === 0 && <p className="text-xs text-slate-500">No bundle yet.</p>}
+          <div className="space-y-1.5">
+            {data?.bundles.map((b) => (
+              <div key={b.file} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-mono text-slate-200 truncate" title={b.file}>{b.file}</p>
+                  <p className="text-[10px] text-slate-500">{b.size_human}{b.created ? ` · ${new Date(b.created).toLocaleString()}` : ''}{b.checksum ? ' · sha256' : ''}</p>
+                </div>
+                <button onClick={() => download(b)} disabled={busy !== null} title="Download" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 disabled:opacity-50">
+                  {busy === `dl:${b.file}` ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                </button>
+                <button onClick={() => { setRestoreTarget(b); setRestorePass('') }} disabled={busy !== null} title="Restore this bundle here" className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
+                  <RotateCcw size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {restoreTarget && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-4 space-y-3 animate-fade-in">
+            <p className="text-xs text-amber-200">Restore <span className="font-mono">{restoreTarget.file}</span> on this server. Settings, accounts, secrets and stack files are replaced (a pre-restore snapshot is kept); running containers are not touched.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="password"
+                value={restorePass}
+                onChange={(e) => setRestorePass(e.target.value)}
+                placeholder={data?.passphrase_set ? 'Passphrase (stored one is used when empty)' : 'Passphrase of this bundle'}
+                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/40"
+              />
+              <button onClick={restore} disabled={busy !== null || (!data?.passphrase_set && !restorePass)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500 text-slate-900 hover:bg-amber-400 disabled:opacity-50 press">
+                {busy === 'restore' ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                Restore
+              </button>
+              <button onClick={() => setRestoreTarget(null)} className="px-3 py-2 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10">Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

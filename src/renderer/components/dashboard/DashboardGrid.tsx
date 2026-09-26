@@ -7,7 +7,7 @@ import {
   X, RotateCcw, Settings2, Plus, Check, Move,
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
   TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
-  Boxes, Crosshair, Globe, StickyNote, Bookmark,
+  Boxes, Crosshair, Globe, StickyNote, Bookmark, BatteryCharging,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DashboardCard } from '../../../shared/types'
@@ -43,12 +43,13 @@ import StackControls from './StackControls'
 import ContainerSpotlight from './ContainerSpotlight'
 import RoutesDns from './RoutesDns'
 import NotesCard from './NotesCard'
+import PowerCard from './PowerCard'
 import BookmarksCard from './BookmarksCard'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
   TrendingUp, Zap, Download, Archive, FileText, Wrench, Bell, Clock, Rocket, ShieldCheck,
-  Boxes, Crosshair, Globe, StickyNote, Bookmark,
+  Boxes, Crosshair, Globe, StickyNote, Bookmark, BatteryCharging,
 }
 
 const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
@@ -63,6 +64,7 @@ const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   'quick-actions': QuickActions, 'crowdsec': CrowdSecStatus,
   'stack-controls': StackControls, 'container-spotlight': ContainerSpotlight,
   'routes-dns': RoutesDns, 'notes': NotesCard, 'bookmarks': BookmarksCard,
+  'power': PowerCard,
 }
 
 interface Props {

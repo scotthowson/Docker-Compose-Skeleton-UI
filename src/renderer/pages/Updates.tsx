@@ -27,8 +27,8 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer } from '../api/endpoints'
-import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, APIVersion } from '../../shared/types'
+import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory } from '../api/endpoints'
+import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, SystemUpdateHistoryResponse, APIVersion } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
 // ---------------------------------------------------------------------------
@@ -239,6 +239,7 @@ export default function Updates() {
   const [restartingApi, setRestartingApi] = useState<string | null>(null)
   const [restartHint, setRestartHint] = useState<string | null>(null)
   const [applyReport, setApplyReport] = useState<SystemUpdateApplyResponse | null>(null)
+  const [updHistory, setUpdHistory] = useState<SystemUpdateHistoryResponse | null>(null)
   const [lastBackupTag, setLastBackupTag] = useState<string | null>(() => {
     // Persist across navigation — load from sessionStorage
     try { return sessionStorage.getItem('dcs-last-backup-tag') } catch { return null }
@@ -418,6 +419,12 @@ export default function Updates() {
       fetchVersion().then(setApiVersionInfo).catch(() => {})
     }
   }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Unattended-update outcomes (admins), refreshed with every check
+  useEffect(() => {
+    if (!isConnected || !isAdmin) return
+    fetchSystemUpdateHistory().then(setUpdHistory).catch(() => {})
+  }, [isConnected, isAdmin, sysUpdate])
 
   // Periodic auto-check
   useEffect(() => {
@@ -854,6 +861,26 @@ export default function Updates() {
                   </div>
                 )}
 
+                {isAdmin && updHistory && (updHistory.running || updHistory.entries.length > 0) && (
+                  <details className="mt-3 pt-3 border-t border-white/[0.03]">
+                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400">
+                      Unattended updates{updHistory.running ? ' · running now' : ''} ({updHistory.entries.length})
+                    </summary>
+                    <div className="space-y-1.5 mt-2 max-h-40 overflow-y-auto scrollbar-thin">
+                      {updHistory.entries.map((e, i) => (
+                        <div key={`${e.timestamp}-${i}`} className="flex items-start gap-2 text-[10px]">
+                          <span className={`shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full ${e.result === 'updated' || e.result === 'images' ? 'bg-emerald-400' : e.result === 'rolled-back' || e.result === 'failed' || e.result === 'check-failed' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                          <div className="min-w-0">
+                            <p className="text-slate-300 break-words">{e.message}</p>
+                            <p className="text-[9px] text-slate-500">{new Date(e.timestamp).toLocaleString()} · {e.result}{e.channel ? ` · ${e.channel}` : ''}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-slate-500 mt-2">Auto-rollback {updHistory.auto_rollback ? `on: ${updHistory.rollback_drop} points within ${updHistory.health_grace} s` : 'off'} · schedule a “DCS Self-Update” under Schedules</p>
+                  </details>
+                )}
+
                 {isAdmin && (
                   <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/[0.03]">
                     <div className="min-w-0">
@@ -864,7 +891,7 @@ export default function Updates() {
                         </>
                       ) : (
                         <p className="text-[10px] text-slate-500">
-                          API listener: {sysUpdate.restart_method === 'reexec' ? 'restarts in place' : sysUpdate.restart_method === 'systemd' ? 'restarts through systemd' : 'restart by hand only'}
+                          API listener: {sysUpdate.restart_method === 'reexec' ? 'restarts in place' : sysUpdate.restart_method === 'systemd' ? 'restarts through systemd' : sysUpdate.restart_method === 'relaunch' ? 'older listener, relaunched on request' : 'restart by hand only'}
                         </p>
                       )}
                     </div>

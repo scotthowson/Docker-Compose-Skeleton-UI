@@ -12,6 +12,7 @@ import ContainerList from '../components/containers/ContainerList'
 import ContainerDetail from '../components/containers/ContainerDetail'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
 import { useToast } from '../components/common/Toast'
 
 const Containers: React.FC = () => {
@@ -127,6 +128,7 @@ const Containers: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6 animate-fade-in">
       <DisconnectedBanner />
+      <OnDemandMissingBanner />
       {selectedName && selectedContainer ? (
         <ErrorBoundary key={selectedName} fallbackMessage="Failed to render container details">
           <ContainerDetail

@@ -24,7 +24,7 @@ import {
   HeartPulse,
   Activity,
   HardDrive,
-  Container,
+  Container, LifeBuoy, BatteryCharging, ArrowUpCircle,
 } from 'lucide-react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { usePolling } from '../hooks/usePolling'
@@ -1007,6 +1007,48 @@ export default function Config() {
             <TextRow label="Source Directory" description="Path to back up (typically your Stacks or App-Data)" configKey="BACKUP_SOURCE_DIR" value={String(edits.BACKUP_SOURCE_DIR ?? '')} onChange={handleStringChange} placeholder="/opt/docker" />
             <TextRow label="Destination Directory" description="Where backups are stored" configKey="BACKUP_DEST_DIR" value={String(edits.BACKUP_DEST_DIR ?? '')} onChange={handleStringChange} placeholder="/mnt/backup" />
             <NumberRow label="Retention Count" description="Number of backup copies to keep" configKey="BACKUP_RETENTION_COUNT" value={Number(edits.BACKUP_RETENTION_COUNT ?? 7)} onChange={handleNumberChange} min={1} max={90} />
+          </GroupCard>
+
+          {/* ── Recovery bundle ── */}
+          <GroupCard
+            icon={<LifeBuoy size={16} className="text-rose-300" />}
+            title="Recovery Bundle"
+            description="One encrypted archive that rebuilds this install anywhere (Backup page creates it)"
+          >
+            <TextRow label="Destination Directory" description="Where bundles are written (default: backup destination/recovery, else .data/recovery)" configKey="RECOVERY_DEST_DIR" value={String(edits.RECOVERY_DEST_DIR ?? cfg.recovery_dest_dir ?? '')} onChange={handleStringChange} placeholder="/mnt/backup/recovery" />
+            <TextRow label="Off-box Copy" description="rsync target (user@nas:/backups/dcs) or a mounted path that receives every bundle" configKey="RECOVERY_REMOTE" value={String(edits.RECOVERY_REMOTE ?? cfg.recovery_remote ?? '')} onChange={handleStringChange} placeholder="user@nas:/backups/dcs" />
+            <NumberRow label="Bundles to Keep" description="Older bundles are removed" configKey="RECOVERY_RETENTION_COUNT" value={Number(edits.RECOVERY_RETENTION_COUNT ?? cfg.recovery_retention_count ?? 10)} onChange={handleNumberChange} min={1} max={100} />
+          </GroupCard>
+
+          {/* ── Power (UPS) ── */}
+          <GroupCard
+            icon={<BatteryCharging size={16} className="text-lime-400" />}
+            title="Power (UPS)"
+            description="Watch a UPS, alert on battery, stop the stacks cleanly before it runs out"
+          >
+            <ToggleRow label="UPS Watch" description="Poll the UPS from the API (restart the API after changing these settings)" configKey="UPS_ENABLED" value={Boolean(edits.UPS_ENABLED ?? cfg.ups_enabled)} onChange={handleBoolChange} />
+            <SelectRow label="Source" description="auto tries a NUT server first, then apcupsd" configKey="UPS_SOURCE" value={String(edits.UPS_SOURCE ?? cfg.ups_source ?? 'auto')} options={['auto', 'nut', 'apcupsd']} onChange={handleStringChange} />
+            <TextRow label="NUT Host" description="NUT server address (the nut-upsd template listens on this host)" configKey="UPS_NUT_HOST" value={String(edits.UPS_NUT_HOST ?? cfg.ups_nut_host ?? '127.0.0.1')} onChange={handleStringChange} placeholder="127.0.0.1" />
+            <NumberRow label="NUT Port" description="NUT server port" configKey="UPS_NUT_PORT" value={Number(edits.UPS_NUT_PORT ?? cfg.ups_nut_port ?? 3493)} onChange={handleNumberChange} min={1} max={65535} />
+            <TextRow label="UPS Name" description="Name of the UPS on the NUT server" configKey="UPS_NAME" value={String(edits.UPS_NAME ?? cfg.ups_name ?? 'ups')} onChange={handleStringChange} placeholder="ups" />
+            <NumberRow label="Poll Interval" description="Seconds between readings" configKey="UPS_POLL_INTERVAL" value={Number(edits.UPS_POLL_INTERVAL ?? cfg.ups_poll_interval ?? 15)} onChange={handleNumberChange} min={5} max={300} />
+            <NumberRow label="Stop at Charge %" description="On battery and at or below this charge, stop every stack" configKey="UPS_SHUTDOWN_CHARGE" value={Number(edits.UPS_SHUTDOWN_CHARGE ?? cfg.ups_shutdown_charge ?? 20)} onChange={handleNumberChange} min={1} max={99} />
+            <NumberRow label="Stop at Runtime (s)" description="On battery and at or below this many seconds left, stop every stack" configKey="UPS_SHUTDOWN_RUNTIME" value={Number(edits.UPS_SHUTDOWN_RUNTIME ?? cfg.ups_shutdown_runtime ?? 300)} onChange={handleNumberChange} min={30} max={7200} />
+            <SelectRow label="On Low Battery" description="stop-stacks runs ./stop.sh --force in order; none only alerts" configKey="UPS_ON_BATTERY_ACTION" value={String(edits.UPS_ON_BATTERY_ACTION ?? cfg.ups_on_battery_action ?? 'stop-stacks')} options={['stop-stacks', 'none']} onChange={handleStringChange} />
+            <TextRow label="Host Shutdown Command" description="Run after the stacks stopped (needs a sudo rule), for example: sudo /sbin/shutdown -h now" configKey="UPS_HOST_SHUTDOWN_CMD" value={String(edits.UPS_HOST_SHUTDOWN_CMD ?? cfg.ups_host_shutdown_cmd ?? '')} onChange={handleStringChange} placeholder="leave empty to keep the host running" />
+            <ToggleRow label="Start Again on Mains" description="Run ./start.sh when power returns after a low-battery stop" configKey="UPS_START_ON_POWER" value={Boolean(edits.UPS_START_ON_POWER ?? cfg.ups_start_on_power)} onChange={handleBoolChange} />
+          </GroupCard>
+
+          {/* ── Unattended updates ── */}
+          <GroupCard
+            icon={<ArrowUpCircle size={16} className="text-emerald-400" />}
+            title="Unattended Updates"
+            description="What a dcs-update schedule does after it applied a release"
+          >
+            <ToggleRow label="Auto Rollback" description="Return to the backup tag when the health score drops after the update" configKey="UPDATE_AUTO_ROLLBACK" value={Boolean(edits.UPDATE_AUTO_ROLLBACK ?? cfg.update_auto_rollback ?? true)} onChange={handleBoolChange} />
+            <NumberRow label="Health Grace (s)" description="Seconds to wait before the health score is compared" configKey="UPDATE_HEALTH_GRACE" value={Number(edits.UPDATE_HEALTH_GRACE ?? cfg.update_health_grace ?? 120)} onChange={handleNumberChange} min={30} max={3600} />
+            <NumberRow label="Rollback Drop" description="Points the health score may fall before a rollback" configKey="UPDATE_ROLLBACK_DROP" value={Number(edits.UPDATE_ROLLBACK_DROP ?? cfg.update_rollback_drop ?? 15)} onChange={handleNumberChange} min={1} max={100} />
+            <ToggleRow label="Pull Images on Boot" description="Pull image updates during an unattended boot (slower, otherwise the Updates page and schedules do it)" configKey="UPDATE_ON_BOOT" value={Boolean(edits.UPDATE_ON_BOOT)} onChange={handleBoolChange} />
           </GroupCard>
         </div>
       )}

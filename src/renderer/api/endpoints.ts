@@ -169,6 +169,12 @@ import type {
   SystemUpdateApplyResponse,
   SystemUpdateRollbackResponse,
   SystemRestartResponse,
+  TraefikStatusResponse,
+  PowerStatus,
+  RecoveryListResponse,
+  RecoveryBundleResponse,
+  RecoveryRestoreResponse,
+  SystemUpdateHistoryResponse,
   OsUpdateCheckResponse,
   OsUpdateApplyResponse,
   OsUpdateStatusResponse,
@@ -1040,9 +1046,9 @@ export function saveProfileToServer(profile: Record<string, unknown>): Promise<{
   return apiClient.post<{ success: boolean }>('/settings/profile', { profile })
 }
 
-/** GET /traefik/status — Check if Traefik is deployed and get domain */
-export function fetchTraefikStatus(): Promise<{ active: boolean; domain: string }> {
-  return apiClient.get<{ active: boolean; domain: string }>('/traefik/status')
+/** GET /traefik/status — Traefik present, its domain, the Authelia middleware name, Sablier present */
+export function fetchTraefikStatus(): Promise<TraefikStatusResponse> {
+  return apiClient.get<TraefikStatusResponse>('/traefik/status')
 }
 
 /** Start a container on demand through Sablier (or serve it normally again): writes or removes the Traefik middleware */
@@ -1264,6 +1270,10 @@ export function deployTemplate(name: string, opts: {
   allow_privileged?: boolean
   /** Container names chosen on the deploy screen, keyed by service */
   container_names?: Record<string, string>
+  /** services whose route is protected by Authelia */
+  authelia_services?: string[]
+  /** services Sablier starts on demand (route carries the middleware) */
+  on_demand_services?: string[]
 }): Promise<TemplateDeployResponse> {
   return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
 }
@@ -1675,6 +1685,59 @@ export function rollbackSystemUpdate(backupTag: string, restart = false): Promis
 /** POST /system/restart — Restart the API listener without root (re-exec, or a systemd relaunch for older listeners) */
 export function restartApiServer(): Promise<SystemRestartResponse> {
   return apiClient.post<SystemRestartResponse>('/system/restart', {}, 20000)
+}
+
+/** GET /system/update/history — Outcomes of unattended self-updates */
+export function fetchSystemUpdateHistory(): Promise<SystemUpdateHistoryResponse> {
+  return apiClient.get<SystemUpdateHistoryResponse>('/system/update/history')
+}
+
+// ---------------------------------------------------------------------------
+// Power (UPS)
+// ---------------------------------------------------------------------------
+
+/** GET /power — UPS status: mains or battery, charge, runtime, load */
+export function fetchPower(): Promise<PowerStatus> {
+  return apiClient.get<PowerStatus>('/power')
+}
+
+/** POST /sablier/repair — Recreate on-demand containers a prune removed (created, not started) */
+export function repairOnDemand(): Promise<{ success: boolean; recreated: string[]; failed: string[]; message: string }> {
+  return apiClient.post<{ success: boolean; recreated: string[]; failed: string[]; message: string }>('/sablier/repair', {}, 120000)
+}
+
+/** POST /power/sample — Read the UPS right now */
+export function samplePower(): Promise<PowerStatus> {
+  return apiClient.post<PowerStatus>('/power/sample', {}, 20000)
+}
+
+// ---------------------------------------------------------------------------
+// Recovery bundles
+// ---------------------------------------------------------------------------
+
+/** GET /recovery — bundles on this box and how they are made */
+export function fetchRecovery(): Promise<RecoveryListResponse> {
+  return apiClient.get<RecoveryListResponse>('/recovery')
+}
+
+/** POST /recovery/bundle — write an encrypted recovery bundle now */
+export function createRecoveryBundle(opts: { passphrase?: string; include_app_data?: string[]; copy_remote?: boolean }): Promise<RecoveryBundleResponse> {
+  return apiClient.post<RecoveryBundleResponse>('/recovery/bundle', opts, 900000)
+}
+
+/** POST /recovery/restore — restore a bundle stored on this box (pre-restore snapshot kept) */
+export function restoreRecoveryBundle(file: string, passphrase: string, restart = true): Promise<RecoveryRestoreResponse> {
+  return apiClient.post<RecoveryRestoreResponse>('/recovery/restore', { file, passphrase, confirm: true, restart }, 300000)
+}
+
+/** POST /recovery/upload — store a bundle picked in the browser */
+export function uploadRecoveryBundle(filename: string, contentB64: string): Promise<{ success: boolean; file: string; size: number }> {
+  return apiClient.post<{ success: boolean; file: string; size: number }>('/recovery/upload', { filename, content_b64: contentB64 }, 300000)
+}
+
+/** POST /setup/restore — first run only: restore a bundle from the setup wizard */
+export function setupRestore(contentB64: string, passphrase: string): Promise<RecoveryRestoreResponse> {
+  return apiClient.post<RecoveryRestoreResponse>('/setup/restore', { content_b64: contentB64, passphrase }, 300000)
 }
 
 /** POST /system/ui-update/apply — Pull latest DCS-UI image and recreate container */

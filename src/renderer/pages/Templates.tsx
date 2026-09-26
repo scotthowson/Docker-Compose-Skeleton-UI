@@ -43,7 +43,7 @@ import {
   Lock,
   KeyRound,
   Wand2,
-  Terminal,
+  Terminal, Moon,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
@@ -287,12 +287,39 @@ function lintCompose(compose: string): LintWarning[] {
 // Traefik route generation helper
 // ---------------------------------------------------------------------------
 
-function generateRouteYaml(serviceName: string, containerName: string, containerPort: string, domain: string, autheliaProtected = false): string {
+function generateRouteYaml(
+  serviceName: string,
+  containerName: string,
+  containerPort: string,
+  domain: string,
+  autheliaProtected = false,
+  autheliaMiddleware = 'authelia-forwardauth',
+  onDemand = false,
+): string {
   const routeId = serviceName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
   const protocol = ['443', '9443', '8443'].includes(containerPort) ? 'https' : 'http'
-  const middlewares = autheliaProtected
-    ? `        - "traefik-chain"\n        - "authelia-forwardauth"\n        - "compress-gzip"`
-    : `        - "traefik-chain"\n        - "compress-gzip"`
+  // Order matters: auth first, then the wake-up, then compression
+  const chain = ['traefik-chain']
+  if (autheliaProtected) chain.push(autheliaMiddleware || 'authelia-forwardauth')
+  if (onDemand) chain.push(`${routeId}-sablier`)
+  chain.push('compress-gzip')
+  const middlewares = chain.map((m) => `        - "${m}"`).join('\n')
+  const sablierBlock = onDemand
+    ? `
+  middlewares:
+    ${routeId}-sablier:
+      plugin:
+        sablier:
+          names: ${containerName}
+          sablierUrl: http://Sablier:10000
+          sessionDuration: 30m
+          dynamic:
+            displayName: ${serviceName}
+            theme: ghost
+            showDetails: true
+            refreshFrequency: 5s
+`
+    : ''
   return `# Auto-generated Traefik route for: ${serviceName}
 # Edit the subdomain or middlewares as needed.
 
@@ -306,7 +333,7 @@ http:
       middlewares:
 ${middlewares}
       tls: {}
-
+${sablierBlock}
   services:
     ${routeId}:
       loadBalancer:
@@ -409,7 +436,7 @@ interface DeployModalProps {
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: { authelia_services?: string[]; on_demand_services?: string[] }) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -559,6 +586,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [enableRouting, setEnableRouting] = useState(true)
   const [connectProxy, setConnectProxy] = useState(true)
   const [enableAuthelia, setEnableAuthelia] = useState(false)
+  // What this install can offer per route: the Authelia middleware name and Sablier
+  const [autheliaMw, setAutheliaMw] = useState('')
+  const [sablierPresent, setSablierPresent] = useState(false)
   // Homarr integration state
   const [homarrActive, setHomarrActive] = useState(false)
   const [addToHomarr, setAddToHomarr] = useState(false)
@@ -570,7 +600,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
   const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
   // Per-service subdomain + enabled state
-  const [routeServices, setRouteServices] = useState<{ name: string; containerName: string; port: string; subdomain: string; enabled: boolean }[]>([])
+  const [routeServices, setRouteServices] = useState<{ name: string; containerName: string; port: string; subdomain: string; enabled: boolean; authelia: boolean; onDemand: boolean }[]>([])
 
   // Fetch Traefik status on mount (skip for traefik template itself)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
@@ -580,6 +610,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       .then((res) => {
         setTraefikActive(res.active)
         setTraefikDomain(res.domain || '')
+        setAutheliaMw(res.authelia_middleware || (res.authelia ? 'authelia' : ''))
+        setSablierPresent(!!res.sablier)
       })
       .catch(() => {})
   }, [isConnected, template.name])
@@ -648,6 +680,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       ...svc,
       subdomain: svc.name,
       enabled: true,
+      authelia: false,
+      onDemand: false,
     })))
   }, [traefikActive, traefikDomain, detail])
 
@@ -660,10 +694,18 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const routes: Record<string, string> = {}
     for (const svc of routeServices) {
       if (!svc.enabled) continue
-      routes[svc.name] = generateRouteYaml(svc.subdomain, containerNameFor(svc), svc.port, traefikDomain, enableAuthelia)
+      routes[svc.name] = generateRouteYaml(
+        svc.subdomain,
+        containerNameFor(svc),
+        svc.port,
+        traefikDomain,
+        (enableAuthelia || svc.authelia) && !!autheliaMw,
+        autheliaMw || 'authelia-forwardauth',
+        svc.onDemand && sablierPresent,
+      )
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, containerNameFor])
+  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, autheliaMw, sablierPresent, containerNameFor])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -885,14 +927,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       : undefined
     const homarrFlag = homarrActive && addToHomarr ? true : undefined
     const names = Object.keys(customContainerNames).length > 0 ? customContainerNames : undefined
-    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names)
+    const routing = traefikActive && enableRouting
+    const switches = routing
+      ? {
+          authelia_services: routeServices.filter((s) => s.enabled && (s.authelia || enableAuthelia) && !!autheliaMw).map((s) => s.name),
+          on_demand_services: routeServices.filter((s) => s.enabled && s.onDemand && sablierPresent).map((s) => s.name),
+        }
+      : undefined
+    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names, switches)
     if (result) {
       setDeployResult(result)
       setOutcome(result.started ? 'pending' : 'not-started')
       setShowOutput(true)
     }
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, addToast])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -1559,6 +1608,28 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                           <span className="text-[10px] text-slate-500">.{traefikDomain}</span>
                           <span className="text-[10px] text-slate-500 ml-auto">:{svc.port}</span>
                           <span className="text-[10px] text-slate-500 truncate max-w-[80px]" title={containerNameFor(svc)}>{containerNameFor(svc)}</span>
+                          {autheliaMw && (
+                            <button
+                              type="button"
+                              disabled={!svc.enabled}
+                              onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, authelia: !s.authelia } : s))}
+                              title={(enableAuthelia || svc.authelia) ? 'Protected by Authelia (click to serve without sign-in)' : 'Protect this route with Authelia sign-in'}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 ${(enableAuthelia || svc.authelia) ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                            >
+                              <Shield size={9} /> Auth
+                            </button>
+                          )}
+                          {sablierPresent && (
+                            <button
+                              type="button"
+                              disabled={!svc.enabled}
+                              onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, onDemand: !s.onDemand } : s))}
+                              title={svc.onDemand ? 'Starts on the first request and sleeps after 30 minutes idle (click to keep it running)' : 'Start this service on demand: Sablier stops it when idle and wakes it on the first request'}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 ${svc.onDemand ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                            >
+                              <Moon size={9} /> On demand
+                            </button>
+                          )}
                         </div>
                       ))}
 
@@ -3200,7 +3271,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: { authelia_services?: string[]; on_demand_services?: string[] }): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -3218,6 +3289,8 @@ export default function Templates() {
           add_to_homarr: addToHomarr,
           allow_privileged: needsPrivileged,
           container_names: containerNames,
+          authelia_services: switches?.authelia_services?.length ? switches.authelia_services : undefined,
+          on_demand_services: switches?.on_demand_services?.length ? switches.on_demand_services : undefined,
         })
         if (res.success) {
           refresh()

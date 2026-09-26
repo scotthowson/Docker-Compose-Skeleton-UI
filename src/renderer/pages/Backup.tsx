@@ -42,6 +42,7 @@ import type {
   BackupListResponse,
 } from '../../shared/types'
 import { LoadingState } from '../components/common/PageState'
+import RecoveryBundleCard from '../components/backup/RecoveryBundleCard'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -535,6 +536,8 @@ export default function Backup() {
         {/* ================================================================= */}
         {/* Trigger Backup                                                    */}
         {/* ================================================================= */}
+        <RecoveryBundleCard />
+
         <div className="glass rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
             <Play size={16} className="text-emerald-400" />

@@ -22,6 +22,7 @@ import { fetchContainers, fetchHealthReport, fetchEvents } from '../api/endpoint
 import { useConnectionStore } from '../stores/connectionStore'
 import type { ContainerInfo, HealthReport, EventEntry } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
 import { LoadingState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
@@ -441,6 +442,7 @@ export default function Uptime() {
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
+      <OnDemandMissingBanner />
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

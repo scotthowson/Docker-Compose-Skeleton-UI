@@ -302,19 +302,23 @@ export default function Maintenance() {
               resides in dangling volumes or unused images.
             </p>
 
-            <div className="flex items-center gap-3">
+            <p className="text-[11px] text-slate-500 mb-4">
+              Containers that Traefik starts on demand (Sablier) are stopped on purpose: they, their images, volumes and networks are left alone.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowDeepPruneModal(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                className="h-10 inline-flex items-center justify-center rounded-lg text-sm font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeepPrune}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white bg-rose-500 hover:bg-rose-400 shadow-lg shadow-rose-500/25 transition-all"
+                className="h-10 inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium text-white bg-rose-500 border border-rose-400/40 hover:bg-rose-400 transition-all press whitespace-nowrap"
               >
                 <Trash2 size={14} />
-                I understand, delete everything
+                Delete everything
               </button>
             </div>
           </div>
