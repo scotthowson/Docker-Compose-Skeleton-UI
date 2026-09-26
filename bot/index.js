@@ -8,7 +8,7 @@
 // IDs listed in DISCORD_ADMIN_IDS.
 // =============================================================================
 
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js'
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, MessageFlags, Events } from 'discord.js'
 
 const env = (k, d = '') => (process.env[k] ?? d).trim()
 const TOKEN = env('DISCORD_BOT_TOKEN')
@@ -193,7 +193,8 @@ const handlers = {
 // Discord client
 // ---------------------------------------------------------------------------
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
-client.once('ready', async (c) => {
+// discord.js 14.16 renamed the event; Events.ClientReady carries the right name on every 14.x
+client.once(Events.ClientReady ?? 'ready', async (c) => {
   console.log(`signed in to Discord as ${c.user.tag}`)
   try { await login(); console.log(`signed in to DCS at ${API} as ${USER}`) } catch (e) { console.error('DCS login failed:', e.message) }
   try { await registerCommands(c.user.id) } catch (e) { console.error('command registration failed:', e.message) }
