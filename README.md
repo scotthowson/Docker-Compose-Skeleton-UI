@@ -116,6 +116,7 @@ Live overview with configurable polling intervals.
 - Container detail view with stats (CPU, memory, network I/O, PIDs)
 - Container logs viewer
 - Start/stop/restart individual containers
+- **Nuke & reinstall** — a fresh install of a wedged container: preview of the App-Data folders and volumes that go (folders land in a trash kept for a week; anything shared with another container is kept), type the name to confirm, and the service comes back from its compose file
 - **Batch operations** — multi-select with floating action bar and per-container result cards
 
 ### Health Monitoring
@@ -175,7 +176,7 @@ Live overview with configurable polling intervals.
 - **Login** — two-phase flow: server connection test, then authentication
 - **Invite system** — generate invite codes, track usage, revoke
 - **Auto-lock** — configurable inactivity timer (5/15/30/60/120 min)
-- **User management** — admin panel for all registered users
+- **User management** — admin panel for all registered users; three roles (admin, user, and **bot** for chat bots: day-to-day operations only, several sessions allowed), changeable per account
 - **Offline fallback** — local-only auth when server is unreachable
 - **Smooth logout** — `useLayoutEffect` fade-to-dark transition prevents login screen flash
 
@@ -235,8 +236,23 @@ Defense-in-depth permission model with admin and user roles enforced across ever
 - **NTFY integration** — create notification rules for system events
 - **Rule management** — add, toggle, delete rules with event type filtering
 - **Test notifications** — send test pushes to verify configuration
+- **Discord** — every rule also lands in a Discord channel as an embed in the dashboard's palette; presets for health changes, backups and stack failures; per-rule cooldowns; name, avatar and cooldown defaults under Server Config
 - **Notification drawer** — slide-out panel with unread count, mark all read, clear all
 - **Desktop notifications** — Web Notification API with permission management
+
+### Discord
+
+- **DCS Discord Bot** (`bot/`, image `ghcr.io/scotthowson/dcs-discord-bot`) — slash commands with buttons and confirmations: status, usage, health, containers, stacks, top, disk, updates, logs, routes, power, security, schedules, audit; start, stop, restart, update, deploy (dry-run first), backup, prune, run, unban and DCS self-update for the admins you name; locked to the channels you list; the bot's status line mirrors the server
+- **Rich Presence** (desktop app) — "Managing *your server* · containers · stacks · health" on your profile while the app is open (Settings → Discord Rich Presence)
+- **Brand kit** (`brand/discord/`) — app icon, bot avatar and banner, notification and CrowdSec avatars, presence art, with a note on where each goes
+- The complete walkthrough (webhook, rules, CrowdSec alerts, the bot's application, invite URL, IDs and account, Rich Presence) is [docs/DISCORD.md](https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md) in the DCS repository
+
+### Activity
+
+- Docker events as a timeline grouped by day; each day folds away so the audit log is one scroll away
+- **Errors** filter: crashes, kills, out-of-memory and failed health checks only
+- New events slide in; nothing else re-animates while the page polls
+- A floating **back to top** arrow appears on every long page
 
 ### Automations
 

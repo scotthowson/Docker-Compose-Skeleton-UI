@@ -47,6 +47,11 @@ type TriggerType =
   | 'image_stale'
   | 'deploy_complete'
   | 'update_available'
+  | 'stack_failed'
+  | 'health_change'
+  | 'backup_complete'
+  | 'backup_failed'
+  | 'automation_run'
 
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
@@ -60,6 +65,11 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
   { value: 'image_stale', label: 'Image Stale' },
   { value: 'deploy_complete', label: 'Deploy Complete' },
   { value: 'update_available', label: 'Update Available' },
+  { value: 'stack_failed', label: 'Stack Failed' },
+  { value: 'health_change', label: 'Health Changed' },
+  { value: 'backup_complete', label: 'Backup Finished' },
+  { value: 'backup_failed', label: 'Backup Failed' },
+  { value: 'automation_run', label: 'Automation Ran' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -77,6 +87,10 @@ const TEMPLATE_VARIABLES = [
   { var: '{event}', desc: 'Event type (e.g. container_unhealthy)' },
   { var: '{timestamp}', desc: 'Current date/time' },
   { var: '{hostname}', desc: 'Server hostname' },
+  { var: '{template}', desc: 'Template name (deploys)' },
+  { var: '{action}', desc: 'What was attempted (stack failures)' },
+  { var: '{mount}', desc: 'Mount point (disk warnings)' },
+  { var: '{message}', desc: 'Details (updates, backups, health, automations)' },
 ]
 
 /** Premade notification rule templates */
@@ -160,11 +174,47 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     trigger: 'deploy_complete',
     priority: 'default',
     tags: ['deploy', 'success'],
-    title_template: '✅ Deployed — {stack}',
-    message_template: 'Template deployed to {stack} on {hostname} at {timestamp}.',
+    title_template: '✅ {template} deployed',
+    message_template: '{template} is up in {stack} on {hostname}.',
     icon: Play,
     iconBg: 'bg-emerald-500/10 border-emerald-500/15',
     iconText: 'text-emerald-400',
+  },
+  {
+    name: 'Health Changed',
+    description: 'One message each time the server goes healthy, degraded or critical',
+    trigger: 'health_change',
+    priority: 'high',
+    tags: ['health'],
+    title_template: '💓 {hostname} is {status}',
+    message_template: '{message}',
+    icon: HeartPulse,
+    iconBg: 'bg-rose-500/10 border-rose-500/15',
+    iconText: 'text-rose-400',
+  },
+  {
+    name: 'Backup Finished',
+    description: 'Know when a backup lands, with its name and size',
+    trigger: 'backup_complete',
+    priority: 'low',
+    tags: ['backup'],
+    title_template: '💾 Backup finished',
+    message_template: '{message}',
+    icon: Archive,
+    iconBg: 'bg-violet-500/10 border-violet-500/15',
+    iconText: 'text-violet-400',
+  },
+  {
+    name: 'Stack Failed',
+    description: 'A start, restart or deploy left a stack broken',
+    trigger: 'stack_failed',
+    priority: 'urgent',
+    tags: ['stack', 'failed'],
+    title_template: '💥 {stack} failed to {action}',
+    message_template: 'Stack {stack} on {hostname} did not come up cleanly ({action}). Open its activity log on the Stacks page.',
+    icon: Zap,
+    iconBg: 'bg-rose-500/10 border-rose-500/15',
+    iconText: 'text-rose-400',
   },
 ]
 
@@ -285,6 +335,7 @@ export default function Notifications() {
   const [newTarget, setNewTarget] = useState('*')
   const [newPriority, setNewPriority] = useState<Priority>('default')
   const [newTags, setNewTags] = useState('')
+  const [newCooldown, setNewCooldown] = useState('')
   const [newTitleTemplate, setNewTitleTemplate] = useState('')
   const [newMessageTemplate, setNewMessageTemplate] = useState('')
   const [showGuide, setShowGuide] = useState(false)
@@ -368,6 +419,7 @@ export default function Notifications() {
     setNewTarget('*')
     setNewPriority('default')
     setNewTags('')
+    setNewCooldown('')
     setNewTitleTemplate('')
     setNewMessageTemplate('')
   }, [])
@@ -386,6 +438,7 @@ export default function Notifications() {
         enabled: true,
         title_template: newTitleTemplate.trim(),
         message_template: newMessageTemplate.trim(),
+        ...(newCooldown.trim() !== '' && /^\d{1,6}$/.test(newCooldown.trim()) ? { cooldown_minutes: Number(newCooldown.trim()) } : {}),
       })
       addToast({ type: 'success', message: `Rule "${newName.trim()}" created` })
       setShowAddModal(false)
@@ -396,7 +449,7 @@ export default function Notifications() {
     } finally {
       setCreating(false)
     }
-  }, [newName, newTrigger, newTarget, newPriority, newTags, newTitleTemplate, newMessageTemplate, addToast, refreshRules, resetForm])
+  }, [newName, newTrigger, newTarget, newPriority, newTags, newCooldown, newTitleTemplate, newMessageTemplate, addToast, refreshRules, resetForm])
 
   /** Apply a preset template to the form */
   const applyPreset = useCallback((preset: PresetTemplate) => {
@@ -733,7 +786,7 @@ export default function Notifications() {
           <div className="mt-3 pt-3 border-t border-white/[0.03]">
             {discordConfigured ? (
               <p className="text-[11px] text-slate-500">
-                Messages carry the event, stack, container, status and host as fields, a colour per event, and a link back to this dashboard. Change the webhook under <button onClick={() => setCurrentPage('config')} className="text-cyan-400 hover:underline">Server Config → Notifications</button>. Commands from Discord are a separate integration: the DCS Discord bot template.
+                Each event lands as an embed with a colour and emoji per event, the stack, container and status as fields, your server as the author line and a link back here. Repeats are held back by the rule's cooldown. Name, avatar and cooldowns live under <button onClick={() => setCurrentPage('config')} className="text-cyan-400 hover:underline">Server Config → Notifications</button>; CrowdSec bans use the same webhook. Commands from Discord are the separate <button onClick={() => setCurrentPage('templates')} className="text-cyan-400 hover:underline">DCS Discord Bot</button> template — the full walkthrough is docs/DISCORD.md in the DCS repository.
               </p>
             ) : (
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15">
@@ -1252,6 +1305,23 @@ export default function Notifications() {
                   onChange={(e) => setNewTags(e.target.value)}
                   placeholder="warning, server, docker"
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                />
+              </div>
+
+              {/* Cooldown */}
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                  Repeat at most every
+                  <span className="text-slate-500 ml-1 normal-case">(minutes; blank = the event's default: 60 for container rules, 6 h for disk space, a day for image updates, always for deploys, backups and health changes)</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={999999}
+                  value={newCooldown}
+                  onChange={(e) => setNewCooldown(e.target.value)}
+                  placeholder="default"
+                  className="w-40 px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
                 />
               </div>
 

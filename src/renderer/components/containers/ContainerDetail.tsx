@@ -27,6 +27,8 @@ import { CopyButton } from '../common/CopyButton'
 import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import LiveLogViewer from '../logs/LiveLogViewer'
+import { NukeDialog } from './NukeDialog'
+import { Bomb } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -524,6 +526,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const [envEditingKey, setEnvEditingKey] = useState<string | null>(null)
   const [envSaving, setEnvSaving] = useState(false)
   const [envRecreate, setEnvRecreate] = useState(true)
+  const [nukeOpen, setNukeOpen] = useState(false)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
   const mountedRef = useRef(true)
@@ -1023,6 +1026,25 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               {actionLoading === 'remove' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               Remove
             </button>
+          )}
+          {isAdmin && composeProject && (
+            <>
+              <button
+                onClick={() => setNukeOpen(true)}
+                disabled={!!actionLoading}
+                title="Fresh install: remove the container and the App-Data folders it owns (kept in the trash a week), then create it again from the compose file"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/25 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+              >
+                <Bomb className="h-3.5 w-3.5" />
+                Nuke &amp; reinstall
+              </button>
+              <NukeDialog
+                containerName={containerName}
+                open={nukeOpen}
+                onClose={() => setNukeOpen(false)}
+                onDone={() => { onRefreshList?.(); void fetchDetail(); setTimeout(() => fetchStats(), 1500) }}
+              />
+            </>
           )}
           {isRunning && (
             <button

@@ -310,6 +310,9 @@ export default function Config() {
     NTFY_TOPIC: d.ntfy_topic ?? '',
     NTFY_PRIORITY: d.ntfy_priority ?? 'default',
     DISCORD_WEBHOOK_URL: '',
+    DISCORD_WEBHOOK_NAME: d.discord_webhook_name ?? 'DCS Manager',
+    DISCORD_WEBHOOK_AVATAR: d.discord_webhook_avatar ?? '',
+    NOTIFY_COOLDOWN_MINUTES: d.notify_cooldown_minutes ?? 60,
     NOTIFICATION_STACKS: d.notification_stacks ?? '',
     ENABLE_COLORS: d.enable_colors ?? true,
     COLOR_MODE: d.color_mode ?? 'auto',
@@ -881,6 +884,30 @@ export default function Config() {
               value={String(edits.DISCORD_WEBHOOK_URL ?? '')}
               onChange={handleStringChange}
               placeholder={cfg.discord_configured ? 'configured' : 'https://discord.com/api/webhooks/…'}
+            />
+            <TextRow
+              label="Discord name"
+              description="The name the Discord posts appear with"
+              configKey="DISCORD_WEBHOOK_NAME"
+              value={String(edits.DISCORD_WEBHOOK_NAME ?? cfg.discord_webhook_name ?? 'DCS Manager')}
+              onChange={handleStringChange}
+              placeholder="DCS Manager"
+            />
+            <TextRow
+              label="Discord avatar"
+              description="Any https image URL; empty = the DCS icon"
+              configKey="DISCORD_WEBHOOK_AVATAR"
+              value={String(edits.DISCORD_WEBHOOK_AVATAR ?? cfg.discord_webhook_avatar ?? '')}
+              onChange={handleStringChange}
+              placeholder="https://…/avatar.png"
+            />
+            <TextRow
+              label="Repeat cooldown"
+              description="Minutes before a container rule repeats the same event for the same container while it lasts (0 = every check). Disk rules wait 6 h, image-update rules a day; a rule's own cooldown overrides these."
+              configKey="NOTIFY_COOLDOWN_MINUTES"
+              value={String(edits.NOTIFY_COOLDOWN_MINUTES ?? cfg.notify_cooldown_minutes ?? 60)}
+              onChange={handleStringChange}
+              placeholder="60"
             />
             <SelectRow
               label="Priority"

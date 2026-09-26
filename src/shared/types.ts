@@ -302,6 +302,11 @@ export interface ServerConfig {
   discord_configured?: boolean
   /** Last characters of the webhook, to recognise it without exposing it */
   discord_webhook_hint?: string
+  /** Name and avatar the Discord posts appear with */
+  discord_webhook_name?: string
+  discord_webhook_avatar?: string
+  /** Minutes before a container rule repeats the same event for the same target */
+  notify_cooldown_minutes?: number
   ntfy_url: string
   ntfy_topic: string
   ntfy_priority: string
@@ -612,6 +617,40 @@ export interface EventEntry {
   name: string
 }
 
+// GET /containers/:name/reset — what a nuke & reinstall would do
+export interface ContainerResetPreview {
+  container: string
+  stack: string
+  service: string
+  image: string
+  app_data: { path: string; size: string; exists: boolean }[]
+  kept_shared: { path: string; shared_with: string }[]
+  volumes: string[]
+  volumes_shared: { path: string; shared_with: string }[]
+  trash_dir: string
+  trash_keep_days: number
+  previous_resets: string[]
+}
+
+// POST /containers/:name/reset
+export interface ContainerResetResponse {
+  success: boolean
+  container: string
+  stack: string
+  service: string
+  image: string
+  trashed: string[]
+  trash_dir: string
+  volumes_removed: string[]
+  kept_shared: { path: string; shared_with: string }[]
+  failed: string[]
+  message: string
+  output: string
+}
+
+// POST /auth/users/:name/role
+export interface UserRoleResponse { success: boolean; username: string; role: 'admin' | 'user' | 'bot'; message: string }
+
 // GET /containers/:name/processes
 export interface ContainerProcessesResponse {
   container: string
@@ -638,7 +677,7 @@ export interface AuthResponse {
   success: boolean
   token: string
   username: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'user' | 'bot'
 }
 
 export interface AuthVerifyResponse {
@@ -1608,6 +1647,8 @@ export interface NotificationRule {
   tags: string[]
   title_template?: string
   message_template?: string
+  /** Minutes before the same event for the same target repeats; null = the event's default */
+  cooldown_minutes?: number | null
   created_at: string
 }
 

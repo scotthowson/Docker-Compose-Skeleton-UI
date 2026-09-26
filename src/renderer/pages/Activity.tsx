@@ -8,8 +8,8 @@ import {
   Box, Network, HardDrive, Database,
   Clock, Filter, Search, Activity as ActivityIcon,
   Zap, WifiOff, Server, Loader2, X,
-  ChevronDown, FileText, Shield, Rocket, Power,
-  HeartPulse, Archive, ListFilter,
+  ChevronDown, ChevronRight, FileText, Shield, Rocket, Power,
+  HeartPulse, Archive, ListFilter, AlertTriangle,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { fetchEvents, fetchAuditLog } from '../api/endpoints'
@@ -23,7 +23,7 @@ import type { EventEntry, EventsResponse, AuditEntry } from '../../shared/types'
 // Constants & helpers
 // ---------------------------------------------------------------------------
 
-type FilterType = 'all' | 'container' | 'network' | 'volume' | 'image'
+type FilterType = 'all' | 'container' | 'network' | 'volume' | 'image' | 'error'
 
 const FILTER_TABS: { key: FilterType; label: string; icon: React.ReactNode }[] = [
   { key: 'all', label: 'All', icon: <ActivityIcon size={13} /> },
@@ -31,7 +31,20 @@ const FILTER_TABS: { key: FilterType; label: string; icon: React.ReactNode }[] =
   { key: 'network', label: 'Networks', icon: <Network size={13} /> },
   { key: 'volume', label: 'Volumes', icon: <HardDrive size={13} /> },
   { key: 'image', label: 'Images', icon: <Database size={13} /> },
+  { key: 'error', label: 'Errors', icon: <AlertTriangle size={13} /> },
 ]
+
+/** Events that mean something went wrong: crashes, kills, out-of-memory, failed health checks */
+function isErrorEvent(e: EventEntry): boolean {
+  const a = e.action.toLowerCase()
+  if (a.startsWith('exec_')) return false
+  return a === 'die' || a === 'oom' || a === 'kill' || a.startsWith('health_status: unhealthy') || a.includes('unhealthy')
+}
+
+/** A key that stays the same for the same event across polls, so cards never remount */
+function eventKey(e: EventEntry): string {
+  return `${e.timestamp}|${e.type}|${e.action}|${e.name}`
+}
 
 /** Icon for each event action */
 function actionIcon(action: string): React.ReactNode {
@@ -231,10 +244,11 @@ function DisconnectedState() {
 
 function StatsBar({ events }: { events: EventEntry[] }) {
   const counts = useMemo(() => {
-    const c = { container: 0, network: 0, volume: 0, image: 0, other: 0 }
+    const c = { container: 0, network: 0, volume: 0, image: 0, other: 0, error: 0 }
     for (const e of events) {
       if (e.type in c) (c as Record<string, number>)[e.type]++
       else c.other++
+      if (isErrorEvent(e)) c.error++
     }
     return c
   }, [events])
@@ -245,10 +259,11 @@ function StatsBar({ events }: { events: EventEntry[] }) {
     { label: 'Networks', value: counts.network, color: 'text-amber-400', iconColor: 'text-amber-400', icon: <Network size={14} /> },
     { label: 'Volumes', value: counts.volume, color: 'text-violet-400', iconColor: 'text-violet-400', icon: <HardDrive size={14} /> },
     { label: 'Images', value: counts.image, color: 'text-emerald-400', iconColor: 'text-emerald-400', icon: <Database size={14} /> },
+    { label: 'Errors', value: counts.error, color: counts.error ? 'text-rose-400' : 'text-slate-400', iconColor: 'text-rose-400', icon: <AlertTriangle size={14} /> },
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 animate-fade-in stagger-children">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {stats.map((stat) => (
         <div
           key={stat.label}
@@ -269,14 +284,14 @@ function StatsBar({ events }: { events: EventEntry[] }) {
 // Timeline card
 // ---------------------------------------------------------------------------
 
-function TimelineCard({ event, index }: { event: EventEntry; index: number }) {
+const TimelineCard = React.memo(function TimelineCard({ event, index, fresh }: { event: EventEntry; index: number; fresh: boolean }) {
   const colors = actionColors(event.action)
   const badge = typeBadge(event.type)
 
   return (
     <div
-      className="relative pl-10 pb-8 last:pb-0 group animate-fade-in"
-      style={{ animationDelay: `${Math.min(index * 40, 600)}ms` }}
+      className={`relative pl-10 pb-8 last:pb-0 group ${fresh ? 'animate-fade-in' : ''}`}
+      style={fresh ? { animationDelay: `${Math.min(index * 40, 400)}ms` } : undefined}
     >
       {/* Vertical connector line (hidden on last) */}
       <div className="absolute left-[11px] top-6 bottom-0 w-px bg-gradient-to-b from-white/[0.08] to-transparent group-last:hidden" />
@@ -354,26 +369,37 @@ function TimelineCard({ event, index }: { event: EventEntry; index: number }) {
       </div>
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Day group header
 // ---------------------------------------------------------------------------
 
-function DayHeader({ label }: { label: string }) {
+function DayHeader({ label, count, collapsed, onToggle }: { label: string; count: number; collapsed: boolean; onToggle: () => void }) {
   return (
-    <div className="relative pl-10 pb-4 pt-2 animate-fade-in">
+    <div className="relative pl-10 pb-4 pt-2">
       {/* Dot on the timeline */}
       <div className="absolute left-[7px] top-3 z-10">
         <div className="w-[9px] h-[9px] rounded-full bg-gradient-to-br from-emerald-400 to-cyan-400 ring-2 ring-slate-950" />
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="group/day flex items-center gap-3 w-full text-left"
+        title={collapsed ? `Show ${label.toLowerCase()}` : `Hide ${label.toLowerCase()}`}
+      >
+        <span className="text-xs font-bold uppercase tracking-widest text-slate-400 group-hover/day:text-slate-200 transition-colors">
           {label}
         </span>
+        <span className="text-[10px] font-medium text-slate-600 tabular-nums">{count}</span>
         <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
-      </div>
+        <ChevronDown
+          size={14}
+          className={`text-slate-500 group-hover/day:text-slate-300 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
+        />
+      </button>
     </div>
   )
 }
@@ -411,6 +437,13 @@ export default function Activity() {
 
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(() => new Set())
+  const toggleDay = useCallback((label: string) => {
+    setCollapsedDays((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next })
+  }, [])
+  // Cards seen before never animate again: new events slide in, the rest stay put
+  const seenKeys = React.useRef<Set<string>>(new Set())
+  const firstPaint = React.useRef(true)
 
   // Poll /events every 3s
   const onPollSuccess = useCallback(() => {
@@ -433,12 +466,22 @@ export default function Activity() {
     }
   }, [eventsPoll.data, setEvents, onPollSuccess])
 
+  // After the first paint, only events that were not on screen before animate in
+  useEffect(() => {
+    if (events.length > 0 && firstPaint.current) {
+      const t = setTimeout(() => { firstPaint.current = false }, 800)
+      return () => clearTimeout(t)
+    }
+  }, [events.length])
+
   // Filter events
   const filteredEvents = useMemo(() => {
     let result = [...events]
 
     // Type filter
-    if (activeFilter !== 'all') {
+    if (activeFilter === 'error') {
+      result = result.filter(isErrorEvent)
+    } else if (activeFilter !== 'all') {
       result = result.filter((e) => e.type === activeFilter)
     }
 
@@ -657,18 +700,24 @@ export default function Activity() {
 
               {/* Grouped events */}
               <div className="relative">
-                {groupedEvents.map((group) => (
-                  <div key={group.label}>
-                    <DayHeader label={group.label} />
-                    {group.events.map((event, idx) => (
-                      <TimelineCard
-                        key={`${event.timestamp}-${event.name}-${event.action}-${idx}`}
-                        event={event}
-                        index={idx}
-                      />
-                    ))}
-                  </div>
-                ))}
+                {groupedEvents.map((group) => {
+                  const collapsed = collapsedDays.has(group.label)
+                  const dupes = new Map<string, number>()
+                  return (
+                    <div key={group.label}>
+                      <DayHeader label={group.label} count={group.events.length} collapsed={collapsed} onToggle={() => toggleDay(group.label)} />
+                      {!collapsed && group.events.map((event, idx) => {
+                        const base = eventKey(event)
+                        const n = (dupes.get(base) ?? 0) + 1
+                        dupes.set(base, n)
+                        const key = n > 1 ? `${base}#${n}` : base
+                        const fresh = !firstPaint.current && !seenKeys.current.has(key)
+                        seenKeys.current.add(key)
+                        return <TimelineCard key={key} event={event} index={idx} fresh={fresh} />
+                      })}
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Bottom fade */}

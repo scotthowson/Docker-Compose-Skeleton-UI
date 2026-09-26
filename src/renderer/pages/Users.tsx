@@ -19,13 +19,14 @@ import {
   AlertTriangle,
   KeyRound,
 } from 'lucide-react'
+import { Bot } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { Tooltip } from '../components/common/Tooltip'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
-  authListUsers, authListInvites, authCreateInvite, authCreateUser, authRevokeUser,
+  authListUsers, authListInvites, authCreateInvite, authCreateUser, authRevokeUser, authSetUserRole,
   authListSessions, authRevokeSession,
 } from '../api/endpoints'
 import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
@@ -83,8 +84,8 @@ export default function Users() {
   const [inviteLoading, setInviteLoading] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
-  const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin'>('user')
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as 'user' | 'admin' })
+  const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin' | 'bot'>('user')
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as 'user' | 'admin' | 'bot' })
   const [createLoading, setCreateLoading] = useState(false)
   const [showConfirmRevoke, setShowConfirmRevoke] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionEntry[]>([])
@@ -151,6 +152,17 @@ export default function Users() {
   }, [newUser, addToast, fetchData])
 
   // Revoke user
+  const handleChangeRole = useCallback(async (username: string, role: 'user' | 'admin' | 'bot') => {
+    try {
+      const result = await authSetUserRole(username, role)
+      addToast({ type: result.success ? 'success' : 'error', message: result.message || `${username} is now ${role}` })
+      fetchData()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast({ type: 'error', message: `Could not change the role: ${msg}`, duration: 6000 })
+    }
+  }, [addToast, fetchData])
+
   const handleRevokeUser = useCallback(async (username: string) => {
     setRevokeTarget(username)
     try {
@@ -293,7 +305,9 @@ export default function Users() {
                       w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold
                       ${user.role === 'admin'
                         ? 'bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-400 ring-1 ring-amber-500/20'
-                        : 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-400 ring-1 ring-emerald-500/20'
+                        : user.role === 'bot'
+                          ? 'bg-gradient-to-br from-violet-500/20 to-indigo-500/20 text-violet-300 ring-1 ring-violet-500/20'
+                          : 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-400 ring-1 ring-emerald-500/20'
                       }
                     `}>
                       {user.username[0]?.toUpperCase() ?? 'U'}
@@ -305,10 +319,12 @@ export default function Users() {
                           inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold
                           ${user.role === 'admin'
                             ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
-                            : 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
+                            : user.role === 'bot'
+                              ? 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20'
+                              : 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
                           }
                         `}>
-                          {user.role === 'admin' ? <Shield className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
+                          {user.role === 'admin' ? <Shield className="h-2.5 w-2.5" /> : user.role === 'bot' ? <Bot className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
                           {user.role}
                         </span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1">
@@ -319,6 +335,20 @@ export default function Users() {
                     </div>
                   </div>
 
+                  {/* Role, changeable for everyone but yourself; a bot account runs day-to-day operations only and may keep several sessions */}
+                  <div className="flex items-center gap-2">
+                  {user.username !== currentUser && (
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleChangeRole(user.username, e.target.value as 'user' | 'admin' | 'bot')}
+                      title="Change this account's role (signs its sessions out)"
+                      className="px-2 py-1 rounded-lg text-[11px] bg-white/5 border border-white/5 text-slate-400 hover:text-slate-200 focus:outline-none focus:border-emerald-500/30 cursor-pointer"
+                    >
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                      <option value="bot">Bot</option>
+                    </select>
+                  )}
                   {/* Revoke button — disabled for current user (cannot revoke own access) */}
                   {user.username === currentUser ? (
                     <Tooltip content="You cannot revoke your own account" position="bottom">
@@ -356,6 +386,7 @@ export default function Users() {
                       Revoke
                     </button>
                   )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -390,11 +421,12 @@ export default function Users() {
             />
             <select
               value={newUser.role}
-              onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as 'user' | 'admin' }))}
+              onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as 'user' | 'admin' | 'bot' }))}
               className="px-2 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-emerald-500/30"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
+              <option value="bot">Bot</option>
             </select>
             <button
               onClick={handleCreateUser}
@@ -425,7 +457,7 @@ export default function Users() {
               <span className="text-xs text-slate-400">Generate new invite as:</span>
               <select
                 value={newInviteRole}
-                onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin')}
+                onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin' | 'bot')}
                 className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-cyan-500/30"
               >
                 <option value="user">User</option>

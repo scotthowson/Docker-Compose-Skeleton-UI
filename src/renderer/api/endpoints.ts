@@ -160,6 +160,9 @@ import type {
   ExportResponse,
   AuditLogResponse,
   WebhookListResponse,
+  ContainerResetPreview,
+  ContainerResetResponse,
+  UserRoleResponse,
   WebhookCreateResponse,
   WebhookDeleteResponse,
   WebhookTestResponse,
@@ -380,6 +383,16 @@ export function recreateContainer(name: string): Promise<ContainerActionResponse
   )
 }
 
+/** GET /containers/:name/reset — What a nuke & reinstall would remove (admin) */
+export function fetchContainerResetPreview(name: string): Promise<ContainerResetPreview> {
+  return apiClient.get<ContainerResetPreview>(`/containers/${encodeURIComponent(name)}/reset`)
+}
+
+/** POST /containers/:name/reset — Nuke & reinstall: wipe its App-Data (to the trash), optionally its volumes, recreate it */
+export function resetContainer(name: string, body: { confirm: string; wipe_app_data?: boolean; wipe_volumes?: boolean; pull?: boolean }): Promise<ContainerResetResponse> {
+  return apiClient.post<ContainerResetResponse>(`/containers/${encodeURIComponent(name)}/reset`, body, 300000)
+}
+
 /** POST /containers/:name/remove — Force-remove a container */
 export function removeContainer(name: string): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
@@ -563,8 +576,13 @@ export function authCreateInvite(role?: string): Promise<InviteResponse> {
 }
 
 /** POST /auth/users — Create an account directly, no invite code (admin) */
-export function authCreateUser(username: string, password: string, role: 'user' | 'admin'): Promise<{ success: boolean; username: string; role: string; message: string }> {
+export function authCreateUser(username: string, password: string, role: 'user' | 'admin' | 'bot'): Promise<{ success: boolean; username: string; role: string; message: string }> {
   return apiClient.post<{ success: boolean; username: string; role: string; message: string }>('/auth/users', { username, password, role })
+}
+
+/** POST /auth/users/:name/role — Change an account's role (admin); their sessions are signed out */
+export function authSetUserRole(username: string, role: 'user' | 'admin' | 'bot'): Promise<UserRoleResponse> {
+  return apiClient.post<UserRoleResponse>(`/auth/users/${encodeURIComponent(username)}/role`, { role })
 }
 
 /** GET /auth/users — List all registered users */

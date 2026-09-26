@@ -55,6 +55,7 @@ import DNS from './pages/DNS'
 import Export from './pages/Export'
 import SetupWizard from './pages/SetupWizard'
 import KeyboardShortcutsPanel from './components/common/KeyboardShortcutsPanel'
+import { BackToTop } from './components/common/BackToTop'
 import { apiClient } from './api/client'
 import { sseClient } from './lib/sse'
 import type { PageId } from '../shared/types'
@@ -659,6 +660,7 @@ export default function App() {
                 <ActivePage />
               </ErrorBoundary>
             </div>
+            <BackToTop scrollRef={mainRef} />
           </main>
         </div>
 
