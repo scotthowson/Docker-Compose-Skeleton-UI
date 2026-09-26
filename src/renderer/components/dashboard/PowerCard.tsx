@@ -67,7 +67,7 @@ export default function PowerCard(_props: CardCommonProps) {
       <div className="flex items-center gap-2 mb-3">
         <Icon size={14} className={ring[tone].split(' ')[0]} />
         {title}
-        <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${ring[tone]}`}>
+        <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0 ${ring[tone]}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${bar[tone]} ${onBatt ? 'animate-pulse' : ''}`} />
           {label}
         </span>
