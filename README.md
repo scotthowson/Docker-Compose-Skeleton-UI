@@ -426,3 +426,7 @@ npm run electron
 ## License
 
 MIT
+
+## Terms and privacy
+
+DCS Manager runs against your own server and sends nothing to the author. The [Terms of Service](TERMS.md) and [Privacy Policy](PRIVACY.md) spell it out; the Discord Rich Presence feature links to both.

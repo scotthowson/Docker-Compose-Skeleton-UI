@@ -428,6 +428,9 @@ function DiscordPresenceSettings() {
           Create an application at <span className="font-mono">discord.com/developers/applications</span> named “DCS Manager”, copy its Application ID here, and under Rich Presence → Art Assets upload three images named <span className="font-mono">dcs</span> (the big icon), <span className="font-mono">healthy</span> and <span className="font-mono">warning</span> (the small badge).
         </p>
         {status?.error && <p className="text-[11px] text-amber-400 mt-1">{status.error}</p>}
+        <p className="text-[11px] text-slate-500 mt-2">
+          The Discord portal asks for these two links: <a href="https://github.com/scotthowson/Docker-Compose-Skeleton-UI/blob/legal/TERMS.md" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Terms of Service</a> · <a href="https://github.com/scotthowson/Docker-Compose-Skeleton-UI/blob/legal/PRIVACY.md" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Privacy Policy</a>
+        </p>
       </div>
     </div>
   )
