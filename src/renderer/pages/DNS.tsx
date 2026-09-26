@@ -730,7 +730,7 @@ function CertificatesPanel({ data, loading, onRefresh }: { data: RouteCertificat
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <Lock size={15} className={tone} />
-          <h3 className="text-sm font-semibold text-slate-100">Certificates</h3>
+          <h3 className="text-sm font-semibold text-slate-100">Proxy health</h3>
           {data && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.04] text-slate-400 border border-white/5 truncate" title="ACME challenge Traefik is configured for">{challengeLabel}</span>
           )}
@@ -749,6 +749,16 @@ function CertificatesPanel({ data, loading, onRefresh }: { data: RouteCertificat
             <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">acme.json</span><span className={data.acme_file.exists ? (data.acme_file.mode_ok ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400'}>{data.acme_file.exists ? `mode ${data.acme_file.mode}${data.acme_file.mode_ok ? '' : ' (must be 600)'}` : 'missing'}</span></div>
             <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2"><span className="text-slate-500 block">Issued</span><span className={certs.length ? 'text-emerald-400' : 'text-amber-400'}>{certs.length} certificate{certs.length === 1 ? '' : 's'}</span></div>
           </div>
+          {data.probe && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-slate-500">Live probe through Traefik:</span>
+              <span className="text-emerald-400">{data.probe.passing} passing</span>
+              {data.probe.skipped_target_down > 0 && <span className="text-slate-400">{data.probe.skipped_target_down} target down</span>}
+              {data.probe.backend_down.map((d) => <span key={d} className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-mono" title="Traefik routed it but the app did not answer">{d}</span>)}
+              {data.probe.dead.map((d) => <span key={d} className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 font-mono" title="No router answered for this name">{d}</span>)}
+              {data.domain && <span className="ml-auto text-slate-500">domain <span className="font-mono text-slate-300">{data.domain}</span></span>}
+            </div>
+          )}
           {certs.length > 0 && (
             <div className="divide-y divide-white/[0.04] rounded-lg border border-white/5 overflow-hidden">
               {certs.map((c) => {
@@ -776,6 +786,12 @@ function CertificatesPanel({ data, loading, onRefresh }: { data: RouteCertificat
             <details className="text-xs">
               <summary className="cursor-pointer text-slate-400 hover:text-slate-200">Last ACME errors from Traefik's log ({data.errors.length})</summary>
               <pre className="mt-2 p-3 rounded-lg bg-black/30 border border-white/5 text-[10px] text-rose-300/90 whitespace-pre-wrap break-all">{data.errors.join('\n')}</pre>
+            </details>
+          )}
+          {(data.log?.length ?? 0) > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-200">Traefik errors and warnings, last 24 h ({data.log!.length})</summary>
+              <pre className="mt-2 p-3 rounded-lg bg-black/30 border border-white/5 text-[10px] text-amber-200/80 whitespace-pre-wrap break-all">{data.log!.join('\n')}</pre>
             </details>
           )}
         </div>

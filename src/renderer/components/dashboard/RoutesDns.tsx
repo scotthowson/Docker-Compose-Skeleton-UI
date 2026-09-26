@@ -43,7 +43,8 @@ export default function RoutesDns() {
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 space-y-1">
           {list.map((r) => {
-            const host = domain ? `${r.subdomain}.${domain}` : r.subdomain
+            // The API reports the full host from the route's Host() rule; only a bare label needs the domain
+            const host = r.subdomain.includes('.') || !domain ? r.subdomain : `${r.subdomain}.${domain}`
             const url = `https://${host}`
             return (
               <a

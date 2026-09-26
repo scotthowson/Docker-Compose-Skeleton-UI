@@ -2326,6 +2326,12 @@ export interface RouteCertificate {
 export interface RouteCertificatesResponse {
   traefik_stack: string
   active: boolean
+  /** Domain the routes are built on (empty or example.com = not configured) */
+  domain?: string
+  /** Live probe of every route through Traefik (dry run of proxy-reconcile) */
+  probe?: { routes: number; passing: number; skipped_target_down: number; dead: string[]; backend_down: string[] } | null
+  /** Last Traefik errors and warnings from its log */
+  log?: string[]
   challenge: 'dns' | 'http' | 'none' | 'unknown'
   email: string
   token_set: boolean
