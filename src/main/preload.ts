@@ -12,9 +12,9 @@ export interface ElectronAPI {
   /** Discord Rich Presence: push the latest facts (details/state lines, images, buttons) */
   presenceUpdate: (payload: Record<string, unknown>) => Promise<boolean>
   /** Discord Rich Presence: connection state for the Settings page */
-  presenceStatus: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string }>
+  presenceStatus: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string; lastSentAt: number; user: string }>
   /** Re-read the discord* settings and reconnect */
-  presenceConfigure: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string }>
+  presenceConfigure: () => Promise<{ enabled: boolean; connected: boolean; clientId: string; error: string; lastSentAt: number; user: string }>
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {

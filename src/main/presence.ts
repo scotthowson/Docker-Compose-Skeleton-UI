@@ -26,11 +26,26 @@ export interface PresenceStatus {
   connected: boolean
   clientId: string
   error: string
+  /** unix ms of the last activity Discord accepted, 0 when none yet */
+  lastSentAt: number
   lastPayload: PresencePayload | null
+  /** Discord account the client is signed in with, once connected */
+  user: string
 }
 
 const RECONNECT_MS = 30000
 const MIN_UPDATE_MS = 15000
+const SESSION_STARTED = Date.now()
+
+/** Shown from the moment Discord accepts the connection until the app reports its facts */
+const DEFAULT_PAYLOAD: PresencePayload = {
+  details: 'DCS Manager',
+  state: 'Opening the dashboard…',
+  largeImageKey: 'dcs',
+  largeImageText: 'DCS Manager',
+  startTimestamp: SESSION_STARTED,
+  buttons: [{ label: 'Get DCS', url: 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO' }],
+}
 
 let client: Client | null = null
 let clientId = ''
@@ -39,10 +54,13 @@ let connected = false
 let lastError = ''
 let lastPayload: PresencePayload | null = null
 let lastSentAt = 0
+let userName = ''
 let pending: PresencePayload | null = null
 let pendingTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connecting = false
+
+const log = (...args: unknown[]) => console.log('[presence]', new Date().toISOString(), ...args)
 
 function clearTimers() {
   if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
@@ -52,6 +70,7 @@ function clearTimers() {
 async function destroyClient() {
   clearTimers()
   connected = false
+  userName = ''
   const c = client
   client = null
   if (c) {
@@ -71,22 +90,30 @@ function scheduleReconnect() {
 async function connect() {
   if (!enabled || !clientId || connecting || connected) return
   connecting = true
+  const c = new Client({ clientId })
+  client = c
+  c.on('ready', () => {
+    if (client !== c) return
+    connected = true
+    lastError = ''
+    userName = c.user?.username ?? ''
+    log('connected to Discord as', userName || '(unknown user)')
+    // Show something right away; the renderer replaces it with live facts
+    void send(lastPayload ?? DEFAULT_PAYLOAD, true)
+  })
+  c.on('disconnected', () => {
+    if (client !== c) return
+    connected = false
+    log('Discord closed the connection')
+    scheduleReconnect()
+  })
   try {
-    const c = new Client({ clientId })
-    c.on('ready', () => {
-      connected = true
-      lastError = ''
-      if (lastPayload) void send(lastPayload, true)
-    })
-    c.on('disconnected', () => {
-      connected = false
-      if (client === c) scheduleReconnect()
-    })
     await c.login()
-    client = c
   } catch (err) {
+    if (client === c) client = null
     connected = false
     lastError = err instanceof Error ? err.message : String(err)
+    log('could not reach Discord:', lastError)
     scheduleReconnect()
   } finally {
     connecting = false
@@ -122,8 +149,10 @@ async function send(payload: PresencePayload, force = false) {
       instance: false,
     })
     lastError = ''
+    log('activity set:', payload.details, '|', payload.state)
   } catch (err) {
     lastError = err instanceof Error ? err.message : String(err)
+    log('setActivity failed:', lastError)
     connected = false
     scheduleReconnect()
   }
@@ -132,12 +161,19 @@ async function send(payload: PresencePayload, force = false) {
 /** Apply settings: turn the presence on or off, or switch the application. */
 export async function configurePresence(opts: { enabled: boolean; clientId: string }) {
   const nextId = (opts.clientId || '').trim()
-  const changed = nextId !== clientId || opts.enabled !== enabled
-  enabled = opts.enabled && /^[0-9]{15,22}$/.test(nextId)
+  const nextEnabled = opts.enabled && /^[0-9]{15,22}$/.test(nextId)
+  const changed = nextId !== clientId || nextEnabled !== enabled
+  enabled = nextEnabled
   clientId = nextId
-  if (!changed) return
+  if (opts.enabled && !nextEnabled) lastError = nextId ? 'The Application ID must be the 17–20 digit number from the Discord Developer Portal' : 'No Application ID set'
+  if (!changed) {
+    // same settings: a nudge to reconnect when the link dropped
+    if (enabled && !connected) void connect()
+    return
+  }
   await destroyClient()
   if (enabled) void connect()
+  else log('turned off')
 }
 
 /** Latest facts from the renderer; sent at most every 15 s (Discord's limit). */
@@ -149,7 +185,7 @@ export function updatePresence(payload: PresencePayload) {
 }
 
 export function presenceStatus(): PresenceStatus {
-  return { enabled, connected, clientId, error: lastError, lastPayload }
+  return { enabled, connected, clientId, error: lastError, lastSentAt, lastPayload, user: userName }
 }
 
 export async function shutdownPresence() {

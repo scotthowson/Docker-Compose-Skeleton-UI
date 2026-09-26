@@ -35,6 +35,10 @@ export interface DiscordPresenceStatus {
   connected: boolean
   clientId: string
   error: string
+  /** unix ms of the last activity Discord accepted, 0 when none yet */
+  lastSentAt?: number
+  /** Discord account the local client is signed in with */
+  user?: string
 }
 
 declare global {

@@ -348,7 +348,7 @@ function PersonalSettings() {
 function DiscordPresenceSettings() {
   const [enabled, setEnabled] = useState(false)
   const [clientId, setClientId] = useState('')
-  const [status, setStatus] = useState<{ enabled: boolean; connected: boolean; clientId: string; error: string } | null>(null)
+  const [status, setStatus] = useState<{ enabled: boolean; connected: boolean; clientId: string; error: string; lastSentAt?: number; user?: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
   const refreshStatus = useCallback(async () => {
@@ -389,10 +389,15 @@ function DiscordPresenceSettings() {
         {status && (
           <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${status.connected ? 'bg-emerald-500/15 text-emerald-400' : status.enabled ? 'bg-amber-500/15 text-amber-400' : 'bg-white/[0.06] text-slate-400'}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-emerald-400' : status.enabled ? 'bg-amber-400' : 'bg-slate-500'}`} />
-            {status.connected ? 'Showing on Discord' : status.enabled ? (status.error ? 'Discord not reachable' : 'Connecting…') : 'Off'}
+            {status.connected ? `Connected${status.user ? ` as ${status.user}` : ''}` : status.enabled ? (status.error ? 'Discord not reachable' : 'Connecting…') : 'Off'}
           </span>
         )}
       </div>
+      {status?.connected && (
+        <p className="text-[11px] text-slate-500 -mt-1 mb-1">
+          {status.lastSentAt ? `Last activity sent ${Math.max(0, Math.round((Date.now() - status.lastSentAt) / 1000))} s ago — open your Discord profile to see it.` : 'Connected, sending the first activity…'}
+        </p>
+      )}
       <p className="text-xs text-slate-500 mb-2">
         Shows “Managing {'{server}'}” with your container, stack and health counts on your Discord profile while this app is open. It talks to the Discord app on this computer; nothing is sent anywhere else.
       </p>
@@ -421,9 +426,12 @@ function DiscordPresenceSettings() {
             disabled={saving || (!!clientId && !idOk)}
             className="px-3 py-2 rounded-lg text-xs font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/25 disabled:opacity-50 transition-colors"
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : 'Save & reconnect'}
           </button>
         </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Not showing up? In Discord open User Settings → Activity Privacy and turn on “Share your detected activities with others” and “Display current activity as a status message”. Your own profile (click your avatar) shows it as “Playing DCS Manager”.
+        </p>
         <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
           Create an application at <span className="font-mono">discord.com/developers/applications</span> named “DCS Manager”, copy its Application ID here, and under Rich Presence → Art Assets upload three images named <span className="font-mono">dcs</span> (the big icon), <span className="font-mono">healthy</span> and <span className="font-mono">warning</span> (the small badge).
         </p>
