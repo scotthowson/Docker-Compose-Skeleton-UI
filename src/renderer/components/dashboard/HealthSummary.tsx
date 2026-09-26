@@ -155,8 +155,9 @@ function SummaryBar({ healthy, unhealthy, stopped }: { healthy: number; unhealth
 
 function ContainerRow({ container }: { container: HealthContainer }) {
   const isRunning = container.state === 'running'
-  const isUnhealthy = container.health === 'unhealthy'
-  const dotColor = isUnhealthy ? 'bg-rose-400' : isRunning ? 'bg-emerald-400' : 'bg-slate-500'
+  const isSleeping = !!container.on_demand && !isRunning
+  const isUnhealthy = container.health === 'unhealthy' && !isSleeping
+  const dotColor = isSleeping ? 'bg-indigo-400' : isUnhealthy ? 'bg-rose-400' : isRunning ? 'bg-emerald-400' : 'bg-slate-500'
 
   return (
     <div className="flex items-center justify-between py-1 px-0.5 group">
@@ -165,7 +166,9 @@ function ContainerRow({ container }: { container: HealthContainer }) {
         <span className="text-[11px] text-slate-300 font-mono truncate">{container.name}</span>
       </div>
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-        {container.health && container.health !== 'none' && (
+        {isSleeping ? (
+          <span className="rounded px-1 py-0.5 text-[9px] font-medium bg-indigo-500/10 text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">on demand</span>
+        ) : container.health && container.health !== 'none' && container.health !== 'sleeping' && (
           <span className={`rounded px-1 py-0.5 text-[9px] font-medium ${
             container.health === 'healthy' ? 'bg-emerald-500/10 text-emerald-400'
               : container.health === 'unhealthy' ? 'bg-rose-500/10 text-rose-400'
@@ -174,8 +177,8 @@ function ContainerRow({ container }: { container: HealthContainer }) {
             {container.health}
           </span>
         )}
-        <span className={`text-[10px] ${isRunning ? 'text-slate-500' : 'text-slate-500'}`}>
-          {container.state}
+        <span className="text-[10px] text-slate-500">
+          {isSleeping ? 'sleeping' : container.state}
         </span>
       </div>
     </div>

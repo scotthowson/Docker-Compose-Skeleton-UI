@@ -345,7 +345,7 @@ interface AuthState {
   apiToken: string | null
 
   checkAccountExists: () => Promise<void>
-  register: (username: string, password: string) => Promise<boolean>
+  register: (username: string, password: string, opts?: { overwrite?: boolean }) => Promise<boolean>
   login: (username: string, password: string, rememberMe: boolean) => Promise<boolean>
   /** keepOtherServers: an expired token on one server leaves the sessions saved for other servers alone */
   logout: (opts?: { keepOtherServers?: boolean }) => Promise<void>
@@ -406,7 +406,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
   },
 
-  register: async (username: string, password: string) => {
+  register: async (username: string, password: string, opts?: { overwrite?: boolean }) => {
     set({ error: null })
 
     if (!username.trim() || !password.trim()) {
@@ -426,10 +426,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const accounts = await getAccounts()
-    const exists = accounts.some((a) => a.username.toLowerCase() === username.toLowerCase())
-    if (exists) {
+    const existing = accounts.find((a) => a.username.toLowerCase() === username.toLowerCase())
+    if (existing && !opts?.overwrite) {
       set({ error: 'An account with this username already exists' })
       return false
+    }
+    if (existing) {
+      // The server just accepted these credentials (another server, a changed
+      // password): the local copy used for the app lock follows them
+      const salt2 = generateSalt()
+      existing.passwordHash = await hashPassword(password, salt2)
+      existing.salt = salt2
+      existing.hashVersion = 2
+      existing.lastLoginAt = new Date().toISOString()
+      await saveAccounts(accounts)
+      sessionStorage.setItem('currentUser', existing.username)
+      setPersistedSession(existing.username)
+      const role2 = get().userRole || getPersistedUserRole(existing.username) || 'user'
+      persistUserRole(existing.username, role2)
+      set({ isAuthenticated: true, currentUser: existing.username, hasAccount: true, userRole: role2 })
+      return true
     }
 
     // Generate salt and derive key with PBKDF2

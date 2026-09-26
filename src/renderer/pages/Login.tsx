@@ -219,7 +219,10 @@ export default function Login() {
   // Mode is determined by whether an account exists AND the server needs setup.
   // If the server is already initialized (has admin), always show Sign In —
   // even on a new device with no local accounts.
-  const isSetup = !hasAccount && !serverInitialized
+  // Create-account mode only when nothing is known: no local account AND the
+  // server check failed. A reachable server decides (initialized → Sign In,
+  // not set up → the wizard); while it is being checked, Sign In is shown.
+  const isSetup = !hasAccount && !serverInitialized && connStatus === 'fail'
 
   /** Attempt server-side Bearer token auth after local auth succeeds.
    *  Only network errors (server unreachable) allow offline fallback.
@@ -387,7 +390,7 @@ export default function Login() {
         localStorage.setItem('auth-session', JSON.stringify(session))
 
         // Also create local account so app lock works offline
-        await register(username.trim(), password)
+        await register(username.trim(), password, { overwrite: true })
 
         // Remember username for next session
         useSettingsStore.getState().updateSetting('lastUsername', username.trim())
@@ -497,11 +500,12 @@ export default function Login() {
         return
       }
       success = await login(username, password, rememberMe)
-      if (!success && serverInitialized) {
-        // No local account (new device) — server accepted credentials,
-        // create local account for offline use
+      if (!success && (serverInitialized || apiClient.getAuthToken())) {
+        // The server accepted these credentials: the local copy (used for the
+        // app lock when offline) is created, or brought in line with them when
+        // the same username was used on another server
         clearError()
-        success = await register(username.trim(), password)
+        success = await register(username.trim(), password, { overwrite: true })
       }
     }
 

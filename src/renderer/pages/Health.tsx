@@ -110,6 +110,14 @@ function healthBadge(health: string): React.ReactNode {
       </span>
     )
   }
+  if (h === 'sleeping') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+        Sleeping
+      </span>
+    )
+  }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/15 px-2.5 py-0.5 text-xs font-medium text-slate-400">
       <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
@@ -343,7 +351,7 @@ export default function Health() {
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('')
-  const [healthFilter, setHealthFilter] = useState<'all' | 'healthy' | 'unhealthy' | 'stopped'>('all')
+  const [healthFilter, setHealthFilter] = useState<'all' | 'healthy' | 'unhealthy' | 'stopped' | 'ondemand'>('all')
   const [sortAsc, setSortAsc] = useState(true)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
@@ -352,7 +360,8 @@ export default function Health() {
     let result = enrichedContainers
     if (healthFilter === 'healthy') result = result.filter((c) => c.health.toLowerCase() === 'healthy')
     else if (healthFilter === 'unhealthy') result = result.filter((c) => c.health.toLowerCase() === 'unhealthy')
-    else if (healthFilter === 'stopped') result = result.filter((c) => c.state.toLowerCase() !== 'running')
+    else if (healthFilter === 'stopped') result = result.filter((c) => c.state.toLowerCase() !== 'running' && !c.on_demand)
+    else if (healthFilter === 'ondemand') result = result.filter((c) => !!c.on_demand)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter((c) =>
@@ -654,6 +663,7 @@ export default function Health() {
                 { key: 'healthy', label: 'OK' },
                 { key: 'unhealthy', label: 'Bad' },
                 { key: 'stopped', label: 'Off' },
+                { key: 'ondemand', label: 'On demand' },
               ] as const).map((f) => (
                 <button
                   key={f.key}
@@ -663,6 +673,7 @@ export default function Health() {
                       ? f.key === 'healthy' ? 'bg-emerald-500/15 text-emerald-400'
                         : f.key === 'unhealthy' ? 'bg-rose-500/15 text-rose-400'
                         : f.key === 'stopped' ? 'bg-slate-500/15 text-slate-400'
+                        : f.key === 'ondemand' ? 'bg-indigo-500/15 text-indigo-300'
                         : 'bg-cyan-500/15 text-cyan-400'
                       : 'text-slate-500 hover:text-slate-300'
                   }`}

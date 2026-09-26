@@ -1,1 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#0f172a"/><path d="M8 12h16M8 16h12M8 20h16" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101a2e"/><stop offset="1" stop-color="#050a14"/></linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.22" r="0.75"><stop offset="0" stop-color="#34d399" stop-opacity="0.32"/><stop offset="0.45" stop-color="#22d3ee" stop-opacity="0.10"/><stop offset="1" stop-color="#0b1220" stop-opacity="0"/></radialGradient>
+    <linearGradient id="topFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="0.55" stop-color="#10b981"/><stop offset="1" stop-color="#0891b2"/></linearGradient>
+    <linearGradient id="midFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2dd4bf" stop-opacity="0.55"/><stop offset="1" stop-color="#0e7490" stop-opacity="0.45"/></linearGradient>
+    <linearGradient id="lowFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#94a3b8" stop-opacity="0.32"/><stop offset="1" stop-color="#475569" stop-opacity="0.28"/></linearGradient>
+    <linearGradient id="edgeLight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="10"/></filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#glow)"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="218" fill="none" stroke="url(#edgeLight)" stroke-width="6"/>
+
+  <!-- shadow under the stack -->
+  <ellipse cx="512" cy="742" rx="250" ry="52" fill="#000000" fill-opacity="0.45" filter="url(#soft)"/>
+  <!-- bottom layer -->
+  <g transform="translate(512 618)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#lowFace)" stroke="#cbd5e1" stroke-opacity="0.35" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <!-- middle layer -->
+  <g transform="translate(512 528)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#midFace)" stroke="#67e8f9" stroke-opacity="0.55" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <!-- top layer: the live one -->
+  <g transform="translate(512 438)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#topFace)" stroke="#d1fae5" stroke-opacity="0.9" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M-262 0 L0 -131 L262 0" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <g stroke="#022c22" stroke-opacity="0.55" stroke-width="14" stroke-linecap="round">
+      <line x1="-92" y1="-14" x2="40" y2="52"/>
+      <line x1="-30" y1="-60" x2="102" y2="6"/>
+      <line x1="-154" y1="34" x2="-46" y2="88"/>
+    </g>
+  </g>
+  <!-- glowing corner nodes -->
+  <circle cx="512" cy="307" r="16" fill="#a7f3d0" filter="url(#dotGlow)" fill-opacity="0.9"/>
+  <circle cx="512" cy="307" r="11" fill="#a7f3d0"/>
+  <circle cx="250" cy="438" r="12" fill="#67e8f9" filter="url(#dotGlow)"/>
+  <circle cx="250" cy="438" r="9" fill="#a5f3fc"/>
+  <circle cx="774" cy="438" r="12" fill="#67e8f9" filter="url(#dotGlow)"/>
+  <circle cx="774" cy="438" r="9" fill="#a5f3fc"/>
+  <!-- the network drop -->
+  <line x1="512" y1="749" x2="512" y2="848" stroke="#67e8f9" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="512" cy="862" r="16" fill="#22d3ee" filter="url(#dotGlow)" fill-opacity="0.9"/>
+  <circle cx="512" cy="862" r="11" fill="#a5f3fc"/>
+  <circle cx="436" cy="886" r="7" fill="#67e8f9" fill-opacity="0.7"/>
+  <circle cx="588" cy="886" r="7" fill="#67e8f9" fill-opacity="0.7"/>
+</svg>
