@@ -25,7 +25,7 @@ import { useToast } from '../components/common/Toast'
 import { Tooltip } from '../components/common/Tooltip'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
-  authListUsers, authListInvites, authCreateInvite, authRevokeUser,
+  authListUsers, authListInvites, authCreateInvite, authCreateUser, authRevokeUser,
   authListSessions, authRevokeSession,
 } from '../api/endpoints'
 import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
@@ -84,6 +84,8 @@ export default function Users() {
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin'>('user')
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as 'user' | 'admin' })
+  const [createLoading, setCreateLoading] = useState(false)
   const [showConfirmRevoke, setShowConfirmRevoke] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [revokingSession, setRevokingSession] = useState<string | null>(null)
@@ -129,6 +131,24 @@ export default function Users() {
       setInviteLoading(false)
     }
   }, [newInviteRole, addToast, fetchData])
+
+  // Create an account directly (bots, family): no invite round trip
+  const handleCreateUser = useCallback(async () => {
+    const u = newUser.username.trim()
+    if (!/^[a-zA-Z0-9_-]{3,32}$/.test(u)) { addToast({ type: 'error', message: 'Username: 3–32 letters, digits, hyphens or underscores' }); return }
+    if (newUser.password.length < 8) { addToast({ type: 'error', message: 'Password: at least 8 characters' }); return }
+    setCreateLoading(true)
+    try {
+      const result = await authCreateUser(u, newUser.password, newUser.role)
+      addToast({ type: 'success', message: result.message || `User ${u} created` })
+      setNewUser({ username: '', password: '', role: 'user' })
+      fetchData()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not create the user', duration: 6000 })
+    } finally {
+      setCreateLoading(false)
+    }
+  }, [newUser, addToast, fetchData])
 
   // Revoke user
   const handleRevokeUser = useCallback(async (username: string) => {
@@ -340,6 +360,51 @@ export default function Users() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* ---- Create a user directly ---- */}
+        <div className="glass rounded-xl border border-white/5 p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <UserPlus className="h-4 w-4 text-emerald-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Create User</h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            An account you set up yourself, no invite code: for the Discord bot, an automation, or someone who should not register on their own. Bots need admin for the start, stop and update commands.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
+            <input
+              type="text"
+              value={newUser.username}
+              onChange={(e) => setNewUser((s) => ({ ...s, username: e.target.value }))}
+              placeholder="username (e.g. dcs-bot)"
+              autoComplete="off"
+              className="px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/30 font-mono"
+            />
+            <input
+              type="password"
+              value={newUser.password}
+              onChange={(e) => setNewUser((s) => ({ ...s, password: e.target.value }))}
+              placeholder="password (8+ characters)"
+              autoComplete="new-password"
+              className="px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/30"
+            />
+            <select
+              value={newUser.role}
+              onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as 'user' | 'admin' }))}
+              className="px-2 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-emerald-500/30"
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button
+              onClick={handleCreateUser}
+              disabled={createLoading || !newUser.username || !newUser.password}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
+            >
+              {createLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+              Create
+            </button>
+          </div>
         </div>
 
         {/* ---- Invite Codes ---- */}

@@ -562,6 +562,11 @@ export function authCreateInvite(role?: string): Promise<InviteResponse> {
   return apiClient.post<InviteResponse>('/auth/invite', { role: role || 'user' })
 }
 
+/** POST /auth/users — Create an account directly, no invite code (admin) */
+export function authCreateUser(username: string, password: string, role: 'user' | 'admin'): Promise<{ success: boolean; username: string; role: string; message: string }> {
+  return apiClient.post<{ success: boolean; username: string; role: string; message: string }>('/auth/users', { username, password, role })
+}
+
 /** GET /auth/users — List all registered users */
 export function authListUsers(): Promise<UserListResponse> {
   return apiClient.get<UserListResponse>('/auth/users')
