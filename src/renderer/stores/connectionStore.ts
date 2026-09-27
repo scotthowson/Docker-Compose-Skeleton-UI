@@ -28,6 +28,15 @@ interface ConnectionState {
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
+/** The latency shown is the median of the last few heartbeats: one slow hop does not flip it */
+const LATENCY_SAMPLES = 5
+let latencySamples: number[] = []
+function recordLatency(ms: number): number {
+  latencySamples = [...latencySamples.slice(-(LATENCY_SAMPLES - 1)), ms]
+  const sorted = [...latencySamples].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)]
+}
+
 /** Push a connection notification with cooldown to prevent flood */
 let lastConnNotifTime = 0
 let lastConnNotifType = ''
@@ -58,7 +67,7 @@ function startHeartbeat(connectFn: () => Promise<boolean>) {
       const ok = await apiClient.testConnection()
       if (ok) {
         heartbeatFailCount = 0
-        useConnectionStore.setState({ latencyMs: Math.round(performance.now() - t0) })
+        useConnectionStore.setState({ latencyMs: recordLatency(Math.round(performance.now() - t0)) })
       } else {
         heartbeatFailCount++
         // Only declare connection lost after multiple consecutive failures.
@@ -99,7 +108,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
   setServerUrl: (url) => {
     apiClient.setBaseUrl(url)
-    set({ serverUrl: url })
+    latencySamples = []
+    set({ serverUrl: url, latencyMs: null })
   },
 
   setStatus: (status) => set({ status }),
@@ -126,7 +136,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const t0 = performance.now()
       const ok = await apiClient.testConnection()
-      const latencyMs = Math.round(performance.now() - t0)
+      const latencyMs = recordLatency(Math.round(performance.now() - t0))
       if (ok) {
         if (reconnectTimer) {
           clearTimeout(reconnectTimer)

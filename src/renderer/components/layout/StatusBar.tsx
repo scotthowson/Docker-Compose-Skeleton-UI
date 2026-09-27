@@ -199,7 +199,7 @@ export function StatusBar() {
                 <Wifi size={9} className="text-emerald-500/60" />
                 <span className="text-slate-500">{lastRefreshAgo}</span>
                 {latencyMs != null && (
-                  <span className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
+                  <span title="Round trip to the API — median of the last 5 checks" className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
                     {latencyMs}ms
                   </span>
                 )}
@@ -265,7 +265,7 @@ export function StatusBar() {
                 <Wifi size={8} className="text-emerald-500/60" />
                 <span className="text-slate-500">{lastRefreshAgo}</span>
                 {latencyMs != null && (
-                  <span className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
+                  <span title="Round trip to the API — median of the last 5 checks" className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
                     {latencyMs}ms
                   </span>
                 )}

@@ -67,6 +67,7 @@ export class ApiClient {
 
   setBaseUrl(url: string): void {
     this.baseUrl = url.replace(/\/$/, '')
+    this.pingPath = '/ping'
   }
 
   setTimeout(ms: number): void {
@@ -191,18 +192,28 @@ export class ApiClient {
     return this.request<T>('DELETE', path)
   }
 
+  /** GET /ping on a 3.6+ API, GET / on older ones (remembered per server) */
+  private pingPath: '/ping' | '/' = '/ping'
+
+  /**
+   * Reachability check for the heartbeat. No auth headers (so no CORS preflight)
+   * and the smallest answer the API has, so the time it takes is the round trip.
+   */
   async testConnection(): Promise<boolean> {
     try {
-      // Simple reachability check — no auth headers (avoids CORS preflight)
-      const url = `${this.baseUrl}/`
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 8000)
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${this.baseUrl}${this.pingPath}`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
+        if (response.status === 404 && this.pingPath === '/ping') {
+          // An API before 3.6 has no /ping: use the root document from now on
+          this.pingPath = '/'
+          return this.testConnection()
+        }
         // The dashboard's own HTML answers 200 too; only the API speaks JSON
         return response.ok && (response.headers.get('content-type') || '').includes('json')
       } catch {
