@@ -9,7 +9,7 @@ import {
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
   Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight, Palette,
-  AlertTriangle, LifeBuoy, Satellite, Radar,
+  AlertTriangle, LifeBuoy, Satellite, Radar, Cpu,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -17,10 +17,14 @@ import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
   authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest, fetchFleetStatus,
+  fetchFleetProvisionDefaults, fetchProxmoxCapabilities, provisionFleet, fetchFleetJobs,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
-import type { SetupDefaultsResponse, FleetStatus, FleetJoinHubResponse } from '../../shared/types'
+import type { SetupDefaultsResponse, FleetStatus, FleetJoinHubResponse, FleetProvisionDefaults, ProxmoxCapabilities } from '../../shared/types'
+import { usePolling } from '../hooks/usePolling'
+import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
+import { VmSettingsFields, CapabilityNote, settingsFromDefaults, type VmSettings } from '../components/fleet/NewVmSheet'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 
@@ -223,6 +227,19 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [linkedMembers, setLinkedMembers] = useState(0)
   const [showFleet, setShowFleet] = useState(false)
   const [joined, setJoined] = useState<FleetJoinHubResponse | null>(null)
+  // The VM is the stack: with Proxmox linked, each stack (but core-infrastructure) gets its own VM built by the hub
+  const [provDefaults, setProvDefaults] = useState<FleetProvisionDefaults | null>(null)
+  const [caps, setCaps] = useState<ProxmoxCapabilities | null>(null)
+  const [vmSettings, setVmSettings] = useState<VmSettings | null>(null)
+  const [placements, setPlacements] = useState<Record<string, 'hub' | 'vm'>>({})
+  const [vmSpecs, setVmSpecs] = useState<Record<string, { cores: number; memGb: number; diskGb: number }>>({})
+  const [showVmSettings, setShowVmSettings] = useState(false)
+  const [vmQueued, setVmQueued] = useState(0)
+  const vmReady = !!(pveTest?.ok && caps?.can_provision && vmSettings)
+  const placementOf = (name: string): 'hub' | 'vm' => placements[name] ?? (vmReady && name !== 'core-infrastructure' ? 'vm' : 'hub')
+  const specOf = (name: string) => vmSpecs[name] ?? { cores: provDefaults?.defaults.cores ?? 2, memGb: Math.round((provDefaults?.defaults.memory_mb ?? 4096) / 1024), diskGb: provDefaults?.defaults.disk_gb ?? 32 }
+  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, ...specOf(st.name) }))
+  const jobsPoll = usePolling(fetchFleetJobs, 5000, { enabled: complete && vmQueued > 0 })
   const pveGuest = !!defaults?.system?.proxmox?.guest
   const pveHost = !!defaults?.system?.proxmox?.host
   const pveFilled = !!(pveUrl.trim() && pveTokenId.trim() && pveSecret.trim())
@@ -238,6 +255,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     try {
       const r = await proxmoxTest({ url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify })
       setPveTest(r.reachable ? { ok: true, text: `Connected: Proxmox VE ${r.version}, ${r.nodes} node${r.nodes === 1 ? '' : 's'}, ${r.vms.total} guests (${r.vms.running} running)` } : { ok: false, text: r.error || r.hints?.[0] || 'Not reachable' })
+      if (r.reachable) {
+        const pve = { url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify }
+        void Promise.allSettled([fetchProxmoxCapabilities(pve), fetchFleetProvisionDefaults(pve)]).then(([c, d]) => {
+          if (c.status === 'fulfilled') setCaps(c.value)
+          if (d.status === 'fulfilled') { setProvDefaults(d.value); setVmSettings((v) => v ?? settingsFromDefaults(d.value)) }
+        })
+      } else { setCaps(null); setProvDefaults(null); setVmSettings(null) }
     } catch (e) {
       setPveTest({ ok: false, text: e instanceof Error ? e.message : 'The test failed' })
     } finally { setPveTesting(false) }
@@ -462,8 +486,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   }, [envVars, notifyValid])
 
   const isStep4Valid = useCallback(() => {
-    return stacks.length >= 1 && stacks.every((s) => /^[a-z0-9][a-z0-9_-]*$/.test(s.name))
-  }, [stacks])
+    if (!(stacks.length >= 1 && stacks.every((s) => /^[a-z0-9][a-z0-9_-]*$/.test(s.name)))) return false
+    if (vmPlan.length > 0) {
+      if (!vmSettings || !vmSettings.node || !vmSettings.storage || !vmSettings.gateway || !vmSettings.ip_start) return false
+      if (!/^[0-9]{1,3}(\.[0-9]{1,3}){3}$/.test(vmSettings.gateway) || !/^[0-9]{1,3}(\.[0-9]{1,3}){3}$/.test(vmSettings.ip_start)) return false
+    }
+    return true
+  }, [stacks, vmPlan.length, vmSettings])
 
   // Navigation
   const canNext = useCallback(() => {
@@ -618,7 +647,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // Single setupConfigure call with everything — MUST be before setupComplete
       await setupConfigure({
         env_vars: allEnvVars,
-        stacks: stacks.map((s) => s.name),
+        stacks: stacks.filter((s) => placementOf(s.name) === 'hub').map((s) => s.name),
       })
       results.push({ label: 'Configuration saved', ok: true })
       if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
@@ -712,6 +741,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 3. Mark setup as complete (AFTER template deploys so they run in setup mode);
       //    a join setup.sh saved that was not run above happens here
       const done = await setupComplete()
+      // 3c. The VMs: one per stack placed in a VM, built by the hub in the background
+      if (vmPlan.length > 0 && vmSettings) {
+        try {
+          const r = await provisionFleet({ ...vmSettings, vms: vmPlan.map((v) => ({ stack: v.stack, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
+          setVmQueued(r.jobs.length)
+          results.push({ label: `${r.jobs.length} VM${r.jobs.length === 1 ? '' : 's'} being built by the hub: ${r.jobs.map((j) => `${j.stack} at ${j.ip}`).join(', ')}`, ok: true, detail: 'Each VM gets Docker and DCS, joins this hub and runs its stack — follow them below or on the Proxmox page' })
+        } catch (err) {
+          results.push({ label: 'Building the VMs', ok: false, detail: `${err instanceof Error ? err.message : 'failed'} — the Proxmox page can build them one by one` })
+        }
+        setSetupResults([...results])
+      }
       if (done?.fleet_join) {
         results.push(done.fleet_join.joined
           ? { label: `Joined the hub ${done.fleet_join.hub?.name || done.fleet_join.hub?.url || ''} as "${done.fleet_join.member?.name ?? ''}"`, ok: true }
@@ -751,10 +791,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       setComplete(true)
       sessionStorage.setItem('dcs-just-setup', 'true')
 
-      // 6. Redirect after brief delay
-      setTimeout(() => {
-        onComplete()
-      }, 1500)
+      // 6. Redirect after a brief delay — unless VMs are being built: then the success screen follows them
+      if (vmPlan.length === 0) {
+        setTimeout(() => {
+          onComplete()
+        }, 1500)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed')
       setCompleting(false)
@@ -824,8 +866,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // Success screen
   if (complete) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-950 px-4">
-        <div className="text-center animate-scale-in max-w-sm w-full">
+      <div className="h-screen flex items-center justify-center bg-slate-950 px-4 overflow-y-auto">
+        <div className={`text-center animate-scale-in w-full ${vmQueued > 0 ? 'max-w-2xl py-8' : 'max-w-sm'}`}>
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/30 mb-6 shadow-lg shadow-emerald-500/10">
             <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
           </div>
@@ -846,10 +888,22 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-            <Loader2 size={12} className="animate-spin text-emerald-400" />
-            <span>Entering Dashboard...</span>
-          </div>
+          {vmPlan.length > 0 ? (
+            <div className="text-left space-y-3 mb-4">
+              {vmQueued > 0 && (jobsPoll.data && jobsPoll.data.jobs.length > 0
+                ? <FleetJobsPanel jobs={jobsPoll.data.jobs} onChanged={jobsPoll.refresh} compact title="VMs being built" />
+                : <p className="text-xs text-slate-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin text-emerald-400" /> Waiting for the first VM job…</p>)}
+              {/* no automatic redirect while VMs are involved: the builds are followed here, or a refused build stays readable */}
+              <button type="button" onClick={onComplete} className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+                {vmQueued > 0 ? 'Open the dashboard — the builds carry on in the background' : 'Open the dashboard'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+              <Loader2 size={12} className="animate-spin text-emerald-400" />
+              <span>Entering Dashboard...</span>
+            </div>
+          )}
           <p className="text-[10px] text-slate-500 mt-6">
             Tip: Export your settings from Settings to back up this configuration
           </p>
@@ -2090,8 +2144,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <Layers size={16} className="text-emerald-400" />
                   <h2 className="text-lg font-semibold text-slate-100">Stack Categories</h2>
                 </div>
-                <p className="text-xs text-slate-500">Define your stack categories, startup order, and display labels</p>
+                <p className="text-xs text-slate-500">Define your stack categories, startup order, and display labels{pveTest?.ok ? ' — and which ones get their own VM' : ''}</p>
               </div>
+              {pveTest?.ok && (
+                <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3 space-y-2">
+                  <p className="text-[11px] text-slate-300 flex items-start gap-2"><Server size={13} className="text-amber-400 shrink-0 mt-0.5" /><span>Proxmox is linked, so <b>a stack can be a VM</b>: the hub builds it (Debian cloud image, Docker, DCS), the VM joins this hub and runs that one stack. The dashboard here stays the only one; <span className="font-mono">core-infrastructure</span> stays on the hub. Toggle each stack, size the VMs, and check the network below.</span></p>
+                  <CapabilityNote caps={caps} />
+                  {vmPlan.length > 0 && <p className="text-[11px] text-amber-200">{vmPlan.length} VM{vmPlan.length === 1 ? '' : 's'} · {vmPlan.reduce((n, v) => n + v.cores, 0)} cores · {vmPlan.reduce((n, v) => n + v.memGb, 0)} GB RAM · {vmPlan.reduce((n, v) => n + v.diskGb, 0)} GB disk</p>}
+                </div>
+              )}
 
               {/* Stack list */}
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin mb-4">
@@ -2141,6 +2202,28 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-500/15 text-slate-500 shrink-0">
                           Default
                         </span>
+                      )}
+
+                      {/* Where the stack runs: on the hub, or in its own VM */}
+                      {vmReady && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex rounded-md bg-white/5 border border-white/10 overflow-hidden">
+                            {(['hub', 'vm'] as const).map((p) => (
+                              <button key={p} type="button" onClick={() => setPlacements((m) => ({ ...m, [stack.name]: p }))}
+                                className={`h-6 px-2 text-[10px] font-semibold ${placementOf(stack.name) === p ? (p === 'vm' ? 'bg-amber-500/25 text-amber-200' : 'bg-emerald-500/20 text-emerald-300') : 'text-slate-500 hover:text-slate-300'}`}>
+                                {p === 'vm' ? 'VM' : 'Hub'}
+                              </button>
+                            ))}
+                          </div>
+                          {placementOf(stack.name) === 'vm' && (
+                            <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500">
+                              <Cpu size={10} />
+                              <input type="number" min={1} max={64} value={specOf(stack.name).cores} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), cores: Number(e.target.value) || 1 } }))} className="w-9 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="cores" />
+                              <input type="number" min={1} max={512} value={specOf(stack.name).memGb} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), memGb: Number(e.target.value) || 1 } }))} className="w-9 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="GB RAM" />
+                              <input type="number" min={8} max={4096} value={specOf(stack.name).diskGb} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), diskGb: Number(e.target.value) || 8 } }))} className="w-11 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="GB disk" />
+                            </div>
+                          )}
+                        </div>
                       )}
 
                       {/* Actions */}
@@ -2257,6 +2340,25 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
               {stacks.length === 0 && (
                 <p className="text-[10px] text-rose-400 mt-2">At least one stack is required</p>
+              )}
+
+              {vmReady && vmSettings && vmPlan.length > 0 && (
+                <div className="mt-4 border border-amber-500/20 rounded-xl overflow-hidden">
+                  <button type="button" onClick={() => setShowVmSettings(!showVmSettings)} className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Server size={14} className="text-amber-400 shrink-0" />
+                      <span className="text-xs font-semibold text-slate-300">VM settings</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono truncate">{vmSettings.node} · {vmSettings.storage} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway}</span>
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showVmSettings ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showVmSettings && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
+                      <p className="text-[11px] text-slate-500">Prefilled from Proxmox and this hub's network. Each VM gets the next free address from the first one, cores/RAM/disk per stack, user <span className="font-mono">{provDefaults?.vm_user || 'dcs'}</span> with the hub's ssh key, and the admin <span className="font-mono">{provDefaults?.admin_user || adminUsername}</span> with a generated password kept in the hub's secret store.</p>
+                      <VmSettingsFields value={vmSettings} onChange={setVmSettings} defaults={provDefaults} />
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -2445,6 +2547,32 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   )}
                 </div>
 
+                {/* VMs the hub builds */}
+                {vmPlan.length > 0 && vmSettings && (
+                  <div className="bg-slate-800/40 border border-amber-500/20 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Server size={14} className="text-amber-400" />
+                      <h3 className="text-xs font-semibold text-slate-300">VMs the hub builds ({vmPlan.length})</h3>
+                    </div>
+                    <div className="space-y-1">
+                      {vmPlan.map((v) => (
+                        <div key={v.stack} className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5">
+                          <span className="text-[10px] font-mono text-amber-200">{v.stack}</span>
+                          <span className="text-[10px] text-slate-400">{v.cores} cores · {v.memGb} GB RAM · {v.diskGb} GB</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
+                        <span className="text-[10px] text-slate-500">Network</span>
+                        <span className="text-[10px] font-mono text-slate-300">{vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway} · DNS {vmSettings.dns}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
+                        <span className="text-[10px] text-slate-500">Proxmox</span>
+                        <span className="text-[10px] font-mono text-slate-300">node {vmSettings.node} · disks on {vmSettings.storage} · image on {vmSettings.image_storage}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Fleet */}
                 {(linkedMembers > 0 || joined || fleetStatus?.pending_join) && (
                   <div className="bg-slate-800/40 border border-emerald-500/20 rounded-xl p-4">
@@ -2509,6 +2637,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           {i + 1}
                         </span>
                         <span className="text-xs font-mono text-slate-300">{stack.name}</span>
+                        {vmReady && (placementOf(stack.name) === 'vm'
+                          ? <span className="text-[8px] px-1 rounded bg-amber-500/15 text-amber-300">VM · {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB</span>
+                          : <span className="text-[8px] px-1 rounded bg-emerald-500/10 text-emerald-300">hub</span>)}
                         {stack.label && (
                           <span className="text-[8px] px-1 rounded bg-violet-500/15 text-violet-400">{stack.label}</span>
                         )}

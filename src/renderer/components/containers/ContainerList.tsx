@@ -123,7 +123,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     const actionFn = action === 'start' ? startContainer : action === 'stop' ? stopContainer : action === 'restart' ? restartContainer : removeContainer
     for (const name of selectedContainers) {
       try {
-        await actionFn(name)
+        await actionFn(name, containers.find((c) => c.name === name)?.member)
         results.push({ name, action, success: true })
       } catch {
         results.push({ name, action, success: false })
@@ -142,7 +142,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
         })
       }
     }
-  }, [selectedContainers])
+  }, [selectedContainers, containers])
 
   const exitBatchMode = useCallback(() => {
     setBatchMode(false)
@@ -154,12 +154,13 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     if (quickActionLoading) return
     setQuickActionLoading(`${name}-${action}`)
     try {
-      if (action === 'start') await startContainer(name)
-      else if (action === 'stop') await stopContainer(name)
-      else if (action === 'restart') await restartContainer(name)
+      const member = containers.find((c) => c.name === name)?.member
+      if (action === 'start') await startContainer(name, member)
+      else if (action === 'stop') await stopContainer(name, member)
+      else if (action === 'restart') await restartContainer(name, member)
     } catch { /* silent */ }
     finally { setQuickActionLoading(null) }
-  }, [quickActionLoading])
+  }, [quickActionLoading, containers])
 
   // Filter by tab + search
   const filtered = useMemo(() => {

@@ -36,6 +36,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
+  ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
   NetworkDetail,
@@ -373,30 +374,30 @@ export function fetchContainerLogs(name: string): Promise<ContainerLogsResponse>
 }
 
 /** POST /containers/:name/start — Start a container */
-export function startContainer(name: string): Promise<ContainerActionResponse> {
+export function startContainer(name: string, member?: string | null): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
-    `/containers/${encodeURIComponent(name)}/start`,
+    `/containers/${encodeURIComponent(name)}/start${member ? `?member=${encodeURIComponent(member)}` : ''}`,
   )
 }
 
 /** POST /containers/:name/stop — Stop a container */
-export function stopContainer(name: string): Promise<ContainerActionResponse> {
+export function stopContainer(name: string, member?: string | null): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
-    `/containers/${encodeURIComponent(name)}/stop`,
+    `/containers/${encodeURIComponent(name)}/stop${member ? `?member=${encodeURIComponent(member)}` : ''}`,
   )
 }
 
 /** POST /containers/:name/restart — Restart a container */
-export function restartContainer(name: string): Promise<ContainerActionResponse> {
+export function restartContainer(name: string, member?: string | null): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
-    `/containers/${encodeURIComponent(name)}/restart`,
+    `/containers/${encodeURIComponent(name)}/restart${member ? `?member=${encodeURIComponent(member)}` : ''}`,
   )
 }
 
 /** POST /containers/:name/recreate — Pull latest image, stop, remove, and recreate container */
-export function recreateContainer(name: string): Promise<ContainerActionResponse> {
+export function recreateContainer(name: string, member?: string | null): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
-    `/containers/${encodeURIComponent(name)}/recreate`, undefined, 120000,
+    `/containers/${encodeURIComponent(name)}/recreate${member ? `?member=${encodeURIComponent(member)}` : ''}`, undefined, 120000,
   )
 }
 
@@ -411,9 +412,9 @@ export function resetContainer(name: string, body: { confirm: string; wipe_app_d
 }
 
 /** POST /containers/:name/remove — Force-remove a container */
-export function removeContainer(name: string): Promise<ContainerActionResponse> {
+export function removeContainer(name: string, member?: string | null): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>(
-    `/containers/${encodeURIComponent(name)}/remove`,
+    `/containers/${encodeURIComponent(name)}/remove${member ? `?member=${encodeURIComponent(member)}` : ''}`,
   )
 }
 
@@ -1896,9 +1897,49 @@ export function updateFleetMember(id: string, body: { name?: string; url?: strin
   return apiClient.put<FleetMemberResponse>(`/fleet/members/${encodeURIComponent(id)}`, body)
 }
 
-/** DELETE /fleet/members/:id — forget a member */
-export function removeFleetMember(id: string): Promise<{ success: boolean; id: string }> {
-  return apiClient.delete<{ success: boolean; id: string }>(`/fleet/members/${encodeURIComponent(id)}`)
+/** DELETE /fleet/members/:id — forget a member; destroy=true also stops and destroys its VM on Proxmox */
+export function removeFleetMember(id: string, destroy = false): Promise<{ success: boolean; id: string; vm_destroyed?: boolean }> {
+  return apiClient.delete<{ success: boolean; id: string; vm_destroyed?: boolean }>(`/fleet/members/${encodeURIComponent(id)}${destroy ? '?destroy=true' : ''}`)
+}
+
+/** GET /proxmox/capabilities — what the API token may do (creating VMs needs more than power); POST with Proxmox values before they are saved */
+export function fetchProxmoxCapabilities(pve?: { url: string; token_id: string; token_secret: string; verify_tls: boolean }): Promise<ProxmoxCapabilities> {
+  return pve ? apiClient.post<ProxmoxCapabilities>('/proxmox/capabilities', pve, 60000) : apiClient.get<ProxmoxCapabilities>('/proxmox/capabilities')
+}
+
+/** GET /proxmox/storage — the node's storages */
+export function fetchProxmoxStorage(node?: string): Promise<ProxmoxStorageResponse> {
+  return apiClient.get<ProxmoxStorageResponse>(`/proxmox/storage${node ? `?node=${encodeURIComponent(node)}` : ''}`)
+}
+
+/** GET /fleet/provision/defaults — prefilled values for creating VMs (POST with Proxmox values before they are saved) */
+export function fetchFleetProvisionDefaults(pve?: { url: string; token_id: string; token_secret: string; verify_tls: boolean }): Promise<FleetProvisionDefaults> {
+  return pve ? apiClient.post<FleetProvisionDefaults>('/fleet/provision/defaults', pve, 60000) : apiClient.get<FleetProvisionDefaults>('/fleet/provision/defaults')
+}
+
+/** POST /fleet/provision — create one VM per stack; the jobs run in the background */
+export function provisionFleet(body: FleetProvisionRequest): Promise<FleetProvisionResponse> {
+  return apiClient.post<FleetProvisionResponse>('/fleet/provision', body, 60000)
+}
+
+/** GET /fleet/jobs — VMs being built, newest first */
+export function fetchFleetJobs(): Promise<FleetJobsResponse> {
+  return apiClient.get<FleetJobsResponse>('/fleet/jobs')
+}
+
+/** GET /fleet/jobs/:id — one job with its steps and log */
+export function fetchFleetJob(id: string): Promise<FleetJob> {
+  return apiClient.get<FleetJob>(`/fleet/jobs/${encodeURIComponent(id)}`)
+}
+
+/** POST /fleet/jobs/:id/retry — run a failed job again from the step that failed */
+export function retryFleetJob(id: string): Promise<{ success: boolean }> {
+  return apiClient.post<{ success: boolean }>(`/fleet/jobs/${encodeURIComponent(id)}/retry`, {})
+}
+
+/** DELETE /fleet/jobs/:id — forget a finished or failed job */
+export function deleteFleetJob(id: string, destroy = false): Promise<{ success: boolean; vm_destroyed?: boolean }> {
+  return apiClient.delete<{ success: boolean; vm_destroyed?: boolean }>(`/fleet/jobs/${encodeURIComponent(id)}${destroy ? '?destroy=true' : ''}`)
 }
 
 /** POST /fleet/members/:id/test — log in afresh, read the identity, match the guest */

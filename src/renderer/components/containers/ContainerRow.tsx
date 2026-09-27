@@ -181,6 +181,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
             <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
             {container.state}
             {container.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>}
+            {container.member && <span className="text-[9px] text-amber-300/90" title={'Runs in the VM ' + (container.member_name || container.member) + (container.vmid ? ' (#' + container.vmid + ')' : '')}>· VM {container.vmid ?? container.member_name ?? container.member}</span>}
           </span>
         )}
       </td>

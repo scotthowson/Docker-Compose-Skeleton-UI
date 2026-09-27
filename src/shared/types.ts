@@ -128,6 +128,14 @@ export interface StackInfo {
   running_containers: number
   has_env: boolean
   compose_file: string
+  /** Fleet (3.9): "hub" runs here, "vm" runs on a member VM the hub forwards to */
+  placement?: 'hub' | 'vm'
+  member?: string
+  member_name?: string
+  vmid?: number | null
+  node?: string | null
+  reachable?: boolean
+  version?: string
 }
 
 // GET /stacks/:name
@@ -195,6 +203,10 @@ export interface ContainerInfo {
   restart_count: number
   cpu_percent?: number | null
   mem_percent?: number | null
+  /** Fleet (3.9): the member VM this container runs on (absent = this server) */
+  member?: string
+  member_name?: string
+  vmid?: number | null
 }
 
 // GET /containers/:name
@@ -2853,13 +2865,19 @@ export interface FleetMember {
   last_seen: number
   reachable: boolean
   last_error: string
+  /** The stacks this member runs (the VM's stack, usually one) */
+  stacks?: string[]
+  /** The hub built this VM */
+  provisioned?: boolean
 }
 
+/** A member without its stack-name list: what the sheets and menus need */
+export type FleetMemberBase = Omit<FleetMember, 'stacks'>
 export interface FleetMembersResponse { total: number; members: FleetMember[] }
 export interface FleetMemberResponse { success: boolean; member: FleetMember }
 
 /** A member as GET /fleet/overview reports it, with what it answered just now */
-export interface FleetMemberLive extends FleetMember {
+export interface FleetMemberLive extends FleetMemberBase {
   error: string
   stacks: StackInfo[]
   stacks_total: number
@@ -2908,4 +2926,99 @@ export interface FleetMemberTestResponse { reachable: boolean; error: string; id
 
 export interface FleetJoinHubResponse { success: boolean; member: FleetMember; hub: { name: string; version: string; url: string } }
 export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: string }
+
+/** GET /proxmox/capabilities — what the token may do */
+export interface ProxmoxCapabilities {
+  privileges: string[]
+  can_power: boolean
+  can_provision: boolean
+  missing: string[]
+  needed: string[]
+  hint: string
+}
+
+export interface ProxmoxStorage {
+  storage: string
+  type: string
+  content: string[]
+  total: number
+  used: number
+  avail: number
+  active: number
+  images: boolean
+  import_ready: boolean
+  dir: boolean
+}
+export interface ProxmoxStorageResponse { node: string; storages: ProxmoxStorage[] }
+
+/** GET /fleet/provision/defaults — prefilled values for creating VMs */
+export interface FleetProvisionDefaults {
+  proxmox_linked: boolean
+  node: string
+  storages: ProxmoxStorage[]
+  storage: string
+  image_storage: string
+  bridge: string
+  hub_ip: string
+  cidr: number
+  gateway: string
+  dns: string
+  ip_start: string
+  image_url: string
+  image_file: string
+  admin_user: string
+  tz: string
+  hub_url: string
+  proxy_domain: string
+  vm_user: string
+  defaults: { cores: number; memory_mb: number; disk_gb: number }
+}
+
+export interface FleetVmPlan { stack: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string }
+export interface FleetProvisionRequest {
+  node: string
+  storage: string
+  image_storage?: string
+  bridge?: string
+  cidr?: number
+  gateway: string
+  dns?: string
+  ip_start?: string
+  vms: FleetVmPlan[]
+}
+export interface FleetProvisionResponse { success: boolean; jobs: { id: string; stack: string; ip: string }[] }
+
+export type FleetJobStepState = 'pending' | 'running' | 'done' | 'failed'
+export interface FleetJobStep { id: string; label: string; hint: string; state: FleetJobStepState; detail: string }
+export interface FleetJob {
+  id: string
+  stack: string
+  status: 'queued' | 'running' | 'done' | 'failed'
+  node: string
+  storage: string
+  image_storage: string
+  bridge: string
+  cidr: number
+  gateway: string
+  dns: string
+  ip: string
+  cores: number
+  memory_mb: number
+  disk_gb: number
+  image_url: string
+  image_file: string
+  admin_user: string
+  vmid: number | null
+  member_id: string | null
+  created_by: string
+  created_at: number
+  updated_at: number
+  started_at: number | null
+  finished_at: number | null
+  error: string
+  current: string
+  log: { t: number; text: string }[]
+  steps: FleetJobStep[]
+}
+export interface FleetJobsResponse { total: number; running: number; jobs: FleetJob[] }
 export interface FleetJoinOutcome { joined: boolean; member?: FleetMember; hub?: { name: string; version: string; url: string }; hub_url?: string; error?: string }

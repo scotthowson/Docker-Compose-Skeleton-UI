@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Link2, Loader2, PlugZap } from 'lucide-react'
 import { addFleetMember, updateFleetMember } from '../../api/endpoints'
-import type { FleetMember, ProxmoxVm } from '../../../shared/types'
+import type { FleetMember, FleetMemberBase, ProxmoxVm } from '../../../shared/types'
 import ProgressCard, { type ProgressLine, type ProgressState } from '../common/ProgressCard'
 import { Sheet, inputCls, labelCls, MATCH_LABEL } from './fleetShared'
 
@@ -28,7 +28,7 @@ export interface MemberSheetPrefill {
 }
 
 interface Props {
-  member?: FleetMember | null
+  member?: FleetMemberBase | null
   prefill?: MemberSheetPrefill
   vms?: ProxmoxVm[]
   onClose: () => void

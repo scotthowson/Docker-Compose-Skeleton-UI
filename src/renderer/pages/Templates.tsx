@@ -57,11 +57,10 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
-import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack, fetchFleetMembers,
+import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
   validateCompose,
 } from '../api/endpoints'
 import type {
-  FleetMember,
   TemplateInfo,
   TemplateDetailResponse,
   TemplateListResponse,
@@ -454,10 +453,10 @@ interface DeployModalProps {
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
-  /** Fleet (3.9): deploy on a member instead of this server */
+  /** Fleet (3.9): a stack that lives in a member VM (the hub forwards the deploy); kept for the progress/undo calls */
   member?: { id: string; name: string } | null
-  members?: FleetMember[]
-  onMemberChange?: (id: string | null) => void
+  /** A stack to preselect (the Proxmox page's "Deploy here") */
+  preferredStack?: string
 }
 
 // Deployment progress ---------------------------------------------------------
@@ -530,9 +529,9 @@ function isSensitiveVariable(v: { name: string; type?: string }): boolean {
   return v.type === 'password' || /(PASS|SECRET|TOKEN|_KEY$|API_KEY|PRIVATE)/i.test(v.name)
 }
 
-function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy, isAdmin = true, member = null, members = [], onMemberChange }: DeployModalProps) {
+function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeploy, deploying, onUndeploy, isAdmin = true, member = null, preferredStack }: DeployModalProps) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
-  const defaultStack = template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
+  const defaultStack = preferredStack || template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
   const [targetStack, setTargetStack] = useState(defaultStack)
   // The suggested stack may not exist on this server (renamed or removed):
   // never preview or deploy into a stack that is not in the list
@@ -1012,7 +1011,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     : localDeploying ? 'busy' : 'idle'
   const headerTitle = deployResult
     ? (outcome === 'running' ? 'Deployed and running' : outcome === 'failed' ? 'Deployment needs attention' : outcome === 'not-started' ? 'Merged — not started' : `Deploying ${template.name}`)
-    : localDeploying ? `Preparing ${template.name}${member ? ` on ${member.name}` : ''}` : `Deploy: ${template.name}${member ? ` → ${member.name}` : ''}`
+    : localDeploying ? `Preparing ${template.name}${selectedStack?.placement === 'vm' ? ` in VM ${selectedStack.member_name || selectedStack.vmid || ''}` : ''}` : `Deploy: ${template.name}`
   const headerSub = deployResult
     ? (outcome === 'pending'
       ? `${phaseLabel(activity?.phase)}${activity?.elapsed_s ? ` · ${activity.elapsed_s}s` : ''}`
@@ -1264,22 +1263,6 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           <>
             {/* Body — scrollable */}
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
-              {/* Fleet: which server takes the template */}
-              {members.length > 0 && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Deploy to</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button type="button" onClick={() => onMemberChange?.(null)} className={`h-9 px-3 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${!member ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}><Home size={12} /> This server</button>
-                    {members.map((mm) => (
-                      <button key={mm.id} type="button" onClick={() => onMemberChange?.(mm.id)} disabled={mm.reachable === false} title={mm.url}
-                        className={`h-9 px-3 rounded-lg text-xs font-medium border flex items-center gap-1.5 disabled:opacity-40 ${member?.id === mm.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}>
-                        <Satellite size={12} /> {mm.name}{mm.vmid ? <span className="text-slate-500">· VM {mm.vmid}</span> : null}
-                      </button>
-                    ))}
-                  </div>
-                  {member && <p className="text-[10px] text-slate-500 mt-1">Merged and started on {member.name}; the stacks below are that server's.</p>}
-                </div>
-              )}
               {/* F2: Enriched target stack dropdown */}
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -1318,7 +1301,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors ${s.name === targetStack ? 'bg-white/5' : ''}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                          <span className="font-mono text-slate-200 truncate flex-1">{s.name}</span>
+                          <span className="font-mono text-slate-200 truncate flex-1">{s.name}{s.placement === 'vm' ? <span className="ml-1.5 text-[9px] font-sans text-amber-300/90">VM{s.vmid ? ` ${s.vmid}` : ''}</span> : null}</span>
                           <span className="text-[10px] text-slate-500 shrink-0">
                             {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
                           </span>
@@ -3183,17 +3166,13 @@ export default function Templates() {
   useEffect(() => {
     const p = useSettingsStore.getState().navigationPayload
     if (p && typeof p.search === 'string') { setSearch(p.search); useSettingsStore.getState().consumeNavigationPayload() }
-    // "Deploy here" on the Proxmox page: the next deployment goes to that member
-    if (p && typeof p.deployTo === 'string') { setDeployMember({ id: p.deployTo, name: typeof p.deployToName === 'string' ? p.deployToName : p.deployTo }); useSettingsStore.getState().consumeNavigationPayload() }
+    // "Deploy here" on the Proxmox page: the next deployment targets that VM's stack
+    if (p && typeof p.targetStack === 'string') { setPreferredStack(p.targetStack); useSettingsStore.getState().consumeNavigationPayload() }
   }, [navigationPayload])
   const [deployTarget, setDeployTarget] = useState<TemplateInfo | null>(null)
-  // Fleet (3.9): the member a deployment goes to, and the members to offer
-  const [deployMember, setDeployMember] = useState<{ id: string; name: string } | null>(null)
-  const [fleetMembers, setFleetMembers] = useState<FleetMember[]>([])
-  useEffect(() => {
-    if (!isConnected) return
-    fetchFleetMembers().then((r) => setFleetMembers(r.members)).catch(() => setFleetMembers([]))
-  }, [isConnected])
+  // Fleet (3.9): "Deploy here" on the Proxmox page preselects that VM's stack; the hub forwards the deploy
+  const [preferredStack, setPreferredStack] = useState<string>('')
+  const [deployMember] = useState<{ id: string; name: string } | null>(null)
   const [detail, setDetail] = useState<TemplateDetailResponse | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [deploying, setDeploying] = useState(false)
@@ -3364,7 +3343,7 @@ export default function Templates() {
     try {
       const [res, stacksRes] = await Promise.all([
         fetchTemplateDetail(template.name),
-        fetchStacks(deployMember?.id).catch(() => null),
+        fetchStacks().catch(() => null),
       ])
       setDetail(res)
       if (stacksRes) setAvailableStacks(stacksRes.stacks)
@@ -3373,13 +3352,7 @@ export default function Templates() {
     } finally {
       setDetailLoading(false)
     }
-  }, [deployMember])
-  // Switch the deployment between this server and a member (the target stacks follow)
-  const handleMemberChange = useCallback((id: string | null) => {
-    const m = id ? fleetMembers.find((x) => x.id === id) : null
-    setDeployMember(m ? { id: m.id, name: m.name } : null)
-    fetchStacks(m?.id).then((r) => setAvailableStacks(r.stacks)).catch(() => {})
-  }, [fleetMembers])
+  }, [])
 
   // Close deploy modal
   const handleCloseDeploy = useCallback(() => {
@@ -4039,8 +4012,7 @@ export default function Templates() {
           onUndeploy={handleUndeploy}
           isAdmin={isAdmin}
           member={deployMember}
-          members={fleetMembers}
-          onMemberChange={handleMemberChange}
+          preferredStack={preferredStack || undefined}
         />
       )}
 

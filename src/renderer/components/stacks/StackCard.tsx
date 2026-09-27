@@ -189,6 +189,11 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
               <p className="text-xs text-slate-500 truncate mt-0.5 font-mono flex items-center gap-1">
                 {stack.name}
                 <CopyButton text={stack.name} className="opacity-0 group-hover:opacity-100" size={10} />
+                {stack.placement === 'vm' && (
+                  <span className={`ml-1 inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[9px] font-sans font-semibold border ${stack.reachable === false ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20'}`} title={`Runs in its own VM${stack.vmid ? ` (#${stack.vmid})` : ''}${stack.reachable === false ? ' — not answering the hub' : ''}`}>
+                    VM{stack.vmid ? ` ${stack.vmid}` : ''}{stack.reachable === false ? ' · offline' : ''}
+                  </span>
+                )}
               </p>
             </div>
           </div>

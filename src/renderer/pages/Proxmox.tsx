@@ -23,14 +23,16 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxTasks, proxmoxVmAction,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
-  testFleetMember, removeFleetMember,
+  testFleetMember, removeFleetMember, fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities,
 } from '../api/endpoints'
-import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMember, FleetMemberLive, FleetGuestScan, StackInfo } from '../../shared/types'
+import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, StackInfo } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
 import MemberSheet, { type MemberSheetPrefill } from '../components/fleet/MemberSheet'
 import { Sheet, MATCH_LABEL } from '../components/fleet/fleetShared'
+import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
+import NewVmSheet, { CapabilityNote } from '../components/fleet/NewVmSheet'
 
 const STATUS_POLL = 15_000
 const LIST_POLL = 10_000
@@ -166,7 +168,7 @@ function NodeCard({ node, vmCount }: { node: ProxmoxNode; vmCount: number }) {
 
 type StackAct = 'start' | 'stop' | 'restart'
 
-function MemberStacks({ member, live, isAdmin, onStackAction, busyKey }: { member: FleetMember; live?: FleetMemberLive; isAdmin: boolean; onStackAction: (m: FleetMember, stack: string, a: StackAct) => void; busyKey: string }) {
+function MemberStacks({ member, live, isAdmin, onStackAction, busyKey }: { member: FleetMemberBase; live?: FleetMemberLive; isAdmin: boolean; onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void; busyKey: string }) {
   const stacks = live?.stacks ?? []
   if (!live) return <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Reading {member.name}'s stacks…</p>
   if (!live.reachable) return <p className="text-[11px] text-rose-300/90">{member.name} did not answer{live.error ? `: ${live.error}` : ''}</p>
@@ -205,15 +207,15 @@ interface VmRowProps {
   vm: ProxmoxVm
   isAdmin: boolean
   isHub: boolean
-  member?: FleetMember
+  member?: FleetMemberBase
   live?: FleetMemberLive
   scan?: FleetGuestScan
   busyKey: string
   onAction: (vm: ProxmoxVm, a: ProxmoxVmAction) => void
-  onStackAction: (m: FleetMember, stack: string, a: StackAct) => void
-  onDeploy: (m: FleetMember) => void
+  onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void
+  onDeploy: (m: FleetMemberBase) => void
   onLink: (p: MemberSheetPrefill) => void
-  onMemberMenu: (m: FleetMember) => void
+  onMemberMenu: (m: FleetMemberBase) => void
 }
 
 function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onStackAction, onDeploy, onLink, onMemberMenu }: VmRowProps) {
@@ -305,7 +307,7 @@ function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onSt
   )
 }
 
-function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: FleetMember; vms: ProxmoxVm[]; onClose: () => void; onEdit: () => void; onChanged: () => void }) {
+function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: FleetMemberBase; vms: ProxmoxVm[]; onClose: () => void; onEdit: () => void; onChanged: () => void }) {
   const { addToast } = useToast()
   const [busy, setBusy] = useState<'test' | 'remove' | ''>('')
   const [note, setNote] = useState('')
@@ -324,6 +326,13 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
     try { await removeFleetMember(member.id); addToast({ type: 'success', message: `${member.name} removed from the fleet` }); onChanged(); onClose() }
     catch (e) { setNote(e instanceof Error ? e.message : 'Could not remove'); setBusy('') }
   }
+  const destroy = async () => {
+    const typed = window.prompt(`Stop and destroy VM ${member.vmid} (${member.name}) on Proxmox, with its disks? Everything in it is lost. Type the stack name to confirm:`)
+    if (typed !== member.name) { if (typed !== null) setNote('The name did not match — nothing was destroyed'); return }
+    setBusy('remove')
+    try { await removeFleetMember(member.id, true); addToast({ type: 'success', message: `VM ${member.vmid} (${member.name}) destroyed` }); onChanged(); onClose() }
+    catch (e) { setNote(e instanceof Error ? e.message : 'Could not destroy the VM'); setBusy('') }
+  }
   const guest = vms.find((v) => v.vmid === member.vmid)
   return (
     <Sheet title={member.name} subtitle={`${member.url} · account ${member.username}${guest ? ` · ${guest.type === 'qemu' ? 'VM' : 'LXC'} ${guest.vmid} ${guest.name}` : member.vmid ? ` · guest ${member.vmid}` : ' · no guest yet'}`} icon={<Satellite size={18} />} onClose={onClose}>
@@ -333,6 +342,7 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
         <button type="button" onClick={test} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
         <button type="button" onClick={onEdit} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50"><Pencil size={15} /> Edit name, address, account or guest</button>
         <button type="button" onClick={remove} disabled={!!busy} className="w-full h-11 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-200 hover:bg-rose-500/20 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
+        {member.vmid && member.type !== 'lxc' && <button type="button" onClick={destroy} disabled={!!busy} className="w-full h-11 rounded-xl bg-rose-500/15 border border-rose-500/30 text-sm text-rose-200 hover:bg-rose-500/25 flex items-center justify-center gap-2 disabled:opacity-50"><Trash2 size={15} /> Stop and destroy the VM on Proxmox</button>}
       </div>
     </Sheet>
   )
@@ -357,6 +367,11 @@ export default function Proxmox() {
   const overview = usePolling(fetchFleetOverview, LIST_POLL, { enabled: isConnected && memberCount > 0 })
   const scan = usePolling(fetchFleetDiscover, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
   const localStacks = usePolling(fetchStacks, LIST_POLL, { enabled: isConnected && (isHub || role === 'member') })
+  // VMs being built by the hub, and what creating one needs
+  const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && isAdmin && configured && reachable })
+  const provDefaults = usePolling(fetchFleetProvisionDefaults, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
+  const caps = usePolling(fetchProxmoxCapabilities, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
+  const [newVm, setNewVm] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // A search result ("VM X") lands here with the guest pre-filtered
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
@@ -368,8 +383,8 @@ export default function Proxmox() {
   const [pending, setPending] = useState<{ vm: ProxmoxVm; action: ProxmoxVmAction } | null>(null)
   const [sheet, setSheet] = useState<'link' | 'code' | null>(null)
   const [adding, setAdding] = useState<MemberSheetPrefill | null>(null)
-  const [editing, setEditing] = useState<FleetMember | null>(null)
-  const [menu, setMenu] = useState<FleetMember | null>(null)
+  const [editing, setEditing] = useState<FleetMemberBase | null>(null)
+  const [menu, setMenu] = useState<FleetMemberBase | null>(null)
   const [busyKey, setBusyKey] = useState('')
 
   const members = overview.data?.members ?? []
@@ -393,11 +408,11 @@ export default function Proxmox() {
     })
   }, [vms.data, query, show, memberByVm])
 
-  const refreshAll = () => { status.refresh(); nodes.refresh(); vms.refresh(); tasks.refresh(); fleet.refresh(); overview.refresh(); scan.refresh(); localStacks.refresh() }
-  const refreshFleet = () => { fleet.refresh(); overview.refresh(); scan.refresh() }
+  const refreshAll = () => { status.refresh(); nodes.refresh(); vms.refresh(); tasks.refresh(); fleet.refresh(); overview.refresh(); scan.refresh(); localStacks.refresh(); jobs.refresh() }
+  const refreshFleet = () => { fleet.refresh(); overview.refresh(); scan.refresh(); jobs.refresh(); vms.refresh() }
   const s = status.data
 
-  const stackAction = async (m: FleetMember, stack: string, a: StackAct) => {
+  const stackAction = async (m: FleetMemberBase, stack: string, a: StackAct) => {
     const key = `${m.id}/${stack}`
     setBusyKey(key)
     try {
@@ -408,7 +423,12 @@ export default function Proxmox() {
       addToast({ type: 'error', message: `${stack} on ${m.name}: ${e instanceof Error ? e.message : 'failed'}` })
     } finally { setBusyKey(''); setTimeout(() => overview.refresh(), 1200) }
   }
-  const deployTo = (m: FleetMember) => setCurrentPage('templates', { deployTo: m.id, deployToName: m.name })
+  // "Deploy here": the VM is the stack — open Templates with that stack preselected (the hub forwards the deploy)
+  const deployTo = (m: FleetMemberBase & { stacks?: unknown[] }) => {
+    const first = Array.isArray(m.stacks) && m.stacks.length ? m.stacks[0] : null
+    const stack = typeof first === 'string' ? first : first && typeof first === 'object' && 'name' in first ? String((first as { name: string }).name) : m.name
+    setCurrentPage('templates', { targetStack: stack })
+  }
 
   const roleChip = role === 'member'
     ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1"><Satellite size={10} /> member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</span>
@@ -429,6 +449,7 @@ export default function Proxmox() {
         <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && configured && reachable && role !== 'member' && (
             <>
+              <button onClick={() => setNewVm('')} className="h-10 px-3 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold flex items-center gap-2"><Rocket size={14} /> New VM stack</button>
               <button onClick={() => setSheet('link')} className="h-10 px-3 rounded-xl bg-amber-500/15 border border-amber-500/25 text-sm text-amber-200 hover:bg-amber-500/25 flex items-center gap-2"><Radar size={14} /> Link VMs</button>
               <button onClick={() => setSheet('code')} className="h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 flex items-center gap-2"><KeyRound size={14} /> Join code</button>
               <button onClick={() => setAdding({})} className="h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 flex items-center gap-2"><Link2 size={14} /> Add member</button>
@@ -485,6 +506,10 @@ export default function Proxmox() {
 
       {configured && reachable && (
         <>
+          {isAdmin && caps.data && !caps.data.can_provision && (
+            <div className="glass-card rounded-2xl p-4 border border-amber-500/20"><CapabilityNote caps={caps.data} /></div>
+          )}
+          {jobs.data && jobs.data.jobs.length > 0 && <FleetJobsPanel jobs={jobs.data.jobs} onChanged={refreshFleet} />}
           {nodes.data && nodes.data.nodes.length > 0 && (
             <section>
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Boxes size={12} /> Nodes</h2>
@@ -604,6 +629,7 @@ export default function Proxmox() {
       {adding && <MemberSheet prefill={adding} vms={vms.data?.vms ?? []} onClose={() => setAdding(null)} onSaved={(m) => { setAdding(null); addToast({ type: 'success', message: `${m.name} joined the fleet` }); refreshFleet() }} />}
       {editing && <MemberSheet member={editing} vms={vms.data?.vms ?? []} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); addToast({ type: 'success', message: `${m.name} saved` }); refreshFleet() }} />}
       {menu && <MemberMenuSheet member={menu} vms={vms.data?.vms ?? []} onClose={() => setMenu(null)} onEdit={() => { setEditing(menu); setMenu(null) }} onChanged={refreshFleet} />}
+      {newVm !== null && <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} initialStack={newVm} onClose={() => setNewVm(null)} onQueued={() => { addToast({ type: 'success', message: 'The VM is being built — follow it on the card' }); refreshFleet() }} />}
     </div>
   )
 }

@@ -392,7 +392,8 @@ views.stacks = async (ctx) => {
   const totalContainers = stacks.reduce((n, s) => n + (byStack.get(s.name)?.total ?? s.running_containers ?? 0), 0)
   const ls = stacks.map((s) => {
     const g = byStack.get(s.name)
-    if (s.status !== 'running') return `⚫ ${bold(s.name)} · stopped`
+    const where = s.placement === 'vm' ? ` · VM${s.vmid ? ' ' + s.vmid : ''}${s.reachable === false ? ' (offline)' : ''}` : ''
+    if (s.status !== 'running') return `⚫ ${bold(s.name)} · stopped${where}`
     const n = g?.running ?? s.running_containers ?? 0
     const notes = []
     if (g?.unhealthy) notes.push(`${g.unhealthy} unhealthy`)
