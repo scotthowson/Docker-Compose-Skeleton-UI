@@ -56,6 +56,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
   validateCompose,
@@ -562,6 +563,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // F4: Undeploy loading
   const [undeploying, setUndeploying] = useState(false)
   const { addToast } = useToast()
+  const confirm = useConfirm()
   // Real progress of the background start (GET /stacks/{stack}/activity)
   const [activity, setActivity] = useState<StackActivityResponse | null>(null)
   const [activityError, setActivityError] = useState<string | null>(null)
@@ -629,7 +631,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       .then((res) => {
         setTraefikActive(res.active)
         setTraefikDomain(res.domain || '')
-        setAutheliaMw(res.authelia_middleware || (res.authelia ? 'authelia' : ''))
+        const mw = res.authelia_middleware || (res.authelia ? 'authelia' : '')
+        setAutheliaMw(mw)
+        // Authelia here: routes sit behind the portal by default, except templates whose apps bring their own clients
+        setEnableAuthelia(!!mw && template.auth !== 'bypass')
         setSablierPresent(!!res.sablier)
       })
       .catch(() => {})
@@ -972,12 +977,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // F4: Handle "Undo Deploy" (undeploy)
   const handleUndoDeploy = useCallback(async () => {
     if (!deployResult || !onUndeploy) return
-    if (!window.confirm(`Undo deploy? This will remove the deployed services from "${deployResult.target_stack}".`)) return
+    if (!(await confirm({ title: 'Undo deploy', message: `Undo deploy? This will remove the deployed services from "${deployResult.target_stack}".`, confirmLabel: 'Undo deploy', danger: true }))) return
     setUndeploying(true)
     const ok = await onUndeploy(template.name, deployResult.target_stack, deployResult.services_added || [])
     setUndeploying(false)
     if (ok) onClose()
-  }, [deployResult, onUndeploy, template.name, onClose])
+  }, [deployResult, onUndeploy, template.name, onClose, confirm])
 
   // F5: Handle dry-run preview
   const [dryRunError, setDryRunError] = useState<string | null>(null)
@@ -2197,6 +2202,7 @@ interface CreateEditModalProps {
 }
 
 function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: CreateEditModalProps) {
+  const confirm = useConfirm()
   const [name, setName] = useState(initial?.name ?? '')
   const [title, setTitle] = useState((initial?.metadata?.title as string) ?? '')
   const [description, setDescription] = useState((initial?.metadata?.description as string) ?? '')
@@ -2291,10 +2297,10 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
   }, [compose])
 
   // Ctrl/Cmd+S saves, Esc closes (asks first when there are unsaved changes)
-  const requestClose = useCallback(() => {
-    if (hasChanges && mode === 'edit' && !window.confirm('Discard unsaved changes to this template?')) return
+  const requestClose = useCallback(async () => {
+    if (hasChanges && mode === 'edit' && !(await confirm({ title: 'Discard changes', message: 'Discard unsaved changes to this template?', confirmLabel: 'Discard', danger: true }))) return
     onClose()
-  }, [hasChanges, mode, onClose])
+  }, [hasChanges, mode, onClose, confirm])
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); handleSaveInPlace() }
@@ -3157,6 +3163,7 @@ export default function Templates() {
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   // State
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all')
@@ -3381,7 +3388,8 @@ export default function Templates() {
           add_to_homarr: addToHomarr,
           allow_privileged: needsPrivileged,
           container_names: containerNames,
-          authelia_services: switches?.authelia_services?.length ? switches.authelia_services : undefined,
+          // the sheet's choice travels even when it is "none": the server would otherwise protect by default
+          authelia_services: switches?.authelia_services,
           on_demand_services: switches?.on_demand_services?.length ? switches.on_demand_services : undefined,
         }, deployMember?.id)
         if (res.success) {
@@ -3586,7 +3594,7 @@ export default function Templates() {
 
   // Delete template
   const handleDeleteTemplate = useCallback(async (template: TemplateInfo) => {
-    if (!confirm(`Delete template "${template.name}"? This cannot be undone.`)) return
+    if (!(await confirm({ title: 'Delete template', message: `Delete template "${template.name}"? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return
     try {
       const res = await deleteTemplate(template.name)
       if (res.success) {
@@ -3598,7 +3606,7 @@ export default function Templates() {
     } catch (err) {
       addToast({ type: 'error', message: `Delete failed: ${err instanceof Error ? err.message : String(err)}` })
     }
-  }, [addToast, refresh])
+  }, [addToast, refresh, confirm])
 
   // -------------------------------------------------------------------------
   // Disconnected state
@@ -3664,48 +3672,49 @@ export default function Templates() {
           </div>
           <button
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:border-emerald-500/30 transition-all duration-200 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:border-emerald-500/30 transition-all duration-200 press"
           >
-            <Plus size={13} />
+            <Plus size={14} />
             Create
           </button>
           {isAdmin && (
             <button
               onClick={() => setShowUrlImport(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
               title="Import template from URL"
             >
-              <Link size={13} />
-              URL Import
+              <Link size={14} />
+              <span className="hidden sm:inline">URL Import</span>
             </button>
           )}
           {isAdmin && (
             <button
               onClick={handleImportTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
               title="Import template from JSON file"
             >
-              <Upload size={13} />
-              File
+              <Upload size={14} />
+              <span className="hidden sm:inline">File</span>
             </button>
           )}
           <button
             onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               showHistory
                 ? 'bg-violet-500/15 text-violet-400 border-violet-500/25 hover:bg-violet-500/25'
                 : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
             }`}
           >
-            <History size={13} />
-            History
+            <History size={14} />
+            <span className="hidden sm:inline">History</span>
           </button>
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            title="Refresh"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>

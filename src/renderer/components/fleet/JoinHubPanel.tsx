@@ -10,6 +10,7 @@ import { Satellite, Loader2, LogOut, PlugZap } from 'lucide-react'
 import { joinFleetHub, leaveFleetHub } from '../../api/endpoints'
 import type { FleetHubLink, FleetJoinHubResponse } from '../../../shared/types'
 import ProgressCard, { type ProgressLine, type ProgressState } from '../common/ProgressCard'
+import { useConfirm } from '../common/ConfirmDialog'
 import { inputCls, labelCls, MATCH_LABEL } from './fleetShared'
 
 const STEPS = [
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export default function JoinHubPanel({ hub, initial, pending = null, autoRun = false, compact = false, onJoined, onLeft }: Props) {
+  const confirm = useConfirm()
   const [hubUrl, setHubUrl] = useState(pending?.hub_url ?? initial?.hub_url ?? 'http://')
   const [token, setToken] = useState(initial?.token ?? '')
   const [name, setName] = useState(pending?.name ?? initial?.name ?? '')
@@ -83,7 +85,7 @@ export default function JoinHubPanel({ hub, initial, pending = null, autoRun = f
   }, [autoRun])
 
   const leave = async () => {
-    if (!window.confirm('Leave the hub? Its account here is removed; remove this server on the hub too.')) return
+    if (!(await confirm({ title: 'Leave the hub', message: 'Leave the hub? Its account here is removed; remove this server on the hub too.', confirmLabel: 'Leave', danger: true }))) return
     setLeaving(true)
     try { await leaveFleetHub(); onLeft?.() } catch (e) { setErr(e instanceof Error ? e.message : 'Could not leave') } finally { setLeaving(false) }
   }

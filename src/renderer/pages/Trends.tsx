@@ -487,12 +487,12 @@ export default function Trends() {
             <button
               onClick={handleCaptureSnapshot}
               disabled={capturing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
             >
               {capturing ? (
-                <Loader2 size={13} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
-                <Camera size={13} />
+                <Camera size={14} />
               )}
               <span className="hidden sm:inline">Capture Snapshot</span>
               <span className="sm:hidden">Capture</span>
@@ -502,14 +502,14 @@ export default function Trends() {
           {/* Auto-refresh toggle */}
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               autoRefresh
                 ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/25'
                 : 'bg-white/5 text-slate-500 border-white/5 hover:bg-white/10 hover:text-slate-400'
             }`}
             title={autoRefresh ? 'Auto-refresh enabled (1 min)' : 'Auto-refresh disabled'}
           >
-            <Timer size={13} />
+            <Timer size={14} />
             <span className="hidden sm:inline">{autoRefresh ? 'Auto' : 'Paused'}</span>
           </button>
 
@@ -517,9 +517,9 @@ export default function Trends() {
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>

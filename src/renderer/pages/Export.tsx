@@ -469,9 +469,9 @@ export default function Export() {
         {history.length > 0 && (
           <button
             onClick={() => setShowHistory((p) => !p)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock size={14} />
             History ({history.length})
             {showHistory ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
@@ -506,12 +506,12 @@ export default function Export() {
             <button
               onClick={handleFullReport}
               disabled={fullReportLoading || !isConnected}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-400 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 border border-cyan-500/20 press"
+              className="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-400 text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 border border-cyan-500/20 press"
             >
               {fullReportLoading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Generating</>
+                <><Loader2 size={14} className="animate-spin" /> Generating</>
               ) : (
-                <><Download className="w-4 h-4" /> Generate Report</>
+                <><Download size={14} /> Generate Report</>
               )}
             </button>
           </div>

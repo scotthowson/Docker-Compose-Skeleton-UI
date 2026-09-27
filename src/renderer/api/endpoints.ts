@@ -34,6 +34,7 @@ import type {
   ProxmoxVmDetail,
   ProxmoxTasksResponse,
   ProxmoxActionResponse,
+  ProxmoxBalloonResponse,
   ProxmoxGuestType,
   ProxmoxVmAction,
   TraefikFeedStatus,
@@ -202,8 +203,7 @@ import type {
   TotpVerifyResponse,
   TotpValidateResponse,
   RouteCertificatesResponse,
-  SablierToggleResponse,
-} from '../../shared/types'
+  SablierToggleResponse, DockerEngineInfo, DockerEngineFleet, DockerEngineStatus, DockerEngineUpdateResponse, FleetDockerEngineUpdateResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Root
@@ -575,9 +575,9 @@ export function runDockerPrune(): Promise<MaintenanceResponse> {
   return apiClient.post<MaintenanceResponse>('/maintenance/prune')
 }
 
-/** POST /maintenance/image-prune — Docker image prune */
-export function runImagePrune(): Promise<MaintenanceResponse> {
-  return apiClient.post<MaintenanceResponse>('/maintenance/image-prune')
+/** POST /maintenance/image-prune — Docker image prune (on a fleet member when one is given) */
+export function runImagePrune(member?: string | null): Promise<MaintenanceResponse> {
+  return apiClient.post<MaintenanceResponse>(memberPath(member, '/maintenance/image-prune'))
 }
 
 // ---------------------------------------------------------------------------
@@ -1888,6 +1888,11 @@ export function proxmoxVmAction(node: string, type: ProxmoxGuestType, vmid: numb
   return apiClient.post<ProxmoxActionResponse>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}/${action}`, {}, 60000)
 }
 
+/** POST /proxmox/vms/:node/qemu/:vmid/balloon — give a VM a memory balloon (floor: half its memory) so Proxmox reports the guest's real use and can reclaim idle memory; takes effect at the next boot */
+export function proxmoxVmBalloon(node: string, vmid: number): Promise<ProxmoxBalloonResponse> {
+  return apiClient.post<ProxmoxBalloonResponse>(`/proxmox/vms/${encodeURIComponent(node)}/qemu/${vmid}/balloon`, {}, 60000)
+}
+
 /** POST /proxmox/test — try a connection with the given values without saving them */
 export function proxmoxTest(body: { url?: string; token_id?: string; token_secret?: string; verify_tls?: boolean }): Promise<ProxmoxStatus> {
   return apiClient.post<ProxmoxStatus>('/proxmox/test', body, 30000)
@@ -2028,6 +2033,21 @@ export function deleteFleetTemplate(vmid: number): Promise<{ success: boolean }>
 }
 
 /** GET /fleet/versions — the hub's DCS version next to every member's, asked live */
+// ---- Docker Engine: version, package source, one-click update (fleet-wide from a hub) ----
+export function fetchDockerEngine(fleet = false): Promise<DockerEngineInfo | DockerEngineFleet> {
+  return apiClient.get<DockerEngineInfo | DockerEngineFleet>(`/system/docker-engine${fleet ? '?fleet=1' : ''}`)
+}
+export function fetchDockerEngineStatus(): Promise<DockerEngineStatus> {
+  return apiClient.get<DockerEngineStatus>('/system/docker-engine/status')
+}
+/** unattended where the API has passwordless sudo; otherwise the Terminal session token + the sudo password */
+export function updateDockerEngine(terminalToken?: string, password?: string): Promise<DockerEngineUpdateResponse> {
+  return apiClient.post<DockerEngineUpdateResponse>('/system/docker-engine/update', { ...(terminalToken ? { terminal_token: terminalToken } : {}), ...(password ? { password } : {}) }, 30000)
+}
+export function updateFleetDockerEngine(members: string[] | 'all' = 'all'): Promise<FleetDockerEngineUpdateResponse> {
+  return apiClient.post<FleetDockerEngineUpdateResponse>('/fleet/docker-engine/update', { members }, 60000)
+}
+
 export function fetchFleetVersions(): Promise<FleetVersions> {
   return apiClient.get<FleetVersions>('/fleet/versions')
 }

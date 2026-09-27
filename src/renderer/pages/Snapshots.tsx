@@ -41,6 +41,9 @@ import { LoadingState } from '../components/common/PageState'
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** a row key: the file on its DCS (the hub's rows have no member) */
+const snapshotKey = (s: { member?: string | null; filename: string }) => `${s.member ?? ''}|${s.filename}`
+
 function formatSnapshotDate(ts: string, epoch?: number): string {
   const d = epoch ? new Date(epoch * 1000) : new Date(ts)
   if (isNaN(d.getTime())) return ts
@@ -504,14 +507,14 @@ export default function Snapshots() {
     } finally {
       setCreating(false)
     }
-  }, [createLabel, addToast, refresh])
+  }, [createLabel, addToast, refresh, scope])
 
   const [downloadingMap, setDownloadingMap] = useState<Record<string, boolean>>({})
 
   const handleDownload = useCallback(
     async (snapshot: SnapshotEntry) => {
       if (snapshot.member ?? scopeMember) { addToast({ type: 'info', message: 'A VM keeps its snapshot files itself: download it from that VM\'s own dashboard or over ssh (~/.Docker-Compose-Skeleton-AIO/.snapshots)' }); return }
-      setDownloadingMap((prev) => ({ ...prev, [snapshot.filename]: true }))
+      setDownloadingMap((prev) => ({ ...prev, [snapshotKey(snapshot)]: true }))
       try {
         const baseUrl = apiClient.getBaseUrl()
         const url = `${baseUrl}/snapshots/${encodeURIComponent(snapshot.filename)}/download`
@@ -534,10 +537,10 @@ export default function Snapshots() {
         const message = err instanceof Error ? err.message : 'Download failed'
         addToast({ type: 'error', message })
       } finally {
-        setDownloadingMap((prev) => ({ ...prev, [snapshot.filename]: false }))
+        setDownloadingMap((prev) => ({ ...prev, [snapshotKey(snapshot)]: false }))
       }
     },
-    [addToast],
+    [addToast, scopeMember],
   )
 
   const handleRestoreInit = useCallback((snapshot: SnapshotEntry) => {
@@ -668,21 +671,21 @@ export default function Snapshots() {
               setShowGuide((prev) => !prev)
               if (showGuide) setExpandedGuide(null)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 press ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               showGuide
                 ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20'
                 : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
             }`}
           >
-            <BookOpen size={13} />
+            <BookOpen size={14} />
             <span className="hidden sm:inline">Guide</span>
           </button>
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
@@ -708,7 +711,7 @@ export default function Snapshots() {
                 <div key={section.title} className="rounded-lg border border-white/[0.03] overflow-hidden">
                   <button
                     onClick={() => setExpandedGuide(isExpanded ? null : idx)}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left hover:bg-white/[0.03] transition-all duration-200"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-all duration-200"
                   >
                     {isExpanded ? (
                       <ChevronDown size={14} className="text-slate-500 shrink-0" />
@@ -772,7 +775,7 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }
               }}
-              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-50 transition-all duration-200"
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 disabled:opacity-50 transition-all duration-200"
               autoFocus
             />
             <div className="flex items-center gap-2">
@@ -794,7 +797,7 @@ export default function Snapshots() {
                   setCreateLabel('')
                 }}
                 disabled={creating}
-                className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 hover:text-slate-300 disabled:opacity-50 transition-all duration-200"
+                className="rounded-lg px-3 py-2.5 text-xs font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 hover:text-slate-300 disabled:opacity-50 transition-all duration-200"
               >
                 Cancel
               </button>
@@ -843,12 +846,12 @@ export default function Snapshots() {
           <div className="flex flex-col gap-3 stagger-children">
             {snapshots.map((snapshot) => (
               <SnapshotCard
-                key={snapshot.filename}
+                key={snapshotKey(snapshot)}
                 snapshot={snapshot}
                 onDownload={handleDownload}
                 onRestore={handleRestoreInit}
                 onDelete={handleDeleteInit}
-                downloading={downloadingMap[snapshot.filename] ?? false}
+                downloading={downloadingMap[snapshotKey(snapshot)] ?? false}
                 restoreTarget={restoreTarget}
                 restoreConfirmText={restoreConfirmText}
                 onRestoreConfirmChange={setRestoreConfirmText}

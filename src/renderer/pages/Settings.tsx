@@ -123,6 +123,7 @@ function saveProfileData(data: ProfileData) {
 
 function ProfileSettings() {
   const { currentUser } = useAuthStore()
+  const { addToast } = useToast()
   const [profile, setProfile] = useState<ProfileData>(getProfileData)
   const [initialProfile, setInitialProfile] = useState<ProfileData>(getProfileData)
   const [avatarPreview, setAvatarPreview] = useState(profile.icon)
@@ -192,7 +193,7 @@ function ProfileSettings() {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
-      alert('Image must be under 2MB')
+      addToast({ type: 'error', message: 'Image must be under 2MB' })
       return
     }
     const reader = new FileReader()

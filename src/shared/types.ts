@@ -1861,6 +1861,9 @@ export interface TemplateOptionalService {
 export interface TemplateInfo {
   name: string
   title?: string
+  /** "bypass": its apps sign in on their own, so its routes are not put behind Authelia by default */
+  auth?: string
+  auth_note?: string
   description: string
   category: string
   target_stack?: string
@@ -2848,6 +2851,11 @@ export interface ProxmoxVmDetail {
   maxmem: number
   disk: number
   maxdisk: number
+  /** the memory balloon as Proxmox reports it while the VM runs, in bytes; 0 = no balloon device, so `mem` is the host's view of the whole allocation (page cache included) */
+  balloon: number
+  /** what the guest itself reports through its balloon driver, in bytes (0 when there is no device or the guest has not answered yet) */
+  guest_mem_free: number
+  guest_mem_total: number
   netin: number
   netout: number
   diskread: number
@@ -2878,6 +2886,16 @@ export interface ProxmoxActionResponse {
   type: ProxmoxGuestType
   vmid: number
   name: string
+  message: string
+}
+
+/** POST /proxmox/vms/:node/qemu/:vmid/balloon — the balloon floor and the VM's memory, both in MB; it takes effect at the next boot */
+export interface ProxmoxBalloonResponse {
+  success: boolean
+  action: 'balloon'
+  vmid: number
+  balloon: number
+  memory: number
   message: string
 }
 
@@ -3083,6 +3101,31 @@ export interface FleetTemplatesResponse { total: number; templates: FleetTemplat
 export interface FleetMemberVersion { id: string; name: string; vmid: number | null; url: string; /** the version recorded at join/last update */ recorded: string; version: string; reachable: boolean; /** answering, on another version than the hub */ behind: boolean }
 export interface FleetUpdateResult { id: string; success: boolean; message: string; from?: string; to?: string; restart?: string }
 export interface FleetUpdateRound { at: number; hub_version: string; results: FleetUpdateResult[]; updated: number; failed: number }
+/** GET /system/docker-engine — the Docker Engine here and what its package source offers */
+export interface DockerEngineStatus { status: 'idle' | 'running' | 'done' | 'failed'; started_at?: string; finished_at?: string; version?: string; exit_code?: number; output?: string; by?: string }
+export interface DockerEngineInfo {
+  version: string
+  /** docker-ce (Docker's own packages), docker.io (Debian's), moby-engine (Fedora's) or unknown */
+  source: string
+  /** the newest version the package source offers ('' when unknown) */
+  candidate: string
+  package_manager: string
+  upgradable: boolean
+  /** this API may update it unattended (root or passwordless sudo) */
+  sudo_ready: boolean
+  hostname: string
+  /** Debian's docker.io with AppArmor 4: the dashboard and Traefik's socket proxy cannot spawn workers */
+  apparmor_issue: boolean
+  recommended: boolean
+  switch_command: string
+  note: string
+  last_update: DockerEngineStatus
+}
+export interface DockerEngineMember extends DockerEngineInfo { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string }
+export interface DockerEngineFleet extends DockerEngineInfo { fleet: true; members: DockerEngineMember[]; upgradable_count: number; versions: string[] }
+export interface DockerEngineUpdateResponse { success: boolean; status: string; message: string }
+export interface FleetDockerEngineUpdateResponse { success: boolean; results: { id: string; success: boolean; message: string }[]; started: number; failed: number }
+
 export interface FleetVersions { hub: { version: string }; members: FleetMemberVersion[]; behind: number; unreachable: number; /** a round is queued for after the hub's own restart */ pending: boolean; last_round: FleetUpdateRound | null; /** when the members were asked (epoch seconds) */ checked_at: number }
 export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean }
 export interface FleetProvisionDefaults {

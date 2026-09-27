@@ -20,7 +20,7 @@ import type {
   RootEnvResponse, StackEnvResponse, StackListResponse,
   EnvValidateResponse,
 } from '../../shared/types'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,11 +69,7 @@ function EnvTable({
   }
 
   if (variables.length === 0) {
-    return (
-      <div className="py-8 text-center">
-        <p className="text-sm text-slate-500 italic">No variables found</p>
-      </div>
-    )
+    return <EmptyState compact title="No variables found" hint="Add KEY=value lines to this .env file and they appear here." />
   }
 
   return (
@@ -432,15 +428,15 @@ export default function Environment() {
           }}
           disabled={(activeTab === 'root' && rootLoading) || (activeTab === 'stack' && stackEnvLoading)}
           className="
-            flex items-center gap-2 rounded-lg px-3.5 py-2
-            text-sm font-medium text-slate-300
+            flex items-center gap-2 rounded-lg px-3 py-2
+            text-xs font-medium text-slate-300
             bg-white/5 border border-white/10
             hover:bg-white/10 hover:border-white/15
             disabled:opacity-50 transition-all duration-200
           "
         >
           <RefreshCw
-            size={15}
+            size={14}
             className={(activeTab === 'root' && rootLoading) || (activeTab === 'stack' && stackEnvLoading) ? 'animate-spin' : ''}
           />
           Refresh
@@ -516,8 +512,8 @@ export default function Environment() {
                 onClick={handleRootValidate}
                 disabled={rootValidating || rootLoading}
                 className="
-                  flex items-center gap-2 rounded-lg px-3.5 py-2
-                  text-sm font-medium text-cyan-400
+                  flex items-center gap-2 rounded-lg px-3 py-2
+                  text-xs font-medium text-cyan-400
                   bg-cyan-500/10 border border-cyan-500/20
                   hover:bg-cyan-500/20 hover:border-cyan-500/30
                   disabled:opacity-50 transition-all duration-200
@@ -534,8 +530,8 @@ export default function Environment() {
                 onClick={handleRootSave}
                 disabled={rootSaving || !rootHasChanges}
                 className={`
-                  flex items-center gap-2 rounded-lg px-3.5 py-2
-                  text-sm font-medium transition-all duration-200
+                  flex items-center gap-2 rounded-lg px-3 py-2
+                  text-xs font-medium transition-all duration-200
                   ${rootHasChanges
                     ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
                     : 'text-slate-500 bg-white/5 border border-white/10 cursor-not-allowed'
@@ -669,8 +665,8 @@ export default function Environment() {
                   onClick={handleStackSave}
                   disabled={stackSaving || !stackHasChanges}
                   className={`
-                    flex items-center gap-2 rounded-lg px-3.5 py-2
-                    text-sm font-medium transition-all duration-200
+                    flex items-center gap-2 rounded-lg px-3 py-2
+                    text-xs font-medium transition-all duration-200
                     ${stackHasChanges
                       ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
                       : 'text-slate-500 bg-white/5 border border-white/10 cursor-not-allowed'

@@ -20,6 +20,7 @@ import {
 import { apiClient } from '../api/client'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { EmptyState } from '../components/common/PageState'
 import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import type {
@@ -306,11 +307,7 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
 
   const total = images.length
   if (total === 0) {
-    return (
-      <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
-        No images found
-      </div>
-    )
+    return <EmptyState compact title="No images found" hint="Run a registry check on the Images page to discover images, or pull one from Docker Hub." />
   }
 
   const segments = [
@@ -517,11 +514,7 @@ function EventFrequencyChart({ events }: { events: EventEntry[] }) {
 
 function NetworkTopology({ networks }: { networks: NetworkInfo[] }) {
   if (networks.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
-        No networks found
-      </div>
-    )
+    return <EmptyState compact title="No networks found" hint="Docker networks appear here once a stack creates one, or create one on the Networks page." />
   }
 
   return (
@@ -1070,7 +1063,7 @@ function FactoryResetCard() {
             <button
               onClick={() => setActiveMode('app')}
               className="
-                mt-3 flex items-center gap-2 px-3.5 py-2 rounded-lg text-[11px] font-medium
+                mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium
                 bg-amber-500/10 border border-amber-500/20 text-amber-400
                 hover:bg-amber-500/20 hover:border-amber-500/30
                 transition-all duration-200
@@ -1095,7 +1088,7 @@ function FactoryResetCard() {
             <button
               onClick={() => setActiveMode('full')}
               className="
-                mt-3 flex items-center gap-2 px-3.5 py-2 rounded-lg text-[11px] font-medium
+                mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium
                 bg-rose-500/10 border border-rose-500/20 text-rose-400
                 hover:bg-rose-500/20 hover:border-rose-500/30
                 transition-all duration-200
@@ -1518,7 +1511,7 @@ export default function Diagnostics() {
                 disabled:opacity-50 transition-all duration-200
               "
             >
-              <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
               Refresh All
             </button>
           )}

@@ -26,6 +26,7 @@ import { usePolling } from '../hooks/usePolling'
 import { useFleetRole } from '../hooks/useFleetRole'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import DockerEngineCard from '../components/updates/DockerEngineCard'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -795,7 +796,7 @@ export default function Updates() {
           </select>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mt-5">
           {/* DCS Backend */}
           <div className={`rounded-xl border p-5 transition-all duration-300 ${
             sysUpdate?.available
@@ -1035,7 +1036,7 @@ export default function Updates() {
                         <button
                           onClick={handleRollback}
                           disabled={sysRollingBack || !!restartingApi}
-                          className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press"
                         >
                           {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
                           {sysRollingBack ? 'Rolling back…' : 'Rollback'}
@@ -1045,7 +1046,7 @@ export default function Updates() {
                         onClick={handleRestartApi}
                         disabled={!!restartingApi || sysApplying}
                         title="Restart the API listener now"
-                        className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all press"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all press"
                       >
                         <Power size={13} />
                         Restart API
@@ -1069,7 +1070,7 @@ export default function Updates() {
                   <p className="text-[10px] text-rose-200 break-words">{sysCheckError}</p>
                 </div>
                 <StatusLine ok={false} okText="" warnText="Not checked" checkedAt={lastChecked} updatedAt={null} tone="rose" />
-                <button onClick={handleCheckSystemUpdate} disabled={sysChecking} className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all">
+                <button onClick={handleCheckSystemUpdate} disabled={sysChecking} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all">
                   {sysChecking ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Try again
                 </button>
               </div>
@@ -1173,6 +1174,9 @@ export default function Updates() {
               </a>
             </div>
           </div>
+
+          {/* Docker Engine — the runtime under every container, here and (from a hub) in every VM */}
+          <DockerEngineCard enabled={isConnected} isHub={isHub} />
         </div>
 
         {/* The VMs: a hub keeps them on its own DCS version */}

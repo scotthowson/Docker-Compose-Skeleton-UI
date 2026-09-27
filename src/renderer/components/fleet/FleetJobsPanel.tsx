@@ -9,6 +9,7 @@ import { Loader2, RefreshCw, Trash2, Server, ChevronDown, ChevronUp } from 'luci
 import { retryFleetJob, deleteFleetJob } from '../../api/endpoints'
 import type { FleetJob } from '../../../shared/types'
 import ProgressCard, { type ProgressLine, type ProgressState } from '../common/ProgressCard'
+import { useConfirm } from '../common/ConfirmDialog'
 import { ago } from './fleetShared'
 
 function jobState(j: FleetJob): ProgressState {
@@ -57,6 +58,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJob; onChanged: () => void; compact?: boolean }) {
+  const confirm = useConfirm()
   const [busy, setBusy] = useState<'retry' | 'dismiss' | ''>('')
   const [open, setOpen] = useState(job.status !== 'done')
   const lines: ProgressLine[] = (job.log ?? []).slice(-40).map((l) => ({ text: l.text, tone: l.text.startsWith('✗') ? 'bad' : l.text.startsWith('✓') ? 'ok' : l.text.startsWith('→') ? 'plain' : 'muted' }))
@@ -65,7 +67,7 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
     // a failed build may have left a VM behind: offer to take it with the job
     let destroy = false
     if (job.status === 'failed' && job.vmid) {
-      destroy = window.confirm(`Also destroy VM #${job.vmid} on Proxmox? Cancel keeps the VM and only forgets the job.`)
+      destroy = await confirm({ title: 'Forget this build', message: `Also destroy VM #${job.vmid} on Proxmox? Cancel keeps the VM and only forgets the job.`, confirmLabel: 'Destroy VM', danger: true })
     }
     setBusy('dismiss')
     try { await deleteFleetJob(job.id, destroy); onChanged() } finally { setBusy('') }

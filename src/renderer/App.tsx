@@ -5,6 +5,7 @@ import { Header } from './components/layout/Header'
 import { pageTitles } from './constants/pageTitles'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
+import { ConfirmDialogHost } from './components/common/ConfirmDialog'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import UpdateBanner from './components/common/UpdateBanner'
 import OnboardingOverlay from './components/common/OnboardingOverlay'
@@ -643,6 +644,8 @@ export default function App() {
         <CommandPalette />
         <KeyboardShortcuts />
         <KeyboardShortcutsPanel open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+        {/* The one confirm dialog every page asks with (useConfirm) */}
+        <ConfirmDialogHost />
 
         {/* Header — z-30 so dropdown renders above content area */}
         <div className="relative z-30">

@@ -10,6 +10,7 @@ import { CheckCircle2, XCircle, Loader2, PlugZap, RefreshCw, Copy, Check, Radio 
 import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { proxmoxTest, fetchTraefikFeedStatus, rotateTraefikFeedToken } from '../../api/endpoints'
+import { useConfirm } from '../common/ConfirmDialog'
 import type { ProxmoxStatus } from '../../../shared/types'
 
 function CopyChip({ text, label }: { text: string; label: string }) {
@@ -69,10 +70,11 @@ function ago(epoch: number): string {
 export function TraefikFeedPanel({ enabled }: { enabled: boolean }) {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const feed = usePolling(fetchTraefikFeedStatus, 15000, { enabled: isConnected })
+  const confirm = useConfirm()
   const [rotating, setRotating] = useState(false)
   const f = feed.data
   const rotate = async () => {
-    if (!window.confirm('Mint a new feed token? The Traefik that pulls the feed keeps failing until you paste the new one.')) return
+    if (!(await confirm({ title: 'Mint a new feed token', message: 'Mint a new feed token? The Traefik that pulls the feed keeps failing until you paste the new one.', confirmLabel: 'Mint token' }))) return
     setRotating(true)
     try { await rotateTraefikFeedToken(); feed.refresh() } finally { setRotating(false) }
   }

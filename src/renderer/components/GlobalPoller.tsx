@@ -23,7 +23,9 @@ export function GlobalPoller() {
   fleetScopeRef.current = hasFleet ? 'all' : 'hub'
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const setSystemStatus = useSystemStore((s) => s.setStatus)
+  const setSystemError = useSystemStore((s) => s.setError)
   const setHealthReport = useHealthStore((s) => s.setReport)
+  const setHealthError = useHealthStore((s) => s.setError)
   const setContainers = useContainerStore((s) => s.setContainers)
   const setContainerStats = useContainerStore((s) => s.setStats)
   const setContainersLoading = useContainerStore((s) => s.setLoading)
@@ -46,9 +48,12 @@ export function GlobalPoller() {
     try {
       const data = await fetchServerStatus()
       if (mountedRef.current) setSystemStatus(data)
-    } catch { /* silent — connection store handles errors */ }
+    } catch (err) {
+      // the connection store handles reconnecting; the cards say why when nothing has loaded yet
+      if (mountedRef.current) setSystemError(err instanceof Error ? err.message : 'Could not load the server status')
+    }
     fetchingStatus.current = false
-  }, [setSystemStatus])
+  }, [setSystemStatus, setSystemError])
 
   const pollHealth = useCallback(async () => {
     if (fetchingHealth.current || !mountedRef.current) return
@@ -56,9 +61,11 @@ export function GlobalPoller() {
     try {
       const data = await fetchHealthReport(fleetScopeRef.current)
       if (mountedRef.current) setHealthReport(data)
-    } catch { /* silent */ }
+    } catch (err) {
+      if (mountedRef.current) setHealthError(err instanceof Error ? err.message : 'Could not load the health report')
+    }
     fetchingHealth.current = false
-  }, [setHealthReport])
+  }, [setHealthReport, setHealthError])
 
   // The container list lives here so the Containers page (and the dashboard's
   // container card) open with current data instead of fetching after they

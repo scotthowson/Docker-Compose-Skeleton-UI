@@ -13,6 +13,7 @@ import { X, LayoutTemplate, Code, Database, Loader2, Play, Save, Trash2, FolderO
 import { apiClient } from '../../api/client'
 import { fetchApiCatalogue, fetchPluginCards, fetchCardSource, saveCard, deleteCard } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import { HtmlCardFrame } from '../dashboard/PluginFrame'
 
 type Widget = 'number' | 'gauge' | 'list' | 'badge' | 'text'
@@ -104,6 +105,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 
 export default function CardStudio({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const [mode, setMode] = useState<'data' | 'code'>('data')
   const [title, setTitle] = useState('My card')
   const [plugin, setPlugin] = useState('my-cards')
@@ -172,7 +174,7 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
     finally { setSaving(false) }
   }
   const handleDelete = async () => {
-    if (!loadedFrom || !window.confirm(`Delete the card ${loadedFrom.plugin}/${loadedFrom.card}?`)) return
+    if (!loadedFrom || !(await confirm({ title: 'Delete this card', message: `Delete the card ${loadedFrom.plugin}/${loadedFrom.card}?`, confirmLabel: 'Delete', danger: true }))) return
     try {
       await deleteCard(loadedFrom.plugin, loadedFrom.card)
       setExisting((l) => l.filter((x) => !(x.plugin === loadedFrom.plugin && x.card === loadedFrom.card)))

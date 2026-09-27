@@ -241,9 +241,9 @@ export default function Users() {
         <button
           onClick={fetchData}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 transition-all disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
@@ -293,7 +293,7 @@ export default function Users() {
               <button
                 onClick={handleCreateInvite}
                 disabled={inviteLoading}
-                className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
+                className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
               >
                 <UserPlus className="h-3.5 w-3.5" />
                 Invite User

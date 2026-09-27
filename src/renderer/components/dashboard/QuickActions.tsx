@@ -19,6 +19,7 @@ import { useStackStore } from '../../stores/stackStore'
 import { useContainerStore } from '../../stores/containerStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import {
   runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
   startStack, stopStack, restartStack, updateStack,
@@ -98,6 +99,7 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
   const setHealthReport = useHealthStore((s) => s.setReport)
   const refreshContainers = useContainerStore((s) => s.refresh)
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
@@ -122,7 +124,7 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
     if (a.kind === 'url') { if (/^https?:\/\//i.test(a.target)) window.open(a.target, '_blank', 'noopener'); return }
     if (!isConnected || loadingAction) return
     const needsConfirm = (a.kind === 'stack' && a.op !== 'start') || (a.kind === 'container' && a.op !== 'start') || (a.kind === 'maintenance' && a.target !== 'check-health')
-    if (needsConfirm && !window.confirm(`${a.label}: run this now?`)) return
+    if (needsConfirm && !(await confirm({ title: a.label, message: `${a.label}: run this now?`, confirmLabel: 'Run now', danger: a.op === 'stop' }))) return
     setLoadingAction(a.id)
     try {
       if (a.kind === 'maintenance') {
@@ -152,7 +154,7 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
     } finally {
       setLoadingAction(null)
     }
-  }, [setCurrentPage, isConnected, loadingAction, addToast, setHealthReport, refreshContainers])
+  }, [setCurrentPage, isConnected, loadingAction, addToast, setHealthReport, refreshContainers, confirm])
 
   const visible = actions.filter((a) => {
     if (a.kind === 'page' && ADMIN_ONLY_PAGES.has(a.target as PageId) && !isAdmin) return false

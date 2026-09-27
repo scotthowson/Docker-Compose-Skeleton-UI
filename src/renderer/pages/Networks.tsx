@@ -29,7 +29,7 @@ import type {
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { CopyButton } from '../components/common/CopyButton'
 import { useToast } from '../components/common/Toast'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -801,6 +801,7 @@ export default function Networks() {
   const {
     data: networksData,
     loading: networksLoading,
+    error: networksError,
     refresh: refreshNetworks,
   } = usePolling<NetworkListResponse>(fetchScopedNetworks, 30000, { enabled: isConnected })
   const scopeRef = useRef(scope)
@@ -888,7 +889,7 @@ export default function Networks() {
           {isAdmin && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
             >
               <Plus size={14} />
               New Network
@@ -898,14 +899,14 @@ export default function Networks() {
             onClick={refreshNetworks}
             disabled={networksLoading}
             className="
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium text-slate-300
+              flex items-center gap-2 rounded-lg px-3 py-2
+              text-xs font-medium text-slate-300
               bg-white/5 border border-white/10
               hover:bg-white/10 hover:border-white/15
               disabled:opacity-50 transition-all duration-200
             "
           >
-            <RefreshCw size={15} className={networksLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={networksLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
@@ -978,6 +979,8 @@ export default function Networks() {
             <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[180px] border border-white/[0.03]" />
           ))}
         </div>
+      ) : networksError && !networksData ? (
+        <ErrorState title="Failed to load networks" error={networksError} onRetry={refreshNetworks} />
       ) : filteredNetworks.length === 0 ? (
         <div className="glass rounded-xl p-12 text-center">
           <Network size={32} className="text-slate-500 mx-auto mb-3" />

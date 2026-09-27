@@ -8,6 +8,8 @@ import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
 import { startContainer, stopContainer, restartContainer, removeContainer } from '../../api/endpoints'
 import ContainerRow, { ContainerCard } from './ContainerRow'
+import { useConfirm } from '../common/ConfirmDialog'
+import { EmptyState } from '../common/PageState'
 import {
   Search,
   ChevronUp,
@@ -84,6 +86,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   const loading = useContainerStore((s) => s.loading)
   const favorites = useContainerStore((s) => s.favorites)
   const toggleFavorite = useContainerStore((s) => s.toggleFavorite)
+  const confirm = useConfirm()
 
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -116,7 +119,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   const handleBatchAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'remove') => {
     if (selectedContainers.size === 0) return
     if (action === 'remove') {
-      if (!window.confirm(`Remove ${selectedContainers.size} container(s)? This will force-remove them and cannot be undone.`)) return
+      if (!(await confirm({ title: 'Remove containers', message: `Remove ${selectedContainers.size} container(s)? This will force-remove them and cannot be undone.`, confirmLabel: 'Remove', danger: true }))) return
     }
     setBatchLoading(true)
     setBatchResults(null)
@@ -143,7 +146,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
         })
       }
     }
-  }, [selectedContainers, containers])
+  }, [selectedContainers, containers, confirm])
 
   const exitBatchMode = useCallback(() => {
     setBatchMode(false)
@@ -254,9 +257,9 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             <button
               onClick={onRefresh}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white/5 border border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 press"
             >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           )}
@@ -264,7 +267,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             <button
               onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
               className={`
-                flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
+                flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
                 border transition-all duration-200
                 ${batchMode
                   ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
@@ -399,10 +402,11 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             ))}
           </div>
         ) : sorted.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <Box className="h-8 w-8 text-slate-500" />
-            <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
-          </div>
+          <EmptyState
+            icon={<Box size={32} />}
+            title={search ? 'No containers match your search.' : 'No containers found.'}
+            hint={search ? 'Try another name, image or stack.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : 'Start a stack or deploy a template and its containers appear here.'}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-2.5 animate-fade-in">
             {sorted.map((container) => (
@@ -476,11 +480,12 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                 </>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + 3} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <Box className="h-8 w-8 text-slate-500" />
-                      <span className="text-sm text-slate-500">{search ? 'No containers match your search.' : 'No containers found.'}</span>
-                    </div>
+                  <td colSpan={COLUMNS.length + 3}>
+                    <EmptyState
+                      icon={<Box size={32} />}
+                      title={search ? 'No containers match your search.' : 'No containers found.'}
+                      hint={search ? 'Try another name, image or stack.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : 'Start a stack or deploy a template and its containers appear here.'}
+                    />
                   </td>
                 </tr>
               ) : (

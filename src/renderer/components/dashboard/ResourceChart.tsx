@@ -12,6 +12,7 @@ import {
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { ServerOff } from 'lucide-react'
+import { CardError } from './cardShared'
 
 // Dark theme palette
 const COLORS = {
@@ -318,11 +319,24 @@ type TabId = 'gauges' | 'trending'
 
 export default function ResourceChart({ history = [] }: { history?: ResourceHistoryPoint[] }) {
   const status = useSystemStore((s) => s.status)
+  const error = useSystemStore((s) => s.error)
   const systemInfo = useSystemStore((s) => s.system)
   const connectionStatus = useConnectionStore((s) => s.status)
   const isDisconnected = !status && connectionStatus !== 'connected'
 
   const [activeTab, setActiveTab] = useState<TabId>('gauges')
+
+  // The poll failed before anything loaded: say why instead of a skeleton that never resolves
+  if (!status && error) {
+    return (
+      <div className="glass-card p-4 md:p-6 animate-fade-in">
+        <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          System Resources
+        </h3>
+        <CardError error={error} onRetry={() => window.dispatchEvent(new Event('app-refresh'))} />
+      </div>
+    )
+  }
 
   // Show skeleton while connected but no data yet
   if (!status && connectionStatus === 'connected') {

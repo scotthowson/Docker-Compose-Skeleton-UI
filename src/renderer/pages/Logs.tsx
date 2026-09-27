@@ -16,7 +16,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import LiveLogViewer from '../components/logs/LiveLogViewer'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { ErrorState } from '../components/common/PageState'
+import { ErrorState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Log level config
@@ -272,7 +272,7 @@ export default function Logs() {
     <div className="space-y-4 flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
       <DisconnectedBanner />
       {/* Page header */}
-      <div className="flex items-center justify-between shrink-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
             <ScrollText className="w-6 h-6 text-amber-400" />
@@ -297,7 +297,7 @@ export default function Logs() {
             title="Toggle log statistics"
           >
             <BarChart3 size={14} />
-            Stats
+            <span className="hidden sm:inline">Stats</span>
           </button>
           <button
             onClick={handleCopy}
@@ -311,7 +311,7 @@ export default function Logs() {
             title="Copy to clipboard"
           >
             {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-            {copied ? 'Copied' : 'Copy'}
+            <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
           </button>
           <button
             onClick={handleDownload}
@@ -326,7 +326,7 @@ export default function Logs() {
             title="Download logs"
           >
             <Download size={14} />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
           <button
             onClick={refresh}
@@ -340,7 +340,7 @@ export default function Logs() {
             "
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
@@ -720,9 +720,7 @@ export default function Logs() {
             )}
 
             {archives && archives.archives.length === 0 && (
-              <div className="p-5">
-                <p className="text-sm text-slate-500">No archived log files found.</p>
-              </div>
+              <EmptyState compact title="No archived log files found." hint="Rotate the logs from the Maintenance page and the archive appears here." />
             )}
 
             {archives && archives.archives.length > 0 && (

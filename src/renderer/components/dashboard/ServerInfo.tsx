@@ -10,6 +10,7 @@ import {
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useFleetScope } from '../../hooks/useFleetScope'
+import { CardError } from './cardShared'
 
 function InfoRow({ icon, label, value, color }: {
   icon: React.ReactNode
@@ -29,8 +30,22 @@ function InfoRow({ icon, label, value, color }: {
 export default function ServerInfo() {
   const { hasFleet } = useFleetScope()
   const status = useSystemStore((s) => s.status)
+  const error = useSystemStore((s) => s.error)
   const version = useSystemStore((s) => s.version)
   const connectionStatus = useConnectionStore((s) => s.status)
+
+  // The poll failed before anything loaded: say why instead of a skeleton that never resolves
+  if (!status && error) {
+    return (
+      <div className="glass-card p-4 md:p-6 animate-fade-in">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
+          <Server size={14} className="text-emerald-400" />
+          Server Details
+        </h3>
+        <CardError error={error} onRetry={() => window.dispatchEvent(new Event('app-refresh'))} />
+      </div>
+    )
+  }
 
   if (!status && connectionStatus === 'connected') {
     return (

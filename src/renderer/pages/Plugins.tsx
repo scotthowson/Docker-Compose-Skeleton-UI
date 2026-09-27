@@ -368,7 +368,7 @@ export default function Plugins() {
       <DisconnectedBanner />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/10 flex items-center justify-center">
             <Puzzle className="w-5 h-5 text-cyan-400" />
@@ -396,7 +396,7 @@ export default function Plugins() {
           </button>
           <button
             onClick={() => setShowStudio(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium text-violet-300 bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-violet-300 bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all"
             title="Build a dashboard card from an endpoint, or write one"
           >
             <LayoutTemplate size={14} />
@@ -404,7 +404,7 @@ export default function Plugins() {
           </button>
           <button
             onClick={() => setShowInstall(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all"
           >
             <Download size={14} />
             <span>Install from Git</span>
@@ -775,7 +775,7 @@ export default function Plugins() {
                   onKeyDown={e => e.key === 'Enter' && handleInstall()}
                   placeholder="https://github.com/user/my-dcs-plugin.git"
                   autoFocus
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
                 />
               </div>
               <div className="bg-slate-800/40 rounded-lg px-3.5 py-3 border border-white/[0.03]">

@@ -295,7 +295,7 @@ export default function Backup() {
       <DisconnectedBanner />
       <div className="flex flex-col gap-5 animate-fade-in">
         {/* ---- Header ---- */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Backup & Restore</span></h1>
             <p className="text-sm text-slate-400 mt-1">
@@ -305,23 +305,23 @@ export default function Backup() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowGuide(!showGuide)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15 transition-all duration-200"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15 transition-all duration-200"
             >
-              <BookOpen size={15} />
+              <BookOpen size={14} />
               <span className="hidden sm:inline">Guide</span>
             </button>
             <button
               onClick={refreshBackups}
               disabled={backupsLoading}
               className="
-                flex items-center gap-2 rounded-lg px-3.5 py-2
-                text-sm font-medium text-slate-300
+                flex items-center gap-2 rounded-lg px-3 py-2
+                text-xs font-medium text-slate-300
                 bg-white/5 border border-white/10
                 hover:bg-white/10 hover:border-white/15
                 disabled:opacity-50 transition-all duration-200
               "
             >
-              <RotateCcw size={15} className={backupsLoading ? 'animate-spin' : ''} />
+              <RotateCcw size={14} className={backupsLoading ? 'animate-spin' : ''} />
               Refresh
             </button>
           </div>
@@ -841,7 +841,7 @@ export default function Backup() {
                   placeholder="RESTORE"
                   disabled={restoreLoading}
                   className="
-                    w-full px-3.5 py-2.5 rounded-lg text-sm font-mono
+                    w-full px-3 py-2.5 rounded-lg text-sm font-mono
                     bg-white/5 border border-white/10
                     text-slate-200 placeholder-slate-600
                     focus:outline-none focus:ring-1 focus:ring-rose-500/30 focus:border-rose-500/30

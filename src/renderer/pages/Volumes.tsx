@@ -33,7 +33,7 @@ import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, ErrorState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -353,6 +353,7 @@ export default function Volumes() {
   const {
     data: volumesData,
     loading,
+    error,
     refresh,
   } = usePolling<VolumeListResponse>(fetchScopedVolumes, VOLUME_POLL_INTERVAL, {
     enabled: isConnected,
@@ -542,7 +543,7 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       {/* Page Header                                                       */}
       {/* ----------------------------------------------------------------- */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
             <HardDrive className="w-5 h-5 text-emerald-400" />
@@ -562,15 +563,15 @@ export default function Volumes() {
             <button
               onClick={toggleBatchMode}
               className={`
-                flex items-center gap-2 rounded-lg px-3.5 py-2
-                text-sm font-medium transition-all duration-200 border
+                flex items-center gap-1.5 rounded-lg px-3 py-2
+                text-xs font-medium transition-all duration-200 border
                 ${batchMode
                   ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
                   : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
                 }
               `}
             >
-              <ListChecks size={15} />
+              <ListChecks size={14} />
               {batchMode ? 'Exit Batch' : 'Batch Select'}
             </button>
           )}
@@ -578,14 +579,14 @@ export default function Volumes() {
             onClick={refresh}
             disabled={loading}
             className="
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium text-slate-300
+              flex items-center gap-1.5 rounded-lg px-3 py-2
+              text-xs font-medium text-slate-300
               bg-white/5 border border-white/10
               hover:bg-white/10 hover:border-white/15
               disabled:opacity-50 transition-all duration-200
             "
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
@@ -618,7 +619,7 @@ export default function Volumes() {
             onClick={() => setBatchConfirmOpen(true)}
             disabled={selectedVolumes.size === 0 || batchLoading}
             className="
-              flex items-center gap-2 rounded-lg px-4 py-2
+              flex items-center gap-2 rounded-lg px-3 py-2
               text-sm font-semibold text-white
               bg-rose-500 hover:bg-rose-400
               shadow-lg shadow-rose-500/25
@@ -904,6 +905,15 @@ export default function Volumes() {
                 </>
               )}
 
+              {/* The poll failed before anything loaded */}
+              {!hasLoaded && !loading && error && (
+                <tr>
+                  <td colSpan={batchMode ? 6 : 5} className="px-5 py-6">
+                    <ErrorState title="Failed to load volumes" error={error} onRetry={refresh} />
+                  </td>
+                </tr>
+              )}
+
               {/* Empty state */}
               {hasLoaded && filteredVolumes.length === 0 && (
                 <tr>
@@ -923,7 +933,7 @@ export default function Volumes() {
                         <p className="text-sm font-medium text-slate-400">
                           {searchQuery
                             ? 'No volumes match your search'
-                            : 'No volumes found'}
+                            : 'No named volumes here — DCS stacks keep their data in App-Data folders next to each compose file'}
                         </p>
                         <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
                           {searchQuery

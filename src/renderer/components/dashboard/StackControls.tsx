@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useContainerStore } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import { CardHeader, CardLoading, CardError, CardEmpty } from './cardShared'
 
 type Op = 'start' | 'stop' | 'restart' | 'update'
@@ -24,13 +25,14 @@ export default function StackControls({ stacks, error, onRetry, onRefresh }: {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const refreshContainers = useContainerStore((s) => s.refresh)
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState<string | null>(null)
 
   const run = useCallback(async (stack: string, op: Op) => {
     if (busy) return
-    if (op === 'stop' && !window.confirm(`Stop every container of ${stack}?`)) return
-    if (op === 'restart' && !window.confirm(`Restart ${stack}?`)) return
-    if (op === 'update' && !window.confirm(`Pull the images of ${stack} and recreate what changed?`)) return
+    if (op === 'stop' && !(await confirm({ title: 'Stop the stack', message: `Stop every container of ${stack}?`, confirmLabel: 'Stop', danger: true }))) return
+    if (op === 'restart' && !(await confirm({ title: 'Restart the stack', message: `Restart ${stack}?`, confirmLabel: 'Restart' }))) return
+    if (op === 'update' && !(await confirm({ title: 'Update the stack', message: `Pull the images of ${stack} and recreate what changed?`, confirmLabel: 'Update' }))) return
     setBusy(`${stack}:${op}`)
     try {
       const fn = { start: startStack, stop: stopStack, restart: restartStack, update: updateStack }[op]
@@ -43,7 +45,7 @@ export default function StackControls({ stacks, error, onRetry, onRefresh }: {
       onRefresh?.()
       void refreshContainers()
     }
-  }, [busy, addToast, onRefresh, refreshContainers])
+  }, [busy, addToast, onRefresh, refreshContainers, confirm])
 
   const running = stacks?.filter((s) => s.status === 'running').length ?? 0
 

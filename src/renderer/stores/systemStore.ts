@@ -16,8 +16,11 @@ interface SystemState {
   system: SystemInfo | null
   version: APIVersion | null
   loading: boolean
+  /** why the last status poll failed; cleared by the next status */
+  error: string | null
   metricHistory: MetricHistory
   setStatus: (status: ServerStatus | null) => void
+  setError: (error: string | null) => void
   setSystem: (system: SystemInfo) => void
   setVersion: (version: APIVersion) => void
   setLoading: (loading: boolean) => void
@@ -34,9 +37,11 @@ export const useSystemStore = create<SystemState>((set) => ({
   system: null,
   version: null,
   loading: false,
+  error: null,
   metricHistory: { stacks: [], containers: [], health: [], cpu: [], mem: [] },
 
-  setStatus: (status) => set({ status }),
+  setStatus: (status) => set({ status, error: null }),
+  setError: (error) => set({ error }),
   setSystem: (system) => set({ system }),
   setVersion: (version) => set({ version }),
   setLoading: (loading) => set({ loading }),

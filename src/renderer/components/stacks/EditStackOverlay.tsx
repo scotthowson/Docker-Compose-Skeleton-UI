@@ -32,6 +32,7 @@ import {
   rollbackCompose,
 } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useComposeLinter, useEnvLinter, type LintDiagnostic } from '../../hooks/useComposeLinter'
@@ -287,6 +288,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
   const composeTextareaRef = useRef<HTMLTextAreaElement>(null)
   const focusedServiceRef = useRef<string | null>(null)
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const isRunning = stack.status === 'running'
 
@@ -528,12 +530,12 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
   const hasEnvChanges = envContent !== originalEnv
   const hasAnyChanges = hasComposeChanges || hasEnvChanges
 
-  const safeClose = useCallback(() => {
+  const safeClose = useCallback(async () => {
     if (hasAnyChanges) {
-      if (!window.confirm('You have unsaved changes. Close without saving?')) return
+      if (!(await confirm({ title: 'Unsaved changes', message: 'You have unsaved changes. Close without saving?', confirmLabel: 'Close without saving', danger: true }))) return
     }
     onClose()
-  }, [hasAnyChanges, onClose])
+  }, [hasAnyChanges, onClose, confirm])
 
   // Keyboard handlers
   useEffect(() => {
@@ -645,7 +647,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
     // Warn about lint errors before saving
     const errors = composeDiagnostics.filter(d => d.severity === 'error')
     if (errors.length > 0) {
-      if (!window.confirm(`${errors.length} lint error${errors.length !== 1 ? 's' : ''} detected (port conflicts, etc). Save anyway?`)) return
+      if (!(await confirm({ title: 'Lint errors', message: `${errors.length} lint error${errors.length !== 1 ? 's' : ''} detected (port conflicts, etc). Save anyway?`, confirmLabel: 'Save anyway', danger: true }))) return
     }
 
     setSavingCompose(true)
@@ -663,7 +665,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
     } finally {
       setSavingCompose(false)
     }
-  }, [stack.name, composeContent, validationResult, composeDiagnostics, addToast, onSaved])
+  }, [stack.name, composeContent, validationResult, composeDiagnostics, addToast, onSaved, confirm])
 
   // Ctrl+S in edit mode: run the server validation, then save when it passes
   const handleValidateThenSave = useCallback(async () => {

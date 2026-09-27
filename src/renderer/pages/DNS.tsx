@@ -625,13 +625,13 @@ export default function DNS() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border ${tokenPill.cls}`} title={dnsStatus?.hint || undefined}>{tokenPill.icon}{tokenPill.label}</span>
-          <button onClick={refreshAll} disabled={routesLoading || dnsLoading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all disabled:opacity-50 press">
-            <RefreshCw size={13} className={routesLoading || dnsLoading ? 'animate-spin' : ''} />
+          <button onClick={refreshAll} disabled={routesLoading || dnsLoading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all disabled:opacity-50 press">
+            <RefreshCw size={14} className={routesLoading || dnsLoading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           {isAdmin && cfConfigured && (
-            <button onClick={() => { switchTab('records'); setRecordModal({ open: true, record: null }) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 hover:bg-cyan-500/25 transition-all press">
-              <Plus size={13} /> Add record
+            <button onClick={() => { switchTab('records'); setRecordModal({ open: true, record: null }) }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 hover:bg-cyan-500/25 transition-all press">
+              <Plus size={14} /> Add record
             </button>
           )}
         </div>

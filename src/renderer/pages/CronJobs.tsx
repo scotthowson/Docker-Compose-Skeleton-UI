@@ -34,7 +34,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { CronEntry, CrontabResponse } from '../../shared/types'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -307,7 +307,7 @@ export default function CronJobs() {
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/10 flex items-center justify-center text-violet-400">
             <CalendarClock size={20} />
@@ -326,34 +326,34 @@ export default function CronJobs() {
             <>
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors press"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors press"
               >
-                <Plus size={13} />
-                Add Entry
+                <Plus size={14} />
+                <span className="hidden sm:inline">Add Entry</span>
               </button>
               <button
                 onClick={handleOpenRawEditor}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
               >
-                <Edit3 size={13} />
-                Raw Editor
+                <Edit3 size={14} />
+                <span className="hidden sm:inline">Raw Editor</span>
               </button>
             </>
           )}
           <button
             onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
           >
-            <BookOpen size={13} />
+            <BookOpen size={14} />
             <span className="hidden sm:inline">Guide</span>
           </button>
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
@@ -520,36 +520,30 @@ export default function CronJobs() {
 
       {/* Empty state */}
       {data && entries.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="relative">
-            <div className="absolute inset-0 bg-violet-500/10 rounded-full blur-xl" />
-            <div className="relative w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-              <CalendarClock size={22} className="text-slate-500" />
-            </div>
-          </div>
-          <p className="text-sm font-medium text-slate-400">
-            {search ? 'No entries match your filter' : 'No cron entries found'}
-          </p>
-          <p className="text-xs text-slate-500 text-center max-w-sm">
-            {search
-              ? 'Try adjusting your search query or clearing the filter.'
-              : 'Cron entries will appear here once scheduled tasks are configured on the server.'}
-          </p>
-          {!search && activeTab === 'user' && (
+        <EmptyState
+          icon={<CalendarClock size={32} />}
+          title={search ? 'No entries match your filter' : 'No cron entries found'}
+          hint={search
+            ? 'Try adjusting your search query or clearing the filter.'
+            : activeTab === 'user'
+              ? 'Add an entry here, or schedule a task from the Scheduled Tasks page.'
+              : 'System cron entries appear here once tasks are scheduled on the server.'}
+          action={!search && activeTab === 'user' ? (
             <button
               onClick={() => setShowAddForm(true)}
-              className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
             >
-              <Plus size={13} />
+              <Plus size={14} />
               Add Entry
             </button>
-          )}
-        </div>
+          ) : undefined}
+        />
       )}
 
       {/* Cron entries table */}
       {entries.length > 0 && (
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.05] rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
@@ -638,6 +632,7 @@ export default function CronJobs() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -12,6 +12,8 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { fetchHealthScore } from '../../api/endpoints'
 import { useFleetScope } from '../../hooks/useFleetScope'
 import { useStackCounts } from '../../hooks/useStackCounts'
+import { CardError } from './cardShared'
+import VmCapsule from '../fleet/VmCapsule'
 import type { HealthContainer, HealthScoreResponse } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -166,6 +168,7 @@ function ContainerRow({ container }: { container: HealthContainer }) {
       <div className="flex items-center gap-1.5 min-w-0">
         <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor} shrink-0`} />
         <span className="text-[11px] text-slate-300 font-mono truncate">{container.name}</span>
+        {container.member !== undefined && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
       </div>
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
         {isSleeping ? (
@@ -193,6 +196,7 @@ function ContainerRow({ container }: { container: HealthContainer }) {
 
 export default function HealthSummary() {
   const report = useHealthStore((s) => s.report)
+  const error = useHealthStore((s) => s.error)
   const connectionStatus = useConnectionStore((s) => s.status)
   const isConnected = connectionStatus === 'connected'
 
@@ -216,6 +220,19 @@ export default function HealthSummary() {
     const interval = setInterval(load, 30000)
     return () => { mounted = false; clearInterval(interval) }
   }, [isConnected, scope])
+
+  // The poll failed before anything loaded: say why instead of a skeleton that never resolves
+  if (!report && error) {
+    return (
+      <div className="glass-card p-4 md:p-6 animate-fade-in flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <HeartPulse className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Health</h3>
+        </div>
+        <CardError error={error} onRetry={() => window.dispatchEvent(new Event('app-refresh'))} />
+      </div>
+    )
+  }
 
   // Skeleton
   if (!report && isConnected) {
@@ -337,7 +354,7 @@ export default function HealthSummary() {
                   c.health === 'unhealthy' ? 0 : c.state === 'running' ? 1 : 2
                 return priority(a) - priority(b)
               })
-              .map((c) => <ContainerRow key={c.name} container={c} />)
+              .map((c) => <ContainerRow key={`${c.member ?? ''}|${c.name}`} container={c} />)
             }
           </div>
         </div>

@@ -136,9 +136,9 @@ function DisconnectedHero() {
         {(isError || connectionStatus === 'disconnected') && (
           <button
             onClick={() => connect()}
-            className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 press"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={14} />
             Retry Connection
           </button>
         )}

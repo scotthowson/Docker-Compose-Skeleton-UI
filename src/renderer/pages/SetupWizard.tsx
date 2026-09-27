@@ -794,11 +794,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       setComplete(true)
       sessionStorage.setItem('dcs-just-setup', 'true')
 
-      // 6. Redirect after a brief delay — unless VMs are being built: then the success screen follows them
-      if (vmPlan.length === 0) {
+      // 6. Redirect after a short pause when every step succeeded — a failed step keeps the results on screen
+      //    (the button below moves on); VMs being built keep the success screen too, it follows them
+      if (vmPlan.length === 0 && results.every((r) => r.ok)) {
         setTimeout(() => {
           onComplete()
-        }, 1500)
+        }, 4000)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed')
@@ -2004,7 +2005,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <p className="text-[10px] text-slate-500 leading-relaxed">
                             Authelia uses <span className="text-violet-400">Redis</span> for sessions and <span className="text-violet-400">SQLite</span> for storage.
                             Secrets are auto-generated. Password is hashed with Argon2id.
-                            After setup, enable per-service protection in your Traefik route files.
+                            Every app you deploy afterwards sits behind the portal; apps that bring their own clients (Plex, Nextcloud, the *arr apps…) stay open unless you protect them in the deploy sheet.
                           </p>
                         </div>
                       </div>
@@ -2620,6 +2621,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Docker Socket Proxy</span>
                         <span className="text-[10px] text-slate-300">{includeDockerSocket ? 'Included' : 'Excluded'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableAuthelia && autheliaUser && autheliaPassword ? 'bg-violet-500/5' : 'bg-white/[0.03]'}`}>
+                        <span className="text-[10px] text-slate-500">Authelia SSO</span>
+                        <span className={`text-[10px] ${enableAuthelia && autheliaUser && autheliaPassword ? 'text-violet-300' : 'text-slate-400'}`}>
+                          {enableAuthelia && autheliaUser && autheliaPassword ? `${autheliaUser} · auth.${envVars.PROXY_DOMAIN}` : enableAuthelia ? 'Enabled but incomplete — skipped' : 'Off'}
+                        </span>
+                      </div>
+                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableCrowdsec ? 'bg-amber-500/5' : 'bg-white/[0.03]'}`}>
+                        <span className="text-[10px] text-slate-500">CrowdSec</span>
+                        <span className={`text-[10px] ${enableCrowdsec ? 'text-amber-300' : 'text-slate-400'}`}>{enableCrowdsec ? `Enabled${crowdsecBouncer ? ' · Traefik bouncer' : ''}` : 'Off'}</span>
                       </div>
                       {cfDnsToken && (
                         <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">

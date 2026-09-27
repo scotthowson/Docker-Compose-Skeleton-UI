@@ -110,7 +110,7 @@ export default function Schedules() {
   return (
     <div className="space-y-6 animate-fade-in">
       <DisconnectedBanner />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/10 flex items-center justify-center">
             <CalendarClock className="w-5 h-5 text-violet-400" />
@@ -129,7 +129,7 @@ export default function Schedules() {
             <span className="hidden sm:inline">Refresh</span>
           </button>
           {isAdmin && (
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press">
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press">
               <Plus size={14} /> New Schedule
             </button>
           )}

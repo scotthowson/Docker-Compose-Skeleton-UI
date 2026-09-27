@@ -404,7 +404,7 @@ export default function Stacks() {
                 disabled={!!batchLoading}
                 title={label}
                 className={`
-                  flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold
+                  flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
                   border transition-all duration-200
                   ${bg} ${hoverBg}
                   disabled:opacity-50 disabled:cursor-not-allowed

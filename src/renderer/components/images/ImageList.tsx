@@ -5,6 +5,7 @@
 import React, { useState, useMemo } from 'react'
 import { ImageInfo } from '../../../shared/types'
 import VmCapsule from '../fleet/VmCapsule'
+import { EmptyState } from '../common/PageState'
 const imageKey = (i: ImageInfo) => `${i.member ?? ''}|${i.id}`
 import { useImageStore } from '../../stores/imageStore'
 import {
@@ -193,7 +194,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
   return (
     <div className="flex flex-col gap-4">
       {/* ---- Filter tabs ---- */}
-      <div className="flex items-center gap-1 border-b border-white/5 select-none">
+      <div className="flex items-center gap-1 border-b border-white/5 select-none overflow-x-auto scrollbar-none whitespace-nowrap">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -201,7 +202,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={`
-                px-4 py-2.5 text-sm font-medium transition-all duration-200
+                shrink-0 px-3 py-1.5 text-xs font-medium transition-all duration-200
                 border-b-2 -mb-[1px]
                 ${
                   isActive
@@ -263,15 +264,12 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                 </>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <HardDrive className="h-8 w-8 text-slate-500" />
-                      <span className="text-sm text-slate-500">
-                        {activeTab !== 'all'
-                          ? `No ${activeTab} images found.`
-                          : 'No images found.'}
-                      </span>
-                    </div>
+                  <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)}>
+                    <EmptyState
+                      icon={<HardDrive size={32} />}
+                      title={activeTab !== 'all' ? `No ${activeTab} images found.` : 'No images found.'}
+                      hint={activeTab !== 'all' ? 'Pick another tab to see the rest.' : 'Run a registry check to discover images, or pull one from Docker Hub.'}
+                    />
                   </td>
                 </tr>
               ) : (

@@ -268,7 +268,7 @@ export default function Automations() {
     } finally {
       setTogglingId(null)
     }
-  }, [addToast, refresh])
+  }, [addToast, refresh, scopeMember])
 
   const handleRun = useCallback(async (rule: AutomationRule) => {
     setRunningId(rule.id)
@@ -281,7 +281,7 @@ export default function Automations() {
     } finally {
       setRunningId(null)
     }
-  }, [addToast, refresh])
+  }, [addToast, refresh, scopeMember])
 
   const handleDelete = useCallback(async (id: string) => {
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
@@ -296,7 +296,7 @@ export default function Automations() {
     } finally {
       setDeleting(false)
     }
-  }, [addToast, refresh])
+  }, [addToast, refresh, scope, scopeMember])
 
   const handleCreate = useCallback(async () => {
     if (!formName.trim()) return
@@ -430,25 +430,25 @@ export default function Automations() {
           {isAdmin && (
 <button
             onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
           >
-            <Plus size={13} />
+            <Plus size={14} />
             Add Automation
           </button>
 )}
           <button
             onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200"
           >
-            <BookOpen size={13} />
+            <BookOpen size={14} />
             <span className="hidden sm:inline">Guide</span>
           </button>
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>

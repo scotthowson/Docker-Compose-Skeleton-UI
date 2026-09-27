@@ -13,7 +13,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchSecretReferences } from '../api/endpoints'
-import type { SecretReferencesResponse } from '../../shared/types'
+import type { SecretEntry, SecretReferencesResponse } from '../../shared/types'
 
 // Same rule as the server (.lib/secrets.sh): a compose-safe variable name.
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
@@ -26,6 +26,9 @@ function generateSecret(length = GENERATED_LENGTH): string {
   crypto.getRandomValues(bytes)
   return Array.from(bytes, (b) => GENERATED_ALPHABET[b % GENERATED_ALPHABET.length]).join('')
 }
+
+/** a row key: the secret on its DCS (the hub's rows have no member), so the same name on two VMs stays apart */
+const secretKey = (e: { member?: string | null; key: string }) => `${e.member ?? ''}|${e.key}`
 
 function referenceFor(name: string): string {
   return `\${SECRETS_${name}}`
@@ -152,39 +155,44 @@ export default function Secrets() {
         type: 'success',
         message: `${result.replaced ? 'Replaced' : 'Stored'} ${trimmedKey}. Reference it as ${result.reference}${result.replaced ? ' and restart stacks that use it.' : '.'}`,
       })
-      setRefs((prev) => { const next = { ...prev }; delete next[trimmedKey]; return next })
+      setRefs((prev) => { const next = { ...prev }; delete next[secretKey({ member: scopeMember, key: trimmedKey })]; return next })
       closeAdd()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyValid, keyExists, confirmReplace, newValue, trimmedKey, setSecret, addToast, scope, scopeMember])
 
-  const handleDelete = useCallback(async (key: string) => {
+  const handleDelete = useCallback(async (entry: SecretEntry) => {
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
-    const ok = await deleteSecret(key, scopeMember)
-    if (ok) addToast({ type: 'success', message: `Deleted ${key}` })
+    const ok = await deleteSecret(entry.key, scopeMember)
+    if (ok) addToast({ type: 'success', message: `Deleted ${entry.key}` })
     setDeleteTarget(null)
   }, [deleteSecret, addToast, scope, scopeMember])
 
-  const copyReference = async (key: string) => {
+  // the row the delete dialog is about (deleteTarget holds its row key)
+  const deleteEntry = deleteTarget ? entries.find((e) => secretKey(e) === deleteTarget) ?? null : null
+
+  const copyReference = async (entry: SecretEntry) => {
+    const id = secretKey(entry)
     try {
-      await navigator.clipboard.writeText(referenceFor(key))
-      setCopied(key)
-      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500)
+      await navigator.clipboard.writeText(referenceFor(entry.key))
+      setCopied(id)
+      setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500)
     } catch {
       addToast({ type: 'error', message: 'Clipboard is not available' })
     }
   }
 
-  const toggleReferences = async (key: string) => {
-    if (refsFor === key) { setRefsFor(null); return }
-    setRefsFor(key)
-    if (refs[key] && refs[key] !== 'error') return
-    setRefs((prev) => ({ ...prev, [key]: 'loading' }))
+  const toggleReferences = async (entry: SecretEntry) => {
+    const id = secretKey(entry)
+    if (refsFor === id) { setRefsFor(null); return }
+    setRefsFor(id)
+    if (refs[id] && refs[id] !== 'error') return
+    setRefs((prev) => ({ ...prev, [id]: 'loading' }))
     try {
-      const r = await fetchSecretReferences(key, entries.find((e) => e.key === key)?.member ?? scopeMember)
-      setRefs((prev) => ({ ...prev, [key]: r }))
+      const r = await fetchSecretReferences(entry.key, entry.member ?? scopeMember)
+      setRefs((prev) => ({ ...prev, [id]: r }))
     } catch {
-      setRefs((prev) => ({ ...prev, [key]: 'error' }))
+      setRefs((prev) => ({ ...prev, [id]: 'error' }))
     }
   }
 
@@ -218,7 +226,7 @@ export default function Secrets() {
             <span className="hidden sm:inline">Usage Guide</span>
           </button>
           {isAdmin && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
               <Plus size={14} /> Add Secret
             </button>
           )}
@@ -290,10 +298,11 @@ export default function Secrets() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
           {filtered.map((entry) => {
-            const r = refs[entry.key]
-            const open = refsFor === entry.key
+            const id = secretKey(entry)
+            const r = refs[id]
+            const open = refsFor === id
             return (
-              <div key={entry.key} className="glass rounded-xl p-4 group hover:border-amber-500/20 border border-transparent transition-all animate-fade-in">
+              <div key={id} className="glass rounded-xl p-4 group hover:border-amber-500/20 border border-transparent transition-all animate-fade-in">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
@@ -305,14 +314,14 @@ export default function Secrets() {
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    <button onClick={() => copyReference(entry.key)} title="Copy the placeholder for compose and .env files" className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
-                      {copied === entry.key ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    <button onClick={() => copyReference(entry)} title="Copy the placeholder for compose and .env files" className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
+                      {copied === id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     </button>
-                    <button onClick={() => toggleReferences(entry.key)} title="Where is this secret used?" className={`p-1.5 rounded-lg transition-all ${open ? 'text-cyan-400 bg-cyan-500/10' : 'text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10'}`}>
+                    <button onClick={() => toggleReferences(entry)} title="Where is this secret used?" className={`p-1.5 rounded-lg transition-all ${open ? 'text-cyan-400 bg-cyan-500/10' : 'text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10'}`}>
                       <Link2 className="w-4 h-4" />
                     </button>
                     {isAdmin && (
-                      <button onClick={() => setDeleteTarget(entry.key)} title="Delete" className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+                      <button onClick={() => setDeleteTarget(id)} title="Delete" className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
@@ -412,7 +421,7 @@ export default function Secrets() {
       )}
 
       {/* Delete confirmation */}
-      {deleteTarget && createPortal(
+      {deleteEntry && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
@@ -422,10 +431,10 @@ export default function Secrets() {
                 <p className="text-sm text-slate-400">Stacks that reference it will refuse to start</p>
               </div>
             </div>
-            <p className="text-sm text-slate-300 mb-4">Delete <span className="font-mono text-white">{deleteTarget}</span>? This cannot be undone.</p>
+            <p className="text-sm text-slate-300 mb-4">Delete <span className="font-mono text-white">{deleteEntry.key}</span>{deleteEntry.member !== undefined && <span className="ml-2 align-middle"><VmCapsule member={deleteEntry.member} name={deleteEntry.member_name} vmid={deleteEntry.vmid} size="xs" /></span>}? This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5">Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+              <button onClick={() => handleDelete(deleteEntry)} disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
               </button>
             </div>

@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
-import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry } from '../api/endpoints'
+import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry, checkFleetImageRegistry } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 
@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 
 const IMAGE_POLL_INTERVAL = 60_000
 
@@ -107,6 +107,7 @@ const Images: React.FC = () => {
   // Pull image handler
   const handlePullImage = useCallback(async (imageName: string) => {
     if (pullingImages.has(imageName)) return
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
     setPullingImages((prev) => new Set(prev).add(imageName))
     try {
       const res = await pullImage(imageName, scopeMember)
@@ -126,33 +127,43 @@ const Images: React.FC = () => {
         return next
       })
     }
-  }, [pullingImages, addToast, handleFetch, scopeMember])
+  }, [pullingImages, addToast, handleFetch, scope, scopeMember])
 
-  // Check registry for digest updates (slow POST)
+  // Check registry for digest updates (slow POST): the whole fleet at once, or the hub / one VM
   const handleCheckRegistry = useCallback(async () => {
     if (registryChecking) return
     setRegistryChecking(true)
     try {
-      const result = await checkImageRegistry()
-      addToast({
-        type: 'info',
-        message: `Registry check complete: ${result.updates_available} update${result.updates_available !== 1 ? 's' : ''} available out of ${result.total} image${result.total !== 1 ? 's' : ''}`,
-        duration: 5000,
-      })
+      if (scope === 'all') {
+        const r = await checkFleetImageRegistry()
+        addToast({
+          type: r.unreachable ? 'warning' : 'info',
+          message: `Registry check complete: ${r.updates_available} update${r.updates_available !== 1 ? 's' : ''} across ${r.members.length} DCS (${r.total} image${r.total !== 1 ? 's' : ''})${r.unreachable ? ` — ${r.unreachable} not answering` : ''}`,
+          duration: 6000,
+        })
+      } else {
+        const result = await checkImageRegistry(scopeMember)
+        addToast({
+          type: 'info',
+          message: `Registry check complete: ${result.updates_available} update${result.updates_available !== 1 ? 's' : ''} available out of ${result.total} image${result.total !== 1 ? 's' : ''}${scopeMember ? ` on ${memberName}` : ''}`,
+          duration: 5000,
+        })
+      }
       await handleFetch()
     } catch {
       addToast({ type: 'error', message: 'Registry check failed' })
     } finally {
       setRegistryChecking(false)
     }
-  }, [registryChecking, addToast, handleFetch])
+  }, [registryChecking, addToast, handleFetch, scope, scopeMember, memberName])
 
-  // Prune dangling images
+  // Prune dangling images on the hub or the chosen VM
   const handlePrune = useCallback(async () => {
     if (pruneLoading) return
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
     setPruneLoading(true)
     try {
-      const result = await runImagePrune()
+      const result = await runImagePrune(scopeMember)
       if (result.success) {
         addToast({
           type: 'success',
@@ -172,7 +183,7 @@ const Images: React.FC = () => {
     } finally {
       setPruneLoading(false)
     }
-  }, [pruneLoading, addToast, handleFetch])
+  }, [pruneLoading, addToast, handleFetch, scope, scopeMember])
 
   // Filter by search
   const filteredImages = useMemo(() => {
@@ -305,7 +316,7 @@ const Images: React.FC = () => {
           {isAdmin && (
             <button
               onClick={handleToggleBatch}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
                 batchMode
                   ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
                   : 'bg-white/5 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10'
@@ -322,7 +333,7 @@ const Images: React.FC = () => {
             onClick={handlePrune}
             disabled={pruneLoading}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
+              flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
               border backdrop-blur-sm transition-all duration-200
               ${
                 pruneLoading
@@ -502,13 +513,12 @@ const Images: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {filteredImages.length === 0 ? (
-              <div className="col-span-full py-16 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <HardDrive className="h-8 w-8 text-slate-500" />
-                  <span className="text-sm text-slate-500">
-                    {searchQuery ? 'No images match your search.' : 'No images found.'}
-                  </span>
-                </div>
+              <div className="col-span-full">
+                <EmptyState
+                  icon={<HardDrive size={32} />}
+                  title={searchQuery ? 'No images match your search.' : 'No images found.'}
+                  hint={searchQuery ? 'Try another name or tag.' : 'Run a registry check to discover images, or pull one from Docker Hub.'}
+                />
               </div>
             ) : (
               filteredImages.map((image, idx) => (

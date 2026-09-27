@@ -512,14 +512,14 @@ export default function Config() {
             <button
               onClick={handleReset}
               className="
-                flex items-center gap-2 rounded-lg px-3.5 py-2
-                text-sm font-medium text-slate-400
+                flex items-center gap-2 rounded-lg px-3 py-2
+                text-xs font-medium text-slate-400
                 bg-white/5 border border-white/10
                 hover:bg-white/10 hover:text-slate-200
                 transition-all duration-200
               "
             >
-              <Undo2 size={15} />
+              <Undo2 size={14} />
               Reset
             </button>
           )}
@@ -527,8 +527,8 @@ export default function Config() {
             onClick={hasChanges ? handleSave : refresh}
             disabled={saving || (loading && !cfg)}
             className={`
-              flex items-center gap-2 rounded-lg px-3.5 py-2
-              text-sm font-medium transition-all duration-200
+              flex items-center gap-2 rounded-lg px-3 py-2
+              text-xs font-medium transition-all duration-200
               ${hasChanges
                 ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
                 : 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15'
@@ -537,11 +537,11 @@ export default function Config() {
             `}
           >
             {saving ? (
-              <RefreshCw size={15} className="animate-spin" />
+              <RefreshCw size={14} className="animate-spin" />
             ) : hasChanges ? (
-              <Save size={15} />
+              <Save size={14} />
             ) : (
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             )}
             {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Refresh'}
           </button>

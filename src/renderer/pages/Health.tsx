@@ -509,7 +509,7 @@ export default function Health() {
                 type="button"
                 onClick={() => setScope(mb.id ?? 'hub')}
                 title={mb.reachable ? `Only ${mb.id ? `the VM ${mb.name}` : 'the hub'}` : mb.error || 'not answering'}
-                className={`inline-flex items-center gap-2 h-8 px-2.5 rounded-lg border text-[11px] transition-colors shrink-0 whitespace-nowrap ${!mb.reachable ? 'border-white/[0.06] text-slate-500' : mb.status === 'critical' ? 'bg-rose-500/[0.06] border-rose-500/20 text-rose-200' : mb.status === 'degraded' ? 'bg-amber-500/[0.06] border-amber-500/20 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
+                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border text-[11px] transition-colors shrink-0 whitespace-nowrap ${!mb.reachable ? 'border-white/[0.06] text-slate-500' : mb.status === 'critical' ? 'bg-rose-500/[0.06] border-rose-500/20 text-rose-200' : mb.status === 'degraded' ? 'bg-amber-500/[0.06] border-amber-500/20 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
                 <span className="font-medium">{mb.id ? `VM${mb.vmid ? ` #${mb.vmid}` : ''} · ${mb.name}` : 'Hub'}</span>

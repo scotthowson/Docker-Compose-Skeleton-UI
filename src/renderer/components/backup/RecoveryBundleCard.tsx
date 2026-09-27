@@ -10,6 +10,7 @@ import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import { apiClient } from '../../api/client'
 import { fetchRecovery, createRecoveryBundle, restoreRecoveryBundle, uploadRecoveryBundle, setSecret } from '../../api/endpoints'
 import type { RecoveryBundleEntry } from '../../../shared/types'
@@ -27,6 +28,7 @@ export default function RecoveryBundleCard() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const { data, refetch } = usePolling(fetchRecovery, 30000, { enabled: isConnected && isAdmin })
   const [passphrase, setPassphrase] = useState('')
   const [storePass, setStorePass] = useState(true)
@@ -93,7 +95,7 @@ export default function RecoveryBundleCard() {
 
   const restore = useCallback(async () => {
     if (!restoreTarget || busy) return
-    if (!window.confirm(`Restore ${restoreTarget.file}?\n\nThe configuration on this server is replaced (a pre-restore snapshot is kept under .snapshots). Running containers are not touched; start the stacks afterwards.`)) return
+    if (!(await confirm({ title: 'Restore this bundle', message: `Restore ${restoreTarget.file}?\n\nThe configuration on this server is replaced (a pre-restore snapshot is kept under .snapshots). Running containers are not touched; start the stacks afterwards.`, confirmLabel: 'Restore', danger: true }))) return
     setBusy('restore')
     try {
       const res = await restoreRecoveryBundle(restoreTarget.file, restorePass, true)
@@ -107,7 +109,7 @@ export default function RecoveryBundleCard() {
     } finally {
       setBusy(null)
     }
-  }, [restoreTarget, restorePass, busy, addToast])
+  }, [restoreTarget, restorePass, busy, addToast, confirm])
 
   if (!isAdmin) return null
 

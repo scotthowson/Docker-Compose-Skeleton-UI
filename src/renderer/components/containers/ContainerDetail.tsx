@@ -6,6 +6,7 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
+import { useConfirm } from '../common/ConfirmDialog'
 import {
   fetchContainer,
   fetchContainerStats,
@@ -480,6 +481,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const statsHistorySelector = useMemo(() => selectStatsHistory(containerName), [containerName])
   const statsHistory = useContainerStore(statsHistorySelector)
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const [detail, setDetail] = useState<ContainerDetailType | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -598,9 +600,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const toggleSablier = useCallback(async () => {
     if (!detail) return
     const turningOn = !detail.on_demand
-    const ok = window.confirm(turningOn
-      ? `Start ${containerName} on demand?\n\nTraefik will start it on the first request and Sablier stops it after 30 minutes idle. Visitors see a short "starting" page meanwhile.`
-      : `Serve ${containerName} normally again?\n\nThe Sablier middleware is removed from its route; the container keeps running until you stop it.`)
+    const ok = await confirm({
+      title: turningOn ? 'Start on demand' : 'Serve normally',
+      message: turningOn
+        ? `Start ${containerName} on demand?\n\nTraefik will start it on the first request and Sablier stops it after 30 minutes idle. Visitors see a short "starting" page meanwhile.`
+        : `Serve ${containerName} normally again?\n\nThe Sablier middleware is removed from its route; the container keeps running until you stop it.`,
+      confirmLabel: turningOn ? 'Start on demand' : 'Serve normally',
+    })
     if (!ok) return
     setSablierBusy(true)
     try {
@@ -614,14 +620,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setSablierBusy(false)
     }
-  }, [detail, containerName, addToast, onRefreshList])
+  }, [detail, containerName, addToast, onRefreshList, confirm])
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'recreate' | 'remove') => {
     const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', recreate: 'recreated', remove: 'removed' }
     const gerund: Record<typeof action, string> = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', recreate: 'Recreating', remove: 'Removing' }
 
     if (action === 'remove') {
-      if (!window.confirm(`Remove container "${containerName}"? This will force-remove it and cannot be undone.`)) return
+      if (!(await confirm({ title: 'Remove container', message: `Remove container "${containerName}"? This will force-remove it and cannot be undone.`, confirmLabel: 'Remove', danger: true }))) return
     }
 
     setActionLoading(action)
@@ -654,7 +660,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setActionLoading(null)
     }
-  }, [containerName, fetchStats, addToast, onRefreshList, onBack])
+  }, [containerName, fetchStats, addToast, onRefreshList, onBack, confirm])
 
   // ---- Environment editing (Compose-managed containers only) ----
   const composeService = detail?.compose_service || ''

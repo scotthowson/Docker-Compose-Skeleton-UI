@@ -615,7 +615,7 @@ export default function Activity() {
                 disabled:opacity-50 transition-all duration-200
               "
             >
-              <RefreshCw size={13} className={eventsPoll.loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={eventsPoll.loading ? 'animate-spin' : ''} />
               Refresh
             </button>
           )}

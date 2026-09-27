@@ -17,6 +17,7 @@ import { deleteStack, fetchStackCompose } from '../../api/endpoints'
 import { lintCompose, isComposeLinterEnabled } from '../../hooks/useComposeLinter'
 import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
+import { EmptyState } from '../common/PageState'
 
 interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
@@ -343,14 +344,14 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             <button
               onClick={onToggleBatchMode}
               className={`
-                flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
+                flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
                 border transition-all duration-200
                 ${batchMode
                   ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25 ring-1 ring-cyan-500/20'
                   : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200 hover:bg-white/10'}
               `}
             >
-              <ListChecks size={15} />
+              <ListChecks size={14} />
               <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch'}</span>
             </button>
           )}
@@ -359,9 +360,9 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             <button
               onClick={handleLintAll}
               disabled={lintAllLoading || stacks.length === 0}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
             >
-              {lintAllLoading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />}
+              {lintAllLoading ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
               <span className="hidden sm:inline">Lint All</span>
             </button>
           )}
@@ -369,7 +370,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           {isAdmin && (
             <button
               onClick={onCreateStack}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
             >
               <Plus size={14} />
               New Stack
@@ -548,24 +549,31 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           )}
         </div>
       ) : (
-        <div className="glass-subtle flex flex-col items-center justify-center py-16 rounded-xl">
-          <Layers className="w-10 h-10 text-slate-500 mb-3" />
-          <p className="text-sm text-slate-500">
-            {search || statusFilter !== 'all'
-              ? 'No stacks match your filters'
-              : 'No stacks found'}
-          </p>
-          {(search || statusFilter !== 'all') && (
-            <button
-              onClick={() => {
-                setSearch('')
-                setStatusFilter('all')
-              }}
-              className="mt-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-            >
-              Clear filters
-            </button>
-          )}
+        <div className="glass-subtle rounded-xl">
+          <EmptyState
+            icon={<Layers size={32} />}
+            title={search || statusFilter !== 'all' ? 'No stacks match your filters' : 'No stacks found'}
+            hint={search || statusFilter !== 'all' ? 'Try another name or status.' : 'No stacks yet — deploy a template or create a stack.'}
+            action={search || statusFilter !== 'all' ? (
+              <button
+                onClick={() => {
+                  setSearch('')
+                  setStatusFilter('all')
+                }}
+                className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                Clear filters
+              </button>
+            ) : isAdmin ? (
+              <button
+                onClick={onCreateStack}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
+              >
+                <Plus size={14} />
+                New Stack
+              </button>
+            ) : undefined}
+          />
         </div>
       )}
 
