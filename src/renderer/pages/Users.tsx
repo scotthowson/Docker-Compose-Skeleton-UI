@@ -47,6 +47,12 @@ function formatDate(dateStr: string): string {
   } catch { return dateStr }
 }
 
+/** Older builds stored the status emoji as \uXXXX escapes */
+function decodeEmoji(s: string): string {
+  if (/^(\\u[0-9A-Fa-f]{4})+$/.test(s)) { try { return JSON.parse('"' + s + '"') } catch { return s } }
+  return s
+}
+
 function timeAgo(dateStr: string): string {
   if (!dateStr) return ''
   try {
@@ -84,7 +90,7 @@ export default function Users() {
   const [inviteLoading, setInviteLoading] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
-  const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin' | 'bot'>('user')
+  const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin'>('user')
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as 'user' | 'admin' | 'bot' })
   const [createLoading, setCreateLoading] = useState(false)
   const [showConfirmRevoke, setShowConfirmRevoke] = useState<string | null>(null)
@@ -310,10 +316,19 @@ export default function Users() {
                           : 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-400 ring-1 ring-emerald-500/20'
                       }
                     `}>
-                      {user.username[0]?.toUpperCase() ?? 'U'}
+                      {user.avatar && user.avatar.length > 2 ? (
+                        <img src={user.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+                      ) : user.avatar ? (
+                        <span className="text-lg leading-none">{user.avatar}</span>
+                      ) : (
+                        user.username[0]?.toUpperCase() ?? 'U'
+                      )}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-200">{user.username}</p>
+                      <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                        {user.display_name ? <>{user.display_name} <span className="text-[11px] font-normal text-slate-500">{user.username}</span></> : user.username}
+                        {user.status_emoji && <span className="text-xs" title={user.status_text || ''}>{decodeEmoji(user.status_emoji)}</span>}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`
                           inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold
@@ -457,7 +472,7 @@ export default function Users() {
               <span className="text-xs text-slate-400">Generate new invite as:</span>
               <select
                 value={newInviteRole}
-                onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin' | 'bot')}
+                onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin')}
                 className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-cyan-500/30"
               >
                 <option value="user">User</option>

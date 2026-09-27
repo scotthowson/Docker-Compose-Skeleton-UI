@@ -217,6 +217,16 @@ interface GroupCardProps {
   storageKey?: string
 }
 
+/** A small heading that splits one card into readable parts */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-5 pb-1">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{children}</span>
+      <span className="flex-1 h-px bg-gradient-to-r from-white/[0.08] to-transparent" />
+    </div>
+  )
+}
+
 function GroupCard({ icon, title, description, children, storageKey }: GroupCardProps) {
   const key = storageKey || `cfg-card-${title.toLowerCase().replace(/\s+/g, '-')}`
   const [collapsed, setCollapsed] = useState(() => {
@@ -861,6 +871,7 @@ export default function Config() {
                 )}
               </span>
             </div>
+            <SectionLabel>ntfy push</SectionLabel>
             <TextRow
               label="NTFY Server URL"
               description="URL of your NTFY server (e.g., https://ntfy.sh)"
@@ -877,6 +888,7 @@ export default function Config() {
               onChange={handleStringChange}
               placeholder="docker-updates"
             />
+            <SectionLabel>Discord</SectionLabel>
             <TextRow
               label="Discord webhook"
               description={cfg.discord_configured ? `Set (webhook ${cfg.discord_webhook_hint || ''}). Paste a new URL to replace it, or a \${SECRETS_…} reference.` : 'Channel webhook URL — every notification is also posted there as a rich embed'}
@@ -909,9 +921,10 @@ export default function Config() {
               onChange={handleStringChange}
               placeholder="60"
             />
+            <SectionLabel>Delivery</SectionLabel>
             <SelectRow
               label="Priority"
-              description="Default notification priority level"
+              description="Default ntfy priority level"
               configKey="NTFY_PRIORITY"
               value={String(edits.NTFY_PRIORITY ?? cfg.ntfy_priority ?? 'default')}
               options={['min', 'low', 'default', 'high', 'urgent']}

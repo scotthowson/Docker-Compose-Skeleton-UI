@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101a2e"/><stop offset="1" stop-color="#050a14"/></linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.22" r="0.75"><stop offset="0" stop-color="#34d399" stop-opacity="0.32"/><stop offset="0.45" stop-color="#22d3ee" stop-opacity="0.10"/><stop offset="1" stop-color="#0b1220" stop-opacity="0"/></radialGradient>
+    <linearGradient id="topFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="0.55" stop-color="#10b981"/><stop offset="1" stop-color="#0891b2"/></linearGradient>
+    <linearGradient id="midFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2dd4bf" stop-opacity="0.55"/><stop offset="1" stop-color="#0e7490" stop-opacity="0.45"/></linearGradient>
+    <linearGradient id="lowFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#94a3b8" stop-opacity="0.32"/><stop offset="1" stop-color="#475569" stop-opacity="0.28"/></linearGradient>
+    <linearGradient id="edgeLight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fcd34d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="badgeShadow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14"/></filter>
+  </defs>
+  <linearGradient id="bannerBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1b30"/><stop offset="0.6" stop-color="#070d1a"/><stop offset="1" stop-color="#04070f"/></linearGradient>
+  <radialGradient id="bannerGlow" cx="0.22" cy="0.5" r="0.5"><stop offset="0" stop-color="#34d399" stop-opacity="0.35"/><stop offset="0.5" stop-color="#22d3ee" stop-opacity="0.10"/><stop offset="1" stop-color="#0b1220" stop-opacity="0"/></radialGradient>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 H0 V40" fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/></pattern>
+  <rect width="1280" height="640" fill="url(#bannerBg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <rect width="1280" height="640" fill="url(#bannerGlow)"/>
+  <g transform="translate(0 84) scale(0.94)">
+  <g transform="translate(300 232) scale(0.62)">
+  <!-- shadow under the stack -->
+  <ellipse cx="0" cy="304" rx="250" ry="52" fill="#000000" fill-opacity="0.45" filter="url(#soft)"/>
+  <!-- bottom layer -->
+  <g transform="translate(0 180)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#lowFace)" stroke="#cbd5e1" stroke-opacity="0.35" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <!-- middle layer -->
+  <g transform="translate(0 90)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#midFace)" stroke="#67e8f9" stroke-opacity="0.55" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <!-- top layer: the live one -->
+  <g transform="translate(0 0)">
+    <path d="M-262 0 L0 -131 L262 0 L0 131 Z" fill="url(#topFace)" stroke="#d1fae5" stroke-opacity="0.9" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M-262 0 L0 -131 L262 0" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <g stroke="#022c22" stroke-opacity="0.55" stroke-width="14" stroke-linecap="round">
+      <line x1="-92" y1="-14" x2="40" y2="52"/>
+      <line x1="-30" y1="-60" x2="102" y2="6"/>
+      <line x1="-154" y1="34" x2="-46" y2="88"/>
+    </g>
+  </g>
+  <!-- glowing corner nodes -->
+  <circle cx="0" cy="-131" r="16" fill="#a7f3d0" filter="url(#dotGlow)" fill-opacity="0.9"/>
+  <circle cx="0" cy="-131" r="11" fill="#a7f3d0"/>
+  <circle cx="-262" cy="0" r="12" fill="#67e8f9" filter="url(#dotGlow)"/>
+  <circle cx="-262" cy="0" r="9" fill="#a5f3fc"/>
+  <circle cx="262" cy="0" r="12" fill="#67e8f9" filter="url(#dotGlow)"/>
+  <circle cx="262" cy="0" r="9" fill="#a5f3fc"/>
+    <line x1="0" y1="311" x2="0" y2="400" stroke="#67e8f9" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="0" cy="414" r="16" fill="#22d3ee" filter="url(#dotGlow)" fill-opacity="0.9"/><circle cx="0" cy="414" r="11" fill="#a5f3fc"/>
+  </g>
+  <g transform="translate(210 148)"></g>
+  <g font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#f8fafc">
+    <text x="560" y="196" font-size="96" font-weight="800" letter-spacing="-3">DCS</text>
+    <text x="562" y="262" font-size="34" font-weight="500" fill="#cbd5e1">Docker Compose Skeleton</text>
+  </g>
+  <g transform="translate(562 300)" font-family="'JetBrains Mono', 'Fira Mono', Menlo, Consolas, monospace" font-size="24"><rect x="0" y="0" width="150" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="24" y="34" fill="#a7f3d0">start.sh</text><rect x="166" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="190" y="34" fill="#a7f3d0">deploy</text><rect x="306" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="330" y="34" fill="#a7f3d0">update</text><rect x="446" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="470" y="34" fill="#a7f3d0">backup</text></g>
+  <g transform="translate(562 386)" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" fill="#64748b"><text x="0" y="0">Every stack on your server, one command away.</text></g>
+  <g transform="translate(562 430)" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" fill="#475569"><text x="0" y="0">A self-hosted framework with a bash API, templates and a dashboard</text></g>
+  </g>
+</svg>

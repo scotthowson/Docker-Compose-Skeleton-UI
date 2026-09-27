@@ -678,6 +678,11 @@ export interface AuthResponse {
   token: string
   username: string
   role: 'admin' | 'user' | 'bot'
+  /** From the person's profile, when set */
+  display_name?: string
+  avatar?: string
+  status_emoji?: string
+  status_text?: string
 }
 
 export interface AuthVerifyResponse {
@@ -723,6 +728,11 @@ export interface ApiUser {
   username: string
   role: string
   created_at: string
+  /** From the person's profile, when set */
+  display_name?: string
+  avatar?: string
+  status_emoji?: string
+  status_text?: string
 }
 
 // GET /auth/sessions

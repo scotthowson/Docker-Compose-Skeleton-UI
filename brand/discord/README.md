@@ -14,5 +14,19 @@ compose stack on deep slate, emerald for what runs, cyan for the network.
 | `presence-healthy.png` | Rich Presence small image, all good | key `healthy` |
 | `presence-warning.png` | Rich Presence small image, something needs a look | key `warning` |
 
-`render.sh` rebuilds every PNG from the SVG sources (needs `rsvg-convert`). The API and the bot load
-the PNGs from this folder on the `v2.0.0` branch, so keep the file names.
+## Banners
+
+`make-banners.sh` draws one banner per surface (1360×480, the size Discord shows on bot and app
+profiles) and two GitHub social previews (1280×640):
+
+| File | Use it for |
+| --- | --- |
+| `banner-commands.png` | The DCS-Commands bot profile (Developer portal → Bot → Banner); same art as `bot-banner.png` |
+| `banner-alerts.png` | A bot or app that carries the notification webhook's identity, or the channel's pinned welcome post |
+| `banner-crowdsec.png` | The CrowdSec alerts channel's welcome post, or a CrowdSec-branded app |
+| `banner-manager.png` | The DCS Manager application (Rich Presence app profile) |
+| `banner-dcs.png` | Anywhere DCS itself is presented: README headers, forum posts, a server banner |
+| `social-aio.png`, `social-ui.png` | GitHub → repository Settings → Social preview, for the framework and the dashboard |
+
+`render.sh` rebuilds every icon PNG from the SVG sources (needs `rsvg-convert`). The API and the bot
+load the PNGs from this folder on the `v2.0.0` branch, so keep the file names.

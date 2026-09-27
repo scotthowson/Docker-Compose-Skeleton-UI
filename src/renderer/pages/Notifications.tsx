@@ -9,7 +9,7 @@ import {
   ToggleLeft, ToggleRight, Loader2, AlertTriangle,
   Clock, Shield, Cpu, HardDrive, Box, Layers, Package,
   Webhook, ExternalLink, Zap, ChevronDown, Play, Power,
-  HeartPulse, Archive,
+  HeartPulse, Archive, Rocket, RefreshCw,
   MessageCircle,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
@@ -311,7 +311,7 @@ export default function Notifications() {
   const [webhooksExpanded, setWebhooksExpanded] = useState(true)
   const [showAddWebhook, setShowAddWebhook] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
-  const [webhookEvents, setWebhookEvents] = useState<Set<string>>(new Set(['deploy', 'health_change']))
+  const [webhookEvents, setWebhookEvents] = useState<Set<string>>(new Set(WEBHOOK_DEFAULT_EVENTS))
   const [creatingWebhook, setCreatingWebhook] = useState(false)
   const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null)
@@ -476,7 +476,7 @@ export default function Notifications() {
       addToast({ type: 'success', message: 'Webhook created' })
       setShowAddWebhook(false)
       setWebhookUrl('')
-      setWebhookEvents(new Set(['deploy', 'health_change']))
+      setWebhookEvents(new Set(WEBHOOK_DEFAULT_EVENTS))
       refreshWebhooks()
     } catch {
       addToast({ type: 'error', message: 'Failed to create webhook' })
@@ -1067,23 +1067,39 @@ export default function Notifications() {
 
                 {/* Event checkboxes */}
                 <div>
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 block">Events</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {WEBHOOK_EVENT_TYPES.map((evt) => (
-                      <button
-                        key={evt.value}
-                        onClick={() => toggleWebhookEvent(evt.value)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
-                          webhookEvents.has(evt.value)
-                            ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-                            : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
-                        }`}
-                      >
-                        {webhookEventIcon(evt.value)}
-                        {evt.label}
-                      </button>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Events <span className="normal-case text-slate-600">· {webhookEvents.size} selected</span></label>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_EVENT_TYPES.map((e) => e.value)))} className="text-cyan-400 hover:underline">all</button>
+                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_DEFAULT_EVENTS))} className="text-cyan-400 hover:underline">essentials</button>
+                      <button type="button" onClick={() => setWebhookEvents(new Set())} className="text-slate-500 hover:underline">none</button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {WEBHOOK_EVENT_GROUPS.map((group) => (
+                      <div key={group.label}>
+                        <div className="text-[10px] font-semibold text-slate-400 mb-1.5">{group.label}</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {group.events.map((evt) => (
+                            <button
+                              key={evt.value}
+                              type="button"
+                              onClick={() => toggleWebhookEvent(evt.value)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
+                                webhookEvents.has(evt.value)
+                                  ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
+                                  : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
+                              }`}
+                            >
+                              {webhookEventIcon(evt.value)}
+                              {evt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
+                  <p className="text-[10px] text-slate-500 mt-2">A Discord webhook URL gets the same embeds as the notification channel; a Slack URL gets text; anything else a JSON envelope.</p>
                 </div>
 
                 {/* Actions */}
@@ -1408,23 +1424,66 @@ export default function Notifications() {
 // Webhook constants & helpers
 // ---------------------------------------------------------------------------
 
-const WEBHOOK_EVENT_TYPES = [
-  { value: 'deploy', label: 'Deploy' },
-  { value: 'undeploy', label: 'Undeploy' },
-  { value: 'health_change', label: 'Health Change' },
-  { value: 'backup_complete', label: 'Backup Complete' },
-  { value: 'stack_start', label: 'Stack Start' },
-  { value: 'stack_stop', label: 'Stack Stop' },
+/** Everything a webhook can subscribe to: audit events the server records, grouped for the picker */
+const WEBHOOK_EVENT_GROUPS: { label: string; events: { value: string; label: string }[] }[] = [
+  { label: 'Containers', events: [
+    { value: 'container_stopped', label: 'Stopped on its own' },
+    { value: 'container_unhealthy', label: 'Unhealthy' },
+    { value: 'container_recovered', label: 'Recovered' },
+    { value: 'container_start', label: 'Started from DCS' },
+    { value: 'container_stop', label: 'Stopped from DCS' },
+    { value: 'container_restart', label: 'Restarted' },
+    { value: 'container_recreate', label: 'Recreated' },
+    { value: 'container_remove', label: 'Removed' },
+    { value: 'container_reset', label: 'Nuked & reinstalled' },
+  ] },
+  { label: 'Stacks & deploys', events: [
+    { value: 'deploy', label: 'Deployed' },
+    { value: 'undeploy', label: 'Undeployed' },
+    { value: 'stack_start', label: 'Stack started' },
+    { value: 'stack_stop', label: 'Stack stopped' },
+    { value: 'stack_restart', label: 'Stack restarted' },
+    { value: 'stack_update', label: 'Stack updated' },
+    { value: 'automation_run', label: 'Automation ran' },
+  ] },
+  { label: 'Health & space', events: [
+    { value: 'health_change', label: 'Overall health changed' },
+    { value: 'disk_warning', label: 'Disk space low' },
+  ] },
+  { label: 'Backups & DCS', events: [
+    { value: 'backup_complete', label: 'Backup finished' },
+    { value: 'backup_failed', label: 'Backup failed' },
+    { value: 'recovery_bundle', label: 'Recovery bundle made' },
+    { value: 'recovery_restore', label: 'Recovery restored' },
+    { value: 'system_update', label: 'DCS updated' },
+    { value: 'system_rollback', label: 'DCS rolled back' },
+    { value: 'api_restart', label: 'API restarted' },
+  ] },
+  { label: 'Security & accounts', events: [
+    { value: 'login_fail', label: 'Failed sign-in' },
+    { value: 'lockout', label: 'Account locked out' },
+    { value: 'login_ok', label: 'Sign-in' },
+    { value: 'user_create', label: 'User created' },
+    { value: 'user_role', label: 'Role changed' },
+    { value: 'crowdsec_unban', label: 'CrowdSec unban' },
+  ] },
 ]
+const WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_GROUPS.flatMap((g) => g.events)
+const WEBHOOK_DEFAULT_EVENTS = ['container_stopped', 'container_unhealthy', 'container_recovered', 'deploy', 'undeploy', 'stack_start', 'stack_stop', 'health_change', 'disk_warning', 'backup_complete', 'backup_failed']
 
 function webhookEventIcon(event: string) {
   switch (event) {
-    case 'deploy': return <Zap size={9} />
-    case 'undeploy': return <Trash2 size={9} />
-    case 'health_change': return <HeartPulse size={9} />
-    case 'backup_complete': return <Archive size={9} />
-    case 'stack_start': return <Play size={9} />
-    case 'stack_stop': return <Power size={9} />
+    case 'deploy': return <Rocket size={9} />
+    case 'undeploy': case 'container_remove': return <Trash2 size={9} />
+    case 'health_change': case 'container_unhealthy': case 'container_recovered': return <HeartPulse size={9} />
+    case 'backup_complete': case 'backup_failed': case 'recovery_bundle': case 'recovery_restore': return <Archive size={9} />
+    case 'stack_start': case 'container_start': return <Play size={9} />
+    case 'stack_stop': case 'container_stop': case 'container_stopped': return <Power size={9} />
+    case 'stack_restart': case 'container_restart': case 'container_recreate': case 'stack_update': case 'system_update': case 'system_rollback': case 'api_restart': return <RefreshCw size={9} />
+    case 'disk_warning': return <HardDrive size={9} />
+    case 'login_fail': case 'lockout': case 'login_ok': case 'user_create': case 'user_role': case 'crowdsec_unban': return <Shield size={9} />
+    case 'container_reset': return <Zap size={9} />
+    case 'automation_run': return <Zap size={9} />
     default: return <Bell size={9} />
   }
 }

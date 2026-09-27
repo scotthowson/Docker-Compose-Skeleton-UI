@@ -6,6 +6,7 @@
 // =============================================================================
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Bomb, Loader2, FolderX, Database, ShieldCheck, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { fetchContainerResetPreview, resetContainer } from '../../api/endpoints'
 import type { ContainerResetPreview, ContainerResetResponse } from '../../../shared/types'
@@ -71,7 +72,9 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
   if (!open) return null
   const canGo = !!preview && typed === containerName && !busy && !result
 
-  return (
+  // A portal: the page wrapper animates with a transform, which would otherwise pin
+  // this fixed overlay to the container card instead of the whole screen
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Nuke and reinstall ${containerName}`}>
       <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => !busy && onClose()} />
       <div className="relative w-full max-w-lg rounded-2xl border border-rose-500/20 bg-slate-900/95 shadow-2xl shadow-black/50 overflow-hidden animate-scale-in">
@@ -184,7 +187,8 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
