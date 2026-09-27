@@ -2362,9 +2362,16 @@ export interface HealthScoreResponse {
     uptime: { score: number; weight: number; seconds: number }
   }
   stacks: StackHealthScore[]
+  /** GET /health/score?fleet=1 on a hub: the members were folded in */
+  fleet?: boolean
+  members?: { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; score: number | null; grade: string | null }[]
 }
 
 export interface StackHealthScore {
+  /** the fleet view: which member runs it (null = the hub) */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   stack: string
   score: number
   grade: string

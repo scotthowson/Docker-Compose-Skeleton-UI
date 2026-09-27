@@ -5,15 +5,30 @@
 
 import React, { useState, useMemo } from 'react'
 import {
-  HeartPulse, Activity, AlertTriangle, XCircle, RefreshCw, WifiOff,
-  Search, ArrowUpDown, Download, Clock, RotateCcw, Box, Cpu, MemoryStick,
-  HardDrive, ChevronDown, ChevronUp,
+  HeartPulse,
+  Activity,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
+  WifiOff,
+  Search,
+  ArrowUpDown,
+  Download,
+  Clock,
+  RotateCcw,
+  Box,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  ChevronDown,
+  ChevronUp,
+  Layers,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
-import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore } from '../api/endpoints'
+import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore, fetchStacks } from '../api/endpoints'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
@@ -315,9 +330,19 @@ export default function Health() {
   })
 
   // Poll health score for scoring + factor breakdown
-  const { data: healthScoreData, loading: scoreLoading } = usePolling<HealthScoreResponse>(fetchHealthScore, 15000, {
+  const fetchScopedScore = React.useCallback(() => fetchHealthScore(scope), [scope])
+  // the stacks, so the page can say how many run where (a hub's /stacks carries every VM's, tagged)
+  const { data: stacksData } = usePolling(fetchStacks, 30000, { enabled: isConnected })
+  const stackCounts = useMemo(() => {
+    const all = stacksData?.stacks ?? []
+    const mine = scope === 'all' ? all : scope === 'hub' ? all.filter((st) => st.placement !== 'vm') : all.filter((st) => st.member === scopeMember)
+    return { total: mine.length, running: mine.filter((st) => st.status === 'running').length }
+  }, [stacksData, scope, scopeMember])
+  const { data: healthScoreData, loading: scoreLoading, refresh: refreshScore } = usePolling<HealthScoreResponse>(fetchScopedScore, 15000, {
     enabled: isConnected,
   })
+  const scoreScopeRef = React.useRef(scope)
+  React.useEffect(() => { if (scoreScopeRef.current !== scope) { scoreScopeRef.current = scope; refreshScore() } }, [scope, refreshScore])
 
   // Sync to store (one VM's report is not this server's: it stays on this page)
   React.useEffect(() => {
@@ -526,6 +551,7 @@ export default function Health() {
         {/* Summary stats grid */}
         <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3 stagger-children">
           {([
+            { label: 'Stacks', value: `${stackCounts.running}/${stackCounts.total}`, color: stackCounts.running === stackCounts.total ? 'text-emerald-400' : 'text-amber-400', icon: Layers, iconColor: 'text-amber-400' },
             { label: 'Healthy', value: summary.healthy, color: 'text-emerald-400', icon: HeartPulse, iconColor: 'text-emerald-400' },
             { label: 'Unhealthy', value: summary.unhealthy, color: 'text-rose-400', icon: XCircle, iconColor: 'text-rose-400' },
             { label: 'Stopped', value: summary.stopped, color: 'text-slate-400', icon: Box, iconColor: 'text-slate-400' },
@@ -573,7 +599,7 @@ export default function Health() {
               </div>
             ) : factors ? (
               <div className="space-y-3">
-                <ScoreFactorBar label="Stacks" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total}`} />
+                <ScoreFactorBar label="Containers" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total} healthy${scope === 'all' ? ' · whole fleet' : ''}`} />
                 <ScoreFactorBar label="Resources" value={factors.resources.score} detail={`${factors.resources.cpu_pct}% cpu`} />
                 <ScoreFactorBar label="Images" value={factors.images.score} detail={factors.images.stale > 0 ? `${factors.images.stale} stale` : 'fresh'} />
                 <ScoreFactorBar label="Uptime" value={factors.uptime.score} detail={formatUptime(factors.uptime.seconds)} />
@@ -592,9 +618,9 @@ export default function Health() {
               {healthScoreData.stacks.map((stack) => {
                 const sg = stack.grade || getGrade(stack.score)
                 return (
-                  <div key={stack.stack} className="rounded-lg bg-slate-800/40 px-3 py-2 border border-white/[0.03]">
+                  <div key={`${stack.member ?? ''}|${stack.stack}`} className="rounded-lg bg-slate-800/40 px-3 py-2 border border-white/[0.03]">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[11px] text-slate-300 font-mono truncate">{stack.stack}</span>
+                      <span className="text-[11px] text-slate-300 font-mono truncate flex items-center gap-1.5 min-w-0"><span className="truncate">{stack.stack}</span>{scope === 'all' && <VmCapsule member={stack.member} name={stack.member_name} vmid={stack.vmid} size="xs" onClick={() => setScope(stack.member ?? 'hub')} />}</span>
                       <span className={`text-[10px] font-semibold ${gradeColors[sg] || 'text-slate-400'}`}>{sg}</span>
                     </div>
                     <div className="mt-1.5 h-1 rounded-full bg-white/5 overflow-hidden">

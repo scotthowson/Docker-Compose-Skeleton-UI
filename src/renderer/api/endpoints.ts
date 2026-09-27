@@ -1558,8 +1558,10 @@ export function fetchScheduleHistory(id: string): Promise<ScheduleHistoryRespons
 // Health Score
 // ---------------------------------------------------------------------------
 
-export function fetchHealthScore(): Promise<HealthScoreResponse> {
-  return apiClient.get<HealthScoreResponse>('/health/score')
+/** GET /health/score — this server's; on a hub, scope 'all' folds every VM in (?fleet=1) and a member id asks that VM */
+export function fetchHealthScore(scope?: string | null): Promise<HealthScoreResponse> {
+  if (scope === 'all') return apiClient.get<HealthScoreResponse>('/health/score?fleet=1')
+  return apiClient.get<HealthScoreResponse>(memberPath(scope === 'hub' ? null : scope, '/health/score'))
 }
 
 export function fetchStackHealthScore(stack: string): Promise<StackHealthScore> {
