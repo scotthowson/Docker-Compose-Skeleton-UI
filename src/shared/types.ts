@@ -298,6 +298,23 @@ export interface ServerConfig {
   api_port: number
   api_bind: string
   ntfy_configured: boolean
+  // Proxmox (3.8)
+  proxmox_url?: string
+  proxmox_token_id?: string
+  proxmox_token_secret_set?: boolean
+  /** 'secret' = the secret store (preferred), 'env' = .env, '' = not set */
+  proxmox_token_secret_source?: 'secret' | 'env' | ''
+  proxmox_verify_tls?: boolean
+  proxmox_node?: string
+  // Traefik feed — a Traefik on another machine pulls this host's routes (3.8)
+  traefik_feed_enabled?: boolean
+  traefik_feed_token?: string
+  traefik_feed_target_host?: string
+  traefik_feed_detected_host?: string
+  traefik_feed_entrypoint?: string
+  traefik_feed_middlewares?: string
+  traefik_feed_tls?: boolean
+  traefik_feed_cert_resolver?: string
   /** A Discord channel webhook is set (DISCORD_WEBHOOK_URL) */
   discord_configured?: boolean
   /** Last characters of the webhook, to recognise it without exposing it */
@@ -1363,6 +1380,7 @@ export type PageId =
   | 'event-feed'
   | 'export'
   | 'dns'
+  | 'proxmox'
   | 'setup'
 
 /**
@@ -1995,6 +2013,8 @@ export interface SetupDefaultsResponse {
     docker_version: string
     compose_version: string
     docker_available: boolean
+    /** where DCS runs (3.8): a Proxmox guest gets a link offer in the wizard */
+    proxmox?: { virtualization: string; host: boolean; guest: boolean; reason: string; hint_url: string; vendor: string; product: string; guest_agent: boolean }
   }
 }
 
@@ -2621,3 +2641,139 @@ export interface SablierToggleResponse {
   traefik_restarted: boolean
   message?: string
 }
+
+// =============================================================================
+// Proxmox (3.8) — GET /proxmox/*, POST /proxmox/vms/:node/:type/:vmid/:action
+// =============================================================================
+
+export interface ProxmoxStatus {
+  configured: boolean
+  reachable: boolean
+  url: string
+  token_id: string
+  verify_tls: boolean
+  node_filter: string
+  version: string
+  release: string
+  nodes: number
+  nodes_online: number
+  vms: { total: number; running: number; stopped: number; qemu: number; lxc: number }
+  error: string
+  hints: string[]
+}
+
+export interface ProxmoxNode {
+  node: string
+  status: string
+  cpu: number
+  maxcpu: number
+  mem: number
+  maxmem: number
+  mem_pct: number
+  disk: number
+  maxdisk: number
+  disk_pct: number
+  uptime: number
+  level: string
+}
+
+export interface ProxmoxNodesResponse { total: number; nodes: ProxmoxNode[] }
+
+export type ProxmoxGuestType = 'qemu' | 'lxc'
+export type ProxmoxVmAction = 'start' | 'shutdown' | 'stop' | 'reboot' | 'reset' | 'suspend' | 'resume'
+
+export interface ProxmoxVm {
+  vmid: number
+  name: string
+  type: ProxmoxGuestType
+  node: string
+  status: string
+  cpu: number
+  maxcpu: number
+  mem: number
+  maxmem: number
+  mem_pct: number
+  disk: number
+  maxdisk: number
+  uptime: number
+  tags: string[]
+  lock: string
+  hastate: string
+  /** DCS asked for the last change within five minutes */
+  intended: boolean
+}
+
+export interface ProxmoxVmsResponse { total: number; running: number; stopped: number; vms: ProxmoxVm[] }
+
+export interface ProxmoxVmDetail {
+  vmid: number
+  node: string
+  type: ProxmoxGuestType
+  name: string
+  status: string
+  qmpstatus: string
+  uptime: number
+  cpu: number
+  cpus: number
+  mem: number
+  maxmem: number
+  disk: number
+  maxdisk: number
+  netin: number
+  netout: number
+  diskread: number
+  diskwrite: number
+  agent: string
+  lock: string
+  config: { cores: number | null; sockets: number | null; memory: number | null; ostype: string; onboot: string; description: string; tags: string; net0: string; bootdisk: string; hostname: string }
+}
+
+export interface ProxmoxTask {
+  upid: string
+  node: string
+  type: string
+  id: string
+  user: string
+  status: string
+  starttime: number
+  endtime: number
+}
+
+export interface ProxmoxTasksResponse { tasks: ProxmoxTask[] }
+
+export interface ProxmoxActionResponse {
+  success: boolean
+  action: ProxmoxVmAction
+  upid: string
+  node: string
+  type: ProxmoxGuestType
+  vmid: number
+  name: string
+  message: string
+}
+
+// =============================================================================
+// Traefik feed (3.8) — GET /traefik/feed/status, POST /traefik/feed/token
+// =============================================================================
+
+export interface TraefikFeedStatus {
+  enabled: boolean
+  ready: boolean
+  token: string
+  target_host: string
+  detected_host: string
+  entrypoint: string
+  middlewares: string
+  tls: boolean
+  cert_resolver: string
+  routes: number
+  skipped: { service: string; reason: string }[]
+  routes_dir: string
+  local_traefik: boolean
+  last_poll: number
+  last_client: string
+  endpoint_url: string
+  snippet: string
+}
+
+export interface TraefikFeedTokenResponse { success: boolean; token: string }

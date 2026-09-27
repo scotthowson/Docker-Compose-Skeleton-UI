@@ -71,6 +71,13 @@ export const definitions = [
   cmd('dcs', 'DCS itself: version, update, restart')
     .addStringOption((o) => o.setName('action').setDescription('What to do (default: info)').addChoices(
       { name: 'info', value: 'info' }, { name: 'check for updates', value: 'check' }, { name: 'update now', value: 'update' }, { name: 'restart the API', value: 'restart' })),
+  cmd('vms', 'Every VM and container on the Proxmox host: state, CPU, memory, uptime'),
+  cmd('vm', 'Start, shut down, stop, reboot, reset, suspend or resume a Proxmox VM or container')
+    .addStringOption((o) => o.setName('vm').setDescription('Name or VMID (start typing)').setRequired(true).setAutocomplete(true))
+    .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(true).addChoices(
+      { name: 'info', value: 'info' }, { name: 'start', value: 'start' }, { name: 'shutdown (clean)', value: 'shutdown' },
+      { name: 'stop (hard)', value: 'stop' }, { name: 'reboot', value: 'reboot' }, { name: 'reset (VM only, hard)', value: 'reset' },
+      { name: 'suspend', value: 'suspend' }, { name: 'resume', value: 'resume' })),
   cmd('help', 'What this bot can do'),
 ].map((c) => c.toJSON())
 
@@ -125,6 +132,91 @@ async function reply(i, payload) {
 // Views
 // ---------------------------------------------------------------------------
 export const views = {}
+
+const vmDot = (st) => (st === 'running' ? '🟢' : st === 'paused' || st === 'suspended' ? '🟡' : '⚫')
+const vmKind = (v) => (v.type === 'lxc' ? 'LXC' : 'VM')
+const gbOf = (b) => (b ? `${(b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1)} GB` : '0')
+
+views.vms = async (ctx) => {
+  const st = await ctx.api.get('/proxmox/status')
+  if (!st.configured) return { embeds: [result(ctx, 'warn', 'Proxmox is not linked', 'Set the URL and an API token in Server Config → Proxmox on the dashboard (docs/PROXMOX.md).')], components: [] }
+  if (!st.reachable) return { embeds: [result(ctx, false, 'Proxmox did not answer', st.error || st.hints?.[0] || '')], components: [] }
+  const [vms, nodes] = await Promise.all([ctx.api.get('/proxmox/vms'), ctx.api.get('/proxmox/nodes').catch(() => null)])
+  const list = vms.vms || []
+  const nodeLines = (nodes?.nodes || []).map((n) => `${n.status === 'online' ? '🟢' : '🔴'} ${bold(n.node)} · CPU ${bar(n.cpu)} ${n.cpu}% · RAM ${bar(n.mem_pct)} ${n.mem_pct}% · up ${since(n.uptime)}`)
+  const byNode = {}
+  for (const v of list) (byNode[v.node] ||= []).push(v)
+  const fields = Object.keys(byNode).sort().map((node) => ({
+    name: `${node} · ${byNode[node].filter((v) => v.status === 'running').length}/${byNode[node].length} running`,
+    value: truncate(byNode[node].map((v) => `${vmDot(v.status)} ${bold(v.name)} \`${v.vmid}\` ${vmKind(v)}${v.status === 'running' ? ` · ${v.cpu}% · ${gbOf(v.mem)}/${gbOf(v.maxmem)} · ${since(v.uptime)}` : ` · ${v.status}`}`).join('\n') || '—', 1000),
+  }))
+  const e = embed(ctx, {
+    title: `Proxmox VE ${st.version} · ${vms.running} of ${vms.total} guests running`,
+    description: nodeLines.join('\n') || undefined,
+    color: vms.running === vms.total ? COLORS.ok : vms.running === 0 ? COLORS.bad : COLORS.warn,
+    fields,
+  })
+  return { embeds: [e], components: rows([button('nav:vms', 'Refresh', Style.Secondary, '🔄')]) }
+}
+
+views.vm = async (ctx, ref) => {
+  const v = await findVm(ctx, ref)
+  if (!v) return { embeds: [result(ctx, false, `No VM or container called ${bold(ref)}`, 'Use /vms to list them.')], components: [] }
+  const d = await ctx.api.get(`/proxmox/vms/${encodeURIComponent(v.node)}/${v.type}/${v.vmid}`).catch(() => null)
+  const c = d?.config || {}
+  const e = embed(ctx, {
+    title: `${vmDot(v.status)} ${v.name} · ${vmKind(v)} ${v.vmid} on ${v.node}`,
+    description: `${bold(v.status)}${v.status === 'running' ? ` for ${since(v.uptime)}` : ''}${v.tags?.length ? ` · tags: ${v.tags.join(', ')}` : ''}${v.intended ? ' · last change by DCS' : ''}`,
+    color: v.status === 'running' ? COLORS.ok : COLORS.slate,
+    fields: [
+      { name: 'CPU', value: `${bar(v.cpu)} ${v.cpu}%\n${v.maxcpu || c.cores || '?'} cores`, inline: true },
+      { name: 'Memory', value: `${bar(v.mem_pct)} ${v.mem_pct}%\n${gbOf(v.mem)} of ${gbOf(v.maxmem)}`, inline: true },
+      { name: 'Disk', value: `${gbOf(v.maxdisk)}${c.bootdisk ? `\n${c.bootdisk}` : ''}`, inline: true },
+      ...(c.ostype ? [{ name: 'OS type', value: c.ostype, inline: true }] : []),
+      ...(c.onboot != null ? [{ name: 'Start at boot', value: String(c.onboot) === '1' ? 'yes' : 'no', inline: true }] : []),
+      ...(d?.netin != null ? [{ name: 'Network', value: `↓ ${fmtBytes(d.netin)} · ↑ ${fmtBytes(d.netout)}`, inline: true }] : []),
+      ...(c.description ? [{ name: 'Notes', value: truncate(c.description, 300) }] : []),
+    ],
+  })
+  const key = `${v.node}/${v.type}/${v.vmid}`
+  const acts = v.status === 'running'
+    ? [button(`act:vm:shutdown:${key}`, 'Shut down', Style.Secondary, '⏻'), button(`act:vm:reboot:${key}`, 'Reboot', Style.Secondary, '🔁'), button(`act:vm:stop:${key}`, 'Stop', Style.Danger, '⏹️'), ...(v.type === 'qemu' ? [button(`act:vm:reset:${key}`, 'Reset', Style.Danger, '⚡')] : [])]
+    : v.status === 'paused' || v.status === 'suspended'
+      ? [button(`act:vm:resume:${key}`, 'Resume', Style.Success, '▶️')]
+      : [button(`act:vm:start:${key}`, 'Start', Style.Success, '▶️')]
+  return { embeds: [e], components: rows([...acts, button(`nav:vm:${key}`, 'Refresh', Style.Secondary, '🔄')]) }
+}
+
+async function findVm(ctx, ref) {
+  const list = await ctx.api.names.vms()
+  const r = String(ref || '').trim()
+  if (r.includes('/')) { const [node, type, id] = r.split('/'); return list.find((v) => v.node === node && v.type === type && String(v.vmid) === id) || null }
+  return list.find((v) => String(v.vmid) === r) || list.find((v) => v.name.toLowerCase() === r.toLowerCase()) || list.find((v) => v.name.toLowerCase().includes(r.toLowerCase())) || null
+}
+
+async function vmAction(ctx, i, ref, action) {
+  if (action === 'info') return sendView(ctx, i, 'vm', ref)
+  if (!needAdmin(ctx, i)) return
+  const v = await findVm(ctx, ref)
+  if (!v) { const msg = { embeds: [result(ctx, false, `No VM or container called ${bold(ref)}`, 'Use /vms to list them.')], ...EPH }; return i.deferred || i.replied ? i.followUp(msg) : i.reply(msg) }
+  const words = { start: 'Start', shutdown: 'Shut down', stop: 'Stop', reboot: 'Reboot', reset: 'Reset', suspend: 'Suspend', resume: 'Resume' }
+  const go = async (j) => {
+    let r
+    try { r = await ctx.api.post(`/proxmox/vms/${encodeURIComponent(v.node)}/${v.type}/${v.vmid}/${action}`) }
+    catch (err) { return j.editReply({ embeds: [result(ctx, false, `${words[action]} ${bold(v.name)} failed`, err instanceof ApiError ? err.message : String(err))], components: [] }) }
+    ctx.api.invalidate('vms')
+    await sleep(2500)
+    const view = await views.vm(ctx, `${v.node}/${v.type}/${v.vmid}`).catch(() => null)
+    const head = result(ctx, r.success !== false, r.message || `${words[action]} ${bold(v.name)}`, r.upid ? `Proxmox task ${code(r.upid.split(':')[5] || r.upid)}` : '')
+    await j.editReply({ embeds: [head, ...(view?.embeds || [])], components: view?.components || [] })
+  }
+  if (action !== 'start' && action !== 'resume') {
+    const q = { shutdown: `Shut down ${bold(v.name)} cleanly?`, stop: `Stop ${bold(v.name)} now? Like pulling the plug — nothing inside gets to save.`, reboot: `Reboot ${bold(v.name)}?`, reset: `Hard-reset ${bold(v.name)}? Only for a VM that no longer answers.`, suspend: `Suspend ${bold(v.name)}?` }[action]
+    return askConfirm(ctx, i, { question: q, label: `${words[action]} it`, run: go })
+  }
+  await (i.deferred || i.replied ? Promise.resolve() : i.deferReply())
+  await go(i)
+}
 
 views.status = async (ctx) => {
   const [s, h, score, upd, imgs] = await Promise.all([
@@ -751,6 +843,8 @@ actions['dcs-restart'] = async (ctx, i) => {
 // ---------------------------------------------------------------------------
 export const handlers = {
   status: (ctx, i) => sendView(ctx, i, 'status'),
+  vms: (ctx, i) => sendView(ctx, i, 'vms'),
+  vm: (ctx, i) => vmAction(ctx, i, i.options.getString('vm'), i.options.getString('action')),
   usage: (ctx, i) => sendView(ctx, i, 'usage'),
   health: (ctx, i) => sendView(ctx, i, 'health'),
   containers: (ctx, i) => sendView(ctx, i, 'containers', i.options.getString('filter') || '', i.options.getString('show') || ''),
@@ -878,7 +972,7 @@ export async function handleButton(ctx, i) {
     const arg = rest.join(':')
     if (!views[view]) return i.deferUpdate()
     await i.deferUpdate().catch(() => {})
-    const payload = view === 'routes' ? await views.routes(ctx, arg === 'check') : view === 'dcs' ? await views.dcs(ctx, arg === 'check') : await views[view](ctx, arg || undefined)
+    const payload = view === 'routes' ? await views.routes(ctx, arg === 'check') : view === 'dcs' ? await views.dcs(ctx, arg === 'check') : view === 'vm' ? await views.vm(ctx, arg) : await views[view](ctx, arg || undefined)
     return i.editReply(payload)
   }
   if (id.startsWith('act:')) {
@@ -888,6 +982,10 @@ export async function handleButton(ctx, i) {
       if (action === 'logs') return sendLogs(ctx, i, kind, name, 40)
       if (kind === 'c') return containerAction(ctx, i, name, action)
       return stackAction(ctx, i, name, action)
+    }
+    if (parts[1] === 'vm') {
+      const action = parts[2], ref = parts.slice(3).join(':')
+      return vmAction(ctx, i, ref, action)
     }
     const fn = actions[parts[1]]
     if (!fn) return i.deferUpdate()
@@ -919,6 +1017,9 @@ export async function autocomplete(ctx, i) {
     choices = (await ctx.api.names.templates()).filter((t) => match(t.name) || match(t.title || '')).sort((a, b) => rank(a.name, b.name)).map((t) => ({ name: truncate(`${t.title || t.name} · ${t.name}`, 100), value: t.name }))
   } else if (focused.name === 'schedule') {
     choices = (await ctx.api.names.schedules()).filter((s) => match(s.name || s.id)).map((s) => ({ name: truncate(`${s.name || s.id} · ${s.action || ''}`, 100), value: s.id }))
+  } else if (focused.name === 'vm') {
+    choices = (await ctx.api.names.vms()).filter((v) => match(v.name) || String(v.vmid).includes(q)).sort((a, b) => rank(a.name, b.name))
+      .map((v) => ({ name: truncate(`${v.status === 'running' ? '🟢' : '⚫'} ${v.name} · ${v.type === 'lxc' ? 'LXC' : 'VM'} ${v.vmid} · ${v.node}`, 100), value: `${v.node}/${v.type}/${v.vmid}` }))
   } else if (focused.name === 'ip') {
     choices = (await ctx.api.names.decisions()).map((d) => d.ip).filter((v, idx, a) => v && a.indexOf(v) === idx && match(v)).map((v) => ({ name: v, value: v }))
   }

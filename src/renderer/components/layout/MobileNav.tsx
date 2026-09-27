@@ -23,7 +23,7 @@ const PRIMARY: { id: PageId; label: string; icon: React.ElementType }[] = [
 
 const GROUPS: { label: string; ids: PageId[] }[] = [
   { label: 'Core', ids: ['images', 'networks', 'volumes', 'dns', 'templates'] },
-  { label: 'Watch', ids: ['uptime', 'trends', 'topology', 'updates', 'activity', 'event-feed', 'notifications'] },
+  { label: 'Watch', ids: ['proxmox', 'uptime', 'trends', 'topology', 'updates', 'activity', 'event-feed', 'notifications'] },
   { label: 'Manage', ids: ['secrets', 'schedules', 'automations', 'bookmarks', 'file-browser', 'plugins', 'backup', 'snapshots'] },
   { label: 'System', ids: ['terminal', 'logs', 'environment', 'diagnostics', 'system', 'maintenance', 'disk-analysis', 'cronjobs', 'users', 'export', 'config', 'settings'] },
 ]

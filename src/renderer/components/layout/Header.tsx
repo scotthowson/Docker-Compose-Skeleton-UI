@@ -409,7 +409,7 @@ export function Header() {
     <>
     <header
       className="
-        drag-region
+        drag-region relative
         flex items-center justify-between
         h-14 px-4 md:px-5
         bg-slate-900/80 backdrop-blur-2xl
@@ -437,7 +437,27 @@ export function Header() {
         )}
       </div>
 
-      {/* Right: Notifications + Search + User + Theme + Connection */}
+      {/* Centre: global search — finds pages, containers, stacks, templates, routes, VMs and docs */}
+      <div className="no-drag hidden lg:flex absolute left-1/2 -translate-x-1/2 w-[min(38vw,32rem)]">
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+          className="
+            w-full flex items-center gap-2.5
+            rounded-xl px-3 py-1.5
+            text-[12px] text-slate-500
+            bg-white/[0.04] border border-white/[0.06]
+            hover:bg-white/[0.07] hover:text-slate-300 hover:border-white/10
+            transition-all duration-200 press
+          "
+          title="Search anything (Ctrl+K)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span className="flex-1 text-left truncate">Search anything…</span>
+          <kbd className="rounded border border-white/5 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9px]">Ctrl+K</kbd>
+        </button>
+      </div>
+
+      {/* Right: Notifications beside the user menu, then theme and connection */}
       <div className="no-drag flex items-center gap-2.5">
         {/* Notification bell */}
         <button
@@ -468,22 +488,14 @@ export function Header() {
           )}
         </button>
 
-        {/* Command palette trigger */}
+        {/* Compact search on tablets (the centred bar needs a wide header) */}
         <button
           onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-          className="
-            hidden sm:flex items-center gap-2
-            rounded-lg px-2.5 py-1.5
-            text-[11px] text-slate-500
-            bg-white/[0.03] border border-white/5
-            hover:bg-white/5 hover:text-slate-400
-            transition-all duration-200 press
-          "
+          className="hidden md:flex lg:hidden items-center justify-center w-8 h-8 rounded-lg text-slate-400 bg-white/[0.03] border border-white/5 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 press"
           title="Search (Ctrl+K)"
+          aria-label="Search"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <span>Jump to page or action...</span>
-          <kbd className="rounded border border-white/5 bg-white/[0.03] px-1 py-0.5 font-mono text-[9px]">Ctrl+K</kbd>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </button>
 
         {/* User Profile Button */}

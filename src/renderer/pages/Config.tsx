@@ -27,8 +27,10 @@ import {
   Container, LifeBuoy, BatteryCharging, ArrowUpCircle,
 } from 'lucide-react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
+import { ProxmoxTestPanel, TraefikFeedPanel } from '../components/settings/IntegrationPanels'
 import { usePolling } from '../hooks/usePolling'
-import { fetchConfig, updateConfig } from '../api/endpoints'
+import { fetchConfig, updateConfig, setSecret } from '../api/endpoints'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useConfigStore } from '../stores/configStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -135,6 +137,7 @@ function TextRow({
   disabled,
   readOnly,
   placeholder,
+  type = 'text',
 }: {
   label: string
   description?: string
@@ -144,6 +147,7 @@ function TextRow({
   disabled?: boolean
   readOnly?: boolean
   placeholder?: string
+  type?: 'text' | 'password'
 }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
@@ -155,11 +159,12 @@ function TextRow({
         <span className="text-sm text-slate-400 font-mono truncate max-w-[180px] md:max-w-[260px]" title={value}>{value}</span>
       ) : (
         <input
-          type="text"
+          type={type}
           value={value}
           onChange={(e) => onChange(configKey, e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
+          autoComplete={type === 'password' ? 'new-password' : undefined}
           className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-40 md:w-48 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
         />
       )}
@@ -272,6 +277,7 @@ function GroupCard({ icon, title, description, children, storageKey }: GroupCard
 type EditableConfig = Record<string, string | boolean | number>
 
 export default function Config() {
+  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const setStoreConfig = useConfigStore((s) => s.setConfig)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const connServerUrl = useConnectionStore((s) => s.serverUrl)
@@ -321,6 +327,17 @@ export default function Config() {
     NTFY_PRIORITY: d.ntfy_priority ?? 'default',
     DISCORD_WEBHOOK_URL: '',
     DISCORD_WEBHOOK_NAME: d.discord_webhook_name ?? 'DCS Manager',
+    PROXMOX_URL: d.proxmox_url ?? '',
+    PROXMOX_TOKEN_ID: d.proxmox_token_id ?? '',
+    PROXMOX_TOKEN_SECRET: '',
+    PROXMOX_VERIFY_TLS: d.proxmox_verify_tls ?? true,
+    PROXMOX_NODE: d.proxmox_node ?? '',
+    TRAEFIK_FEED_ENABLED: d.traefik_feed_enabled ?? false,
+    TRAEFIK_FEED_TARGET_HOST: d.traefik_feed_target_host ?? '',
+    TRAEFIK_FEED_ENTRYPOINT: d.traefik_feed_entrypoint ?? 'websecure',
+    TRAEFIK_FEED_MIDDLEWARES: d.traefik_feed_middlewares ?? '',
+    TRAEFIK_FEED_TLS: d.traefik_feed_tls ?? true,
+    TRAEFIK_FEED_CERT_RESOLVER: d.traefik_feed_cert_resolver ?? '',
     DISCORD_WEBHOOK_AVATAR: d.discord_webhook_avatar ?? '',
     NOTIFY_COOLDOWN_MINUTES: d.notify_cooldown_minutes ?? 60,
     NOTIFICATION_STACKS: d.notification_stacks ?? '',
@@ -437,6 +454,22 @@ export default function Config() {
     }
 
     try {
+      // The Proxmox token secret belongs in the secret store (the API reads it
+      // from there first); .env only when the store cannot take it
+      if (typeof diff.PROXMOX_TOKEN_SECRET === 'string' && diff.PROXMOX_TOKEN_SECRET) {
+        try {
+          await setSecret('PROXMOX_TOKEN_SECRET', diff.PROXMOX_TOKEN_SECRET)
+          delete diff.PROXMOX_TOKEN_SECRET
+          if (Object.keys(diff).length === 0) {
+            setSaveResult({ success: true, message: 'Proxmox token secret stored in the secret store' })
+            setUserIsEditing(false)
+            setTimeout(refresh, 500)
+            return
+          }
+        } catch (err) {
+          console.error('[Config] storing the Proxmox secret in the secret store failed, writing .env:', err)
+        }
+      }
       const result = await updateConfig(diff)
       setSaveResult({ success: result.success, message: result.message })
       // Refresh to get updated values — clear editing flag so poll can sync
@@ -984,6 +1017,28 @@ export default function Config() {
             <NumberRow label="DDNS Interval" description="Seconds between DDNS update checks" configKey="DDNS_INTERVAL" value={Number(edits.DDNS_INTERVAL ?? 300)} onChange={handleNumberChange} min={60} max={3600} />
             <TextRow label="Trusted LAN" description="CIDR subnet for Traefik IP-based access rules" configKey="TRAEFIK_TRUSTED_LAN" value={String(edits.TRAEFIK_TRUSTED_LAN ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24" />
             <TextRow label="DDNS Subdomains" description="DNS records to update (@ = root, * = wildcard)" configKey="DDNS_SUBDOMAINS" value={String(edits.DDNS_SUBDOMAINS ?? '@')} onChange={handleStringChange} />
+            <SectionLabel>Traefik in another VM or machine (route feed)</SectionLabel>
+            <ToggleRow label="Publish routes as a feed" description="The Traefik that fronts this host runs elsewhere — the networking VM of a Proxmox layout, or a friend's proxy box. It pulls every route DCS makes with its HTTP provider; nothing to install there" configKey="TRAEFIK_FEED_ENABLED" value={Boolean(edits.TRAEFIK_FEED_ENABLED)} onChange={handleBoolChange} />
+            <TextRow label="Target host" description={`How that Traefik reaches this machine (empty = ${cfg?.traefik_feed_detected_host || 'the detected LAN IP'})`} configKey="TRAEFIK_FEED_TARGET_HOST" value={String(edits.TRAEFIK_FEED_TARGET_HOST ?? '')} onChange={handleStringChange} placeholder={cfg?.traefik_feed_detected_host || '192.168.1.10'} />
+            <TextRow label="Entrypoint" description="Entrypoint name on that Traefik" configKey="TRAEFIK_FEED_ENTRYPOINT" value={String(edits.TRAEFIK_FEED_ENTRYPOINT ?? 'websecure')} onChange={handleStringChange} placeholder="websecure" />
+            <TextRow label="Middlewares" description="Middleware names that exist on that Traefik, comma-separated (its own auth, compress…)" configKey="TRAEFIK_FEED_MIDDLEWARES" value={String(edits.TRAEFIK_FEED_MIDDLEWARES ?? '')} onChange={handleStringChange} placeholder="secure-headers@file, compress@file" />
+            <ToggleRow label="TLS on the routes" description="Off only when that Traefik serves plain http" configKey="TRAEFIK_FEED_TLS" value={Boolean(edits.TRAEFIK_FEED_TLS ?? true)} onChange={handleBoolChange} />
+            <TextRow label="Certificate resolver" description="Its certResolver name, if it does not have a default" configKey="TRAEFIK_FEED_CERT_RESOLVER" value={String(edits.TRAEFIK_FEED_CERT_RESOLVER ?? '')} onChange={handleStringChange} placeholder="letsencrypt" />
+            <TraefikFeedPanel enabled={Boolean(cfg?.traefik_feed_enabled)} />
+          </GroupCard>
+
+          {/* ── Proxmox ── */}
+          <GroupCard
+            icon={<Server size={16} className="text-amber-400" />}
+            title="Proxmox"
+            description="Show and power the VMs and containers of a Proxmox host or cluster"
+          >
+            <TextRow label="Proxmox URL" description="The web UI address, port included" configKey="PROXMOX_URL" value={String(edits.PROXMOX_URL ?? '')} onChange={handleStringChange} placeholder="https://pve.example.com:8006" />
+            <TextRow label="API token ID" description="Datacenter → Permissions → API Tokens (user@realm!name); needs VM.Audit, VM.PowerMgmt, Sys.Audit on /" configKey="PROXMOX_TOKEN_ID" value={String(edits.PROXMOX_TOKEN_ID ?? '')} onChange={handleStringChange} placeholder="dcs@pve!dcs" />
+            <TextRow label="Token secret" description={cfg?.proxmox_token_secret_source === 'secret' ? 'Kept in the secret store (Secrets page); type a new one to replace it' : cfg?.proxmox_token_secret_source === 'env' ? 'Kept in .env — type it again and Save moves it to the secret store' : 'Shown once when the token was made; Save keeps it in the secret store, never in .env'} configKey="PROXMOX_TOKEN_SECRET" value={String(edits.PROXMOX_TOKEN_SECRET ?? '')} onChange={handleStringChange} placeholder={cfg?.proxmox_token_secret_set ? '••••••••' : 'xxxxxxxx-xxxx-…'} type="password" />
+            <ToggleRow label="Verify certificate" description="Off for the self-signed certificate Proxmox ships with" configKey="PROXMOX_VERIFY_TLS" value={Boolean(edits.PROXMOX_VERIFY_TLS ?? true)} onChange={handleBoolChange} />
+            <TextRow label="Only this node" description="Optional: hide the other nodes of a cluster" configKey="PROXMOX_NODE" value={String(edits.PROXMOX_NODE ?? '')} onChange={handleStringChange} placeholder="pve" />
+            <ProxmoxTestPanel url={String(edits.PROXMOX_URL ?? '')} tokenId={String(edits.PROXMOX_TOKEN_ID ?? '')} tokenSecret={String(edits.PROXMOX_TOKEN_SECRET ?? '')} verifyTls={Boolean(edits.PROXMOX_VERIFY_TLS ?? true)} secretSource={cfg?.proxmox_token_secret_source ?? ''} onOpenSecrets={() => setCurrentPage('secrets')} />
           </GroupCard>
 
           {/* ── Docker ── */}
@@ -1128,6 +1183,17 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     NTFY_URL: data.ntfy_url ?? '',
     NTFY_TOPIC: data.ntfy_topic ?? '',
     DISCORD_WEBHOOK_NAME: data.discord_webhook_name ?? 'DCS Manager',
+    PROXMOX_URL: data.proxmox_url ?? '',
+    PROXMOX_TOKEN_ID: data.proxmox_token_id ?? '',
+    PROXMOX_TOKEN_SECRET: '',
+    PROXMOX_VERIFY_TLS: data.proxmox_verify_tls ?? true,
+    PROXMOX_NODE: data.proxmox_node ?? '',
+    TRAEFIK_FEED_ENABLED: data.traefik_feed_enabled ?? false,
+    TRAEFIK_FEED_TARGET_HOST: data.traefik_feed_target_host ?? '',
+    TRAEFIK_FEED_ENTRYPOINT: data.traefik_feed_entrypoint ?? 'websecure',
+    TRAEFIK_FEED_MIDDLEWARES: data.traefik_feed_middlewares ?? '',
+    TRAEFIK_FEED_TLS: data.traefik_feed_tls ?? true,
+    TRAEFIK_FEED_CERT_RESOLVER: data.traefik_feed_cert_resolver ?? '',
     DISCORD_WEBHOOK_AVATAR: data.discord_webhook_avatar ?? '',
     NOTIFY_COOLDOWN_MINUTES: data.notify_cooldown_minutes ?? 60,
     NTFY_PRIORITY: data.ntfy_priority ?? 'default',

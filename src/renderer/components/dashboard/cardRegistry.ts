@@ -58,6 +58,7 @@ export const CARD_REGISTRY: CardRegistryEntry[] = [
   { id: 'routes-dns',         title: 'Routes & DNS',      iconName: 'Globe',           defaultX: 0,  defaultY: 44, defaultW: 12, defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Every Traefik route one click away, with Cloudflare DNS status' },
   { id: 'notes',              title: 'Notes',             iconName: 'StickyNote',      defaultX: 12, defaultY: 44, defaultW: 6,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'A scratchpad that stays on your dashboard' },
   { id: 'bookmarks',          title: 'Bookmarks',         iconName: 'Bookmark',        defaultX: 18, defaultY: 44, defaultW: 6,  defaultH: 6,  minW: 4,  minH: 2, maxW: 24, maxH: 16, description: 'Your saved bookmarks as tiles' },
+  { id: 'proxmox',            title: 'Proxmox',           iconName: 'Server',          defaultX: 0,  defaultY: 50, defaultW: 8,  defaultH: 7,  minW: 4,  minH: 3, maxW: 24, maxH: 16, description: 'Node load and every VM and container on your Proxmox host' },
   { id: 'power',              title: 'Power',             iconName: 'BatteryCharging', defaultX: 0,  defaultY: 50, defaultW: 6,  defaultH: 5,  minW: 4,  minH: 3, maxW: 24, maxH: 12, description: 'UPS at a glance: mains or battery, charge, runtime, and the clean stop before it runs out' },
 ]
 

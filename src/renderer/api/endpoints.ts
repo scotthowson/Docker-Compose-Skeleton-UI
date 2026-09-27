@@ -24,6 +24,16 @@ import type {
   ContainerLogsResponse,
   ServerConfig,
   ConfigUpdateResponse,
+  ProxmoxStatus,
+  ProxmoxNodesResponse,
+  ProxmoxVmsResponse,
+  ProxmoxVmDetail,
+  ProxmoxTasksResponse,
+  ProxmoxActionResponse,
+  ProxmoxGuestType,
+  ProxmoxVmAction,
+  TraefikFeedStatus,
+  TraefikFeedTokenResponse,
   SystemInfo,
   NetworkListResponse,
   NetworkDetail,
@@ -1805,4 +1815,57 @@ export function crowdsecTrust(ip?: string): Promise<{ success: boolean; addresse
 /** DELETE /crowdsec/decisions/:ip — unban one address */
 export function crowdsecUnban(ip: string): Promise<{ success: boolean; ip: string; message: string }> {
   return apiClient.delete(`/crowdsec/decisions/${encodeURIComponent(ip)}`)
+}
+
+// =============================================================================
+// Proxmox (3.8)
+// =============================================================================
+
+/** GET /proxmox/status — link state, version, node and guest counts */
+export function fetchProxmoxStatus(): Promise<ProxmoxStatus> {
+  return apiClient.get<ProxmoxStatus>('/proxmox/status')
+}
+
+/** GET /proxmox/nodes — every node with CPU, memory, disk and uptime */
+export function fetchProxmoxNodes(): Promise<ProxmoxNodesResponse> {
+  return apiClient.get<ProxmoxNodesResponse>('/proxmox/nodes')
+}
+
+/** GET /proxmox/vms — every VM and LXC container */
+export function fetchProxmoxVms(): Promise<ProxmoxVmsResponse> {
+  return apiClient.get<ProxmoxVmsResponse>('/proxmox/vms')
+}
+
+/** GET /proxmox/vms/:node/:type/:vmid — one guest with its configuration */
+export function fetchProxmoxVm(node: string, type: ProxmoxGuestType, vmid: number): Promise<ProxmoxVmDetail> {
+  return apiClient.get<ProxmoxVmDetail>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}`)
+}
+
+/** GET /proxmox/tasks — recent Proxmox tasks */
+export function fetchProxmoxTasks(): Promise<ProxmoxTasksResponse> {
+  return apiClient.get<ProxmoxTasksResponse>('/proxmox/tasks')
+}
+
+/** POST /proxmox/vms/:node/:type/:vmid/:action — start, shutdown, stop, reboot, reset, suspend, resume */
+export function proxmoxVmAction(node: string, type: ProxmoxGuestType, vmid: number, action: ProxmoxVmAction): Promise<ProxmoxActionResponse> {
+  return apiClient.post<ProxmoxActionResponse>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}/${action}`, {}, 60000)
+}
+
+/** POST /proxmox/test — try a connection with the given values without saving them */
+export function proxmoxTest(body: { url?: string; token_id?: string; token_secret?: string; verify_tls?: boolean }): Promise<ProxmoxStatus> {
+  return apiClient.post<ProxmoxStatus>('/proxmox/test', body, 30000)
+}
+
+// =============================================================================
+// Traefik feed (3.8)
+// =============================================================================
+
+/** GET /traefik/feed/status — what a Traefik on another machine can pull, and when it last did */
+export function fetchTraefikFeedStatus(): Promise<TraefikFeedStatus> {
+  return apiClient.get<TraefikFeedStatus>('/traefik/feed/status')
+}
+
+/** POST /traefik/feed/token — mint a new feed token */
+export function rotateTraefikFeedToken(): Promise<TraefikFeedTokenResponse> {
+  return apiClient.post<TraefikFeedTokenResponse>('/traefik/feed/token', {})
 }

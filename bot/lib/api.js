@@ -91,6 +91,9 @@ export function createApi({ baseUrl, username, password, log = () => {} }) {
       stacks: () => cached('stacks', 15000, async () => ((await request('GET', '/stacks')).stacks || [])),
       templates: () => cached('templates', 60000, async () => ((await request('GET', '/templates')).templates || [])),
       schedules: () => cached('schedules', 15000, async () => ((await request('GET', '/schedules')).schedules || [])),
+      vms: () => cached('vms', 15000, async () => {
+        try { return (await request('GET', '/proxmox/vms')).vms || [] } catch { return [] }
+      }),
       decisions: () => cached('decisions', 15000, async () => {
         try { return (await request('GET', '/crowdsec/decisions')).decisions || [] } catch { return [] }
       }),

@@ -45,6 +45,7 @@ import RoutesDns from './RoutesDns'
 import NotesCard from './NotesCard'
 import PowerCard from './PowerCard'
 import BookmarksCard from './BookmarksCard'
+import ProxmoxCard from './ProxmoxCard'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
@@ -64,7 +65,7 @@ const COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   'quick-actions': QuickActions, 'crowdsec': CrowdSecStatus,
   'stack-controls': StackControls, 'container-spotlight': ContainerSpotlight,
   'routes-dns': RoutesDns, 'notes': NotesCard, 'bookmarks': BookmarksCard,
-  'power': PowerCard,
+  'power': PowerCard, 'proxmox': ProxmoxCard,
 }
 
 interface Props {

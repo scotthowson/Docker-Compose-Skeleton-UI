@@ -37,5 +37,6 @@ export const pageTitles: Record<PageId, string> = {
   'event-feed': 'Live Events',
   export: 'Export Center',
   dns: 'DNS & Routes',
+  proxmox: 'Proxmox',
   setup: 'Setup Wizard',
 }

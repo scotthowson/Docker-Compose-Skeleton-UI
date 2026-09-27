@@ -240,6 +240,20 @@ Defense-in-depth permission model with admin and user roles enforced across ever
 - **Notification drawer** — slide-out panel with unread count, mark all read, clear all
 - **Desktop notifications** — Web Notification API with permission management
 
+### Proxmox
+
+Link an API token in **Config → Proxmox** (or in the setup wizard, which opens the section by
+itself when the server runs as a Proxmox guest) and the **Proxmox** page shows every node with
+CPU, memory, disk and uptime bars, every VM and LXC container with state, load, uptime and tags,
+filters and search, and — for admins — start, shut down, stop, reboot, reset, suspend and resume
+with a confirmation sheet that explains each action. Recent Proxmox tasks are listed below. A
+**Proxmox** dashboard card shows the same at a glance, the Notifications page has a *Proxmox*
+event group and *VM stopped on its own* trigger, and the bot answers `/vms` and `/vm`.
+
+**Config → Traefik & DNS → Traefik on another machine** publishes DCS's routes as a feed for a
+Traefik elsewhere: switch it on, copy the snippet the panel shows into that Traefik, and watch
+*Last pulled …* confirm it. Needs DCS 3.8.
+
 ### Discord
 
 - **DCS Discord Bot** (`bot/`, image `ghcr.io/scotthowson/dcs-discord-bot`) — slash commands with buttons and confirmations: status, usage, health, containers, stacks, top, disk, updates, logs, routes, power, security, schedules, audit; start, stop, restart, update, deploy (dry-run first), backup, prune, run, unban and DCS self-update for the admins you name; locked to the channels you list; the bot's status line mirrors the server

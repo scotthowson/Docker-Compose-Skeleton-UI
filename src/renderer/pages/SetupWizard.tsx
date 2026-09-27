@@ -16,7 +16,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup, authLogin, deployTemplate, setSecret, setupRestore,
+  authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
@@ -207,6 +207,33 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [showBackup, setShowBackup] = useState(false)
   const [showTraefik, setShowTraefik] = useState(false)
   const [showPreferences, setShowPreferences] = useState(false)
+  // Proxmox link (Step 3): opened by itself when the API says this is a Proxmox guest
+  const [showProxmox, setShowProxmox] = useState(false)
+  const [pveUrl, setPveUrl] = useState('')
+  const [pveTokenId, setPveTokenId] = useState('')
+  const [pveSecret, setPveSecret] = useState('')
+  const [pveVerify, setPveVerify] = useState(true)
+  const [pveTesting, setPveTesting] = useState(false)
+  const [pveTest, setPveTest] = useState<{ ok: boolean; text: string } | null>(null)
+  const pveGuest = !!defaults?.system?.proxmox?.guest
+  const pveHost = !!defaults?.system?.proxmox?.host
+  const pveFilled = !!(pveUrl.trim() && pveTokenId.trim() && pveSecret.trim())
+  useEffect(() => {
+    const p = defaults?.system?.proxmox
+    if (!p) return
+    if (p.guest || p.host) setShowProxmox(true)
+    if (p.hint_url && !pveUrl) setPveUrl(p.hint_url)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaults])
+  const runPveTest = async () => {
+    setPveTesting(true); setPveTest(null)
+    try {
+      const r = await proxmoxTest({ url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify })
+      setPveTest(r.reachable ? { ok: true, text: `Connected: Proxmox VE ${r.version}, ${r.nodes} node${r.nodes === 1 ? '' : 's'}, ${r.vms.total} guests (${r.vms.running} running)` } : { ok: false, text: r.error || r.hints?.[0] || 'Not reachable' })
+    } catch (e) {
+      setPveTest({ ok: false, text: e instanceof Error ? e.message : 'The test failed' })
+    } finally { setPveTesting(false) }
+  }
 
   // Traefik HTTPS configuration
   const [enableTraefik, setEnableTraefik] = useState(false)
@@ -556,6 +583,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         allEnvVars.NTFY_URL = ''
         allEnvVars.NTFY_TOKEN = ''
       }
+      // Proxmox link: only when every field is filled (the page can be linked later).
+      // The token secret goes to the secret store like the Cloudflare token; .env only if that fails.
+      let pveSecretStored = false
+      if (pveFilled) {
+        allEnvVars.PROXMOX_URL = pveUrl.trim().replace(/\/+$/, '')
+        allEnvVars.PROXMOX_TOKEN_ID = pveTokenId.trim()
+        allEnvVars.PROXMOX_VERIFY_TLS = pveVerify ? 'true' : 'false'
+        try {
+          await setSecret('PROXMOX_TOKEN_SECRET', pveSecret)
+          pveSecretStored = true
+        } catch (err) {
+          console.error('[SetupWizard] storing the Proxmox secret failed, writing .env:', err)
+          allEnvVars.PROXMOX_TOKEN_SECRET = pveSecret
+        }
+      }
       const results: { label: string; ok: boolean; detail?: string }[] = []
       if (cfDnsToken.trim()) {
         results.push(cfTokenStoredAsSecret
@@ -569,6 +611,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         stacks: stacks.map((s) => s.name),
       })
       results.push({ label: 'Configuration saved', ok: true })
+      if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
 
       // 2. Deploy Traefik BEFORE marking setup complete (needs setup mode for permissive CORS/auth)
       if (enableTraefik && envVars.PROXY_DOMAIN) {
@@ -1247,6 +1290,61 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                     />
                   </div>
+                </div>
+
+                {/* ── Proxmox (opened by itself on a Proxmox guest) ── */}
+                <div className={`border rounded-xl overflow-hidden ${pveGuest || pveHost ? 'border-amber-500/25' : 'border-white/5'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProxmox(!showProxmox)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Server size={14} className="text-amber-400 shrink-0" />
+                      <span className="text-xs font-semibold text-slate-300">Proxmox</span>
+                      {pveGuest || pveHost
+                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">{pveHost ? 'This is the Proxmox host' : 'Proxmox guest detected'}</span>
+                        : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Optional</span>}
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showProxmox ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showProxmox && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
+                      <p className="text-[11px] text-slate-500">
+                        {defaults?.system?.proxmox?.reason ? <>{defaults.system.proxmox.reason}. </> : null}
+                        Link DCS to the Proxmox API and the <span className="text-slate-300">Proxmox</span> page shows every VM and container with start, shutdown, reboot and alerts.
+                        Make a token under <span className="text-slate-300">Datacenter → Permissions → API Tokens</span> with <span className="font-mono text-slate-300">VM.Audit</span>, <span className="font-mono text-slate-300">VM.PowerMgmt</span> and <span className="font-mono text-slate-300">Sys.Audit</span> on <span className="font-mono text-slate-300">/</span> (docs/PROXMOX.md). Leave this empty to do it later.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Proxmox URL</label>
+                          <input type="text" value={pveUrl} onChange={(e) => { setPveUrl(e.target.value); setPveTest(null) }} placeholder={defaults?.system?.proxmox?.hint_url || 'https://pve.example.com:8006'}
+                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">API token ID</label>
+                          <input type="text" value={pveTokenId} onChange={(e) => { setPveTokenId(e.target.value); setPveTest(null) }} placeholder="dcs@pve!dcs"
+                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Token secret</label>
+                          <input type="password" value={pveSecret} onChange={(e) => { setPveSecret(e.target.value); setPveTest(null) }} placeholder="shown once when the token is made" autoComplete="off"
+                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                          <input type="checkbox" checked={pveVerify} onChange={(e) => { setPveVerify(e.target.checked); setPveTest(null) }} className="accent-amber-500" />
+                          Verify the certificate (off for the self-signed one Proxmox ships with)
+                        </label>
+                        <button type="button" onClick={runPveTest} disabled={!pveFilled || pveTesting}
+                          className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 disabled:opacity-40 flex items-center gap-1.5">
+                          {pveTesting ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />} Test connection
+                        </button>
+                      </div>
+                      {pveTest && <div className={`text-xs ${pveTest.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{pveTest.text}</div>}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Advanced: Notifications ── */}
@@ -2263,6 +2361,32 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Proxmox */}
+                <div className={`bg-slate-800/40 border rounded-xl p-4 ${pveFilled ? 'border-amber-500/20' : 'border-white/5'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Server size={14} className={pveFilled ? 'text-amber-400' : 'text-slate-500'} />
+                    <h3 className="text-xs font-semibold text-slate-300">Proxmox</h3>
+                  </div>
+                  {pveFilled ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5">
+                        <span className="text-[10px] text-amber-300 font-medium">Linked{pveTest?.ok ? ' · connection tested' : ''}</span>
+                        <span className="text-[10px] text-amber-300">✓</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
+                        <span className="text-[10px] text-slate-500">URL</span>
+                        <span className="text-[10px] font-mono text-slate-300 truncate max-w-[60%]">{pveUrl.trim()}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
+                        <span className="text-[10px] text-slate-500">Token</span>
+                        <span className="text-[10px] font-mono text-slate-300">{pveTokenId.trim()} · secret kept in the secret store</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">Not linked — the Proxmox page and Server Config can do it any time</p>
+                  )}
+                </div>
 
                 {/* HTTPS & Reverse Proxy */}
                 <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/5'}`}>

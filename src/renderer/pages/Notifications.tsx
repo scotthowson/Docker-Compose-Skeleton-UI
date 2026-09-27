@@ -52,6 +52,8 @@ type TriggerType =
   | 'backup_complete'
   | 'backup_failed'
   | 'automation_run'
+  | 'proxmox_vm_stopped'
+  | 'proxmox_vm_started'
 
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
@@ -70,6 +72,8 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
   { value: 'backup_complete', label: 'Backup Finished' },
   { value: 'backup_failed', label: 'Backup Failed' },
   { value: 'automation_run', label: 'Automation Ran' },
+  { value: 'proxmox_vm_stopped', label: 'VM Stopped On Its Own' },
+  { value: 'proxmox_vm_started', label: 'VM Started' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -1466,6 +1470,15 @@ const WEBHOOK_EVENT_GROUPS: { label: string; events: { value: string; label: str
     { value: 'user_create', label: 'User created' },
     { value: 'user_role', label: 'Role changed' },
     { value: 'crowdsec_unban', label: 'CrowdSec unban' },
+  ] },
+  { label: 'Proxmox', events: [
+    { value: 'proxmox_vm_stopped', label: 'VM stopped on its own' },
+    { value: 'proxmox_vm_started', label: 'VM started (not by DCS)' },
+    { value: 'proxmox_vm_start', label: 'VM started by DCS' },
+    { value: 'proxmox_vm_shutdown', label: 'VM shut down by DCS' },
+    { value: 'proxmox_vm_stop', label: 'VM stopped by DCS' },
+    { value: 'proxmox_vm_reboot', label: 'VM rebooted by DCS' },
+    { value: 'proxmox_vm_reset', label: 'VM reset by DCS' },
   ] },
 ]
 const WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_GROUPS.flatMap((g) => g.events)

@@ -52,6 +52,7 @@ import Schedules from './pages/Schedules'
 import Plugins from './pages/Plugins'
 import EventFeed from './pages/EventFeed'
 import DNS from './pages/DNS'
+import Proxmox from './pages/Proxmox'
 import Export from './pages/Export'
 import SetupWizard from './pages/SetupWizard'
 import KeyboardShortcutsPanel from './components/common/KeyboardShortcutsPanel'
@@ -97,6 +98,7 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   plugins: Plugins,
   'event-feed': EventFeed,
   dns: DNS,
+  proxmox: Proxmox,
   export: Export,
   setup: SetupWizard as unknown as React.ComponentType,
 }

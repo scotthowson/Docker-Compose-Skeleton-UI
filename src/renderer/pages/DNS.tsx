@@ -414,6 +414,12 @@ export default function DNS() {
   })
   const switchTab = useCallback((t: Tab) => { setTab(t); try { localStorage.setItem('dcs-dns-tab', t) } catch {} }, [])
   const [searchQuery, setSearchQuery] = useState('')
+  // A search result lands here with the record or route pre-filtered
+  const navigationPayload = useSettingsStore((s) => s.navigationPayload)
+  useEffect(() => {
+    const p = useSettingsStore.getState().navigationPayload
+    if (p && typeof p.search === 'string') { setSearchQuery(p.search); useSettingsStore.getState().consumeNavigationPayload() }
+  }, [navigationPayload])
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [editingRoute, setEditingRoute] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')

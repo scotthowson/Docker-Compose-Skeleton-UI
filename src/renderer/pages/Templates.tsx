@@ -95,7 +95,7 @@ const CATEGORIES: CategoryDef[] = [
     color: { badge: 'bg-violet-500/15 text-violet-400 border-violet-500/20', iconColor: 'text-violet-400', border: 'border-l-violet-500/60' } },
   { id: 'monitoring', label: 'Monitoring', icon: BarChart3, aliases: ['monitoring', 'metrics', 'dashboard'],
     color: { badge: 'bg-amber-500/15 text-amber-400 border-amber-500/20', iconColor: 'text-amber-400', border: 'border-l-amber-500/60' } },
-  { id: 'web', label: 'Web', icon: Globe, aliases: ['web'],
+  { id: 'web', label: 'Web', icon: Globe, aliases: ['web', 'communication'],
     color: { badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20', iconColor: 'text-emerald-400', border: 'border-l-emerald-500/60' } },
   { id: 'databases', label: 'Databases', icon: Database, aliases: ['databases', 'database', 'db'],
     color: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400', border: 'border-l-cyan-500/60' } },
@@ -105,7 +105,7 @@ const CATEGORIES: CategoryDef[] = [
     color: { badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20', iconColor: 'text-indigo-400', border: 'border-l-indigo-500/60' } },
   { id: 'productivity', label: 'Productivity', icon: Store, aliases: ['productivity', 'notes', 'documents', 'knowledge', 'finance', 'lifestyle'],
     color: { badge: 'bg-teal-500/15 text-teal-400 border-teal-500/20', iconColor: 'text-teal-400', border: 'border-l-teal-500/60' } },
-  { id: 'automation', label: 'Automation', icon: Sparkles, aliases: ['automation', 'notifications', 'sync'],
+  { id: 'automation', label: 'Automation', icon: Sparkles, aliases: ['automation', 'notifications', 'sync', 'home', 'smart-home'],
     color: { badge: 'bg-orange-500/15 text-orange-400 border-orange-500/20', iconColor: 'text-orange-400', border: 'border-l-orange-500/60' } },
   { id: 'security', label: 'Security', icon: Shield, aliases: ['security', 'vpn', 'privacy'],
     color: { badge: 'bg-red-500/15 text-red-400 border-red-500/20', iconColor: 'text-red-400', border: 'border-l-red-500/60' } },
@@ -115,7 +115,7 @@ const CATEGORIES: CategoryDef[] = [
     color: { badge: 'bg-sky-500/15 text-sky-400 border-sky-500/20', iconColor: 'text-sky-400', border: 'border-l-sky-500/60' } },
   { id: 'download', label: 'Download', icon: Download, aliases: ['download'],
     color: { badge: 'bg-lime-500/15 text-lime-400 border-lime-500/20', iconColor: 'text-lime-400', border: 'border-l-lime-500/60' } },
-  { id: 'entertainment', label: 'Entertainment', icon: Tv, aliases: ['entertainment', 'ai'],
+  { id: 'entertainment', label: 'Entertainment', icon: Tv, aliases: ['entertainment', 'ai', 'gaming'],
     color: { badge: 'bg-pink-500/15 text-pink-400 border-pink-500/20', iconColor: 'text-pink-400', border: 'border-l-pink-500/60' } },
   { id: 'other', label: 'Other', icon: Package, aliases: [],
     color: { badge: 'bg-slate-500/15 text-slate-400 border-slate-500/20', iconColor: 'text-slate-400', border: 'border-l-slate-500/60' } },
@@ -3155,6 +3155,12 @@ export default function Templates() {
   // State
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all')
   const [search, setSearch] = useState('')
+  // A search result ("Deploy template X") lands here with the template pre-filtered
+  const navigationPayload = useSettingsStore((s) => s.navigationPayload)
+  useEffect(() => {
+    const p = useSettingsStore.getState().navigationPayload
+    if (p && typeof p.search === 'string') { setSearch(p.search); useSettingsStore.getState().consumeNavigationPayload() }
+  }, [navigationPayload])
   const [deployTarget, setDeployTarget] = useState<TemplateInfo | null>(null)
   const [detail, setDetail] = useState<TemplateDetailResponse | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)

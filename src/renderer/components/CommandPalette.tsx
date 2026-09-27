@@ -10,7 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks,
+  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks, Globe, Server, BookOpen, ExternalLink,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -22,17 +22,18 @@ import {
   startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
   runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
+  fetchTemplates, fetchRoutes, fetchProxmoxVms,
 } from '../api/endpoints'
 import { useStackStore } from '../stores/stackStore'
 import { useContainerStore } from '../stores/containerStore'
-import type { PageId } from '../../shared/types'
+import type { PageId, TemplateInfo, ProxmoxVm } from '../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type CommandType = 'page' | 'action' | 'stack' | 'container'
+type CommandType = 'page' | 'action' | 'stack' | 'container' | 'template' | 'route' | 'vm' | 'docs'
 
 interface CommandItem {
   id: string
@@ -84,6 +85,8 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   plugins: <Puzzle size={16} />,
   'event-feed': <Radio size={16} />,
   export: <Download size={16} />,
+  dns: <Globe size={16} />,
+  proxmox: <Server size={16} />,
   setup: <Sparkles size={16} />,
 }
 
@@ -123,7 +126,34 @@ const pageLabels: Record<PageId, string> = {
   plugins: 'Plugins',
   'event-feed': 'Live Events',
   export: 'Export Center',
+  dns: 'DNS & Routes',
+  proxmox: 'Proxmox',
   setup: 'Setup Wizard',
+}
+
+// ---------------------------------------------------------------------------
+// Fuzzy scoring: 0 = no match. Exact 1000, prefix ~900, word prefix 800,
+// substring ~700, then an in-order character match scored by consecutive runs
+// and word starts, minus a little per gap.
+// ---------------------------------------------------------------------------
+function fuzzyScore(q: string, text: string): number {
+  const t = text.toLowerCase()
+  if (!q) return 1
+  if (!t) return 0
+  if (t === q) return 1000
+  if (t.startsWith(q)) return 900 - Math.min(50, t.length) * 0.1
+  if (t.split(/[\s&/:_.-]+/).some((w) => w.startsWith(q))) return 800
+  const at = t.indexOf(q)
+  if (at >= 0) return 700 - Math.min(100, at) * 0.5
+  let ti = 0, score = 0, streak = 0
+  for (const ch of q) {
+    const next = t.indexOf(ch, ti)
+    if (next < 0) return 0
+    if (next === ti && ti > 0) { streak += 1; score += 3 + streak }
+    else { streak = 0; score += 1; if (next === 0 || /[\s&/:_.-]/.test(t[next - 1])) score += 4 }
+    ti = next + 1
+  }
+  return 100 + score - Math.max(0, ti - q.length) * 0.05
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +183,22 @@ export function CommandPalette() {
   const containers = useContainerStore((s) => s.containers)
   const { addToast } = useToast()
   const isConnected = connectionStatus === 'connected'
+
+  // Things worth finding that no store holds: templates, routes and Proxmox
+  // guests. Fetched when the palette opens, kept for a minute.
+  const [extra, setExtra] = useState<{ templates: TemplateInfo[]; routes: { subdomain: string; service: string; stack: string; target: string }[]; vms: ProxmoxVm[] }>({ templates: [], routes: [], vms: [] })
+  const extraAtRef = useRef(0)
+  useEffect(() => {
+    if (!open || !isConnected || Date.now() - extraAtRef.current < 60000) return
+    extraAtRef.current = Date.now()
+    void Promise.allSettled([fetchTemplates(), fetchRoutes(), fetchProxmoxVms()]).then(([t, r, v]) => {
+      setExtra({
+        templates: t.status === 'fulfilled' ? (t.value.templates ?? []) : [],
+        routes: r.status === 'fulfilled' ? ((r.value as { routes?: { subdomain: string; service: string; stack: string; target: string }[] }).routes ?? []) : [],
+        vms: v.status === 'fulfilled' ? (v.value.vms ?? []) : [],
+      })
+    })
+  }, [open, isConnected])
 
   // Global keyboard shortcut: Ctrl+K / Cmd+K
   useEffect(() => {
@@ -210,6 +256,8 @@ export function CommandPalette() {
       topology: 'Network topology, map, visualization',
       'file-browser': 'Browse files, directory, filesystem',
       templates: 'Compose templates, scaffolding, presets',
+      dns: 'Traefik routes, Cloudflare DNS records, certificates',
+      proxmox: 'VMs and containers on your Proxmox host: state, load, power',
       updates: 'Image updates, available upgrades',
       trends: 'Resource trends, metrics, history, graphs',
       terminal: 'Terminal, shell, command line, exec',
@@ -244,6 +292,8 @@ export function CommandPalette() {
       topology: ['topology', 'map', 'graph', 'visualize', 'network map'],
       'file-browser': ['file', 'browse', 'directory', 'folder', 'filesystem', 'explore'],
       templates: ['template', 'scaffold', 'preset', 'compose template'],
+      dns: ['dns', 'routes', 'cloudflare', 'domain', 'traefik', 'subdomain', 'certificate'],
+      proxmox: ['proxmox', 'pve', 'vm', 'virtual machine', 'lxc', 'hypervisor', 'node'],
       updates: ['update', 'upgrade', 'new version', 'outdated'],
       trends: ['trend', 'metric', 'chart', 'graph', 'history', 'cpu usage', 'memory usage'],
       terminal: ['terminal', 'shell', 'bash', 'exec', 'command', 'cli', 'ssh'],
@@ -261,7 +311,7 @@ export function CommandPalette() {
       export: ['export', 'download', 'report', 'backup', 'json'],
     }
 
-    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'event-feed', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'export', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings']
+    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'event-feed', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'export', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings', 'dns', 'proxmox']
     // Filter out admin-only pages for non-admin users
     const pages = allPages.filter((p) => !ADMIN_ONLY_PAGES.has(p) || isAdmin)
     for (const page of pages) {
@@ -553,6 +603,80 @@ export function CommandPalette() {
         },
       })
 
+      // Open a stack or a container straight from the search
+      for (const stack of stacks) {
+        items.push({
+          id: `open-stack-${stack.name}`,
+          label: stack.name,
+          description: `Stack · ${stack.status}${stack.running_containers != null ? ` · ${stack.running_containers} running` : ''}`,
+          icon: <Layers size={16} className="text-cyan-400" />,
+          type: 'stack',
+          keywords: ['stack', 'open', stack.name.toLowerCase()],
+          onSelect: () => { setCurrentPage('stacks', { highlight: stack.name }); setOpen(false) },
+        })
+      }
+      for (const container of containers) {
+        items.push({
+          id: `open-container-${container.name}`,
+          label: container.name,
+          description: `Container · ${container.state}${container.stack ? ` · ${container.stack}` : ''} · ${container.image}`,
+          icon: <Box size={16} className={container.state === 'running' ? 'text-emerald-400' : 'text-slate-400'} />,
+          type: 'container',
+          keywords: ['container', 'open', container.name.toLowerCase(), (container.image || '').toLowerCase(), (container.stack || '').toLowerCase()],
+          onSelect: () => { setCurrentPage('containers', { focusContainer: container.name }); setOpen(false) },
+        })
+      }
+      for (const t of extra.templates) {
+        items.push({
+          id: `template-${t.name}`,
+          label: t.title || t.name,
+          description: `Template · ${t.category}${t.description ? ` · ${t.description}` : ''}`,
+          icon: <LayoutTemplate size={16} className="text-violet-400" />,
+          type: 'template',
+          keywords: ['template', 'deploy', t.name.toLowerCase(), t.category.toLowerCase(), ...(t.tags || []).map((k) => k.toLowerCase())],
+          onSelect: () => { setCurrentPage('templates', { search: t.name }); setOpen(false) },
+        })
+      }
+      for (const r of extra.routes) {
+        items.push({
+          id: `route-${r.subdomain}`,
+          label: r.subdomain,
+          description: `Route · ${r.stack}/${r.service} → ${r.target}`,
+          icon: <Globe size={16} className="text-sky-400" />,
+          type: 'route',
+          keywords: ['route', 'url', 'open', r.subdomain.toLowerCase(), r.service.toLowerCase(), r.stack.toLowerCase()],
+          onSelect: () => { window.open(`https://${r.subdomain}`, '_blank', 'noopener'); setOpen(false) },
+        })
+      }
+      for (const v of extra.vms) {
+        items.push({
+          id: `vm-${v.node}-${v.type}-${v.vmid}`,
+          label: v.name,
+          description: `${v.type === 'lxc' ? 'LXC container' : 'VM'} ${v.vmid} · ${v.status} · ${v.node}${v.tags?.length ? ` · ${v.tags.join(', ')}` : ''}`,
+          icon: <Server size={16} className={v.status === 'running' ? 'text-emerald-400' : 'text-slate-400'} />,
+          type: 'vm',
+          keywords: ['vm', 'proxmox', 'lxc', String(v.vmid), v.name.toLowerCase(), v.node.toLowerCase(), ...(v.tags || []).map((k) => k.toLowerCase())],
+          onSelect: () => { setCurrentPage('proxmox', { search: v.name }); setOpen(false) },
+        })
+      }
+      const docs: [string, string, string, string[]][] = [
+        ['README', 'Install, quick start, every feature', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO#readme', ['readme', 'help', 'guide', 'install']],
+        ['Proxmox guide', 'API token, the Proxmox page, a Traefik on another machine, the hub layout', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/PROXMOX.md', ['proxmox', 'guide', 'hub', 'feed', 'traefik']],
+        ['Discord & webhooks', 'Webhooks, notification rules, CrowdSec alerts, the bot', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md', ['discord', 'webhook', 'bot', 'notifications']],
+        ['API reference', 'Every endpoint with its access level', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/API.md', ['api', 'endpoints', 'reference', 'curl']],
+      ]
+      for (const [title, desc, url, kw] of docs) {
+        items.push({
+          id: `docs-${title}`,
+          label: `Docs: ${title}`,
+          description: desc,
+          icon: <BookOpen size={16} className="text-amber-400" />,
+          type: 'docs',
+          keywords: ['docs', 'documentation', 'help', ...kw],
+          onSelect: () => { window.open(url, '_blank', 'noopener'); setOpen(false) },
+        })
+      }
+
       // Dynamic stack commands
       for (const stack of stacks) {
         if (stack.status === 'running') {
@@ -689,28 +813,29 @@ export function CommandPalette() {
     }
 
     return items
-  }, [setCurrentPage, status, health, isConnected, isAdmin, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks, containers])
+  }, [setCurrentPage, status, health, isConnected, isAdmin, theme, sidebarCollapsed, toggleSidebar, updateSetting, logout, addToast, setHealthReport, stacks, containers, extra])
 
-  // Filter commands
+  // Filter commands: fuzzy. Every word of the query must match the label, the
+  // description or a keyword; exact and prefix matches on the label rank
+  // first, then in-order character matches ("jfin" finds Jellyfin), tighter
+  // ones first. Equal scores keep their definition order.
   const filtered = useMemo(() => {
-    if (!query.trim()) return commands
-    const q = query.toLowerCase().trim()
-    // Rank so that the page called "Settings" beats a page that merely mentions
-    // settings: exact label, label prefix, a word prefix, label substring, then
-    // description and keywords. Equal ranks keep their definition order.
+    const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    if (words.length === 0) return commands
     const ranked = commands.map((cmd, order) => {
       const label = cmd.label.toLowerCase()
-      let rank = -1
-      if (label === q) rank = 0
-      else if (label.startsWith(q)) rank = 1
-      else if (label.split(/[\s&/-]+/).some((w) => w.startsWith(q))) rank = 2
-      else if (label.includes(q)) rank = 3
-      else if (cmd.description.toLowerCase().includes(q)) rank = 4
-      else if (cmd.keywords?.some((k) => k.includes(q))) rank = 5
-      return { cmd, rank, order }
-    }).filter((r) => r.rank >= 0)
-    ranked.sort((a, b) => a.rank - b.rank || a.order - b.order)
-    return ranked.map((r) => r.cmd)
+      const desc = cmd.description.toLowerCase()
+      const kw = (cmd.keywords ?? []).join(' ').toLowerCase()
+      let total = 0
+      for (const w of words) {
+        const sc = Math.max(fuzzyScore(w, label), fuzzyScore(w, kw) * 0.7, fuzzyScore(w, desc) * 0.5)
+        if (sc <= 0) { total = 0; break }
+        total += sc
+      }
+      return { cmd, score: total, order }
+    }).filter((r) => r.score > 0)
+    ranked.sort((a, b) => b.score - a.score || a.order - b.order)
+    return ranked.slice(0, 60).map((r) => r.cmd)
   }, [commands, query])
 
   // Reset selection on filter change
@@ -771,7 +896,7 @@ export function CommandPalette() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search pages, containers, stacks..."
+            placeholder="Search anything: pages, containers, stacks, templates, routes, VMs, docs…"
             className="
               flex-1 bg-transparent py-4
               text-sm text-slate-100 placeholder-slate-500
@@ -795,8 +920,12 @@ export function CommandPalette() {
             const prevType = idx > 0 ? filtered[idx - 1].type : null
             const showGroupHeader = query.trim() === '' && cmd.type !== prevType
             const groupLabel = cmd.type === 'page' ? 'Pages'
-              : cmd.type === 'stack' ? 'Stack Actions'
-              : cmd.type === 'container' ? 'Container Actions'
+              : cmd.type === 'stack' ? 'Stacks'
+              : cmd.type === 'container' ? 'Containers'
+              : cmd.type === 'template' ? 'Templates'
+              : cmd.type === 'route' ? 'Routes'
+              : cmd.type === 'vm' ? 'Proxmox'
+              : cmd.type === 'docs' ? 'Documentation'
               : 'Quick Actions'
             return (
               <React.Fragment key={cmd.id}>
