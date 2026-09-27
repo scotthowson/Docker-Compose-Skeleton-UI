@@ -54,6 +54,9 @@ type TriggerType =
   | 'automation_run'
   | 'proxmox_vm_stopped'
   | 'proxmox_vm_started'
+  | 'fleet_member_joined'
+  | 'fleet_member_down'
+  | 'fleet_member_up'
 
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
@@ -74,6 +77,9 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
   { value: 'automation_run', label: 'Automation Ran' },
   { value: 'proxmox_vm_stopped', label: 'VM Stopped On Its Own' },
   { value: 'proxmox_vm_started', label: 'VM Started' },
+  { value: 'fleet_member_joined', label: 'Fleet Member Joined' },
+  { value: 'fleet_member_down', label: 'Fleet Member Stopped Answering' },
+  { value: 'fleet_member_up', label: 'Fleet Member Back' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -1479,6 +1485,14 @@ const WEBHOOK_EVENT_GROUPS: { label: string; events: { value: string; label: str
     { value: 'proxmox_vm_stop', label: 'VM stopped by DCS' },
     { value: 'proxmox_vm_reboot', label: 'VM rebooted by DCS' },
     { value: 'proxmox_vm_reset', label: 'VM reset by DCS' },
+  ] },
+  { label: 'Fleet', events: [
+    { value: 'fleet_member_joined', label: 'A member joined the hub' },
+    { value: 'fleet_member_down', label: 'A member stopped answering' },
+    { value: 'fleet_member_up', label: 'A member answers again' },
+    { value: 'fleet_member_added', label: 'Member added by address' },
+    { value: 'fleet_member_removed', label: 'Member removed' },
+    { value: 'fleet_proxy', label: 'Action on a member through the hub' },
   ] },
 ]
 const WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_GROUPS.flatMap((g) => g.events)

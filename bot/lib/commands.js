@@ -72,6 +72,7 @@ export const definitions = [
     .addStringOption((o) => o.setName('action').setDescription('What to do (default: info)').addChoices(
       { name: 'info', value: 'info' }, { name: 'check for updates', value: 'check' }, { name: 'update now', value: 'update' }, { name: 'restart the API', value: 'restart' })),
   cmd('vms', 'Every VM and container on the Proxmox host: state, CPU, memory, uptime'),
+  cmd('fleet', 'The hub and its members: the DCS in each VM, its stacks, and whether it answers'),
   cmd('vm', 'Start, shut down, stop, reboot, reset, suspend or resume a Proxmox VM or container')
     .addStringOption((o) => o.setName('vm').setDescription('Name or VMID (start typing)').setRequired(true).setAutocomplete(true))
     .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(true).addChoices(
@@ -157,6 +158,30 @@ views.vms = async (ctx) => {
     fields,
   })
   return { embeds: [e], components: rows([button('nav:vms', 'Refresh', Style.Secondary, '🔄')]) }
+}
+
+views.fleet = async (ctx) => {
+  const st = await ctx.api.get('/fleet/status')
+  if (st.role === 'member') {
+    const h = st.hub || {}
+    return { embeds: [embed(ctx, { title: `This server is a member of ${h.name || h.url || 'a hub'}`, description: `Joined as ${bold(h.member_name || '?')}${h.vmid ? ` · guest ${h.vmid}${h.node ? ` on ${h.node}` : ''}` : ''}${h.version ? ` · hub runs DCS ${h.version}` : ''}\nThe hub's Proxmox page lists this server's stacks under its VM.`, color: COLORS.ok })], components: rows([button('nav:fleet', 'Refresh', Style.Secondary, '🔄')]) }
+  }
+  if (!st.members) return { embeds: [result(ctx, 'warn', 'No fleet members yet', st.proxmox_linked ? 'Link the VMs on the dashboard\'s Proxmox page (Link VMs), or run ./setup.sh with the join code on each Docker VM.' : 'Link Proxmox first (Server Config → Proxmox), then link the VMs on the Proxmox page.')], components: [] }
+  const ov = await ctx.api.get('/fleet/overview')
+  const fields = (ov.members || []).map((m) => ({
+    name: `${m.reachable ? '🟢' : '🔴'} ${m.name}${m.vmid ? ` · VM ${m.vmid}` : ''}${m.version ? ` · DCS ${m.version}` : ''}`,
+    value: truncate(m.reachable
+      ? `${m.url}\n${(m.stacks || []).map((s) => `${s.status === 'running' ? '🟢' : '⚫'} ${s.name} (${s.running_containers})`).join(' · ') || 'no stacks yet'}`
+      : `${m.url}\n${m.error || 'no answer'}`, 1000),
+  }))
+  const t = ov.totals || {}
+  const e = embed(ctx, {
+    title: `Fleet · ${t.reachable ?? 0}/${t.members ?? 0} members answering · ${t.stacks ?? 0} stacks · ${t.containers_running ?? 0}/${t.containers_total ?? 0} containers`,
+    description: `Hub: ${bold(ov.hub?.name || ov.hub?.hostname || 'this server')} (DCS ${ov.hub?.version || '?'})`,
+    color: (t.reachable ?? 0) === (t.members ?? 0) ? COLORS.ok : (t.reachable ?? 0) === 0 ? COLORS.bad : COLORS.warn,
+    fields,
+  })
+  return { embeds: [e], components: rows([button('nav:fleet', 'Refresh', Style.Secondary, '🔄'), button('nav:vms', 'VMs', Style.Secondary, '🖥️')]) }
 }
 
 views.vm = async (ctx, ref) => {
@@ -844,6 +869,7 @@ actions['dcs-restart'] = async (ctx, i) => {
 export const handlers = {
   status: (ctx, i) => sendView(ctx, i, 'status'),
   vms: (ctx, i) => sendView(ctx, i, 'vms'),
+  fleet: (ctx, i) => sendView(ctx, i, 'fleet'),
   vm: (ctx, i) => vmAction(ctx, i, i.options.getString('vm'), i.options.getString('action')),
   usage: (ctx, i) => sendView(ctx, i, 'usage'),
   health: (ctx, i) => sendView(ctx, i, 'health'),

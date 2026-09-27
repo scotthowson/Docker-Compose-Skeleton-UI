@@ -4,11 +4,11 @@
 // =============================================================================
 
 import React from 'react'
-import { Server, Settings2, Cpu, MemoryStick } from 'lucide-react'
+import { Server, Settings2, Cpu, MemoryStick, Satellite } from 'lucide-react'
 import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { fetchProxmoxStatus, fetchProxmoxVms, fetchProxmoxNodes } from '../../api/endpoints'
+import { fetchProxmoxStatus, fetchProxmoxVms, fetchProxmoxNodes, fetchFleetStatus, fetchFleetOverview } from '../../api/endpoints'
 import { CardHeader, CardLoading, CardError, CardEmpty } from './cardShared'
 
 function fmtGb(n: number): string { return n ? `${(n / 1073741824).toFixed(n >= 10737418240 ? 0 : 1)} GB` : '0' }
@@ -20,7 +20,11 @@ export default function ProxmoxCard() {
   const ready = !!status.data?.configured && !!status.data?.reachable
   const vms = usePolling(fetchProxmoxVms, 15000, { enabled: isConnected && ready })
   const nodes = usePolling(fetchProxmoxNodes, 15000, { enabled: isConnected && ready })
+  // the fleet (3.9): members and what they run
+  const fleet = usePolling(fetchFleetStatus, 30000, { enabled: isConnected })
+  const overview = usePolling(fetchFleetOverview, 15000, { enabled: isConnected && (fleet.data?.members ?? 0) > 0 })
   const s = status.data
+  const memberByVm = new Map((overview.data?.members ?? []).filter((m) => m.vmid).map((m) => [m.vmid as number, m]))
 
   return (
     <div className="glass-card p-4 h-full flex flex-col">
@@ -42,6 +46,15 @@ export default function ProxmoxCard() {
         <CardEmpty icon={<Server size={20} />} title="Proxmox does not answer" hint={s.error || s.hints?.[0] || ''} action={<button onClick={() => setCurrentPage('proxmox')} className="text-[11px] text-amber-300 hover:text-amber-200">Details</button>} />
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-1">
+          {overview.data && overview.data.totals.members > 0 && (
+            <button onClick={() => setCurrentPage('proxmox')} className="w-full rounded-xl bg-amber-500/[0.06] border border-amber-500/15 px-3 py-2 text-[11px] text-left flex items-center gap-2 hover:bg-amber-500/10">
+              <Satellite size={11} className="text-amber-400 shrink-0" />
+              <span className="text-slate-300 truncate">Fleet: {overview.data.totals.reachable}/{overview.data.totals.members} members answering · {overview.data.totals.stacks} stacks · {overview.data.totals.containers_running}/{overview.data.totals.containers_total} containers</span>
+            </button>
+          )}
+          {fleet.data?.role === 'member' && fleet.data.hub && (
+            <div className="rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2 text-[11px] text-slate-300 flex items-center gap-2"><Satellite size={11} className="text-emerald-400 shrink-0" /> Member of {fleet.data.hub.name || fleet.data.hub.url}</div>
+          )}
           {(nodes.data?.nodes ?? []).map((n) => (
             <div key={n.node} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-3 py-2 text-[11px]">
               <div className="flex items-center justify-between gap-2">
@@ -58,7 +71,7 @@ export default function ProxmoxCard() {
             {(vms.data?.vms ?? []).slice(0, 8).map((v) => (
               <button key={`${v.node}/${v.type}/${v.vmid}`} onClick={() => setCurrentPage('proxmox')} className="w-full flex items-center gap-2 py-1.5 text-left hover:bg-white/[0.03] rounded-lg px-1">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${v.status === 'running' ? 'bg-emerald-400' : v.status === 'paused' ? 'bg-amber-400' : 'bg-slate-500'}`} />
-                <span className="text-xs text-slate-200 truncate flex-1 min-w-0">{v.name}</span>
+                <span className="text-xs text-slate-200 truncate flex-1 min-w-0">{v.name}{memberByVm.get(v.vmid) ? <span className="text-[9px] text-amber-300/80 ml-1">· {memberByVm.get(v.vmid)!.stacks_total} stacks</span> : null}</span>
                 <span className={`text-[9px] px-1 rounded border ${v.type === 'qemu' ? 'text-cyan-300 border-cyan-500/20' : 'text-violet-300 border-violet-500/20'}`}>{v.type === 'qemu' ? 'VM' : 'LXC'}</span>
                 <span className="text-[10px] text-slate-500 tabular-nums w-16 text-right">{v.status === 'running' ? `${v.cpu}% · ${fmtGb(v.mem)}` : v.status}</span>
               </button>

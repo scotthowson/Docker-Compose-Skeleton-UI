@@ -22,11 +22,11 @@ import {
   startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
   runImagePrune, triggerLogRotate, fetchHealthReport, triggerBackup,
-  fetchTemplates, fetchRoutes, fetchProxmoxVms,
+  fetchTemplates, fetchRoutes, fetchProxmoxVms, fetchFleetMembers,
 } from '../api/endpoints'
 import { useStackStore } from '../stores/stackStore'
 import { useContainerStore } from '../stores/containerStore'
-import type { PageId, TemplateInfo, ProxmoxVm } from '../../shared/types'
+import type { PageId, TemplateInfo, ProxmoxVm, FleetMember } from '../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -186,16 +186,17 @@ export function CommandPalette() {
 
   // Things worth finding that no store holds: templates, routes and Proxmox
   // guests. Fetched when the palette opens, kept for a minute.
-  const [extra, setExtra] = useState<{ templates: TemplateInfo[]; routes: { subdomain: string; service: string; stack: string; target: string }[]; vms: ProxmoxVm[] }>({ templates: [], routes: [], vms: [] })
+  const [extra, setExtra] = useState<{ templates: TemplateInfo[]; routes: { subdomain: string; service: string; stack: string; target: string }[]; vms: ProxmoxVm[]; members: FleetMember[] }>({ templates: [], routes: [], vms: [], members: [] })
   const extraAtRef = useRef(0)
   useEffect(() => {
     if (!open || !isConnected || Date.now() - extraAtRef.current < 60000) return
     extraAtRef.current = Date.now()
-    void Promise.allSettled([fetchTemplates(), fetchRoutes(), fetchProxmoxVms()]).then(([t, r, v]) => {
+    void Promise.allSettled([fetchTemplates(), fetchRoutes(), fetchProxmoxVms(), fetchFleetMembers()]).then(([t, r, v, f]) => {
       setExtra({
         templates: t.status === 'fulfilled' ? (t.value.templates ?? []) : [],
         routes: r.status === 'fulfilled' ? ((r.value as { routes?: { subdomain: string; service: string; stack: string; target: string }[] }).routes ?? []) : [],
         vms: v.status === 'fulfilled' ? (v.value.vms ?? []) : [],
+        members: f.status === 'fulfilled' ? (f.value.members ?? []) : [],
       })
     })
   }, [open, isConnected])
@@ -659,9 +660,20 @@ export function CommandPalette() {
           onSelect: () => { setCurrentPage('proxmox', { search: v.name }); setOpen(false) },
         })
       }
+      for (const m of extra.members) {
+        items.push({
+          id: `member-${m.id}`,
+          label: m.name,
+          description: `Fleet member · ${m.url}${m.vmid ? ` · VM ${m.vmid}` : ''}${m.version ? ` · DCS ${m.version}` : ''}${m.reachable === false ? ' · not answering' : ''}`,
+          icon: <Server size={16} className={m.reachable === false ? 'text-rose-400' : 'text-amber-400'} />,
+          type: 'vm',
+          keywords: ['member', 'fleet', 'hub', 'dcs', m.name.toLowerCase(), m.url.toLowerCase(), String(m.vmid ?? '')],
+          onSelect: () => { setCurrentPage('proxmox', { search: m.name }); setOpen(false) },
+        })
+      }
       const docs: [string, string, string, string[]][] = [
         ['README', 'Install, quick start, every feature', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO#readme', ['readme', 'help', 'guide', 'install']],
-        ['Proxmox guide', 'API token, the Proxmox page, a Traefik on another machine, the hub layout', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/PROXMOX.md', ['proxmox', 'guide', 'hub', 'feed', 'traefik']],
+        ['Proxmox guide', 'API token, the Proxmox page, the fleet (hub + members), a Traefik in another VM', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/PROXMOX.md', ['proxmox', 'guide', 'hub', 'feed', 'traefik']],
         ['Discord & webhooks', 'Webhooks, notification rules, CrowdSec alerts, the bot', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md', ['discord', 'webhook', 'bot', 'notifications']],
         ['API reference', 'Every endpoint with its access level', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/API.md', ['api', 'endpoints', 'reference', 'curl']],
       ]

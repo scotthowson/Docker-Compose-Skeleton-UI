@@ -9,18 +9,20 @@ import {
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
   Trash2, Plus, Pencil, Sparkles, Loader2, ArrowRight, ArrowLeft,
   Check, AlertCircle, Wifi, WifiOff, Link, Bell, Zap, HardDrive, ChevronRight, Palette,
-  AlertTriangle, LifeBuoy,
+  AlertTriangle, LifeBuoy, Satellite, Radar,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
-  authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest,
+  authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest, fetchFleetStatus,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
-import type { SetupDefaultsResponse } from '../../shared/types'
+import type { SetupDefaultsResponse, FleetStatus, FleetJoinHubResponse } from '../../shared/types'
+import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
+import JoinHubPanel from '../components/fleet/JoinHubPanel'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -215,6 +217,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [pveVerify, setPveVerify] = useState(true)
   const [pveTesting, setPveTesting] = useState(false)
   const [pveTest, setPveTest] = useState<{ ok: boolean; text: string } | null>(null)
+  // Fleet (3.9): link the other VMs from here (hub), or join a hub (member)
+  const [fleetStatus, setFleetStatus] = useState<FleetStatus | null>(null)
+  const [showLink, setShowLink] = useState(false)
+  const [linkedMembers, setLinkedMembers] = useState(0)
+  const [showFleet, setShowFleet] = useState(false)
+  const [joined, setJoined] = useState<FleetJoinHubResponse | null>(null)
   const pveGuest = !!defaults?.system?.proxmox?.guest
   const pveHost = !!defaults?.system?.proxmox?.host
   const pveFilled = !!(pveUrl.trim() && pveTokenId.trim() && pveSecret.trim())
@@ -495,6 +503,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             // Account already exists locally (e.g. previous session) — log in instead
             await login(adminUsername.trim(), adminPassword, true)
           }
+          // A join saved by setup.sh (this VM runs under a hub) opens its section by itself
+          void fetchFleetStatus().then((f) => { setFleetStatus(f); if (f.pending_join) setShowFleet(true) }).catch(() => {})
         } else {
           setError(needsAdmin ? 'Failed to create admin account' : 'Invalid credentials')
           setLoading(false)
@@ -612,6 +622,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       })
       results.push({ label: 'Configuration saved', ok: true })
       if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
+      if (linkedMembers > 0) results.push({ label: `${linkedMembers} fleet member${linkedMembers === 1 ? '' : 's'} linked — their stacks show under their VMs on the Proxmox page`, ok: true })
+      if (joined) results.push({ label: `Joined the hub ${joined.hub.name || joined.hub.url} as "${joined.member.name}"`, ok: true, detail: joined.member.vmid ? `Guest ${joined.member.vmid}${joined.member.node ? ` on ${joined.member.node}` : ''}` : 'The hub could not tell which guest this is — pick it on its Proxmox page' })
 
       // 2. Deploy Traefik BEFORE marking setup complete (needs setup mode for permissive CORS/auth)
       if (enableTraefik && envVars.PROXY_DOMAIN) {
@@ -697,8 +709,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       }
       setSetupResults(results)
 
-      // 3. Mark setup as complete (AFTER template deploys so they run in setup mode)
-      await setupComplete()
+      // 3. Mark setup as complete (AFTER template deploys so they run in setup mode);
+      //    a join setup.sh saved that was not run above happens here
+      const done = await setupComplete()
+      if (done?.fleet_join) {
+        results.push(done.fleet_join.joined
+          ? { label: `Joined the hub ${done.fleet_join.hub?.name || done.fleet_join.hub?.url || ''} as "${done.fleet_join.member?.name ?? ''}"`, ok: true }
+          : { label: `Joining the hub ${done.fleet_join.hub_url || ''} failed`, ok: false, detail: `${done.fleet_join.error || ''} — run ./setup.sh --join <hub-url> <code> on this VM, or use the Proxmox page` })
+        setSetupResults([...results])
+      }
 
       // 4. Persist client-side dashboard preferences
       const settingsState = useSettingsStore.getState()
@@ -1343,6 +1362,44 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </button>
                       </div>
                       {pveTest && <div className={`text-xs ${pveTest.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{pveTest.text}</div>}
+                      {pveTest?.ok && (
+                        <div className="pt-3 border-t border-white/[0.04] space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-[11px] text-slate-400">This DCS becomes the <span className="text-slate-300">hub</span>: the DCS in each other VM is a member, shown under its VM on the Proxmox page. Scan the VMs now, link what answers, and get the join code for the rest.</p>
+                            {!showLink && <button type="button" onClick={() => setShowLink(true)} className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 flex items-center gap-1.5 shrink-0"><Radar size={13} /> Link the VMs</button>}
+                          </div>
+                          {showLink && <FleetLinkPanel pve={{ url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify }} compact onChanged={() => setLinkedMembers((n) => n + 1)} />}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Fleet: this VM runs under a hub (opened by itself when setup.sh saved a join) ── */}
+                <div className={`border rounded-xl overflow-hidden ${fleetStatus?.pending_join || joined ? 'border-emerald-500/25' : 'border-white/5'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowFleet(!showFleet)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Satellite size={14} className="text-emerald-400 shrink-0" />
+                      <span className="text-xs font-semibold text-slate-300">Join a DCS hub</span>
+                      {joined
+                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium truncate">Joined {joined.hub.name || joined.hub.url}</span>
+                        : fleetStatus?.pending_join
+                          ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium truncate">setup.sh saved a join to {fleetStatus.pending_join.hub_url}</span>
+                          : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Optional</span>}
+                    </div>
+                    <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showFleet ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showFleet && (
+                    <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
+                      <p className="text-[11px] text-slate-500">
+                        A hub is the DCS linked to Proxmox. As a member, this server keeps its own stacks; the hub's Proxmox page lists them under this VM and can deploy here.
+                        {fleetStatus?.pending_join ? ' setup.sh already holds the join code — the join runs now, on the card.' : ' You need the hub\'s address and a join code from its Proxmox page (Members → Join code).'}
+                      </p>
+                      <JoinHubPanel pending={fleetStatus?.pending_join ?? null} autoRun={!!fleetStatus?.pending_join} compact onJoined={(r) => { setJoined(r); setFleetStatus((f) => (f ? { ...f, pending_join: null } : f)) }} />
                     </div>
                   )}
                 </div>
@@ -2387,6 +2444,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <p className="text-[10px] text-slate-500">Not linked — the Proxmox page and Server Config can do it any time</p>
                   )}
                 </div>
+
+                {/* Fleet */}
+                {(linkedMembers > 0 || joined || fleetStatus?.pending_join) && (
+                  <div className="bg-slate-800/40 border border-emerald-500/20 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Satellite size={14} className="text-emerald-400" />
+                      <h3 className="text-xs font-semibold text-slate-300">Fleet</h3>
+                    </div>
+                    <div className="space-y-1">
+                      {linkedMembers > 0 && <div className="flex items-center justify-between py-1 px-2 rounded bg-emerald-500/5"><span className="text-[10px] text-emerald-300 font-medium">Hub · {linkedMembers} member{linkedMembers === 1 ? '' : 's'} linked</span><span className="text-[10px] text-emerald-300">✓</span></div>}
+                      {joined && <div className="flex items-center justify-between py-1 px-2 rounded bg-emerald-500/5"><span className="text-[10px] text-emerald-300 font-medium">Member of {joined.hub.name || joined.hub.url} as "{joined.member.name}"</span><span className="text-[10px] text-emerald-300">✓</span></div>}
+                      {!joined && fleetStatus?.pending_join && <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]"><span className="text-[10px] text-slate-400">Joins {fleetStatus.pending_join.hub_url} when setup completes</span></div>}
+                    </div>
+                  </div>
+                )}
 
                 {/* HTTPS & Reverse Proxy */}
                 <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/5'}`}>

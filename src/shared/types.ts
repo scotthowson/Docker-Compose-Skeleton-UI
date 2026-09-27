@@ -2044,6 +2044,8 @@ export interface SetupConfigureResponse {
 export interface SetupCompleteResponse {
   initialized: boolean
   message: string
+  /** A join saved by setup.sh that ran when setup completed (3.9) */
+  fleet_join?: FleetJoinOutcome | null
 }
 
 // POST /stacks/rename
@@ -2767,6 +2769,9 @@ export interface TraefikFeedStatus {
   tls: boolean
   cert_resolver: string
   routes: number
+  /** Routes merged in from fleet members (3.9) */
+  member_routes?: number
+  members?: number
   skipped: { service: string; reason: string }[]
   routes_dir: string
   local_traefik: boolean
@@ -2777,3 +2782,130 @@ export interface TraefikFeedStatus {
 }
 
 export interface TraefikFeedTokenResponse { success: boolean; token: string }
+
+// =============================================================================
+// Fleet (3.9): a hub and the DCS installs in the other VMs (members)
+// =============================================================================
+
+export type FleetRole = 'hub' | 'member' | 'standalone'
+
+/** What a member remembers about the hub it joined */
+export interface FleetHubLink {
+  url: string
+  name: string
+  version: string
+  member_id: string
+  member_name: string
+  vmid: number | null
+  node: string | null
+  matched_by: string | null
+  username: string
+  joined_at: number
+}
+
+/** GET /fleet/status */
+export interface FleetStatus {
+  role: FleetRole
+  members: number
+  hub: FleetHubLink | null
+  join_tokens: number
+  /** A join saved by setup.sh before the first admin existed */
+  pending_join: { hub_url: string; name: string } | null
+  /** How other machines reach this API */
+  self_url: string
+  scan_ports: string
+  proxmox_linked: boolean
+  hostname: string
+  server_name: string
+  version: string
+  hub_account: string
+}
+
+export interface FleetIdentity {
+  hostname: string
+  product_uuid: string
+  ips: string[]
+  api_port: number
+  version: string
+  server_name: string
+  os: string
+  virt: string
+}
+
+export type FleetMatchedBy = 'uuid' | 'ip' | 'name' | 'manual'
+
+export interface FleetMember {
+  id: string
+  name: string
+  url: string
+  username: string
+  role: string
+  source: 'join' | 'manual'
+  added_by: string
+  added_at: number
+  vmid: number | null
+  node: string | null
+  type: ProxmoxGuestType | null
+  matched_by: FleetMatchedBy | null
+  insecure: boolean
+  identity: Partial<FleetIdentity>
+  version: string
+  last_seen: number
+  reachable: boolean
+  last_error: string
+}
+
+export interface FleetMembersResponse { total: number; members: FleetMember[] }
+export interface FleetMemberResponse { success: boolean; member: FleetMember }
+
+/** A member as GET /fleet/overview reports it, with what it answered just now */
+export interface FleetMemberLive extends FleetMember {
+  error: string
+  stacks: StackInfo[]
+  stacks_total: number
+  containers_running: number
+  containers_total: number
+}
+
+export interface FleetOverview {
+  hub: { version: string; name: string; hostname: string }
+  members: FleetMemberLive[]
+  totals: { members: number; reachable: number; stacks: number; containers_running: number; containers_total: number }
+}
+
+/** One guest as the scan saw it */
+export interface FleetGuestScan {
+  node: string
+  type: ProxmoxGuestType
+  vmid: number
+  name: string
+  status: string
+  ips: string[]
+  /** A DCS API answered at this address */
+  dcs: { ip: string; port: number; version: string; url: string } | null
+  /** The member already mapped to this guest */
+  member: { id: string; name: string; url: string } | null
+}
+
+export interface FleetDiscoverResponse { scanned: number; found: number; guests: FleetGuestScan[]; error?: string }
+
+export interface FleetJoinToken { token: string; created_at: number; expires_at: number; created_by: string; uses: number }
+export interface FleetJoinTokensResponse { hub_url: string; tokens: FleetJoinToken[] }
+export interface FleetJoinTokenResponse {
+  success: boolean
+  token: string
+  expires_at: number
+  ttl_hours: number
+  hub_url: string
+  /** DCS_HUB_URL=… DCS_JOIN_TOKEN=… ./setup.sh */
+  command: string
+  /** ./setup.sh --join <hub> <code> */
+  join_command: string
+}
+
+export interface FleetMatch { node: string; type: ProxmoxGuestType; vmid: number; name: string; matched_by: FleetMatchedBy }
+export interface FleetMemberTestResponse { reachable: boolean; error: string; identity: Partial<FleetIdentity>; version: string; match: FleetMatch | null }
+
+export interface FleetJoinHubResponse { success: boolean; member: FleetMember; hub: { name: string; version: string; url: string } }
+export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: string }
+export interface FleetJoinOutcome { joined: boolean; member?: FleetMember; hub?: { name: string; version: string; url: string }; hub_url?: string; error?: string }

@@ -1,7 +1,10 @@
 // =============================================================================
 // Proxmox — the VMs and LXC containers of the Proxmox host DCS is linked to:
-// node load, every guest with its state and resources, and power actions with
-// a confirmation. Works on phones (cards, 44 px buttons, bottom-sheet confirm).
+// node load, every guest with its state and resources, power actions with a
+// confirmation — and, on a hub, the DCS member running in each guest with its
+// stacks (start/stop/restart, deploy here), the scan that finds installs, the
+// join code, and the members that still need a guest. A member shows the hub
+// it belongs to. Works on phones (cards, 44 px buttons, bottom sheets).
 // =============================================================================
 
 import { useEffect, useMemo, useState } from 'react'
@@ -9,6 +12,7 @@ import { createPortal } from 'react-dom'
 import {
   Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
+  Satellite, Link2, KeyRound, Radar, Rocket, MoreHorizontal, PlugZap, Pencil, Trash2, Layers, ExternalLink, Home,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -16,8 +20,17 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxTasks, proxmoxVmAction } from '../api/endpoints'
-import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction } from '../../shared/types'
+import {
+  fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxTasks, proxmoxVmAction,
+  fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
+  testFleetMember, removeFleetMember,
+} from '../api/endpoints'
+import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMember, FleetMemberLive, FleetGuestScan, StackInfo } from '../../shared/types'
+import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
+import JoinHubPanel from '../components/fleet/JoinHubPanel'
+import JoinCodeCard from '../components/fleet/JoinCodeCard'
+import MemberSheet, { type MemberSheetPrefill } from '../components/fleet/MemberSheet'
+import { Sheet, MATCH_LABEL } from '../components/fleet/fleetShared'
 
 const STATUS_POLL = 15_000
 const LIST_POLL = 10_000
@@ -151,10 +164,63 @@ function NodeCard({ node, vmCount }: { node: ProxmoxNode; vmCount: number }) {
   )
 }
 
-function VmRow({ vm, isAdmin, onAction }: { vm: ProxmoxVm; isAdmin: boolean; onAction: (vm: ProxmoxVm, a: ProxmoxVmAction) => void }) {
-  const acts = actionsFor(vm)
+type StackAct = 'start' | 'stop' | 'restart'
+
+function MemberStacks({ member, live, isAdmin, onStackAction, busyKey }: { member: FleetMember; live?: FleetMemberLive; isAdmin: boolean; onStackAction: (m: FleetMember, stack: string, a: StackAct) => void; busyKey: string }) {
+  const stacks = live?.stacks ?? []
+  if (!live) return <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Reading {member.name}'s stacks…</p>
+  if (!live.reachable) return <p className="text-[11px] text-rose-300/90">{member.name} did not answer{live.error ? `: ${live.error}` : ''}</p>
+  if (stacks.length === 0) return <p className="text-[11px] text-slate-500">No stacks on {member.name} yet — deploy a template here.</p>
   return (
-    <div className="glass-card rounded-2xl p-4 flex flex-col gap-3">
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] divide-y divide-white/[0.04]">
+      {stacks.map((st: StackInfo) => {
+        const key = `${member.id}/${st.name}`
+        const busy = busyKey === key
+        return (
+          <div key={st.name} className="flex items-center gap-2.5 px-3 py-2">
+            <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${st.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-slate-200 truncate">{st.name}</p>
+              <p className="text-[10px] text-slate-500">{st.status === 'running' ? `${st.running_containers} container${st.running_containers === 1 ? '' : 's'} running` : 'stopped'}</p>
+            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-1">
+                {busy ? <Loader2 size={13} className="animate-spin text-cyan-400" /> : (
+                  <>
+                    {st.status !== 'running' && <button type="button" onClick={() => onStackAction(member, st.name, 'start')} title="Start" className="h-8 w-8 rounded-lg text-emerald-300 hover:bg-emerald-500/15 flex items-center justify-center"><Play size={13} /></button>}
+                    {st.status === 'running' && <button type="button" onClick={() => onStackAction(member, st.name, 'restart')} title="Restart" className="h-8 w-8 rounded-lg text-slate-300 hover:bg-white/10 flex items-center justify-center"><RotateCw size={13} /></button>}
+                    {st.status === 'running' && <button type="button" onClick={() => onStackAction(member, st.name, 'stop')} title="Stop" className="h-8 w-8 rounded-lg text-rose-300 hover:bg-rose-500/15 flex items-center justify-center"><Square size={13} /></button>}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+interface VmRowProps {
+  vm: ProxmoxVm
+  isAdmin: boolean
+  isHub: boolean
+  member?: FleetMember
+  live?: FleetMemberLive
+  scan?: FleetGuestScan
+  busyKey: string
+  onAction: (vm: ProxmoxVm, a: ProxmoxVmAction) => void
+  onStackAction: (m: FleetMember, stack: string, a: StackAct) => void
+  onDeploy: (m: FleetMember) => void
+  onLink: (p: MemberSheetPrefill) => void
+  onMemberMenu: (m: FleetMember) => void
+}
+
+function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onStackAction, onDeploy, onLink, onMemberMenu }: VmRowProps) {
+  const acts = actionsFor(vm)
+  const found = scan?.dcs && !scan.member ? scan.dcs : null
+  return (
+    <div className={`glass-card rounded-2xl p-4 flex flex-col gap-3 ${member ? 'border border-amber-500/15' : ''}`}>
       <div className="flex items-start gap-3">
         <StatusDot status={vm.status} />
         <div className="min-w-0 flex-1">
@@ -172,6 +238,9 @@ function VmRow({ vm, isAdmin, onAction }: { vm: ProxmoxVm; isAdmin: boolean; onA
             {vm.tags.length > 0 && <span className="flex items-center gap-1"><Tag size={10} /> {vm.tags.join(', ')}</span>}
           </div>
         </div>
+        {member && isAdmin && (
+          <button type="button" onClick={() => onMemberMenu(member)} className="h-9 w-9 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 flex items-center justify-center shrink-0" title={`Manage ${member.name}`}><MoreHorizontal size={15} /></button>
+        )}
       </div>
       {vm.status === 'running' && (
         <div className="grid grid-cols-2 gap-3 text-[11px]">
@@ -185,6 +254,40 @@ function VmRow({ vm, isAdmin, onAction }: { vm: ProxmoxVm; isAdmin: boolean; onA
           </div>
         </div>
       )}
+      {/* the DCS inside this guest */}
+      {member ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-medium ${live && !live.reachable ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-200 border-amber-500/20'}`}>
+              <Satellite size={10} /> {member.name}{member.version ? ` · DCS ${member.version}` : ''}
+            </span>
+            {live?.reachable && <span className="text-slate-400">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span>}
+            <span className="text-slate-600 font-mono truncate">{member.url}</span>
+            {member.matched_by && <span className="text-slate-600" title={MATCH_LABEL[member.matched_by]}>· {member.matched_by === 'manual' ? 'mapped by hand' : `matched by ${member.matched_by}`}</span>}
+          </div>
+          <MemberStacks member={member} live={live} isAdmin={isAdmin} onStackAction={onStackAction} busyKey={busyKey} />
+          {isAdmin && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button type="button" onClick={() => onDeploy(member)} className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-amber-500/25 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20"><Rocket size={13} /> Deploy here</button>
+              <a href={member.url.replace(/:\d+$/, ':3000')} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-white/10 text-slate-300 bg-white/5 hover:bg-white/10" title="Open that server's own dashboard (port 3000)"><ExternalLink size={13} /> Its dashboard</a>
+            </div>
+          )}
+        </div>
+      ) : isHub && vm.status === 'running' && isAdmin ? (
+        <div className="flex items-center justify-between gap-2 flex-wrap text-[11px]">
+          {found ? (
+            <>
+              <span className="text-amber-200 flex items-center gap-1.5"><Radar size={11} /> DCS {found.version} answers at {found.ip}:{found.port}</span>
+              <button type="button" onClick={() => onLink({ name: vm.name, url: found.url, vmid: vm.vmid, node: vm.node, type: vm.type })} className="h-8 px-2.5 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 font-medium hover:bg-amber-500/25 flex items-center gap-1.5"><Link2 size={12} /> Link</button>
+            </>
+          ) : (
+            <>
+              <span className="text-slate-500">No DCS linked to this guest{scan && scan.ips.length === 0 ? ' · address unknown (no guest agent)' : ''}</span>
+              <button type="button" onClick={() => onLink({ name: vm.name, vmid: vm.vmid, node: vm.node, type: vm.type })} className="h-8 px-2.5 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 flex items-center gap-1.5"><Link2 size={12} /> Link…</button>
+            </>
+          )}
+        </div>
+      ) : null}
       {isAdmin && (
         <div className="flex items-center gap-2 flex-wrap">
           {acts.map((a) => {
@@ -202,16 +305,58 @@ function VmRow({ vm, isAdmin, onAction }: { vm: ProxmoxVm; isAdmin: boolean; onA
   )
 }
 
+function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: FleetMember; vms: ProxmoxVm[]; onClose: () => void; onEdit: () => void; onChanged: () => void }) {
+  const { addToast } = useToast()
+  const [busy, setBusy] = useState<'test' | 'remove' | ''>('')
+  const [note, setNote] = useState('')
+  const test = async () => {
+    setBusy('test'); setNote('')
+    try {
+      const r = await testFleetMember(member.id)
+      if (!r.reachable) { setNote(`Not reachable: ${r.error}`); return }
+      setNote(`Answers as ${r.identity?.hostname || member.url}${r.version ? ` (DCS ${r.version})` : ''}${r.match ? ` · guest ${r.match.vmid} ${r.match.name} — ${MATCH_LABEL[r.match.matched_by]}` : ' · no guest matched'}`)
+      onChanged()
+    } catch (e) { setNote(e instanceof Error ? e.message : 'The test failed') } finally { setBusy('') }
+  }
+  const remove = async () => {
+    if (!window.confirm(`Forget ${member.name}? Its stacks keep running; only the hub stops managing it.`)) return
+    setBusy('remove')
+    try { await removeFleetMember(member.id); addToast({ type: 'success', message: `${member.name} removed from the fleet` }); onChanged(); onClose() }
+    catch (e) { setNote(e instanceof Error ? e.message : 'Could not remove'); setBusy('') }
+  }
+  const guest = vms.find((v) => v.vmid === member.vmid)
+  return (
+    <Sheet title={member.name} subtitle={`${member.url} · account ${member.username}${guest ? ` · ${guest.type === 'qemu' ? 'VM' : 'LXC'} ${guest.vmid} ${guest.name}` : member.vmid ? ` · guest ${member.vmid}` : ' · no guest yet'}`} icon={<Satellite size={18} />} onClose={onClose}>
+      <div className="space-y-2">
+        <p className="text-[11px] text-slate-500">Added {new Date(member.added_at * 1000).toLocaleString()} by {member.added_by} ({member.source === 'join' ? 'joined with a code' : 'added by address'}) · last answered {member.last_seen ? ago(member.last_seen) : 'never'}{member.last_error ? ` · ${member.last_error}` : ''}</p>
+        {note && <p className="text-xs text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">{note}</p>}
+        <button type="button" onClick={test} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
+        <button type="button" onClick={onEdit} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50"><Pencil size={15} /> Edit name, address, account or guest</button>
+        <button type="button" onClick={remove} disabled={!!busy} className="w-full h-11 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-200 hover:bg-rose-500/20 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
+      </div>
+    </Sheet>
+  )
+}
+
 export default function Proxmox() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole === 'admin')
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+  const { addToast } = useToast()
   const status = usePolling(fetchProxmoxStatus, STATUS_POLL, { enabled: isConnected })
   const configured = !!status.data?.configured
   const reachable = !!status.data?.reachable
   const nodes = usePolling(fetchProxmoxNodes, LIST_POLL, { enabled: isConnected && configured && reachable })
   const vms = usePolling(fetchProxmoxVms, LIST_POLL, { enabled: isConnected && configured && reachable })
   const tasks = usePolling(fetchProxmoxTasks, TASK_POLL, { enabled: isConnected && configured && reachable })
+  // the fleet: what this server is, the members and what they run, the last scan
+  const fleet = usePolling(fetchFleetStatus, STATUS_POLL, { enabled: isConnected })
+  const role = fleet.data?.role ?? 'standalone'
+  const memberCount = fleet.data?.members ?? 0
+  const isHub = role === 'hub' || memberCount > 0
+  const overview = usePolling(fetchFleetOverview, LIST_POLL, { enabled: isConnected && memberCount > 0 })
+  const scan = usePolling(fetchFleetDiscover, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
+  const localStacks = usePolling(fetchStacks, LIST_POLL, { enabled: isConnected && (isHub || role === 'member') })
   const [query, setQuery] = useState('')
   // A search result ("VM X") lands here with the guest pre-filtered
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
@@ -221,6 +366,17 @@ export default function Proxmox() {
   }, [navigationPayload])
   const [show, setShow] = useState<'all' | 'running' | 'stopped' | 'qemu' | 'lxc'>('all')
   const [pending, setPending] = useState<{ vm: ProxmoxVm; action: ProxmoxVmAction } | null>(null)
+  const [sheet, setSheet] = useState<'link' | 'code' | null>(null)
+  const [adding, setAdding] = useState<MemberSheetPrefill | null>(null)
+  const [editing, setEditing] = useState<FleetMember | null>(null)
+  const [menu, setMenu] = useState<FleetMember | null>(null)
+  const [busyKey, setBusyKey] = useState('')
+
+  const members = overview.data?.members ?? []
+  const liveById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
+  const memberByVm = useMemo(() => { const m = new Map<number, FleetMemberLive>(); for (const x of members) if (x.vmid) m.set(x.vmid, x); return m }, [members])
+  const scanByVm = useMemo(() => new Map((scan.data?.guests ?? []).map((g) => [g.vmid, g])), [scan.data])
+  const unmapped = members.filter((m) => !m.vmid)
 
   const list = useMemo(() => {
     const all = vms.data?.vms ?? []
@@ -230,37 +386,87 @@ export default function Proxmox() {
       if (show === 'stopped' && v.status === 'running') return false
       if (show === 'qemu' && v.type !== 'qemu') return false
       if (show === 'lxc' && v.type !== 'lxc') return false
-      if (q && !(`${v.name} ${v.vmid} ${v.node} ${v.tags.join(' ')}`.toLowerCase().includes(q))) return false
+      const m = memberByVm.get(v.vmid)
+      const hay = `${v.name} ${v.vmid} ${v.node} ${v.tags.join(' ')} ${m ? `${m.name} ${m.url} ${m.stacks.map((st) => st.name).join(' ')}` : ''}`.toLowerCase()
+      if (q && !hay.includes(q)) return false
       return true
     })
-  }, [vms.data, query, show])
+  }, [vms.data, query, show, memberByVm])
 
-  const refreshAll = () => { status.refresh(); nodes.refresh(); vms.refresh(); tasks.refresh() }
+  const refreshAll = () => { status.refresh(); nodes.refresh(); vms.refresh(); tasks.refresh(); fleet.refresh(); overview.refresh(); scan.refresh(); localStacks.refresh() }
+  const refreshFleet = () => { fleet.refresh(); overview.refresh(); scan.refresh() }
   const s = status.data
+
+  const stackAction = async (m: FleetMember, stack: string, a: StackAct) => {
+    const key = `${m.id}/${stack}`
+    setBusyKey(key)
+    try {
+      const fn = a === 'start' ? startStack : a === 'stop' ? stopStack : restartStack
+      const r = await fn(stack, m.id)
+      addToast({ type: r.success === false ? 'error' : 'success', message: (r as { message?: string }).message || `${stack} on ${m.name}: ${a}` })
+    } catch (e) {
+      addToast({ type: 'error', message: `${stack} on ${m.name}: ${e instanceof Error ? e.message : 'failed'}` })
+    } finally { setBusyKey(''); setTimeout(() => overview.refresh(), 1200) }
+  }
+  const deployTo = (m: FleetMember) => setCurrentPage('templates', { deployTo: m.id, deployToName: m.name })
+
+  const roleChip = role === 'member'
+    ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1"><Satellite size={10} /> member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</span>
+    : isHub ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20 flex items-center gap-1"><Satellite size={10} /> hub · {memberCount} member{memberCount === 1 ? '' : 's'}</span>
+    : null
 
   return (
     <div className="space-y-5">
       <DisconnectedBanner />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2"><Server size={20} className="text-amber-400" /> Proxmox</h1>
+          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2"><Server size={20} className="text-amber-400" /> Proxmox {roleChip}</h1>
           <p className="text-sm text-slate-400 mt-1">
             {!s ? 'Checking the link…' : !configured ? 'Not linked yet.' : !reachable ? 'Linked, but Proxmox does not answer.' : `Proxmox VE ${s.version} · ${s.nodes_online}/${s.nodes} node${s.nodes === 1 ? '' : 's'} online · ${s.vms.running} of ${s.vms.total} guests running`}
+            {overview.data && memberCount > 0 && ` · ${overview.data.totals.reachable}/${overview.data.totals.members} members answering · ${overview.data.totals.stacks} stacks · ${overview.data.totals.containers_running}/${overview.data.totals.containers_total} containers`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && configured && reachable && role !== 'member' && (
+            <>
+              <button onClick={() => setSheet('link')} className="h-10 px-3 rounded-xl bg-amber-500/15 border border-amber-500/25 text-sm text-amber-200 hover:bg-amber-500/25 flex items-center gap-2"><Radar size={14} /> Link VMs</button>
+              <button onClick={() => setSheet('code')} className="h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 flex items-center gap-2"><KeyRound size={14} /> Join code</button>
+              <button onClick={() => setAdding({})} className="h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 flex items-center gap-2"><Link2 size={14} /> Add member</button>
+            </>
+          )}
           {isAdmin && <button onClick={() => setCurrentPage('config')} className="h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 flex items-center gap-2"><Settings2 size={14} /> Settings</button>}
-          <button onClick={refreshAll} className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 flex items-center justify-center" title="Refresh"><RefreshCw size={14} className={vms.loading ? 'animate-spin' : ''} /></button>
+          <button onClick={refreshAll} className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 flex items-center justify-center" title="Refresh"><RefreshCw size={14} className={vms.loading || overview.loading ? 'animate-spin' : ''} /></button>
         </div>
       </div>
 
+      {/* a member: the hub it belongs to */}
+      {fleet.data && role === 'member' && (
+        <JoinHubPanel hub={fleet.data.hub} onLeft={() => { addToast({ type: 'success', message: 'Left the hub' }); refreshFleet() }} />
+      )}
+      {fleet.data?.pending_join && role !== 'member' && (
+        <div className="glass-card rounded-2xl p-4">
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Satellite size={15} className="text-amber-400" /> setup.sh saved a join to {fleet.data.pending_join.hub_url}</p>
+          <p className="text-xs text-slate-400 mt-1 mb-3">It runs here, on the progress card.</p>
+          <JoinHubPanel pending={fleet.data.pending_join} onJoined={() => refreshFleet()} />
+        </div>
+      )}
+
       {s && !configured && (
-        <div className="glass-card rounded-2xl p-6 text-center">
-          <Server size={36} className="mx-auto text-amber-400/70" />
-          <h2 className="mt-3 text-lg font-semibold text-slate-100">Link DCS to your Proxmox host</h2>
-          <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto">On Proxmox open <b>Datacenter → Permissions → API Tokens</b>, add a token for a user (untick <i>Privilege Separation</i>, or give the token the roles <code>VM.Audit</code>, <code>VM.PowerMgmt</code> and <code>Sys.Audit</code> on <code>/</code>). Then enter the URL, token ID and secret in Server Config → Proxmox and press <i>Test connection</i>.</p>
-          {isAdmin && <button onClick={() => setCurrentPage('config')} className="mt-4 h-11 px-5 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold">Open Server Config</button>}
-          <p className="mt-3 text-[11px] text-slate-500">Full walkthrough: docs/PROXMOX.md in the DCS repository</p>
+        <div className="glass-card rounded-2xl p-6">
+          <div className="text-center">
+            <Server size={36} className="mx-auto text-amber-400/70" />
+            <h2 className="mt-3 text-lg font-semibold text-slate-100">Link DCS to your Proxmox host</h2>
+            <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto">On Proxmox open <b>Datacenter → Permissions → API Tokens</b>, add a token for a user (untick <i>Privilege Separation</i>, or give the token the roles <code>VM.Audit</code>, <code>VM.PowerMgmt</code> and <code>Sys.Audit</code> on <code>/</code>). Then enter the URL, token ID and secret in Server Config → Proxmox and press <i>Test connection</i>.</p>
+            {isAdmin && <button onClick={() => setCurrentPage('config')} className="mt-4 h-11 px-5 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold">Open Server Config</button>}
+            <p className="mt-3 text-[11px] text-slate-500">Full walkthrough: docs/PROXMOX.md in the DCS repository</p>
+          </div>
+          {isAdmin && role !== 'member' && (
+            <div className="mt-6 pt-5 border-t border-white/5">
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2"><Satellite size={14} className="text-emerald-400" /> Or: this VM runs stacks under a hub</h3>
+              <p className="text-xs text-slate-400 mt-1 mb-3">The hub (the DCS linked to Proxmox) shows this server's stacks under its VM and deploys here. Enter the hub's address and a join code from its Proxmox page.</p>
+              <JoinHubPanel onJoined={() => refreshFleet()} compact />
+            </div>
+          )}
         </div>
       )}
 
@@ -288,13 +494,34 @@ export default function Proxmox() {
             </section>
           )}
 
+          {/* this server's own stacks, so everything is on one page */}
+          {(isHub || role === 'member') && localStacks.data && (
+            <section>
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Home size={12} /> This server{fleet.data?.server_name ? ` · ${fleet.data.server_name}` : ''}{isHub ? ' (hub)' : ''}</h2>
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                  <p className="text-[11px] text-slate-400">{localStacks.data.total} stack{localStacks.data.total === 1 ? '' : 's'} run here, on DCS {fleet.data?.version}{isHub ? ' — the hub itself keeps stacks like any member' : ''}</p>
+                  <button type="button" onClick={() => setCurrentPage('stacks')} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Layers size={12} /> Stacks page</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {localStacks.data.stacks.map((st) => (
+                    <button key={st.name} type="button" onClick={() => setCurrentPage('stacks', { highlight: st.name })} className="h-8 px-2.5 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5">
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${st.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} /> {st.name} <span className="text-slate-600">{st.running_containers}</span>
+                    </button>
+                  ))}
+                  {localStacks.data.stacks.length === 0 && <span className="text-[11px] text-slate-500">no stacks yet</span>}
+                </div>
+              </div>
+            </section>
+          )}
+
           <section>
             <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Box size={12} /> VMs &amp; containers {vms.data ? <span className="text-slate-600">{list.length}/{vms.data.total}</span> : null}</h2>
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Box size={12} /> VMs &amp; containers {vms.data ? <span className="text-slate-600">{list.length}/{vms.data.total}</span> : null}{isHub && <span className="text-slate-600 normal-case tracking-normal">· each with the DCS it runs</span>}</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, id, node, tag" className="h-10 pl-8 pr-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-52 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, id, node, tag, stack" className="h-10 pl-8 pr-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-56 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
                 </div>
                 <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden">
                   {(['all', 'running', 'stopped', 'qemu', 'lxc'] as const).map((k) => (
@@ -311,10 +538,36 @@ export default function Proxmox() {
               <div className="glass-card rounded-2xl p-6 text-center text-sm text-slate-400">Nothing matches.</div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {list.map((vm) => <VmRow key={`${vm.node}/${vm.type}/${vm.vmid}`} vm={vm} isAdmin={isAdmin} onAction={(v, a) => setPending({ vm: v, action: a })} />)}
+                {list.map((vm) => {
+                  const m = memberByVm.get(vm.vmid)
+                  return <VmRow key={`${vm.node}/${vm.type}/${vm.vmid}`} vm={vm} isAdmin={isAdmin} isHub={isHub || role === 'standalone'} member={m} live={m ? liveById.get(m.id) : undefined} scan={scanByVm.get(vm.vmid)} busyKey={busyKey}
+                    onAction={(v, a) => setPending({ vm: v, action: a })} onStackAction={stackAction} onDeploy={deployTo} onLink={(p) => setAdding(p)} onMemberMenu={(mm) => setMenu(mm)} />
+                })}
               </div>
             )}
           </section>
+
+          {unmapped.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Satellite size={12} /> Members without a guest</h2>
+              <div className="glass-card rounded-2xl divide-y divide-white/[0.04]">
+                {unmapped.map((m) => (
+                  <div key={m.id} className="px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`inline-block w-2 h-2 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-200">{m.name} <span className="text-[11px] text-slate-500 font-mono">{m.url}</span></p>
+                        <p className="text-[11px] text-slate-500">{m.reachable ? `${m.stacks_total} stacks · ${m.containers_running}/${m.containers_total} containers` : m.error || 'no answer'} · the hub could not tell which guest this is</p>
+                      </div>
+                      {isAdmin && <button type="button" onClick={() => setEditing(m)} className="h-9 px-3 rounded-xl bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 flex items-center gap-1.5"><Pencil size={12} /> Pick the guest</button>}
+                      {isAdmin && <button type="button" onClick={() => setMenu(m)} className="h-9 w-9 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 flex items-center justify-center"><MoreHorizontal size={14} /></button>}
+                    </div>
+                    <MemberStacks member={m} live={m} isAdmin={isAdmin} onStackAction={stackAction} busyKey={busyKey} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {tasks.data && tasks.data.tasks.length > 0 && (
             <section>
@@ -333,11 +586,24 @@ export default function Proxmox() {
             </section>
           )}
 
-          <p className="text-[11px] text-slate-600 flex items-center gap-1"><ShieldCheck size={11} /> Power actions are audited and reach your webhooks; a guest that stops on its own raises a VM alert.</p>
+          <p className="text-[11px] text-slate-600 flex items-center gap-1"><ShieldCheck size={11} /> Power actions are audited and reach your webhooks; a guest that stops on its own raises a VM alert{isHub ? '; a member that stops answering raises a fleet alert' : ''}.</p>
         </>
       )}
 
       {pending && <ConfirmSheet vm={pending.vm} action={pending.action} onClose={() => setPending(null)} onDone={() => { setTimeout(() => { vms.refresh(); tasks.refresh(); status.refresh() }, 1500) }} />}
+      {sheet === 'link' && (
+        <Sheet title="Link the VMs" subtitle="Scan the guests for DCS installs and link them; VMs without one get the join code" icon={<Radar size={18} />} onClose={() => setSheet(null)} wide>
+          <FleetLinkPanel vms={vms.data?.vms} onChanged={refreshFleet} />
+        </Sheet>
+      )}
+      {sheet === 'code' && (
+        <Sheet title="Join code" subtitle="What a Docker VM runs to become a member of this hub" icon={<KeyRound size={18} />} onClose={() => setSheet(null)} wide>
+          <JoinCodeCard />
+        </Sheet>
+      )}
+      {adding && <MemberSheet prefill={adding} vms={vms.data?.vms ?? []} onClose={() => setAdding(null)} onSaved={(m) => { setAdding(null); addToast({ type: 'success', message: `${m.name} joined the fleet` }); refreshFleet() }} />}
+      {editing && <MemberSheet member={editing} vms={vms.data?.vms ?? []} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); addToast({ type: 'success', message: `${m.name} saved` }); refreshFleet() }} />}
+      {menu && <MemberMenuSheet member={menu} vms={vms.data?.vms ?? []} onClose={() => setMenu(null)} onEdit={() => { setEditing(menu); setMenu(null) }} onChanged={refreshFleet} />}
     </div>
   )
 }

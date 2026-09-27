@@ -34,6 +34,8 @@ import type {
   ProxmoxVmAction,
   TraefikFeedStatus,
   TraefikFeedTokenResponse,
+  FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
+  FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
   SystemInfo,
   NetworkListResponse,
   NetworkDetail,
@@ -245,9 +247,14 @@ export function fetchSystemInfo(): Promise<SystemInfo> {
 // Stacks
 // ---------------------------------------------------------------------------
 
-/** GET /stacks — List all stacks */
-export function fetchStacks(): Promise<StackListResponse> {
-  return apiClient.get<StackListResponse>('/stacks')
+/** Path of a call made on a fleet member through the hub (3.9); the path itself when member is empty */
+export function memberPath(member: string | null | undefined, path: string): string {
+  return member ? `/fleet/members/${encodeURIComponent(member)}/api${path}` : path
+}
+
+/** GET /stacks — List all stacks (on a fleet member when one is given) */
+export function fetchStacks(member?: string | null): Promise<StackListResponse> {
+  return apiClient.get<StackListResponse>(memberPath(member, '/stacks'))
 }
 
 /** GET /stacks/:name — Stack detail */
@@ -270,23 +277,23 @@ export function fetchStackLogs(name: string): Promise<StackLogsResponse> {
 }
 
 /** POST /stacks/:name/start — Start a stack */
-export function startStack(name: string): Promise<StackActionResponse> {
+export function startStack(name: string, member?: string | null): Promise<StackActionResponse> {
   return apiClient.post<StackActionResponse>(
-    `/stacks/${encodeURIComponent(name)}/start`,
+    memberPath(member, `/stacks/${encodeURIComponent(name)}/start`), undefined, member ? 120000 : undefined,
   )
 }
 
 /** POST /stacks/:name/stop — Stop a stack */
-export function stopStack(name: string): Promise<StackActionResponse> {
+export function stopStack(name: string, member?: string | null): Promise<StackActionResponse> {
   return apiClient.post<StackActionResponse>(
-    `/stacks/${encodeURIComponent(name)}/stop`, undefined, 60000,
+    memberPath(member, `/stacks/${encodeURIComponent(name)}/stop`), undefined, 60000,
   )
 }
 
 /** POST /stacks/:name/restart — Restart a stack */
-export function restartStack(name: string): Promise<StackActionResponse> {
+export function restartStack(name: string, member?: string | null): Promise<StackActionResponse> {
   return apiClient.post<StackActionResponse>(
-    `/stacks/${encodeURIComponent(name)}/restart`, undefined, 90000,
+    memberPath(member, `/stacks/${encodeURIComponent(name)}/restart`), undefined, 90000,
   )
 }
 
@@ -860,8 +867,8 @@ export function renameContainer(name: string, newName: string): Promise<Containe
 
 /** GET /stacks/:name/services — Per-service status within a stack */
 /** GET /stacks/:stack/activity — Progress of the background action on a stack (deploy, start, stop) */
-export function fetchStackActivity(name: string): Promise<StackActivityResponse> {
-  return apiClient.get<StackActivityResponse>(`/stacks/${encodeURIComponent(name)}/activity`)
+export function fetchStackActivity(name: string, member?: string | null): Promise<StackActivityResponse> {
+  return apiClient.get<StackActivityResponse>(memberPath(member, `/stacks/${encodeURIComponent(name)}/activity`))
 }
 
 export function fetchStackServices(name: string): Promise<StackServicesResponse> {
@@ -1307,8 +1314,8 @@ export function deployTemplate(name: string, opts: {
   authelia_services?: string[]
   /** services Sablier starts on demand (route carries the middleware) */
   on_demand_services?: string[]
-}): Promise<TemplateDeployResponse> {
-  return apiClient.post<TemplateDeployResponse>(`/templates/${encodeURIComponent(name)}/deploy`, opts, 120000)
+}, member?: string | null): Promise<TemplateDeployResponse> {
+  return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 180000)
 }
 
 /** POST /templates/import — Import a custom template */
@@ -1348,15 +1355,15 @@ export function fetchDeployHistory(): Promise<DeployHistoryResponse> {
 /** POST /templates/:name/undeploy — Remove deployed services from a stack */
 export function undeployTemplate(name: string, opts: {
   target_stack: string; services: string[]; remove_containers?: boolean; remove_data?: boolean
-}): Promise<TemplateUndeployResponse> {
-  return apiClient.post<TemplateUndeployResponse>(`/templates/${encodeURIComponent(name)}/undeploy`, opts, 120000)
+}, member?: string | null): Promise<TemplateUndeployResponse> {
+  return apiClient.post<TemplateUndeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/undeploy`), opts, 120000)
 }
 
 /** POST /templates/:name/dry-run — Preview deployment without writing */
 export function dryRunTemplate(name: string, opts: {
   target_stack: string; variables?: Record<string, string>; exclude_services?: string[]
-}): Promise<TemplateDryRunResponse> {
-  return apiClient.post<TemplateDryRunResponse>(`/templates/${encodeURIComponent(name)}/dry-run`, opts)
+}, member?: string | null): Promise<TemplateDryRunResponse> {
+  return apiClient.post<TemplateDryRunResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/dry-run`), opts, member ? 60000 : undefined)
 }
 
 /** GET /automations — List automation rules */
@@ -1859,6 +1866,85 @@ export function proxmoxTest(body: { url?: string; token_id?: string; token_secre
 // =============================================================================
 // Traefik feed (3.8)
 // =============================================================================
+
+// =============================================================================
+// Fleet (3.9): the hub and its members
+// =============================================================================
+
+/** GET /fleet/status — hub, member or standalone; the hub this server joined; a pending join */
+export function fetchFleetStatus(): Promise<FleetStatus> {
+  return apiClient.get<FleetStatus>('/fleet/status')
+}
+
+/** GET /fleet/members — the members this hub manages */
+export function fetchFleetMembers(): Promise<FleetMembersResponse> {
+  return apiClient.get<FleetMembersResponse>('/fleet/members')
+}
+
+/** GET /fleet/members/:id — one member with a live reachability check */
+export function fetchFleetMember(id: string): Promise<FleetMember> {
+  return apiClient.get<FleetMember>(`/fleet/members/${encodeURIComponent(id)}`)
+}
+
+/** POST /fleet/members — add a member by address and an account on it */
+export function addFleetMember(body: { url: string; username: string; password: string; name?: string; vmid?: number | null; node?: string | null; type?: string | null; insecure?: boolean }): Promise<FleetMemberResponse> {
+  return apiClient.post<FleetMemberResponse>('/fleet/members', body, 90000)
+}
+
+/** PUT /fleet/members/:id — rename, re-address or re-map a member */
+export function updateFleetMember(id: string, body: { name?: string; url?: string; username?: string; password?: string; vmid?: number | null; node?: string | null; type?: string | null; insecure?: boolean }): Promise<FleetMemberResponse> {
+  return apiClient.put<FleetMemberResponse>(`/fleet/members/${encodeURIComponent(id)}`, body)
+}
+
+/** DELETE /fleet/members/:id — forget a member */
+export function removeFleetMember(id: string): Promise<{ success: boolean; id: string }> {
+  return apiClient.delete<{ success: boolean; id: string }>(`/fleet/members/${encodeURIComponent(id)}`)
+}
+
+/** POST /fleet/members/:id/test — log in afresh, read the identity, match the guest */
+export function testFleetMember(id: string): Promise<FleetMemberTestResponse> {
+  return apiClient.post<FleetMemberTestResponse>(`/fleet/members/${encodeURIComponent(id)}/test`, {}, 90000)
+}
+
+/** GET /fleet/overview — every member with its stacks and container counts */
+export function fetchFleetOverview(): Promise<FleetOverview> {
+  return apiClient.get<FleetOverview>('/fleet/overview')
+}
+
+/** GET /fleet/discover — the last scan of the guests for DCS installs (30 s cache) */
+export function fetchFleetDiscover(): Promise<FleetDiscoverResponse> {
+  return apiClient.get<FleetDiscoverResponse>('/fleet/discover')
+}
+
+/** POST /fleet/discover — scan now; Proxmox values may be given before they are saved (the wizard) */
+export function runFleetDiscover(pve?: { url: string; token_id: string; token_secret: string; verify_tls: boolean }): Promise<FleetDiscoverResponse> {
+  return apiClient.post<FleetDiscoverResponse>('/fleet/discover', pve ?? {}, 120000)
+}
+
+/** GET /fleet/join-tokens — the join codes still valid */
+export function fetchFleetJoinTokens(): Promise<FleetJoinTokensResponse> {
+  return apiClient.get<FleetJoinTokensResponse>('/fleet/join-tokens')
+}
+
+/** POST /fleet/join-tokens — mint a join code */
+export function createFleetJoinToken(ttlHours = 24): Promise<FleetJoinTokenResponse> {
+  return apiClient.post<FleetJoinTokenResponse>('/fleet/join-tokens', { ttl_hours: ttlHours })
+}
+
+/** DELETE /fleet/join-tokens/:token — revoke a join code */
+export function revokeFleetJoinToken(token: string): Promise<{ success: boolean }> {
+  return apiClient.delete<{ success: boolean }>(`/fleet/join-tokens/${encodeURIComponent(token)}`)
+}
+
+/** POST /fleet/join-hub — make this server a member of a hub */
+export function joinFleetHub(body: { hub_url?: string; token?: string; name?: string; url?: string; pending?: boolean }): Promise<FleetJoinHubResponse> {
+  return apiClient.post<FleetJoinHubResponse>('/fleet/join-hub', body, 120000)
+}
+
+/** DELETE /fleet/hub — leave the hub */
+export function leaveFleetHub(): Promise<FleetLeaveResponse> {
+  return apiClient.delete<FleetLeaveResponse>('/fleet/hub')
+}
 
 /** GET /traefik/feed/status — what a Traefik on another machine can pull, and when it last did */
 export function fetchTraefikFeedStatus(): Promise<TraefikFeedStatus> {
