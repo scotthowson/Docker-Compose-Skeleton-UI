@@ -4,6 +4,7 @@
 
 import React from 'react'
 import { ImageInfo } from '../../../shared/types'
+import VmCapsule from '../fleet/VmCapsule'
 import { HardDrive, Tag, Clock, Hash, ArrowUpCircle, CheckCircle } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -71,9 +72,11 @@ function agePercent(ageDays: number): number {
 
 interface ImageCardProps {
   image: ImageInfo
+  /** the fleet view: the card says where the image lives */
+  showWhere?: boolean
 }
 
-const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
+const ImageCard: React.FC<ImageCardProps> = ({ image, showWhere = false }) => {
   const style = STALENESS_STYLES[image.staleness] ?? STALENESS_STYLES.unknown
   const pct = agePercent(image.age_days)
 
@@ -84,6 +87,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image }) => {
         <div className="flex items-center gap-2 min-w-0">
           <HardDrive className="h-4 w-4 text-cyan-400 flex-shrink-0" />
           <div className="min-w-0">
+            {showWhere && <div className="mb-1"><VmCapsule member={image.member} name={image.member_name} vmid={image.vmid} size="xs" /></div>}
             <p className="text-sm font-semibold text-white truncate" title={image.repository}>
               {truncate(image.repository, 35)}
             </p>

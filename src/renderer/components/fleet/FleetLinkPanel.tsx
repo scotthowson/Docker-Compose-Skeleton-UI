@@ -60,7 +60,8 @@ export default function FleetLinkPanel({ pve, autoRun = true, showJoinCode = tru
       const msg = st.error || st.hints?.[0] || 'Proxmox did not answer'
       const tokenProblem = /token|privilege|permission|403|401/i.test(msg)
       setCurrent(tokenProblem ? 1 : 0); setState('failed'); setStatus(msg); push(msg, 'bad')
-      for (const h of st.hints ?? []) push(h, 'muted')
+      // the hints repeat the error itself on some failures: only the extra ones are worth a line
+      for (const h of [...new Set(st.hints ?? [])]) { if (h !== msg) push(h, 'muted') }
       return
     }
     push(`Proxmox VE ${st.version} answered at ${st.url || pve?.url || ''}`, 'ok')

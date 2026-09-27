@@ -2,7 +2,7 @@
 // Automations — Scheduled Actions & Automation Rules for Docker operations
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Zap, Plus, Trash2, Clock, Play, Pause, Loader2,
   CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
@@ -25,6 +25,9 @@ import {
   fetchAutomationHistory,
   runAutomation,
 } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import type { AutomationRule, AutomationHistoryEntry } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -226,11 +229,15 @@ export default function Automations() {
   const [expandedHistoryIdx, setExpandedHistoryIdx] = useState<number | null>(null)
 
   // Polling
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedAutomations = useCallback(() => fetchAutomations(scope), [scope])
   const { data, loading, error, refresh } = usePolling(
-    fetchAutomations,
+    fetchScopedAutomations,
     10000,
     { enabled: isConnected },
   )
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refresh() } }, [scope, refresh])
 
   const automations: AutomationRule[] = useMemo(() => data?.automations ?? [], [data])
 
@@ -250,7 +257,7 @@ export default function Automations() {
   const handleToggle = useCallback(async (rule: AutomationRule) => {
     setTogglingId(rule.id)
     try {
-      await updateAutomation(rule.id, { enabled: !rule.enabled })
+      await updateAutomation(rule.id, { enabled: !rule.enabled }, rule.member ?? scopeMember)
       addToast({
         type: 'success',
         message: `${rule.name} ${rule.enabled ? 'disabled' : 'enabled'}`,
@@ -266,7 +273,7 @@ export default function Automations() {
   const handleRun = useCallback(async (rule: AutomationRule) => {
     setRunningId(rule.id)
     try {
-      const res = await runAutomation(rule.id)
+      const res = await runAutomation(rule.id, rule.member ?? scopeMember)
       addToast({ type: res.success ? 'success' : 'error', message: `${rule.name}: ${res.message || (res.success ? 'done' : 'failed')}` })
       refresh()
     } catch (err) {
@@ -277,9 +284,10 @@ export default function Automations() {
   }, [addToast, refresh])
 
   const handleDelete = useCallback(async (id: string) => {
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
     setDeleting(true)
     try {
-      await deleteAutomation(id)
+      await deleteAutomation(id, scopeMember)
       addToast({ type: 'success', message: 'Automation rule deleted' })
       setConfirmDeleteId(null)
       refresh()
@@ -292,6 +300,7 @@ export default function Automations() {
 
   const handleCreate = useCallback(async () => {
     if (!formName.trim()) return
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
     setCreating(true)
     try {
       const triggerValue = formTriggerType === 'schedule' ? formCron : formCondition
@@ -303,10 +312,10 @@ export default function Automations() {
         action_target: formActionTarget.trim() || '*',
       }
       if (editingId) {
-        await updateAutomation(editingId, payload)
+        await updateAutomation(editingId, payload, scopeMember)
         addToast({ type: 'success', message: 'Automation rule updated' })
       } else {
-        await createAutomation({ ...payload, enabled: true })
+        await createAutomation({ ...payload, enabled: true }, scopeMember)
         addToast({ type: 'success', message: 'Automation rule created' })
       }
       setShowCreateModal(false)
@@ -409,7 +418,8 @@ export default function Automations() {
             <Zap size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Automations</span></h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Automations</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!data} /></div>}
             <p className="text-xs text-slate-500">
               Reactive rules — trigger actions based on system conditions
             </p>
@@ -575,6 +585,7 @@ export default function Automations() {
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-bold text-slate-100 truncate">{rule.name}</h3>
+                  {rule.member !== undefined && <div className="mt-1"><VmCapsule member={rule.member} name={rule.member_name} vmid={rule.vmid} size="xs" onClick={() => setScope(rule.member ?? 'hub')} /></div>}
                 </div>
                 <button
                   onClick={() => isAdmin && handleToggle(rule)}

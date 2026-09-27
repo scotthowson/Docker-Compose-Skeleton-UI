@@ -2,7 +2,7 @@
 // Volumes — Docker volume management with search, sort, delete & batch ops
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   HardDrive,
@@ -28,6 +28,9 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { fetchVolumes, deleteVolume } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { LoadingState } from '../components/common/PageState'
@@ -105,12 +108,14 @@ function DeleteConfirmModal({
   const [error, setError] = useState('')
   const { addToast } = useToast()
 
+  const { scope: fleetScope, member: scopeMember } = useFleetScope()
   const handleDelete = async () => {
     if (deleting) return
+    if (fleetScope === 'all') { setError('Everywhere is a view: pick the hub or one VM above, then delete it there'); return }
     setDeleting(true)
     setError('')
     try {
-      await deleteVolume(volumeName)
+      await deleteVolume(volumeName, scopeMember)
       addToast({
         type: 'success',
         message: `Volume "${volumeName}" deleted successfully`,
@@ -343,13 +348,17 @@ export default function Volumes() {
   }, [batchConfirmOpen, deleteTarget])
 
   // Poll volumes data
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedVolumes = useCallback(() => fetchVolumes(scope), [scope])
   const {
     data: volumesData,
     loading,
     refresh,
-  } = usePolling<VolumeListResponse>(fetchVolumes, VOLUME_POLL_INTERVAL, {
+  } = usePolling<VolumeListResponse>(fetchScopedVolumes, VOLUME_POLL_INTERVAL, {
     enabled: isConnected,
   })
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refresh() } }, [scope, refresh])
 
   const volumes: VolumeInfo[] = volumesData?.volumes ?? []
   const hasLoaded = volumesData !== null
@@ -458,13 +467,14 @@ export default function Volumes() {
   const handleBatchDelete = useCallback(async () => {
     setBatchConfirmOpen(false)
     if (selectedVolumes.size === 0) return
+    if (scope === 'all') { setBatchResults([{ name: '—', success: false, message: 'Everywhere is a view: pick the hub or one VM above, then delete there' }]); return }
     setBatchLoading(true)
     setBatchResults(null)
 
     const results: BatchResult[] = []
     for (const name of selectedVolumes) {
       try {
-        await deleteVolume(name)
+        await deleteVolume(name, scopeMember)
         results.push({ name, success: true, message: 'Deleted successfully' })
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to delete'
@@ -539,8 +549,9 @@ export default function Volumes() {
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight">
-              <span className="text-gradient">Volumes</span>
+              <span className="text-gradient">Volumes</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}
             </h2>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!volumesData} /></div>}
             <p className="text-sm text-slate-400">
               Manage Docker volume storage and persistent data
             </p>
@@ -977,6 +988,7 @@ export default function Volumes() {
                           <span className="font-mono text-xs text-slate-200 truncate max-w-[240px]" title={vol.name}>
                             {vol.name}
                           </span>
+                          {vol.member !== undefined && <VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" />}
                         </div>
                       </td>
 

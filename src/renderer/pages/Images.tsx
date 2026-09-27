@@ -2,10 +2,15 @@
 // Images — Image tracking page with table/card toggle and summary stats
 // =============================================================================
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
 import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+
+/** a selection or row key: the image on its DCS (the hub's rows have no member) */
+export const imageKey = (i: { member?: string | null; id: string }) => `${i.member ?? ''}|${i.id}`
 import { useToast } from '../components/common/Toast'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
@@ -66,16 +71,21 @@ const Images: React.FC = () => {
   // Registry check state
   const [registryChecking, setRegistryChecking] = useState(false)
 
+  // a hub: everywhere (the hub and every VM), the hub alone, or one VM — the choice the Health and Updates pages share
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+
   // Fetch images via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
     setLoading(true)
-    const result = await fetchImages()
+    const result = await fetchImages(scope)
     setImages(result.images)
     setLoading(false)
     return result
-  }, [setImages, setLoading])
+  }, [setImages, setLoading, scope])
 
   const { refresh } = useApi(handleFetch, IMAGE_POLL_INTERVAL, { enabled: isConnected })
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; setSelectedImages(new Set()); refresh() } }, [scope, refresh])
 
   // Docker Hub search handler
   const handleHubSearch = useCallback(async (e?: React.FormEvent) => {
@@ -99,7 +109,7 @@ const Images: React.FC = () => {
     if (pullingImages.has(imageName)) return
     setPullingImages((prev) => new Set(prev).add(imageName))
     try {
-      const res = await pullImage(imageName)
+      const res = await pullImage(imageName, scopeMember)
       if (res.success) {
         addToast({ type: 'success', message: `Pulling ${imageName} started` })
         // Refresh image list after a delay
@@ -116,7 +126,7 @@ const Images: React.FC = () => {
         return next
       })
     }
-  }, [pullingImages, addToast, handleFetch])
+  }, [pullingImages, addToast, handleFetch, scopeMember])
 
   // Check registry for digest updates (slow POST)
   const handleCheckRegistry = useCallback(async () => {
@@ -212,9 +222,10 @@ const Images: React.FC = () => {
 
     const results: Array<{ id: string; success: boolean; message: string }> = []
 
-    for (const id of selectedImages) {
+    for (const key of selectedImages) {
+      const sep = key.indexOf('|'); const member = key.slice(0, sep) || null; const id = key.slice(sep + 1)
       try {
-        const res = await deleteImage(id)
+        const res = await deleteImage(id, member)
         results.push({ id, success: res.success, message: res.message })
       } catch (err) {
         results.push({ id, success: false, message: err instanceof Error ? err.message : 'Failed' })
@@ -258,8 +269,9 @@ const Images: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
               <p className="text-sm text-slate-400">
-                Track freshness — check registry for definitive update badges
+                {scope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}` : scopeMember ? `The images inside the VM ${memberName}` : 'Track freshness — check registry for definitive update badges'}
               </p>
+              {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Images on" busy={loading && images.length > 0} /></div>}
             </div>
           </div>
 
@@ -484,6 +496,8 @@ const Images: React.FC = () => {
             batchMode={batchMode}
             selectedImages={selectedImages}
             onToggleImage={handleToggleImage}
+            showWhere={scope === 'all'}
+            onPickWhere={(m) => setScope(m ?? 'hub')}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -498,7 +512,7 @@ const Images: React.FC = () => {
               </div>
             ) : (
               filteredImages.map((image, idx) => (
-                <ImageCard key={`${image.id}-${idx}`} image={image} />
+                <ImageCard key={`${imageKey(image)}-${idx}`} image={image} showWhere={scope === 'all'} />
               ))
             )}
           </div>

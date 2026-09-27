@@ -33,7 +33,6 @@ import { useFleetRole } from '../hooks/useFleetRole'
 import { usePolling } from '../hooks/usePolling'
 import { fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities } from '../api/endpoints'
 import NewVmSheet from '../components/fleet/NewVmSheet'
-import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
 
 // -----------------------------------------------------------------------------
 // Stacks Page
@@ -330,15 +329,15 @@ export default function Stacks() {
         />
       ) : (
         <>
-        {hubMode && (jobs.data?.jobs.length ?? 0) > 0 && (
-          <div className="mb-4"><FleetJobsPanel jobs={jobs.data?.jobs ?? []} onChanged={jobs.refresh} compact title="VMs being built" /></div>
-        )}
         <StackList
           onAction={handleAction}
           onSelect={(name) => setSelectedStackName(name)}
           onRefresh={refresh}
           onEdit={handleEdit}
           onCreateStack={() => (hubMode ? setShowNewVm(true) : setShowCreateOverlay(true))}
+          onCreateHubStack={() => setShowCreateOverlay(true)}
+          building={hubMode ? (jobs.data?.running ?? 0) : 0}
+          onOpenBuilds={() => useSettingsStore.getState().setCurrentPage('proxmox')}
           batchMode={batchMode}
           selectedStacks={selectedStacks}
           onToggleSelect={handleToggleSelect}

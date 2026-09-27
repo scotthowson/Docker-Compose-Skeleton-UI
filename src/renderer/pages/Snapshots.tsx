@@ -2,7 +2,7 @@
 // Snapshots — System snapshots & config export management page
 // =============================================================================
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Camera,
   Download,
@@ -30,6 +30,9 @@ import {
   restoreSnapshot,
   deleteSnapshot,
 } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { apiClient } from '../api/client'
 import type { SnapshotEntry, SnapshotListResponse } from '../../shared/types'
 import { LoadingState } from '../components/common/PageState'
@@ -132,6 +135,7 @@ function SnapshotCard({
             <span className="font-mono text-xs text-slate-200 truncate">
               {snapshot.filename}
             </span>
+            {snapshot.member !== undefined && <VmCapsule member={snapshot.member} name={snapshot.member_name} vmid={snapshot.vmid} size="xs" />}
           </div>
           {snapshot.label && (
             <p className="text-sm text-slate-300 mt-1 truncate">
@@ -455,13 +459,17 @@ export default function Snapshots() {
   }, [restoreTarget, restoreLoading, deleteTarget, deleteLoading, showCreateInput])
 
   // ---- Polling ----
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedSnapshots = useCallback(() => fetchSnapshots(scope), [scope])
   const {
     data: snapshotsData,
     loading,
     refresh,
-  } = usePolling<SnapshotListResponse>(fetchSnapshots, 15000, {
+  } = usePolling<SnapshotListResponse>(fetchScopedSnapshots, 15000, {
     enabled: isConnected,
   })
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refresh() } }, [scope, refresh])
 
   const snapshots: SnapshotEntry[] = snapshotsData?.snapshots ?? []
 
@@ -470,7 +478,7 @@ export default function Snapshots() {
   const handleCreate = useCallback(async () => {
     setCreating(true)
     try {
-      const result = await createSnapshot(createLabel.trim() || undefined)
+      const result = await createSnapshot(createLabel.trim() || undefined, scope)
       if (result.success) {
         addToast({
           type: 'success',
@@ -502,6 +510,7 @@ export default function Snapshots() {
 
   const handleDownload = useCallback(
     async (snapshot: SnapshotEntry) => {
+      if (snapshot.member ?? scopeMember) { addToast({ type: 'info', message: 'A VM keeps its snapshot files itself: download it from that VM\'s own dashboard or over ssh (~/.Docker-Compose-Skeleton-AIO/.snapshots)' }); return }
       setDownloadingMap((prev) => ({ ...prev, [snapshot.filename]: true }))
       try {
         const baseUrl = apiClient.getBaseUrl()
@@ -546,7 +555,7 @@ export default function Snapshots() {
       duration: 3000,
     })
     try {
-      const result = await restoreSnapshot(restoreTarget.filename)
+      const result = await restoreSnapshot(restoreTarget.filename, restoreTarget.member ?? scopeMember)
       if (result.success) {
         addToast({
           type: 'success',
@@ -592,7 +601,7 @@ export default function Snapshots() {
     if (!deleteTarget) return
     setDeleteLoading(true)
     try {
-      const result = await deleteSnapshot(deleteTarget.filename)
+      const result = await deleteSnapshot(deleteTarget.filename, deleteTarget.member ?? scopeMember)
       if (result.success) {
         addToast({
           type: 'success',
@@ -646,7 +655,8 @@ export default function Snapshots() {
             <Camera size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">System Snapshots</span></h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">System Snapshots</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!snapshotsData} /></div>}
             <p className="text-xs text-slate-500">
               Create, restore, and manage configuration snapshots
             </p>

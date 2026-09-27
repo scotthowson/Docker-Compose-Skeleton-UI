@@ -4,6 +4,8 @@
 
 import React, { useState, useMemo } from 'react'
 import { ImageInfo } from '../../../shared/types'
+import VmCapsule from '../fleet/VmCapsule'
+const imageKey = (i: ImageInfo) => `${i.member ?? ''}|${i.id}`
 import { useImageStore } from '../../stores/imageStore'
 import {
   ChevronUp,
@@ -125,11 +127,15 @@ const COLUMNS: ColumnDef[] = [
 
 interface ImageListProps {
   batchMode?: boolean
+  /** keys of the selected rows: member|id */
   selectedImages?: Set<string>
-  onToggleImage?: (id: string) => void
+  onToggleImage?: (key: string) => void
+  /** the fleet view: every row says where it lives */
+  showWhere?: boolean
+  onPickWhere?: (member: string | null) => void
 }
 
-const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages, onToggleImage }) => {
+const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages, onToggleImage, showWhere = false, onPickWhere }) => {
   const images = useImageStore((s) => s.images)
   const loading = useImageStore((s) => s.loading)
 
@@ -275,24 +281,24 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
 
                   return (
                     <tr
-                      key={`${image.id}-${idx}`}
-                      onClick={() => batchMode && onToggleImage?.(image.id)}
+                      key={`${imageKey(image)}-${idx}`}
+                      onClick={() => batchMode && onToggleImage?.(imageKey(image))}
                       className={`group border-b border-white/[0.03] hover:bg-white/5 transition-colors ${
                         batchMode ? 'cursor-pointer' : ''
-                      } ${batchMode && selectedImages?.has(image.id) ? 'bg-emerald-500/[0.06]' : ''}`}
+                      } ${batchMode && selectedImages?.has(imageKey(image)) ? 'bg-emerald-500/[0.06]' : ''}`}
                     >
                       {/* Batch checkbox */}
                       {batchMode && (
                         <td className="px-4 py-3">
                           <button
-                            onClick={(e) => { e.stopPropagation(); onToggleImage?.(image.id) }}
+                            onClick={(e) => { e.stopPropagation(); onToggleImage?.(imageKey(image)) }}
                             className={`flex items-center justify-center w-5 h-5 rounded border transition-all ${
-                              selectedImages?.has(image.id)
+                              selectedImages?.has(imageKey(image))
                                 ? 'bg-emerald-500 border-emerald-500'
                                 : 'bg-white/5 border-white/20 hover:border-white/40'
                             }`}
                           >
-                            {selectedImages?.has(image.id) && (
+                            {selectedImages?.has(imageKey(image)) && (
                               <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                               </svg>
@@ -311,6 +317,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                           >
                             {image.repository}
                           </span>
+                          {showWhere && <VmCapsule member={image.member} name={image.member_name} vmid={image.vmid} size="xs" onClick={onPickWhere ? () => onPickWhere(image.member ?? null) : undefined} />}
                         </div>
                       </td>
 

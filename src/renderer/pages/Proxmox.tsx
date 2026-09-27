@@ -24,7 +24,7 @@ import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxTasks, proxmoxVmAction,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
-  testFleetMember, removeFleetMember, fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities,
+  testFleetMember, removeFleetMember, fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate,
 } from '../api/endpoints'
 import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, StackInfo, ContainerInfo } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
@@ -438,6 +438,16 @@ export default function Proxmox() {
   const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && isAdmin && configured && reachable })
   const provDefaults = usePolling(fetchFleetProvisionDefaults, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
   const caps = usePolling(fetchProxmoxCapabilities, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
+  // the baked DCS templates: a VM cloned from one builds in about 25 s
+  const templates = usePolling(fetchFleetTemplates, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
+  const [removingTemplate, setRemovingTemplate] = useState<number | null>(null)
+  const removeTemplate = async (vmid: number, label: string) => {
+    if (!window.confirm(`Remove the DCS template ${label} (VM ${vmid})? The next build from that image installs everything again (about 85 s) until a new one is baked.`)) return
+    setRemovingTemplate(vmid)
+    try { await deleteFleetTemplate(vmid); addToast({ type: 'success', message: `Template ${label} removed` }); templates.refresh(); vms.refresh() }
+    catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'The template could not be removed' }) }
+    finally { setRemovingTemplate(null) }
+  }
   const [newVm, setNewVm] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // A search result ("VM X") lands here with the guest pre-filtered
@@ -577,6 +587,26 @@ export default function Proxmox() {
             <div className="glass-card rounded-2xl p-4 border border-amber-500/20"><CapabilityNote caps={caps.data} /></div>
           )}
           {jobs.data && jobs.data.jobs.length > 0 && <FleetJobsPanel jobs={jobs.data.jobs} onChanged={refreshFleet} />}
+          {isHub && templates.data && templates.data.templates.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Layers size={12} /> DCS templates <span className="normal-case tracking-normal text-slate-600 font-normal">— a VM cloned from one is built in about 25 s; bake one from the New VM sheet</span></h2>
+              <div className="flex flex-wrap gap-2">
+                {templates.data.templates.map((t) => (
+                  <div key={t.vmid} className="glass-card rounded-xl px-3 py-2 flex items-center gap-3">
+                    <div>
+                      <p className="text-xs text-slate-200">{t.image_id} <span className="text-slate-500">· VM {t.vmid} on {t.node} · DCS {t.dcs_version}</span></p>
+                      <p className="text-[10px] text-slate-500">baked {t.baked_at ? new Date(t.baked_at * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}{t.family ? ` · ${t.family}` : ''}</p>
+                    </div>
+                    {isAdmin && (
+                      <button type="button" onClick={() => removeTemplate(t.vmid, t.image_id)} disabled={removingTemplate === t.vmid} title="Remove this template with its VM" className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center justify-center disabled:opacity-50">
+                        {removingTemplate === t.vmid ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {nodes.data && nodes.data.nodes.length > 0 && (
             <section>
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Boxes size={12} /> Nodes</h2>

@@ -7,6 +7,7 @@ import type {
   FleetVersions,
   FleetUpdateResponse,
   FleetImagesCheckResponse,
+  FleetTemplatesResponse,
   APIRoot,
   APIVersion,
   ServerStatus,
@@ -223,8 +224,10 @@ export function fetchServerStatus(): Promise<ServerStatus> {
 }
 
 /** GET /health — Container health report */
-export function fetchHealthReport(): Promise<HealthReport> {
-  return apiClient.get<HealthReport>('/health')
+/** GET /health — this server's; on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchHealthReport(scope?: string | null): Promise<HealthReport> {
+  if (scope === 'all') return apiClient.get<HealthReport>('/health?fleet=1')
+  return apiClient.get<HealthReport>(memberPath(scope === 'hub' ? null : scope, '/health'))
 }
 
 /** GET /version — API and Docker version info */
@@ -332,8 +335,10 @@ export function fetchStackCompose(name: string): Promise<StackComposeResponse> {
 // ---------------------------------------------------------------------------
 
 /** GET /images — All images */
-export function fetchImages(): Promise<ImageListResponse> {
-  return apiClient.get<ImageListResponse>('/images')
+/** GET /images — this server's; on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchImages(scope?: string | null): Promise<ImageListResponse> {
+  if (scope === 'all') return apiClient.get<ImageListResponse>('/images?fleet=1')
+  return apiClient.get<ImageListResponse>(memberPath(scope === 'hub' ? null : scope, '/images'))
 }
 
 /** GET /images/stale — Stale images only */
@@ -441,13 +446,15 @@ export function execContainerCommand(name: string, command: string): Promise<Con
 // ---------------------------------------------------------------------------
 
 /** GET /networks — Docker networks */
-export function fetchNetworks(): Promise<NetworkListResponse> {
-  return apiClient.get<NetworkListResponse>('/networks')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchNetworks(scope?: string | null): Promise<NetworkListResponse> {
+  if (scope === 'all') return apiClient.get<NetworkListResponse>('/networks?fleet=1')
+  return apiClient.get<NetworkListResponse>(memberPath(scope === 'hub' ? null : scope, '/networks'))
 }
 
 /** GET /networks/:name — Network detail with containers and IPAM */
-export function fetchNetworkDetail(name: string): Promise<NetworkDetail> {
-  return apiClient.get<NetworkDetail>(`/networks/${encodeURIComponent(name)}`)
+export function fetchNetworkDetail(name: string, member?: string | null): Promise<NetworkDetail> {
+  return apiClient.get<NetworkDetail>(memberPath(member, `/networks/${encodeURIComponent(name)}`))
 }
 
 /**
@@ -480,8 +487,8 @@ export function deleteCard(plugin: string, card: string): Promise<{ success: boo
 }
 
 /** POST /networks — Create a new Docker network */
-export function createNetwork(opts: NetworkCreateOptions): Promise<NetworkCreateResponse> {
-  return apiClient.post<NetworkCreateResponse>('/networks', opts)
+export function createNetwork(opts: NetworkCreateOptions, member?: string | null): Promise<NetworkCreateResponse> {
+  return apiClient.post<NetworkCreateResponse>(memberPath(member, '/networks'), opts)
 }
 
 /**
@@ -489,14 +496,14 @@ export function createNetwork(opts: NetworkCreateOptions): Promise<NetworkCreate
  * API disconnects its containers, removes it, creates it again with these
  * settings (Compose ownership labels kept) and reconnects the containers.
  */
-export function recreateNetwork(name: string, opts: Omit<NetworkCreateOptions, 'name'>): Promise<NetworkRecreateResponse> {
-  return apiClient.post<NetworkRecreateResponse>(`/networks/${encodeURIComponent(name)}/recreate`, opts, 120000)
+export function recreateNetwork(name: string, opts: Omit<NetworkCreateOptions, 'name'>, member?: string | null): Promise<NetworkRecreateResponse> {
+  return apiClient.post<NetworkRecreateResponse>(memberPath(member, `/networks/${encodeURIComponent(name)}/recreate`), opts, 120000)
 }
 
 /** POST /networks/:name/delete — Remove a Docker network */
-export function deleteNetwork(name: string): Promise<NetworkDeleteResponse> {
+export function deleteNetwork(name: string, member?: string | null): Promise<NetworkDeleteResponse> {
   return apiClient.post<NetworkDeleteResponse>(
-    `/networks/${encodeURIComponent(name)}/delete`,
+    memberPath(member, `/networks/${encodeURIComponent(name)}/delete`),
   )
 }
 
@@ -504,9 +511,10 @@ export function deleteNetwork(name: string): Promise<NetworkDeleteResponse> {
 export function connectToNetwork(
   networkName: string,
   containerName: string,
+  member?: string | null,
 ): Promise<NetworkActionResponse> {
   return apiClient.post<NetworkActionResponse>(
-    `/networks/${encodeURIComponent(networkName)}/connect`,
+    memberPath(member, `/networks/${encodeURIComponent(networkName)}/connect`),
     { container: containerName },
   )
 }
@@ -515,22 +523,25 @@ export function connectToNetwork(
 export function disconnectFromNetwork(
   networkName: string,
   containerName: string,
+  member?: string | null,
 ): Promise<NetworkActionResponse> {
   return apiClient.post<NetworkActionResponse>(
-    `/networks/${encodeURIComponent(networkName)}/disconnect`,
+    memberPath(member, `/networks/${encodeURIComponent(networkName)}/disconnect`),
     { container: containerName },
   )
 }
 
 /** GET /volumes — Docker volumes */
-export function fetchVolumes(): Promise<VolumeListResponse> {
-  return apiClient.get<VolumeListResponse>('/volumes')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchVolumes(scope?: string | null): Promise<VolumeListResponse> {
+  if (scope === 'all') return apiClient.get<VolumeListResponse>('/volumes?fleet=1')
+  return apiClient.get<VolumeListResponse>(memberPath(scope === 'hub' ? null : scope, '/volumes'))
 }
 
 /** POST /volumes/:name/delete — Remove a Docker volume */
-export function deleteVolume(name: string): Promise<VolumeDeleteResponse> {
+export function deleteVolume(name: string, member?: string | null): Promise<VolumeDeleteResponse> {
   return apiClient.post<VolumeDeleteResponse>(
-    `/volumes/${encodeURIComponent(name)}/delete`,
+    memberPath(member, `/volumes/${encodeURIComponent(name)}/delete`),
   )
 }
 
@@ -549,8 +560,10 @@ export function fetchLogs(): Promise<LogsResponse> {
 }
 
 /** GET /events — Docker events */
-export function fetchEvents(): Promise<EventsResponse> {
-  return apiClient.get<EventsResponse>('/events')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchEvents(scope?: string | null): Promise<EventsResponse> {
+  if (scope === 'all') return apiClient.get<EventsResponse>('/events?fleet=1')
+  return apiClient.get<EventsResponse>(memberPath(scope === 'hub' ? null : scope, '/events'))
 }
 
 // ---------------------------------------------------------------------------
@@ -838,8 +851,8 @@ export function cancelBackup(): Promise<{ success: boolean; message: string }> {
 }
 
 /** POST /schedules/:id/run — Run a schedule immediately */
-export function runSchedule(id: string): Promise<{ success: boolean; action: string; output: string }> {
-  return apiClient.post<{ success: boolean; action: string; output: string }>(`/schedules/${encodeURIComponent(id)}/run`)
+export function runSchedule(id: string, member?: string | null): Promise<{ success: boolean; action: string; output: string }> {
+  return apiClient.post<{ success: boolean; action: string; output: string }>(memberPath(member, `/schedules/${encodeURIComponent(id)}/run`))
 }
 
 // ---------------------------------------------------------------------------
@@ -857,8 +870,8 @@ export function fetchTerminalHistory(): Promise<TerminalHistoryResponse> {
 }
 
 /** POST /images/:id/delete — Remove a Docker image */
-export function deleteImage(id: string): Promise<ImageDeleteResponse> {
-  return apiClient.post<ImageDeleteResponse>(`/images/${encodeURIComponent(id)}/delete`, undefined, 120000)
+export function deleteImage(id: string, member?: string | null): Promise<ImageDeleteResponse> {
+  return apiClient.post<ImageDeleteResponse>(memberPath(member, `/images/${encodeURIComponent(id)}/delete`), undefined, 120000)
 }
 
 /** POST /containers/:name/rename — Rename a container */
@@ -1039,23 +1052,27 @@ export function sendTestNotification(opts?: {
 }
 
 /** GET /snapshots — List all snapshots */
-export function fetchSnapshots(): Promise<SnapshotListResponse> {
-  return apiClient.get<SnapshotListResponse>('/snapshots')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchSnapshots(scope?: string | null): Promise<SnapshotListResponse> {
+  if (scope === 'all') return apiClient.get<SnapshotListResponse>('/snapshots?fleet=1')
+  return apiClient.get<SnapshotListResponse>(memberPath(scope === 'hub' ? null : scope, '/snapshots'))
 }
 
 /** POST /snapshots/create — Create a new snapshot */
-export function createSnapshot(label?: string): Promise<SnapshotCreateResponse> {
-  return apiClient.post<SnapshotCreateResponse>('/snapshots/create', { label: label || '' })
+/** a hub: scope 'all' takes one snapshot here and one on every VM at the same moment (?fleet=1) */
+export function createSnapshot(label?: string, scope?: string | null): Promise<SnapshotCreateResponse> {
+  if (scope === 'all') return apiClient.post<SnapshotCreateResponse>('/snapshots/create?fleet=1', { label: label || '' }, 240000)
+  return apiClient.post<SnapshotCreateResponse>(memberPath(scope === 'hub' ? null : scope, '/snapshots/create'), { label: label || '' })
 }
 
 /** POST /snapshots/:id/restore — Restore from a snapshot */
-export function restoreSnapshot(id: string): Promise<SnapshotRestoreResponse> {
-  return apiClient.post<SnapshotRestoreResponse>(`/snapshots/${encodeURIComponent(id)}/restore`, { confirm: 'RESTORE' }, 120000)
+export function restoreSnapshot(id: string, member?: string | null): Promise<SnapshotRestoreResponse> {
+  return apiClient.post<SnapshotRestoreResponse>(memberPath(member, `/snapshots/${encodeURIComponent(id)}/restore`), { confirm: 'RESTORE' }, 120000)
 }
 
 /** DELETE /snapshots/:id — Delete a snapshot */
-export function deleteSnapshot(id: string): Promise<{ success: boolean; deleted: string }> {
-  return apiClient.delete<{ success: boolean; deleted: string }>(`/snapshots/${encodeURIComponent(id)}`)
+export function deleteSnapshot(id: string, member?: string | null): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(memberPath(member, `/snapshots/${encodeURIComponent(id)}`))
 }
 
 /** GET /stacks/:name/compose/history — Compose version history */
@@ -1371,8 +1388,10 @@ export function dryRunTemplate(name: string, opts: {
 }
 
 /** GET /automations — List automation rules */
-export function fetchAutomations(): Promise<AutomationListResponse> {
-  return apiClient.get<AutomationListResponse>('/automations')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchAutomations(scope?: string | null): Promise<AutomationListResponse> {
+  if (scope === 'all') return apiClient.get<AutomationListResponse>('/automations?fleet=1')
+  return apiClient.get<AutomationListResponse>(memberPath(scope === 'hub' ? null : scope, '/automations'))
 }
 
 /** POST /automations — Create an automation rule */
@@ -1383,23 +1402,23 @@ export function createAutomation(rule: {
   action_type: string
   action_target?: string
   enabled?: boolean
-}): Promise<AutomationRule> {
-  return apiClient.post<AutomationRule>('/automations', rule)
+}, member?: string | null): Promise<AutomationRule> {
+  return apiClient.post<AutomationRule>(memberPath(member, '/automations'), rule)
 }
 
 /** POST /automations/:id/update — Update an automation rule */
-export function updateAutomation(id: string, updates: Partial<AutomationRule>): Promise<AutomationRule> {
-  return apiClient.post<AutomationRule>(`/automations/${encodeURIComponent(id)}/update`, updates)
+export function updateAutomation(id: string, updates: Partial<AutomationRule>, member?: string | null): Promise<AutomationRule> {
+  return apiClient.post<AutomationRule>(memberPath(member, `/automations/${encodeURIComponent(id)}/update`), updates)
 }
 
 /** DELETE /automations/:id — Delete an automation rule */
-export function deleteAutomation(id: string): Promise<{ success: boolean; deleted: string }> {
-  return apiClient.delete<{ success: boolean; deleted: string }>(`/automations/${encodeURIComponent(id)}`)
+export function deleteAutomation(id: string, member?: string | null): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(memberPath(member, `/automations/${encodeURIComponent(id)}`))
 }
 
 /** POST /automations/:id/run — Run an automation now (admin) */
-export function runAutomation(id: string): Promise<{ success: boolean; id: string; action: string; message: string }> {
-  return apiClient.post(`/automations/${encodeURIComponent(id)}/run`)
+export function runAutomation(id: string, member?: string | null): Promise<{ success: boolean; id: string; action: string; message: string }> {
+  return apiClient.post(memberPath(member, `/automations/${encodeURIComponent(id)}/run`))
 }
 
 /** GET /automations/:id/history — Automation run history */
@@ -1482,16 +1501,18 @@ export function fetchRollbackDiff(stack: string, id: string): Promise<RollbackDi
 // Secrets
 // ---------------------------------------------------------------------------
 
-export function fetchSecrets(): Promise<SecretsListResponse> {
-  return apiClient.get<SecretsListResponse>('/secrets')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchSecrets(scope?: string | null): Promise<SecretsListResponse> {
+  if (scope === 'all') return apiClient.get<SecretsListResponse>('/secrets?fleet=1')
+  return apiClient.get<SecretsListResponse>(memberPath(scope === 'hub' ? null : scope, '/secrets'))
 }
 
-export function setSecret(key: string, value: string): Promise<SecretSetResponse> {
-  return apiClient.post<SecretSetResponse>(`/secrets/${encodeURIComponent(key)}`, { value })
+export function setSecret(key: string, value: string, member?: string | null): Promise<SecretSetResponse> {
+  return apiClient.post<SecretSetResponse>(memberPath(member, `/secrets/${encodeURIComponent(key)}`), { value })
 }
 
-export function deleteSecret(key: string): Promise<SecretDeleteResponse> {
-  return apiClient.delete<SecretDeleteResponse>(`/secrets/${encodeURIComponent(key)}`)
+export function deleteSecret(key: string, member?: string | null): Promise<SecretDeleteResponse> {
+  return apiClient.delete<SecretDeleteResponse>(memberPath(member, `/secrets/${encodeURIComponent(key)}`))
 }
 
 export function checkSecretExists(key: string): Promise<SecretExistsResponse> {
@@ -1499,32 +1520,34 @@ export function checkSecretExists(key: string): Promise<SecretExistsResponse> {
 }
 
 /** GET /secrets/:key/references — Stacks and env files that reference a secret */
-export function fetchSecretReferences(key: string): Promise<SecretReferencesResponse> {
-  return apiClient.get<SecretReferencesResponse>(`/secrets/${encodeURIComponent(key)}/references`)
+export function fetchSecretReferences(key: string, member?: string | null): Promise<SecretReferencesResponse> {
+  return apiClient.get<SecretReferencesResponse>(memberPath(member, `/secrets/${encodeURIComponent(key)}/references`))
 }
 
 // ---------------------------------------------------------------------------
 // Schedules
 // ---------------------------------------------------------------------------
 
-export function fetchSchedules(): Promise<ScheduleListResponse> {
-  return apiClient.get<ScheduleListResponse>('/schedules')
+/** on a hub, scope 'all' merges every VM (?fleet=1) and a member id asks that VM */
+export function fetchSchedules(scope?: string | null): Promise<ScheduleListResponse> {
+  if (scope === 'all') return apiClient.get<ScheduleListResponse>('/schedules?fleet=1')
+  return apiClient.get<ScheduleListResponse>(memberPath(scope === 'hub' ? null : scope, '/schedules'))
 }
 
-export function createSchedule(schedule: { name: string; schedule: string; action: string; target?: string }): Promise<ScheduleCreateResponse> {
-  return apiClient.post<ScheduleCreateResponse>('/schedules', schedule)
+export function createSchedule(schedule: { name: string; schedule: string; action: string; target?: string }, member?: string | null): Promise<ScheduleCreateResponse> {
+  return apiClient.post<ScheduleCreateResponse>(memberPath(member, '/schedules'), schedule)
 }
 
-export function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule> {
-  return apiClient.post<Schedule>(`/schedules/${encodeURIComponent(id)}/update`, updates)
+export function updateSchedule(id: string, updates: Partial<Schedule>, member?: string | null): Promise<Schedule> {
+  return apiClient.post<Schedule>(memberPath(member, `/schedules/${encodeURIComponent(id)}/update`), updates)
 }
 
-export function deleteSchedule(id: string): Promise<{ success: boolean; deleted: string }> {
-  return apiClient.delete<{ success: boolean; deleted: string }>(`/schedules/${encodeURIComponent(id)}`)
+export function deleteSchedule(id: string, member?: string | null): Promise<{ success: boolean; deleted: string }> {
+  return apiClient.delete<{ success: boolean; deleted: string }>(memberPath(member, `/schedules/${encodeURIComponent(id)}`))
 }
 
-export function toggleSchedule(id: string): Promise<Schedule> {
-  return apiClient.post<Schedule>(`/schedules/${encodeURIComponent(id)}/toggle`)
+export function toggleSchedule(id: string, member?: string | null): Promise<Schedule> {
+  return apiClient.post<Schedule>(memberPath(member, `/schedules/${encodeURIComponent(id)}/toggle`))
 }
 
 export function fetchScheduleHistory(id: string): Promise<ScheduleHistoryResponse> {
@@ -1674,12 +1697,13 @@ export function exportData(type: 'health' | 'system' | 'config'): Promise<Export
 }
 
 /** GET /audit — Fetch audit log */
-export function fetchAuditLog(opts?: { limit?: number; action?: string }): Promise<AuditLogResponse> {
+export function fetchAuditLog(opts?: { limit?: number; action?: string }, scope?: string | null): Promise<AuditLogResponse> {
   const params = new URLSearchParams()
   if (opts?.limit) params.set('limit', String(opts.limit))
   if (opts?.action) params.set('action', opts.action)
-  const qs = params.toString()
-  return apiClient.get<AuditLogResponse>(`/audit${qs ? `?${qs}` : ''}`)
+  if (scope === 'all') params.set('fleet', '1')
+  const q = params.toString()
+  return apiClient.get<AuditLogResponse>(memberPath(scope === 'all' || scope === 'hub' ? null : scope, `/audit${q ? `?${q}` : ''}`))
 }
 
 /** GET /webhooks — List configured webhooks */
@@ -1703,8 +1727,8 @@ export function testWebhook(id: string): Promise<WebhookTestResponse> {
 }
 
 /** POST /images/pull — Pull an image from Docker Hub */
-export function pullImage(image: string): Promise<ImagePullResponse> {
-  return apiClient.post<ImagePullResponse>('/images/pull', { image })
+export function pullImage(image: string, member?: string | null): Promise<ImagePullResponse> {
+  return apiClient.post<ImagePullResponse>(memberPath(member, '/images/pull'), { image })
 }
 
 // ---------------------------------------------------------------------------
@@ -1989,6 +2013,16 @@ export function fetchFleetImages(): Promise<ImageCheckResponse> {
 /** POST /fleet/images/check — the registry check on the hub and every member at once (slow) */
 export function checkFleetImageRegistry(): Promise<FleetImagesCheckResponse> {
   return apiClient.post<FleetImagesCheckResponse>('/fleet/images/check', undefined, 200000)
+}
+
+/** GET /fleet/templates — the DCS templates the hub baked (a full clone of one is a 25-second build) */
+export function fetchFleetTemplates(): Promise<FleetTemplatesResponse> {
+  return apiClient.get<FleetTemplatesResponse>('/fleet/templates')
+}
+
+/** DELETE /fleet/templates/{vmid} — remove a baked template with its VM */
+export function deleteFleetTemplate(vmid: number): Promise<{ success: boolean }> {
+  return apiClient.delete<{ success: boolean }>(`/fleet/templates/${vmid}`)
 }
 
 /** GET /fleet/versions — the hub's DCS version next to every member's, asked live */

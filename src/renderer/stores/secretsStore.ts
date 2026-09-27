@@ -9,10 +9,10 @@ interface SecretsState {
   loading: boolean
   saving: boolean
   error: string | null
-  fetchSecrets: () => Promise<void>
+  fetchSecrets: (scope?: string | null) => Promise<void>
   /** Returns the placeholder to reference the secret with, or null on failure */
-  setSecret: (key: string, value: string) => Promise<{ reference: string; replaced: boolean } | null>
-  deleteSecret: (key: string) => Promise<boolean>
+  setSecret: (key: string, value: string, member?: string | null) => Promise<{ reference: string; replaced: boolean } | null>
+  deleteSecret: (key: string, member?: string | null) => Promise<boolean>
 }
 
 function normalize(secrets: unknown): SecretEntry[] {
@@ -29,10 +29,10 @@ export const useSecretsStore = create<SecretsState>((set) => ({
   saving: false,
   error: null,
 
-  fetchSecrets: async () => {
+  fetchSecrets: async (scope) => {
     set({ loading: true, error: null })
     try {
-      const res = await api.fetchSecrets()
+      const res = await api.fetchSecrets(scope)
       const entries = normalize(res.secrets)
       set({ entries, keys: entries.map((e) => e.key), loading: false })
     } catch (err) {
@@ -40,11 +40,11 @@ export const useSecretsStore = create<SecretsState>((set) => ({
     }
   },
 
-  setSecret: async (key, value) => {
+  setSecret: async (key, value, member) => {
     set({ saving: true, error: null })
     try {
-      const res = await api.setSecret(key, value)
-      const list = await api.fetchSecrets()
+      const res = await api.setSecret(key, value, member)
+      const list = await api.fetchSecrets(member ?? undefined)
       const entries = normalize(list.secrets)
       set({ entries, keys: entries.map((e) => e.key), saving: false })
       return { reference: res.reference ?? `\${SECRETS_${key}}`, replaced: !!res.replaced }
@@ -54,10 +54,10 @@ export const useSecretsStore = create<SecretsState>((set) => ({
     }
   },
 
-  deleteSecret: async (key) => {
+  deleteSecret: async (key, member) => {
     set({ saving: true, error: null })
     try {
-      await api.deleteSecret(key)
+      await api.deleteSecret(key, member)
       set((prev) => ({
         keys: prev.keys.filter((k) => k !== key),
         entries: prev.entries.filter((e) => e.key !== key),

@@ -6,6 +6,9 @@ import {
   ChevronRight, CheckCircle, XCircle, AlertTriangle, Pencil, Activity, Zap, ArrowUpCircle, LifeBuoy,
 } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
@@ -54,7 +57,8 @@ export default function Schedules() {
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
 
-  useEffect(() => { if (isConnected) fetchSchedules() }, [fetchSchedules, isConnected])
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  useEffect(() => { if (isConnected) fetchSchedules(scope) }, [fetchSchedules, isConnected, scope])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -69,26 +73,28 @@ export default function Schedules() {
 
   const handleCreate = useCallback(async () => {
     if (!form.name) return
-    const ok = await createSchedule(form)
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    const ok = await createSchedule(form, scopeMember)
     if (ok) { setShowCreate(false); setForm({ name: '', schedule: '@daily', action: 'backup', target: '' }); addToast({ type: 'success', message: 'Schedule created' }) }
-  }, [form, createSchedule, addToast])
+  }, [form, createSchedule, addToast, scope, scopeMember])
 
   const handleEdit = useCallback(async () => {
     if (!editingId) return
-    const ok = await updateSchedule(editingId, editForm)
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    const ok = await updateSchedule(editingId, editForm, scopeMember)
     if (ok) { setEditingId(null); addToast({ type: 'success', message: 'Schedule updated' }) }
-  }, [editingId, editForm, updateSchedule, addToast])
+  }, [editingId, editForm, updateSchedule, addToast, scope, scopeMember])
 
   const handleRunNow = useCallback(async (id: string) => {
     setRunningId(id)
-    const result = await runSchedule(id)
+    const result = await runSchedule(id, schedules.find((x) => x.id === id)?.member ?? scopeMember)
     if (result) {
       addToast({ type: result.success ? 'success' : 'error', message: result.success ? `Ran successfully` : `Failed: ${result.output}` })
     } else {
       addToast({ type: 'error', message: 'Failed to run schedule' })
     }
     setRunningId(null)
-  }, [runSchedule, addToast])
+  }, [runSchedule, addToast, schedules, scopeMember])
 
   const handleExpand = (id: string) => {
     if (expandedId === id) { setExpandedId(null); return }
@@ -110,14 +116,15 @@ export default function Schedules() {
             <CalendarClock className="w-5 h-5 text-violet-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Scheduled Tasks</span></h1>
+            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Scheduled Tasks</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && schedules.length > 0} /></div>}
             <p className="text-sm text-slate-400">
               {schedules.length > 0 ? `${schedules.filter(s => s.enabled).length} active of ${schedules.length} schedule${schedules.length !== 1 ? 's' : ''}` : 'Automated tasks on a schedule'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => fetchSchedules()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all press">
+          <button onClick={() => fetchSchedules(scope)} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all press">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
@@ -159,6 +166,7 @@ export default function Schedules() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-white truncate">{s.name}</span>
+                      {s.member !== undefined && <VmCapsule member={s.member} name={s.member_name} vmid={s.vmid} size="xs" onClick={() => setScope(s.member ?? 'hub')} />}
                       <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${s.enabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-500'}`}>
                         {s.enabled ? 'Active' : 'Paused'}
                       </span>
@@ -187,7 +195,7 @@ export default function Schedules() {
                     )}
                     {/* Toggle */}
                     <button
-                      onClick={() => toggleSchedule(s.id)}
+                      onClick={() => toggleSchedule(s.id, s.member ?? scopeMember)}
                       className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
                       title={s.enabled ? 'Pause' : 'Resume'}
                     >
@@ -361,7 +369,7 @@ export default function Schedules() {
             <p className="text-sm text-slate-400 mb-4">This will permanently remove this scheduled task and its execution history.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
-              <button onClick={async () => { await deleteSchedule(deleteTarget); setDeleteTarget(null); addToast({ type: 'success', message: 'Schedule deleted' }) }} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-rose-500 text-white hover:bg-rose-400 text-sm font-medium disabled:opacity-50 shadow-lg shadow-rose-500/20 transition-all">Delete</button>
+              <button onClick={async () => { await deleteSchedule(deleteTarget, schedules.find((x) => x.id === deleteTarget)?.member ?? scopeMember); setDeleteTarget(null); addToast({ type: 'success', message: 'Schedule deleted' }) }} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-rose-500 text-white hover:bg-rose-400 text-sm font-medium disabled:opacity-50 shadow-lg shadow-rose-500/20 transition-all">Delete</button>
             </div>
           </div>
         </div>,

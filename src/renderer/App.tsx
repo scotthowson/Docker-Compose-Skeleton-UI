@@ -1,4 +1,3 @@
-import { fleetRoleSnapshot } from './hooks/useFleetRole'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Loader2, Lock } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
@@ -310,7 +309,7 @@ export default function App() {
   // Sync document title with current page
   useEffect(() => {
     // on a hub the Stacks page is the VMs page
-    const title = (currentPage === 'stacks' && fleetRoleSnapshot()?.role === 'hub') ? 'VMs' : (pageTitles[currentPage] || 'Dashboard')
+    const title = pageTitles[currentPage] || 'Dashboard'
     document.title = `${title} — DCS Manager`
   }, [currentPage])
 

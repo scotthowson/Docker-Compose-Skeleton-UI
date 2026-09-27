@@ -24,6 +24,8 @@ import {
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetRole } from '../hooks/useFleetRole'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -534,12 +536,8 @@ export default function Updates() {
   // Outcome of the last bulk run per image, shown in the row until the next registry check
   const [bulkResults, setBulkResults] = useState<Record<string, 'done' | 'failed'>>({})
 
-  // ---- Whose images: everywhere (the hub and every VM), the hub alone, or one VM ----
-  // null = not chosen yet: a hub with VMs opens on everywhere, anything else on itself
-  const [imgScopeChoice, setImgScope] = useState<string | null>(null)
-  const imgScope = imgScopeChoice ?? (isHub && fleetMembers.length > 0 ? 'all' : 'hub')
-  const scopeMember = imgScope === 'all' || imgScope === 'hub' ? null : imgScope
-  const scopeName = scopeMember ? (fleetMembers.find((m) => m.id === scopeMember)?.name ?? scopeMember) : ''
+  // ---- Whose images: everywhere (the hub and every VM), the hub alone, or one VM — the choice the Health and Images pages share ----
+  const { scope: imgScope, setScope: setImgScope, member: scopeMember, memberName: scopeName, members: scopeMembers, hasFleet } = useFleetScope()
   const fetchScopedImages = useCallback(() => (imgScope === 'all' ? fetchFleetImages() : fetchImageUpdates(scopeMember)), [imgScope, scopeMember])
 
   // ---- Polling: local staleness data ----
@@ -559,10 +557,6 @@ export default function Updates() {
     if (data) { setSwitching(true); setBulkResults({}); refresh() }
   }, [imgScope, data, refresh])
   useEffect(() => { setSwitching(false) }, [data])
-  // a VM that vanished from the fleet: back to everywhere
-  useEffect(() => {
-    if (scopeMember && fv && !fleetMembers.some((m) => m.id === scopeMember)) setImgScope(null)
-  }, [scopeMember, fv, fleetMembers])
 
   const images = data?.images ?? []
 
@@ -1275,7 +1269,7 @@ export default function Updates() {
           <div>
             <h2 className="text-lg font-bold text-slate-100">Image Updates</h2>
             <p className="text-xs text-slate-500">
-              {imgScope === 'all' ? `Every image on the hub and its ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
+              {imgScope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
             </p>
           </div>
         </div>
@@ -1355,37 +1349,7 @@ export default function Updates() {
 
       {/* ---- Whose images: everywhere, the hub, or one VM — and the one-line status ---- */}
       <div className="flex flex-col gap-2">
-        {isHub && fleetMembers.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1">Images on</span>
-            <button
-              onClick={() => setImgScope('all')}
-              title={`The hub and its ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} in one list`}
-              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors ${imgScope === 'all' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
-            >
-              <Boxes size={11} /> Everywhere
-            </button>
-            <button
-              onClick={() => setImgScope('hub')}
-              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors ${imgScope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
-            >
-              <Server size={11} /> Hub
-            </button>
-            {fleetMembers.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => { if (m.reachable) setImgScope(m.id) }}
-                disabled={!m.reachable}
-                title={m.reachable ? `VM${m.vmid ? ` #${m.vmid}` : ''} · DCS ${m.version}` : 'not answering'}
-                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${imgScope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                {m.name}
-              </button>
-            ))}
-            {switching && <Loader2 size={12} className="animate-spin text-slate-500" />}
-          </div>
-        )}
+        {hasFleet && <FleetScopeChips scope={imgScope} members={scopeMembers} onChange={setImgScope} label="Images on" busy={switching} />}
         {data && (
           <StatusLine
             ok={counts.updates === 0}
@@ -1443,7 +1407,7 @@ export default function Updates() {
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-200">
-            Tracked Images{imgScope === 'all' && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-medium text-cyan-200 align-middle">Hub + {fleetMembers.length} VM{fleetMembers.length === 1 ? '' : 's'}</span>}{scopeMember && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 align-middle">VM · {scopeName}</span>}
+            Tracked Images{imgScope === 'all' && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-medium text-cyan-200 align-middle">Hub + {scopeMembers.length} VM{scopeMembers.length === 1 ? '' : 's'}</span>}{scopeMember && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 align-middle">VM · {scopeName}</span>}
           </h3>
           <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
             Age shows when the image was built. Click "Check Registry" to compare digests against upstream — this shows definitive "Update" or "Latest" badges without pulling images.

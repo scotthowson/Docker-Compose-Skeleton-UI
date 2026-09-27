@@ -106,11 +106,24 @@ export interface HealthReport {
   }
   containers: HealthContainer[]
   api?: ApiHealthMetrics
+  /** GET /health?fleet=1 on a hub: the members' containers were merged in */
+  fleet?: boolean
+  /** the fleet view: one entry per DCS, the hub first (id null) */
+  members?: FleetHealthMember[]
 }
+
+/** one DCS in a fleet-wide list (GET …?fleet=1): the hub first, id null */
+export interface FleetListMember { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; count: number }
+
+export interface FleetHealthMember { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; status: string; summary: HealthReport['summary'] | null }
 
 export interface HealthContainer {
   /** Managed by Sablier: a stopped one is idle, not broken */
   on_demand?: boolean
+  /** the fleet view: which member runs it (null = the hub) */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   name: string
   state: string
   health: string
@@ -264,9 +277,16 @@ export interface ContainerStats {
 export interface ImageListResponse {
   total: number
   images: ImageInfo[]
+  /** GET /images?fleet=1 on a hub: the members' images were merged in */
+  fleet?: boolean
+  members?: { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; count: number }[]
 }
 
 export interface ImageInfo {
+  /** the fleet view: which member holds it (null = the hub) */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   repository: string
   tag: string
   id: string
@@ -479,11 +499,18 @@ export interface DockerDiskUsage {
 
 // GET /networks
 export interface NetworkListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   total: number
   networks: NetworkInfo[]
 }
 
 export interface NetworkInfo {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   id: string
   name: string
   driver: string
@@ -493,6 +520,10 @@ export interface NetworkInfo {
 
 // GET /networks/:name
 export interface NetworkDetail {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   id: string
   name: string
   driver: string
@@ -588,11 +619,18 @@ export interface VolumeDeleteResponse {
 
 // GET /volumes
 export interface VolumeListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   total: number
   volumes: VolumeInfo[]
 }
 
 export interface VolumeInfo {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   name: string
   driver: string
   mountpoint: string
@@ -637,11 +675,18 @@ export interface LogEntry {
 
 // GET /events
 export interface EventsResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   total: number
   events: EventEntry[]
 }
 
 export interface EventEntry {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   timestamp: number
   type: string
   action: string
@@ -1745,6 +1790,10 @@ export interface NotificationTestResponse {
 
 // Snapshots
 export interface SnapshotEntry {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   filename: string
   label: string
   size: string
@@ -1753,6 +1802,9 @@ export interface SnapshotEntry {
 }
 
 export interface SnapshotListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   snapshots: SnapshotEntry[]
   total: number
 }
@@ -1965,6 +2017,10 @@ export interface TemplateDryRunResponse {
 
 // Automations
 export interface AutomationRule {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   id: string
   name: string
   enabled: boolean
@@ -1985,6 +2041,9 @@ export interface AutomationHistoryEntry {
 }
 
 export interface AutomationListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   automations: AutomationRule[]
   total: number
 }
@@ -2202,12 +2261,19 @@ export interface RollbackDiffResponse {
 }
 
 export interface SecretEntry {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   key: string
   modified: string
   size: number
 }
 
 export interface SecretsListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   secrets: SecretEntry[]
   count: number
   /** Regular expression the server applies to names */
@@ -2242,11 +2308,18 @@ export interface SecretExistsResponse {
 }
 
 export interface ScheduleListResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   schedules: Schedule[]
   total: number
 }
 
 export interface Schedule {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   id: string
   name: string
   schedule: string
@@ -2514,12 +2587,19 @@ export interface ExportResponse {
 }
 
 export interface AuditEntry {
+  /** the fleet view: which member it belongs to (null = the hub); absent outside it */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   timestamp: string
   action: string
   detail: string
 }
 
 export interface AuditLogResponse {
+  /** GET …?fleet=1 on a hub: the members' rows were merged in, one entry per DCS in members */
+  fleet?: boolean
+  members?: FleetListMember[]
   entries: AuditEntry[]
   total: number
 }
@@ -2990,6 +3070,7 @@ export interface FleetImage { id: string; label: string; url: string; file: stri
 export interface FleetStoredImage { volid: string; file: string; size: number; storage: string }
 /** A DCS template the hub baked: VMs cloned from it build in about 40 s */
 export interface FleetTemplate { vmid: number; node: string; image_id: string; image_file: string; family: string; name: string; baked_at: number; dcs_version: string }
+export interface FleetTemplatesResponse { total: number; templates: FleetTemplate[] }
 
 /** GET /fleet/versions — the hub's DCS version next to every member's (asked live) */
 export interface FleetMemberVersion { id: string; name: string; vmid: number | null; url: string; /** the version recorded at join/last update */ recorded: string; version: string; reachable: boolean; /** answering, on another version than the hub */ behind: boolean }

@@ -5,6 +5,9 @@ import {
   BookOpen, Lock, FileKey, Terminal, ChevronDown, ChevronRight, Wand2, Copy, Check, Link2, Layers,
 } from 'lucide-react'
 import { useSecretsStore } from '../stores/secretsStore'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
@@ -101,7 +104,8 @@ export default function Secrets() {
   const [refsFor, setRefsFor] = useState<string | null>(null)
   const [refs, setRefs] = useState<Record<string, SecretReferencesResponse | 'loading' | 'error'>>({})
 
-  useEffect(() => { if (isConnected) fetchSecrets() }, [fetchSecrets, isConnected])
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  useEffect(() => { if (isConnected) fetchSecrets(scope) }, [fetchSecrets, isConnected, scope])
 
   // Close the topmost modal on Escape
   useEffect(() => {
@@ -141,7 +145,8 @@ export default function Secrets() {
     }
     if (!newValue) { setKeyError('Value is required'); return }
     if (keyExists && !confirmReplace) { setConfirmReplace(true); return }
-    const result = await setSecret(trimmedKey, newValue)
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    const result = await setSecret(trimmedKey, newValue, scopeMember)
     if (result) {
       addToast({
         type: 'success',
@@ -151,13 +156,14 @@ export default function Secrets() {
       closeAdd()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyValid, keyExists, confirmReplace, newValue, trimmedKey, setSecret, addToast])
+  }, [keyValid, keyExists, confirmReplace, newValue, trimmedKey, setSecret, addToast, scope, scopeMember])
 
   const handleDelete = useCallback(async (key: string) => {
-    const ok = await deleteSecret(key)
+    if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    const ok = await deleteSecret(key, scopeMember)
     if (ok) addToast({ type: 'success', message: `Deleted ${key}` })
     setDeleteTarget(null)
-  }, [deleteSecret, addToast])
+  }, [deleteSecret, addToast, scope, scopeMember])
 
   const copyReference = async (key: string) => {
     try {
@@ -175,7 +181,7 @@ export default function Secrets() {
     if (refs[key] && refs[key] !== 'error') return
     setRefs((prev) => ({ ...prev, [key]: 'loading' }))
     try {
-      const r = await fetchSecretReferences(key)
+      const r = await fetchSecretReferences(key, entries.find((e) => e.key === key)?.member ?? scopeMember)
       setRefs((prev) => ({ ...prev, [key]: r }))
     } catch {
       setRefs((prev) => ({ ...prev, [key]: 'error' }))
@@ -195,14 +201,15 @@ export default function Secrets() {
             <KeyRound className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Secrets</span></h1>
+            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Secrets</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && entries.length > 0} /></div>}
             <p className="text-sm text-slate-400">
               {entries.length > 0 ? `${entries.length} encrypted value${entries.length === 1 ? '' : 's'} · injected into stacks at start` : 'Encrypted key-value storage for stacks'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => fetchSecrets()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50">
+          <button onClick={() => fetchSecrets(scope)} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
@@ -293,7 +300,7 @@ export default function Secrets() {
                       <Shield className="w-4 h-4 text-amber-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-mono text-white truncate">{entry.key}</p>
+                      <p className="text-sm font-mono text-white truncate">{entry.key}{entry.member !== undefined && <span className="ml-2 align-middle"><VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} /></span>}</p>
                       <p className="text-[10px] text-slate-500 truncate">{entry.modified ? `Updated ${formatDate(entry.modified)}` : 'Encrypted'}</p>
                     </div>
                   </div>

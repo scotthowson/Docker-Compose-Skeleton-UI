@@ -8,12 +8,12 @@ interface ScheduleState {
   loading: boolean
   saving: boolean
   error: string | null
-  fetchSchedules: () => Promise<void>
-  createSchedule: (data: { name: string; schedule: string; action: string; target?: string }) => Promise<boolean>
-  updateSchedule: (id: string, updates: Partial<Schedule>) => Promise<boolean>
-  deleteSchedule: (id: string) => Promise<boolean>
-  toggleSchedule: (id: string) => Promise<boolean>
-  runSchedule: (id: string) => Promise<{ success: boolean; output: string } | null>
+  fetchSchedules: (scope?: string | null) => Promise<void>
+  createSchedule: (data: { name: string; schedule: string; action: string; target?: string }, member?: string | null) => Promise<boolean>
+  updateSchedule: (id: string, updates: Partial<Schedule>, member?: string | null) => Promise<boolean>
+  deleteSchedule: (id: string, member?: string | null) => Promise<boolean>
+  toggleSchedule: (id: string, member?: string | null) => Promise<boolean>
+  runSchedule: (id: string, member?: string | null) => Promise<{ success: boolean; output: string } | null>
   fetchHistory: (id: string) => Promise<void>
 }
 
@@ -24,20 +24,20 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   saving: false,
   error: null,
 
-  fetchSchedules: async () => {
+  fetchSchedules: async (scope) => {
     set({ loading: true, error: null })
     try {
-      const res = await api.fetchSchedules()
+      const res = await api.fetchSchedules(scope)
       set({ schedules: res.schedules, loading: false })
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch schedules' })
     }
   },
 
-  createSchedule: async (data) => {
+  createSchedule: async (data, member) => {
     set({ saving: true, error: null })
     try {
-      await api.createSchedule(data)
+      await api.createSchedule(data, member)
       set({ saving: false })
       get().fetchSchedules()
       return true
@@ -47,10 +47,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
 
-  updateSchedule: async (id, updates) => {
+  updateSchedule: async (id, updates, member) => {
     set({ saving: true, error: null })
     try {
-      await api.updateSchedule(id, updates)
+      await api.updateSchedule(id, updates, member)
       set({ saving: false })
       get().fetchSchedules()
       return true
@@ -60,10 +60,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
 
-  deleteSchedule: async (id) => {
+  deleteSchedule: async (id, member) => {
     set({ saving: true, error: null })
     try {
-      await api.deleteSchedule(id)
+      await api.deleteSchedule(id, member)
       set(prev => ({ schedules: prev.schedules.filter(s => s.id !== id), saving: false }))
       return true
     } catch (err) {
@@ -72,9 +72,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
 
-  toggleSchedule: async (id) => {
+  toggleSchedule: async (id, member) => {
     try {
-      const res = await api.toggleSchedule(id)
+      const res = await api.toggleSchedule(id, member)
       // The server answers {success, id, enabled}: merge the flag, keep the entry
       const enabled = (res as { enabled?: boolean }).enabled
       set(prev => ({ schedules: prev.schedules.map(s => s.id === id ? { ...s, enabled: enabled ?? !s.enabled } : s) }))
@@ -85,9 +85,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
 
-  runSchedule: async (id) => {
+  runSchedule: async (id, member) => {
     try {
-      const result = await api.runSchedule(id)
+      const result = await api.runSchedule(id, member)
       get().fetchSchedules() // Refresh to update run_count and last_run
       get().fetchHistory(id) // Refresh history
       return result

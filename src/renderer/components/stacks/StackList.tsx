@@ -24,8 +24,13 @@ interface Props {
   onRefresh: () => void
   onEdit?: (stackName: string) => void
   onCreateStack?: () => void
+  /** a hub: a stack on the hub itself (the New menu's second choice) */
+  onCreateHubStack?: () => void
   /** a hub: the VMs are the stacks — the list is grouped into VMs and the hub's own stacks */
   hubMode?: boolean
+  /** a hub: builds in flight, shown as a pill that leads to the Proxmox page */
+  building?: number
+  onOpenBuilds?: () => void
   batchMode?: boolean
   selectedStacks?: Set<string>
   onToggleSelect?: (name: string) => void
@@ -43,7 +48,9 @@ const priorityOrder: Record<string, number> = {
   low: 3,
 }
 
-export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false}: Props) {
+export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [newOpen, setNewOpen] = useState(false)
   const { stacks, actionLoading, loading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
@@ -219,7 +226,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             <Layers className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">{hubMode ? 'VMs' : 'Stack Manager'}</h2>
+            <h2 className="text-lg font-semibold text-slate-100">{hubMode ? 'Stacks' : 'Stack Manager'}</h2>
             <p className="text-xs text-slate-500">
               {hubMode ? <>{stacks.filter((s) => s.placement === 'vm').length} VM{stacks.filter((s) => s.placement === 'vm').length === 1 ? '' : 's'} · {stacks.filter((s) => s.placement !== 'vm').length} on the hub</> : <>{stacks.length} total</>}
               <span className="mx-1.5 text-slate-700">|</span>
@@ -236,7 +243,70 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           </div>
         </div>
 
-        {/* Header actions */}
+        {/* Header actions: a hub keeps the header calm — New, a pill for builds in flight, and More */}
+        {hubMode ? (
+          <div className="flex items-center gap-2">
+            {building > 0 && onOpenBuilds && (
+              <button
+                onClick={onOpenBuilds}
+                title="Follow the builds on the Proxmox page"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-200 border border-amber-500/20 hover:bg-amber-500/20"
+              >
+                <Loader2 size={13} className="animate-spin" />
+                {building} VM{building === 1 ? '' : 's'} being built
+              </button>
+            )}
+            {isAdmin && (
+              <div className="relative">
+                <button
+                  onClick={() => { setNewOpen((v) => !v); setMoreOpen(false) }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25"
+                >
+                  <Plus size={14} />
+                  New stack
+                </button>
+                {newOpen && (
+                  <div className="absolute right-0 mt-1 w-64 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30" onMouseLeave={() => setNewOpen(false)}>
+                    <button onClick={() => { setNewOpen(false); onCreateStack?.() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5">
+                      <p className="text-xs font-medium text-slate-200 flex items-center gap-2"><Server size={12} className="text-amber-400" /> In its own VM</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">The hub builds a VM and the stack runs there (the usual way)</p>
+                    </button>
+                    <button onClick={() => { setNewOpen(false); onCreateHubStack?.() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5">
+                      <p className="text-xs font-medium text-slate-200 flex items-center gap-2"><Home size={12} className="text-emerald-400" /> On the hub</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Next to core-infrastructure, on this server</p>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="relative">
+              <button
+                onClick={() => { setMoreOpen((v) => !v); setNewOpen(false) }}
+                title="Start all, stop all, batch, lint"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${batchMode ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25' : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200 hover:bg-white/10'}`}
+              >
+                <ListChecks size={14} />
+                {batchMode ? 'Batch on' : 'More'}
+              </button>
+              {moreOpen && (
+                <div className="absolute right-0 mt-1 w-56 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30" onMouseLeave={() => setMoreOpen(false)}>
+                  {stoppedCount > 0 && (
+                    <button onClick={() => { setMoreOpen(false); stacks.filter((s) => s.status === 'stopped').forEach((s) => onAction(s.name, 'start')) }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-emerald-300 flex items-center gap-2"><Play size={12} /> Start all ({stoppedCount} stopped)</button>
+                  )}
+                  {runningCount > 0 && (
+                    <button onClick={() => { setMoreOpen(false); stacks.filter((s) => s.status === 'running').forEach((s) => onAction(s.name, 'stop')) }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-rose-300 flex items-center gap-2"><Square size={12} /> Stop all ({runningCount} running)</button>
+                  )}
+                  {isAdmin && onToggleBatchMode && (
+                    <button onClick={() => { setMoreOpen(false); onToggleBatchMode() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-slate-200 flex items-center gap-2"><ListChecks size={12} /> {batchMode ? 'Exit batch mode' : 'Batch mode'}</button>
+                  )}
+                  {linterPluginEnabled && (
+                    <button onClick={() => { setMoreOpen(false); handleLintAll() }} disabled={lintAllLoading || stacks.length === 0} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-cyan-300 flex items-center gap-2 disabled:opacity-50">{lintAllLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Lint all</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
         <div className="flex items-center gap-2">
           {/* Quick actions: Start All / Stop All */}
           {!batchMode && stacks.length > 0 && (
@@ -306,6 +376,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Search, filter, and sort bar */}
@@ -468,7 +539,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
               </div>
               <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                {hubMode ? 'New VM (a stack in its own VM)' : 'Create New Stack'}
+                Create New Stack
               </span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
                 Add a new service category

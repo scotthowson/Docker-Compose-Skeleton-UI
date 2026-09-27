@@ -2,7 +2,7 @@
 // Networks — Full network management with creation, deletion, topology
 // =============================================================================
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, type ReactNode, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Network, RefreshCw, Plus, Trash2, X, Check,
@@ -17,6 +17,9 @@ import {
   fetchContainers,
 } from '../api/endpoints'
 import { useNetworkStore } from '../stores/networkStore'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import type {
@@ -115,8 +118,10 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
     || ipv6 !== !!initial?.ipv6
     || JSON.stringify(cleanLabels) !== JSON.stringify(userLabels)
 
+  const { scope: fleetScope, member: scopeMember } = useFleetScope()
   const handleSave = async () => {
     if (!isValid || saving || !changed) return
+    if (fleetScope === 'all') { setError('Everywhere is a view: pick the hub or one VM above, then create or change networks there'); return }
     setSaving(true)
     setError('')
     const labelMap: Record<string, string> = {}
@@ -133,12 +138,12 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
     }
     try {
       if (initial) {
-        const res = await recreateNetwork(initial.name, opts)
+        const res = await recreateNetwork(initial.name, opts, initial.member ?? scopeMember)
         onSaved(res.failed?.length
           ? `${initial.name} rebuilt — ${res.failed.join(', ')} could not be reconnected`
           : `${initial.name} rebuilt${res.reconnected?.length ? `, ${res.reconnected.length} container${res.reconnected.length === 1 ? '' : 's'} reconnected` : ''}`)
       } else {
-        await createNetwork({ name: name.trim(), ...opts })
+        await createNetwork({ name: name.trim(), ...opts }, scopeMember)
         onSaved(`Network ${name.trim()} created`)
       }
       onClose()
@@ -357,13 +362,15 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
 
   const connectable = allContainers.filter((n) => !detail?.containers.some((c) => c.name === n))
 
+  const { member: scopeMember } = useFleetScope()
+  const netMember = network.member ?? scopeMember
   const handleDisconnect = async (containerName: string) => {
     setDisconnecting(containerName)
     setError('')
     try {
-      await disconnectFromNetwork(network.name, containerName)
+      await disconnectFromNetwork(network.name, containerName, netMember)
       onRefresh()
-      setDetail(await fetchNetworkDetail(network.name))
+      setDetail(await fetchNetworkDetail(network.name, netMember))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect')
     } finally {
@@ -376,10 +383,10 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
     setConnecting(true)
     setError('')
     try {
-      await connectToNetwork(network.name, connectTarget)
+      await connectToNetwork(network.name, connectTarget, netMember)
       setConnectTarget('')
       onRefresh()
-      setDetail(await fetchNetworkDetail(network.name))
+      setDetail(await fetchNetworkDetail(network.name, netMember))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to connect')
     } finally {
@@ -599,11 +606,13 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
+  const { scope: fleetScope, member: scopeMember } = useFleetScope()
   const handleDelete = async () => {
+    if (fleetScope === 'all') { setError('Everywhere is a view: pick the hub or one VM above, then delete it there'); return }
     setDeleting(true)
     setError('')
     try {
-      await deleteNetwork(name)
+      await deleteNetwork(name, scopeMember)
       onConfirm()
       onClose()
     } catch (err: unknown) {
@@ -695,6 +704,7 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
               <h3 className="text-sm font-semibold text-slate-100 truncate group-hover:text-white transition-colors font-mono">
                 {net.name}
               </h3>
+              {net.member !== undefined && <VmCapsule member={net.member} name={net.member_name} vmid={net.vmid} size="xs" />}
             </div>
             <p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
           </div>
@@ -785,11 +795,16 @@ export default function Networks() {
   const setNetworksStore = useNetworkStore((s) => s.setNetworks)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
+  // a hub: everywhere (the hub and every VM), the hub alone, or one VM — the choice every fleet-aware page shares
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedNetworks = useCallback(() => fetchNetworks(scope), [scope])
   const {
     data: networksData,
     loading: networksLoading,
     refresh: refreshNetworks,
-  } = usePolling<NetworkListResponse>(fetchNetworks, 30000, { enabled: isConnected })
+  } = usePolling<NetworkListResponse>(fetchScopedNetworks, 30000, { enabled: isConnected })
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refreshNetworks() } }, [scope, refreshNetworks])
 
   useEffect(() => {
     if (networksData) setNetworksStore(networksData.networks)
@@ -862,7 +877,8 @@ export default function Networks() {
             <Network className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Networks</span></h2>
+            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Networks</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={networksLoading && !!networksData} /></div>}
             <p className="text-sm text-slate-400">
               Docker network topology and container connections
             </p>

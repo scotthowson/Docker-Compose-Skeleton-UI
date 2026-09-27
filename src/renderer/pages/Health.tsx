@@ -10,6 +10,9 @@ import {
   HardDrive, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore } from '../api/endpoints'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -290,10 +293,16 @@ export default function Health() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const isConnected = connectionStatus === 'connected'
 
-  // Poll health report
-  const { data, loading, error, refresh } = usePolling<HealthReport>(fetchHealthReport, 5000, {
+  // a hub: everywhere (the hub and every VM), the hub alone, or one VM — the choice the Images and Updates pages share
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedReport = React.useCallback(() => fetchHealthReport(scope), [scope])
+
+  // Poll health report (the whole fleet is asked a little less often)
+  const { data, loading, error, refresh } = usePolling<HealthReport>(fetchScopedReport, scope === 'all' ? 15000 : 5000, {
     enabled: isConnected,
   })
+  const scopeRef = React.useRef(scope)
+  React.useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refresh() } }, [scope, refresh])
 
   // Poll full container list for enriched data (image, uptime, restart count)
   const { data: containerData } = usePolling<{ containers: ContainerInfo[] }>(fetchContainers, 10000, {
@@ -310,10 +319,10 @@ export default function Health() {
     enabled: isConnected,
   })
 
-  // Sync to store
+  // Sync to store (one VM's report is not this server's: it stays on this page)
   React.useEffect(() => {
-    if (data) setReport(data)
-  }, [data, setReport])
+    if (data && !scopeMember) setReport(data)
+  }, [data, setReport, scopeMember])
 
   // Also use the global store as fallback if the local poll hasn't returned yet
   const storeReport = useHealthStore((s) => s.report)
@@ -323,14 +332,19 @@ export default function Health() {
   const cfg = statusConfig[status]
   const StatusIcon = cfg.Icon
   const summary = report?.summary ?? { total: 0, healthy: 0, unhealthy: 0, stopped: 0 }
-  const healthContainers: HealthContainer[] = report?.containers ?? []
+  // a VM's own report carries no member tag: the rows belong to the VM asked for
+  const healthContainers: HealthContainer[] = useMemo(
+    () => (report?.containers ?? []).map((c) => (c.member === undefined && scopeMember ? { ...c, member: scopeMember, member_name: memberName } : c)),
+    [report, scopeMember, memberName],
+  )
+  const rowKey = (c: { member?: string | null; name: string }) => `${c.member ?? ''}|${c.name}`
 
-  // Merge health data with container info
+  // Merge health data with container info (a hub's /containers already carries every VM's, tagged)
   const containerMap = useMemo(() => {
     const map = new Map<string, ContainerInfo>()
     if (containerData?.containers) {
       for (const c of containerData.containers) {
-        map.set(c.name, c)
+        map.set(rowKey(c as { member?: string | null; name: string }), c)
       }
     }
     return map
@@ -338,7 +352,7 @@ export default function Health() {
 
   const enrichedContainers: EnrichedContainer[] = useMemo(() => {
     return healthContainers.map((hc) => {
-      const info = containerMap.get(hc.name)
+      const info = containerMap.get(rowKey(hc))
       return {
         ...hc,
         image: info?.image,
@@ -419,8 +433,9 @@ export default function Health() {
         <div>
           <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Health Monitor</span></h2>
           <p className="text-sm text-slate-400">
-            Real-time container health and system resource monitoring
+            {scope === 'all' ? `Every container on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}, live` : scopeMember ? `The containers inside the VM ${memberName}, live` : 'Real-time container health and system resource monitoring'}
           </p>
+          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} busy={loading && !!report} /></div>}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -458,6 +473,29 @@ export default function Health() {
       {error && (
         <div className="glass rounded-xl p-4 border border-rose-500/20">
           <p className="text-sm text-rose-400">Failed to fetch health data: {error.message}</p>
+        </div>
+      )}
+
+      {/* Everywhere: how each DCS is doing */}
+      {scope === 'all' && report?.members && report.members.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {report.members.map((mb) => {
+            const dot = !mb.reachable ? 'bg-slate-600' : mb.status === 'critical' ? 'bg-rose-400' : mb.status === 'degraded' ? 'bg-amber-400' : 'bg-emerald-400'
+            const label = !mb.reachable ? 'not answering' : mb.summary ? `${mb.summary.healthy}/${mb.summary.total} healthy${mb.summary.unhealthy ? ` · ${mb.summary.unhealthy} unhealthy` : ''}${mb.summary.stopped ? ` · ${mb.summary.stopped} stopped` : ''}` : mb.status
+            return (
+              <button
+                key={mb.id ?? 'hub'}
+                type="button"
+                onClick={() => setScope(mb.id ?? 'hub')}
+                title={mb.reachable ? `Only ${mb.id ? `the VM ${mb.name}` : 'the hub'}` : mb.error || 'not answering'}
+                className={`inline-flex items-center gap-2 h-8 px-2.5 rounded-lg border text-[11px] transition-colors ${!mb.reachable ? 'border-white/[0.06] text-slate-500' : mb.status === 'critical' ? 'bg-rose-500/[0.06] border-rose-500/20 text-rose-200' : mb.status === 'degraded' ? 'bg-amber-500/[0.06] border-amber-500/20 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                <span className="font-medium">{mb.id ? `VM${mb.vmid ? ` #${mb.vmid}` : ''} · ${mb.name}` : 'Hub'}</span>
+                <span className="text-slate-500">{label}</span>
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -742,11 +780,14 @@ export default function Health() {
               )}
               {filteredContainers.map((c) => (
                 <tr
-                  key={c.name}
+                  key={rowKey(c)}
                   className={`hover:bg-white/[0.03] transition-colors duration-150${c.health.toLowerCase() === 'unhealthy' ? ' glow-rose' : ''}`}
                 >
-                  <td className="px-5 py-3 font-mono text-slate-200 text-xs max-w-[200px] truncate" title={c.name}>
-                    {c.name}
+                  <td className="px-5 py-3 font-mono text-slate-200 text-xs max-w-[260px]" title={c.name}>
+                    <span className="inline-flex items-center gap-2 max-w-full">
+                      <span className="truncate">{c.name}</span>
+                      {scope === 'all' && <VmCapsule member={c.member} name={c.member_name} vmid={c.vmid} size="xs" onClick={() => setScope(c.member ?? 'hub')} />}
+                    </span>
                   </td>
                   <td className="px-5 py-3 text-xs text-slate-400 max-w-[200px] truncate font-mono" title={c.image}>
                     {c.image ? c.image.split(':')[0].split('/').pop() : '--'}
@@ -789,15 +830,16 @@ export default function Health() {
           )}
           {loading && enrichedContainers.length === 0 && <LoadingState compact label="Loading health data…" />}
           {filteredContainers.map((c) => {
-            const isExpanded = expandedRow === c.name
+            const isExpanded = expandedRow === rowKey(c)
             return (
               <div
-                key={c.name}
+                key={rowKey(c)}
                 className="px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
+                {scope === 'all' && <div className="mb-1"><VmCapsule member={c.member} name={c.member_name} vmid={c.vmid} size="xs" /></div>}
                 <button
                   type="button"
-                  onClick={() => setExpandedRow(isExpanded ? null : c.name)}
+                  onClick={() => setExpandedRow(isExpanded ? null : rowKey(c))}
                   className="w-full flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">

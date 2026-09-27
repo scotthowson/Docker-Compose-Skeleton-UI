@@ -2,7 +2,7 @@
 // Activity — Gorgeous vertical timeline of Docker events with filtering
 // =============================================================================
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Play, Square, Plus, Trash2, RefreshCw, Download,
   Box, Network, HardDrive, Database,
@@ -13,6 +13,9 @@ import {
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { fetchEvents, fetchAuditLog } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useLogStore } from '../stores/logStore'
@@ -454,7 +457,9 @@ export default function Activity() {
     reportPollFailure()
   }, [reportPollFailure])
 
-  const eventsPoll = usePolling<EventsResponse>(fetchEvents, 3000, {
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScopedEvents = useCallback(() => fetchEvents(scope), [scope])
+  const eventsPoll = usePolling<EventsResponse>(fetchScopedEvents, scope === 'all' ? 6000 : 3000, {
     enabled: isConnected,
     onError: onPollError,
   })
@@ -534,7 +539,7 @@ export default function Activity() {
     const load = async () => {
       setAuditLoading(true)
       try {
-        const res = await fetchAuditLog({ limit: 200 })
+        const res = await fetchAuditLog({ limit: 200 }, scope)
         if (!cancelled) setAuditEntries(res.entries)
       } catch {
         if (!cancelled) addToast({ type: 'error', message: 'Failed to load audit log' })
@@ -545,7 +550,7 @@ export default function Activity() {
     load()
     const interval = setInterval(load, 15000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [auditExpanded, isConnected, addToast])
+  }, [auditExpanded, isConnected, addToast, scope])
 
   // Audit action types for filter
   const auditActions = useMemo(() => {
@@ -582,7 +587,7 @@ export default function Activity() {
       <div className="flex items-center justify-between animate-fade-in">
         <div>
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient">Activity Timeline</span>
+            <span className="text-gradient">Activity Timeline</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Real-time Docker events across all resources
@@ -847,6 +852,7 @@ export default function Activity() {
                                       <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${colors.bg} ${colors.border} ${colors.text}`}>
                                         {entry.action}
                                       </span>
+                                      {entry.member !== undefined && <VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} />}
                                     </div>
                                     <p className="text-xs text-slate-400 leading-relaxed break-words">
                                       {entry.detail}

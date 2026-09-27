@@ -114,8 +114,8 @@ export const navItems: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]
 
-/** on a hub the VMs are the stacks: the Stacks entry reads "VMs" */
-function navLabel(item: NavItem, isHub: boolean): string { return item.id === 'stacks' && isHub ? 'VMs' : item.label }
+/** the entry's label (the VMs are the stacks, so a hub says Stacks too) */
+function navLabel(item: NavItem, _isHub: boolean): string { return item.label }
 
 export function Sidebar() {
   // a hub: the badge counts the VMs (the merged stack list), not this server's own stacks
