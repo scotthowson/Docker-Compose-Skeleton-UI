@@ -858,9 +858,10 @@ function RoutesPanel(props: {
                 const rec = recordByName.get(route.subdomain)
                 const missing = cfConfigured && (missingByFqdn.has(route.subdomain) || (!rec && route.subdomain.endsWith(`.${domain}`)))
                 return (
-                  <div key={routeKey} className="group/row flex items-center gap-3 px-5 py-3 hover:bg-white/[0.03] transition-colors">
-                    <span className="text-[10px] font-mono text-slate-700 shrink-0">├─</span>
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                  <div key={routeKey} className="group/row flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5 px-4 sm:px-5 py-3 hover:bg-white/[0.03] transition-colors">
+                    <span className="hidden sm:inline text-[10px] font-mono text-slate-700 shrink-0">├─</span>
+                    {/* Phones: the name on its own line, the target and actions on the next */}
+                    <div className="flex items-center gap-1 min-w-0 flex-1 basis-full sm:basis-auto">
                       {isEditing ? (
                         <div className="flex items-center gap-1.5 flex-1">
                           <input
@@ -875,12 +876,12 @@ function RoutesPanel(props: {
                           <button onClick={onRenameCancel} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm font-mono text-cyan-400 truncate" title={route.subdomain}>{sub}</span>
-                          <span className="text-[10px] text-slate-600 font-mono">.{domain}</span>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="text-sm font-mono text-cyan-400 truncate min-w-0" title={route.subdomain}>{sub}</span>
+                          <span className="text-[10px] text-slate-600 font-mono shrink-0">.{domain}</span>
                           {route.conflict && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-rose-500/15 text-rose-400" title="Two routes claim this subdomain"><AlertTriangle size={9} /> conflict</span>}
                           {cfConfigured && rec && (
-                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${rec.proxied ? 'bg-orange-500/10 text-orange-300' : 'bg-white/5 text-slate-400'}`} title={`${rec.type} → ${rec.content}${rec.proxied ? ' (proxied)' : ' (DNS only)'}`}>
+                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold shrink-0 ${rec.proxied ? 'bg-orange-500/10 text-orange-300' : 'bg-white/5 text-slate-400'}`} title={`${rec.type} → ${rec.content}${rec.proxied ? ' (proxied)' : ' (DNS only)'}`}>
                               {rec.proxied ? <Cloud size={9} /> : <Globe size={9} />} {rec.type}
                             </span>
                           )}
@@ -888,10 +889,11 @@ function RoutesPanel(props: {
                         </div>
                       )}
                     </div>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none basis-full sm:basis-auto">
                     <ArrowRight size={12} className="text-slate-700 shrink-0" />
-                    <span className="text-xs text-slate-300 font-medium shrink-0 w-24 truncate" title={route.service}>{route.service}</span>
+                    <span className="text-xs text-slate-300 font-medium truncate min-w-0 sm:w-24 sm:shrink-0" title={route.service}>{route.service}</span>
                     <span className="text-[10px] text-slate-500 font-mono truncate hidden lg:block max-w-[180px]" title={route.target}>{route.target}</span>
-                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <div className="ml-auto sm:ml-0 flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
                       {isAdmin && missing && !isEditing && (
                         <button onClick={() => onCreateRecord(route.subdomain)} disabled={creatingFor === route.subdomain} className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-all disabled:opacity-50" title="Create a proxied CNAME pointing at the domain">
                           {creatingFor === route.subdomain ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />} DNS
@@ -899,11 +901,12 @@ function RoutesPanel(props: {
                       )}
                       {isAdmin && !isEditing && (
                         <>
-                          <button onClick={() => onRenameStart(route)} className="p-1.5 rounded-md text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all" title="Rename subdomain"><Pencil size={11} /></button>
-                          <button onClick={() => onDelete(route)} className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Delete route"><Trash2 size={11} /></button>
+                          <button onClick={() => onRenameStart(route)} className="p-2 sm:p-1.5 rounded-md text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all" title="Rename subdomain"><Pencil size={11} /></button>
+                          <button onClick={() => onDelete(route)} className="p-2 sm:p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Delete route"><Trash2 size={11} /></button>
                         </>
                       )}
-                      <a href={`https://${route.subdomain}`} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-md text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all" title={`Open https://${route.subdomain}`}><ExternalLink size={11} /></a>
+                      <a href={`https://${route.subdomain}`} target="_blank" rel="noopener noreferrer" className="p-2 sm:p-1.5 rounded-md text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all" title={`Open https://${route.subdomain}`}><ExternalLink size={11} /></a>
+                    </div>
                     </div>
                   </div>
                 )
