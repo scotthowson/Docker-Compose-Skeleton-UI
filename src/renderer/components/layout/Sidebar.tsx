@@ -2,6 +2,7 @@
 // Sidebar — Collapsible navigation with glassmorphism, badges, health status
 // =============================================================================
 
+import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useEffect } from 'react'
 import {
   LayoutDashboard,
@@ -110,6 +111,9 @@ export const navItems: NavItem[] = [
   { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
   { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
 ]
+
+/** on a hub the VMs are the stacks: the Stacks entry reads "VMs" */
+function navLabel(item: NavItem, isHub: boolean): string { return item.id === 'stacks' && isHub ? 'VMs' : item.label }
 
 export function Sidebar() {
   const currentPage = useSettingsStore((s) => s.currentPage)
@@ -352,13 +356,14 @@ function NavButton({
   statusIcon?: { icon: React.ElementType; color: string; title: string }
   onClick: () => void
 }) {
+  const { isHub } = useFleetRole()
   const Icon = item.icon
   const StatusIcon = statusIcon?.icon
 
   return (
     <button
       onClick={onClick}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? navLabel(item, isHub) : undefined}
       className={`
         group relative flex items-center gap-3 w-full
         rounded-lg px-3 py-2
@@ -396,7 +401,7 @@ function NavButton({
 
       {!collapsed && (
         <>
-          <span className="truncate whitespace-nowrap flex-1 text-left">{item.label}</span>
+          <span className="truncate whitespace-nowrap flex-1 text-left">{navLabel(item, isHub)}</span>
           {/* Status icon (health check / connection indicator) */}
           {StatusIcon && (
             <StatusIcon

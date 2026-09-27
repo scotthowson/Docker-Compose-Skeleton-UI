@@ -27,8 +27,9 @@ import {
   Pencil,
   X,
 } from 'lucide-react'
-import type { StackDetail as StackDetailType, ContainerInfo } from '../../../shared/types'
-import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack } from '../../api/endpoints'
+import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxVmAction } from '../../../shared/types'
+import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction } from '../../api/endpoints'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { ComposeViewer } from './ComposeViewer'
 
@@ -39,6 +40,8 @@ interface Props {
   isActionLoading: boolean
   onContainerClick?: (containerName: string) => void
   isAdmin?: boolean
+  /** the list entry: on a hub a VM stack carries its VM, member and address */
+  stack?: StackInfo | null
 }
 
 /** Format seconds into human-readable uptime */
@@ -83,7 +86,15 @@ function stateBadge(state: string) {
   return 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
 }
 
-export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick, isAdmin = false }: Props) {
+export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick, isAdmin = false, stack = null }: Props) {
+  // a VM stack: the VM is the stack — its power is part of the stack's controls
+  const isVm = stack?.placement === 'vm'
+  const [vmBusy, setVmBusy] = useState('')
+  const vmPower = async (action: ProxmoxVmAction) => {
+    if (!stack?.node || !stack.vmid) return
+    setVmBusy(action)
+    try { await proxmoxVmAction(stack.node, 'qemu', stack.vmid, action) } catch { /* the toast below reports */ } finally { setVmBusy('') }
+  }
   const [detail, setDetail] = useState<StackDetailType | null>(null)
   const [logs, setLogs] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -343,6 +354,23 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                   {formatStackName(stackName)}
                 </h2>
                 <p className="text-xs text-slate-500 font-mono">{stackName}</p>
+                {isVm && (
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px]">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border font-semibold ${stack?.reachable === false ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-200 border-amber-500/20'}`}>
+                      VM #{stack?.vmid}{stack?.node ? ` on ${stack.node}` : ''}{stack?.reachable === false ? ' · off / not answering' : ''}
+                    </span>
+                    {stack?.member_url && <span className="text-slate-500 font-mono">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span>}
+                    {stack?.version && <span className="text-slate-500">DCS {stack.version}</span>}
+                    {isAdmin && stack?.vmid && (
+                      <span className="inline-flex items-center gap-1 ml-1">
+                        {stack.reachable === false && <button type="button" onClick={() => vmPower('start')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-emerald-500/15 text-emerald-200 border border-emerald-500/25 hover:bg-emerald-500/25 disabled:opacity-50">{vmBusy === 'start' ? 'Starting…' : 'Start VM'}</button>}
+                        {stack.reachable !== false && <button type="button" onClick={() => vmPower('reboot')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 disabled:opacity-50">{vmBusy === 'reboot' ? 'Rebooting…' : 'Reboot VM'}</button>}
+                        {stack.reachable !== false && <button type="button" onClick={() => vmPower('shutdown')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20 hover:bg-rose-500/20 disabled:opacity-50">{vmBusy === 'shutdown' ? 'Shutting down…' : 'Shut down VM'}</button>}
+                        <button type="button" onClick={() => useSettingsStore.getState().setCurrentPage('proxmox')} className="h-7 px-2 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10">Proxmox page</button>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {isAdmin && (
                 <button
@@ -611,7 +639,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 
       {/* Tab content */}
       {activeTab === 'containers' && (
-        <ContainersTable containers={detail?.containers ?? []} onContainerClick={onContainerClick} />
+        <ContainersTable containers={detail?.containers ?? []} onContainerClick={onContainerClick} member={isVm ? stack?.member ?? null : null} isAdmin={isAdmin} onChanged={() => void loadDetail()} />
       )}
 
       {activeTab === 'services' && (
@@ -634,7 +662,13 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 // Sub-components
 // -----------------------------------------------------------------------------
 
-function ContainersTable({ containers, onContainerClick }: { containers: ContainerInfo[]; onContainerClick?: (name: string) => void }) {
+function ContainersTable({ containers, onContainerClick, member = null, isAdmin = false, onChanged }: { containers: ContainerInfo[]; onContainerClick?: (name: string) => void; member?: string | null; isAdmin?: boolean; onChanged?: () => void }) {
+  // start / stop / restart straight from the row — through the hub for a VM's containers
+  const [busy, setBusy] = useState('')
+  const quick = async (e: { stopPropagation: () => void }, name: string, a: 'start' | 'stop' | 'restart') => {
+    e.stopPropagation(); setBusy(`${name}:${a}`)
+    try { await (a === 'start' ? startContainer : a === 'stop' ? stopContainer : restartContainer)(name, member) } catch { /* the row keeps its state */ } finally { setBusy(''); onChanged?.() }
+  }
   if (containers.length === 0) {
     return (
       <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
@@ -687,6 +721,17 @@ function ContainersTable({ containers, onContainerClick }: { containers: Contain
                     <span className={`text-sm font-medium font-mono ${onContainerClick ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-200'}`}>
                       {c.name}
                     </span>
+                    {isAdmin && (
+                      <span className="inline-flex items-center gap-0.5 ml-2 align-middle">
+                        {busy.startsWith(`${c.name}:`) ? <Loader2 className="w-3 h-3 animate-spin text-cyan-400" /> : (
+                          <>
+                            {c.state.toLowerCase() !== 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'start')} title="Start" className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10"><Play className="w-3 h-3" /></button>}
+                            {c.state.toLowerCase() === 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'restart')} title="Restart" className="p-1 rounded text-slate-300 hover:bg-white/10"><RotateCcw className="w-3 h-3" /></button>}
+                            {c.state.toLowerCase() === 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'stop')} title="Stop" className="p-1 rounded text-rose-300 hover:bg-rose-500/10"><Square className="w-3 h-3" /></button>}
+                          </>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span

@@ -4,6 +4,7 @@
 // Shown under 768 px only; the sidebar takes over above that.
 // =============================================================================
 
+import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LayoutDashboard, Layers, Box, HeartPulse, Menu, X, Search } from 'lucide-react'
@@ -29,6 +30,7 @@ const GROUPS: { label: string; ids: PageId[] }[] = [
 ]
 
 export function MobileNav() {
+  const { isHub } = useFleetRole() // on a hub the VMs are the stacks
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const userRole = useAuthStore((s) => s.userRole)
@@ -72,7 +74,7 @@ export function MobileNav() {
                     <span className="absolute -top-0.5 right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-4 text-center ring-2 ring-slate-900">{unhealthy}</span>
                   )}
                 </span>
-                <span className="text-[11px] font-medium leading-none">{p.label}</span>
+                <span className="text-[11px] font-medium leading-none">{p.id === 'stacks' && isHub ? 'VMs' : p.label}</span>
               </button>
             )
           })}

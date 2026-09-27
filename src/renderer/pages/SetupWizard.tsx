@@ -42,6 +42,8 @@ interface StackEntry {
   isDefault: boolean
   isNew: boolean
   editing: boolean
+  /** the folder this row started as (a renamed row keeps the stack files it came from) */
+  source?: string
 }
 
 type Step = 1 | 2 | 3 | 4 | 5
@@ -239,7 +241,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const vmReady = !!(pveTest?.ok && caps?.can_provision && vmSettings)
   const placementOf = (name: string): 'hub' | 'vm' => placements[name] ?? (vmReady && name !== 'core-infrastructure' ? 'vm' : 'hub')
   const specOf = (name: string) => vmSpecs[name] ?? { cores: provDefaults?.defaults.cores ?? 2, memGb: Math.round((provDefaults?.defaults.memory_mb ?? 4096) / 1024), diskGb: provDefaults?.defaults.disk_gb ?? 32 }
-  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, ...specOf(st.name) }))
+  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
   const jobsPoll = usePolling(fetchFleetJobs, 5000, { enabled: complete && vmQueued > 0 })
   const pveGuest = !!defaults?.system?.proxmox?.guest
   const pveHost = !!defaults?.system?.proxmox?.host
@@ -745,7 +747,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 3c. The VMs: one per stack placed in a VM, built by the hub in the background
       if (vmPlan.length > 0 && vmSettings) {
         try {
-          const r = await provisionFleet({ ...vmSettings, vms: vmPlan.map((v) => ({ stack: v.stack, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
+          const r = await provisionFleet({ ...vmSettings, vms: vmPlan.map((v) => ({ stack: v.stack, source: v.source, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
           setVmQueued(r.jobs.length)
           results.push({ label: `${r.jobs.length} VM${r.jobs.length === 1 ? '' : 's'} being built by the hub: ${r.jobs.map((j) => `${j.stack} at ${j.ip}`).join(', ')}`, ok: true, detail: 'Each VM gets Docker and DCS, joins this hub and runs its stack — follow them below or on the Proxmox page' })
         } catch (err) {
@@ -835,8 +837,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     const name = editValue.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
     if (name && /^[a-z0-9][a-z0-9_-]*$/.test(name) && !stacks.some((s, i) => i !== index && s.name === name)) {
       const updated = [...stacks]
-      updated[index] = { ...updated[index], name }
+      const old = updated[index].name
+      // a renamed row keeps the folder it came from, and its VM placement and size follow the new name
+      updated[index] = { ...updated[index], name, source: updated[index].source ?? (updated[index].isNew ? undefined : old) }
       setStacks(updated)
+      if (old !== name) {
+        setPlacements((prev) => { if (!(old in prev)) return prev; const next = { ...prev, [name]: prev[old] }; delete next[old]; return next })
+        setVmSpecs((prev) => { if (!(old in prev)) return prev; const next = { ...prev, [name]: prev[old] }; delete next[old]; return next })
+      }
     }
     setEditingIndex(null)
     setEditValue('')

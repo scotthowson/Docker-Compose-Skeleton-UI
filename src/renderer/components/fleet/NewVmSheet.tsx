@@ -5,6 +5,7 @@
 // network) come prefilled from /fleet/provision/defaults and are remembered.
 // =============================================================================
 
+import { useConnectionStore } from '../../stores/connectionStore'
 import { useEffect, useState } from 'react'
 import { Loader2, Rocket, Server } from 'lucide-react'
 import { fetchFleetProvisionDefaults, provisionFleet } from '../../api/endpoints'
@@ -12,18 +13,21 @@ import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities } from '.
 import { Sheet, inputCls, labelCls } from './fleetShared'
 
 export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string }
-const SETTINGS_KEY = 'dcs-fleet-vm-settings'
+// remembered per hub (another hub has other storages and another network)
+const settingsKey = () => `dcs-fleet-vm-settings:${useConnectionStore.getState().serverUrl || 'default'}`
 
 export function loadVmSettings(): Partial<VmSettings> {
-  try { const raw = localStorage.getItem(SETTINGS_KEY); return raw ? (JSON.parse(raw) as Partial<VmSettings>) : {} } catch { return {} }
+  try { const raw = localStorage.getItem(settingsKey()); return raw ? (JSON.parse(raw) as Partial<VmSettings>) : {} } catch { return {} }
 }
-export function saveVmSettings(s: VmSettings) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch { /* private window */ } }
+export function saveVmSettings(s: VmSettings) { try { localStorage.setItem(settingsKey(), JSON.stringify(s)) } catch { /* private window */ } }
 
+/** the hub's defaults, with what was remembered on top — but only where it still exists on this Proxmox */
 export function settingsFromDefaults(d: FleetProvisionDefaults, saved: Partial<VmSettings> = {}): VmSettings {
+  const has = (name?: string) => !!name && d.storages.some((s) => s.storage === name)
   return {
-    node: saved.node || d.node,
-    storage: saved.storage || d.storage,
-    image_storage: saved.image_storage || d.image_storage || 'local',
+    node: saved.node && (!d.node || saved.node === d.node) ? saved.node : d.node,
+    storage: has(saved.storage) ? (saved.storage as string) : d.storage,
+    image_storage: has(saved.image_storage) ? (saved.image_storage as string) : (d.image_storage || 'local'),
     bridge: saved.bridge || d.bridge || 'vmbr0',
     cidr: saved.cidr || d.cidr || 24,
     gateway: saved.gateway || d.gateway,

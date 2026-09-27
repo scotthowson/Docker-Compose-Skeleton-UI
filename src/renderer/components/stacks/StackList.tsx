@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import {
   Search, Layers, Filter, Plus, Play, Square, Download,
   ArrowUpDown, X, Loader2, AlertTriangle, Check, Sparkles,
-  Trash2, ListChecks,
+  Trash2, ListChecks, Server, Home,
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
 import { useContainerStore } from '../../stores/containerStore'
@@ -24,6 +24,8 @@ interface Props {
   onRefresh: () => void
   onEdit?: (stackName: string) => void
   onCreateStack?: () => void
+  /** a hub: the VMs are the stacks — the list is grouped into VMs and the hub's own stacks */
+  hubMode?: boolean
   batchMode?: boolean
   selectedStacks?: Set<string>
   onToggleSelect?: (name: string) => void
@@ -41,7 +43,7 @@ const priorityOrder: Record<string, number> = {
   low: 3,
 }
 
-export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin }: Props) {
+export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false}: Props) {
   const { stacks, actionLoading, loading } = useStackStore()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
@@ -217,9 +219,9 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             <Layers className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">Stack Manager</h2>
+            <h2 className="text-lg font-semibold text-slate-100">{hubMode ? 'VMs' : 'Stack Manager'}</h2>
             <p className="text-xs text-slate-500">
-              {stacks.length} total
+              {hubMode ? <>{stacks.filter((s) => s.placement === 'vm').length} VM{stacks.filter((s) => s.placement === 'vm').length === 1 ? '' : 's'} · {stacks.filter((s) => s.placement !== 'vm').length} on the hub</> : <>{stacks.length} total</>}
               <span className="mx-1.5 text-slate-700">|</span>
               <span className="text-emerald-400">{runningCount} running</span>
               <span className="mx-1.5 text-slate-700">|</span>
@@ -404,7 +406,31 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         </div>
       ) : filtered.length > 0 || stacks.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
-          {filtered.map((stack) => (
+          {/* a hub: each VM is a stack — VMs first, then what the hub itself runs */}
+          {hubMode && filtered.some((s) => s.placement === 'vm') && (
+            <p className="col-span-full text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 -mb-1"><Server size={12} /> VMs — click one for the containers running in it</p>
+          )}
+          {(hubMode ? [...filtered.filter((s) => s.placement === 'vm')] : filtered).map((stack) => (
+            <StackCard
+              key={stack.name}
+              stack={stack}
+              isActionLoading={actionLoading === stack.name}
+              onAction={onAction}
+              onSelect={onSelect}
+              onEdit={isAdmin ? onEdit : undefined}
+              onDelete={isAdmin ? (name) => setShowDeleteModal(name) : undefined}
+              batchMode={batchMode}
+              isSelected={selectedStacks?.has(stack.name)}
+              onToggleSelect={onToggleSelect}
+              matchedContainers={search.trim() ? containerMatches(stack.name) : undefined}
+              isAdmin={isAdmin}
+            />
+          ))}
+
+          {hubMode && filtered.some((s) => s.placement !== 'vm') && (
+            <p className="col-span-full text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 -mb-1 mt-2"><Home size={12} /> On the hub — this server's own stacks</p>
+          )}
+          {hubMode && filtered.filter((s) => s.placement !== 'vm').map((stack) => (
             <StackCard
               key={stack.name}
               stack={stack}
@@ -442,7 +468,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
               </div>
               <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                Create New Stack
+                {hubMode ? 'New VM (a stack in its own VM)' : 'Create New Stack'}
               </span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
                 Add a new service category

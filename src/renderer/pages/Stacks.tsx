@@ -29,6 +29,11 @@ import {
   CheckCircle2, XCircle, X, ListChecks, Trash2,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useFleetRole } from '../hooks/useFleetRole'
+import { usePolling } from '../hooks/usePolling'
+import { fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities } from '../api/endpoints'
+import NewVmSheet from '../components/fleet/NewVmSheet'
+import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
 
 // -----------------------------------------------------------------------------
 // Stacks Page
@@ -40,6 +45,12 @@ export default function Stacks() {
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
   const [selectedStackName, setSelectedStackName] = useState<string | null>(null)
+  // a hub: the VMs are the stacks — the page reads "VMs", builds new ones and follows the builds
+  const { isHub: hubMode } = useFleetRole()
+  const [showNewVm, setShowNewVm] = useState(false)
+  const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && hubMode })
+  const provDefaults = usePolling(fetchFleetProvisionDefaults, 60000, { enabled: isConnected && hubMode })
+  const caps = usePolling(fetchProxmoxCapabilities, 60000, { enabled: isConnected && hubMode })
   const navigationPayload = useSettingsStore((s) => s.navigationPayload)
   const { addToast } = useToast()
 
@@ -315,20 +326,33 @@ export default function Stacks() {
             useSettingsStore.getState().setCurrentPage('containers', { focusContainer: containerName })
           }}
           isAdmin={isAdmin}
+          stack={stacks.find((st) => st.name === selectedStackName) ?? null}
         />
       ) : (
+        <>
+        {hubMode && (jobs.data?.jobs.length ?? 0) > 0 && (
+          <div className="mb-4"><FleetJobsPanel jobs={jobs.data?.jobs ?? []} onChanged={jobs.refresh} compact title="VMs being built" /></div>
+        )}
         <StackList
           onAction={handleAction}
           onSelect={(name) => setSelectedStackName(name)}
           onRefresh={refresh}
           onEdit={handleEdit}
-          onCreateStack={() => setShowCreateOverlay(true)}
+          onCreateStack={() => (hubMode ? setShowNewVm(true) : setShowCreateOverlay(true))}
           batchMode={batchMode}
           selectedStacks={selectedStacks}
           onToggleSelect={handleToggleSelect}
           onToggleBatchMode={handleToggleBatchMode}
           isAdmin={isAdmin}
+          hubMode={hubMode}
         />
+        </>
+      )}
+
+      {/* a hub: a new stack is a new VM */}
+      {showNewVm && (
+        <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} initialStack="" onClose={() => setShowNewVm(false)}
+          onQueued={() => { setShowNewVm(false); addToast({ type: 'success', message: 'The VM is being built — follow it on the card' }); jobs.refresh() }} />
       )}
 
       {/* ----------------------------------------------------------------- */}

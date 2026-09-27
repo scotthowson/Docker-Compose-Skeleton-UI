@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
+import { RotateCcw,
   Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
   Satellite, Link2, KeyRound, Radar, Rocket, MoreHorizontal, PlugZap, Pencil, Trash2, Layers, ExternalLink, Home,
@@ -23,9 +23,10 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxTasks, proxmoxVmAction,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
+  startContainer, stopContainer, restartContainer,
   testFleetMember, removeFleetMember, fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities,
 } from '../api/endpoints'
-import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, StackInfo } from '../../shared/types'
+import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, StackInfo, ContainerInfo } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
@@ -168,6 +169,66 @@ function NodeCard({ node, vmCount }: { node: ProxmoxNode; vmCount: number }) {
 
 type StackAct = 'start' | 'stop' | 'restart'
 
+// The VM is the stack: a member that runs exactly one stack shows the containers running in it,
+// with start/stop/restart per container, Open (the VMs page), Edit compose and the stack's own controls.
+function VmContainers({ member, live, stack, isAdmin, onStackAction, busyKey, onOpen }: { member: FleetMemberBase; live: FleetMemberLive; stack: StackInfo; isAdmin: boolean; onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void; busyKey: string; onOpen: (stack: string, edit: boolean) => void }) {
+  const { addToast } = useToast()
+  const [cbusy, setCbusy] = useState('')
+  const containers = (live.containers ?? []).filter((c) => !c.stack || c.stack === stack.name)
+  const busy = busyKey === `${member.id}/${stack.name}`
+  const isRunning = (c: ContainerInfo) => String(c.state ?? '').startsWith('running')
+  const act = async (name: string, a: 'start' | 'stop' | 'restart') => {
+    setCbusy(`${name}:${a}`)
+    try {
+      const fn = a === 'start' ? startContainer : a === 'stop' ? stopContainer : restartContainer
+      await fn(name, member.id)
+      addToast({ type: 'success', message: `${name}: ${a} sent to ${member.name}` })
+    } catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : `${a} failed` }) } finally { setCbusy('') }
+  }
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.04]">
+        <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${stack.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+        <p className="text-xs font-medium text-slate-200 flex-1 truncate">{containers.length === 0 ? 'No containers yet — deploy a template here' : `${containers.filter(isRunning).length}/${containers.length} containers running`}</p>
+        {isAdmin && (busy ? <Loader2 size={13} className="animate-spin text-cyan-400" /> : (
+          <div className="flex items-center gap-1">
+            {stack.status !== 'running' && <button type="button" onClick={() => onStackAction(member, stack.name, 'start')} title="Start the stack" className="h-8 w-8 rounded-lg text-emerald-300 hover:bg-emerald-500/10 flex items-center justify-center"><Play size={13} /></button>}
+            {stack.status === 'running' && <button type="button" onClick={() => onStackAction(member, stack.name, 'restart')} title="Restart the stack" className="h-8 w-8 rounded-lg text-slate-300 hover:bg-white/10 flex items-center justify-center"><RotateCcw size={13} /></button>}
+            {stack.status === 'running' && <button type="button" onClick={() => onStackAction(member, stack.name, 'stop')} title="Stop the stack" className="h-8 w-8 rounded-lg text-rose-300 hover:bg-rose-500/10 flex items-center justify-center"><Square size={13} /></button>}
+          </div>
+        ))}
+      </div>
+      {containers.length > 0 && (
+        <div className="divide-y divide-white/[0.04] max-h-64 overflow-y-auto scrollbar-thin">
+          {containers.map((c) => {
+            const running = isRunning(c)
+            return (
+              <div key={c.name} className="flex items-center gap-2.5 px-3 py-1.5">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${running ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-medium text-slate-200 truncate">{c.name}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{c.image}{c.uptime_seconds ? ` · up ${Math.floor(c.uptime_seconds / 3600)}h ${Math.floor((c.uptime_seconds % 3600) / 60)}m` : ''}{c.health ? ` · ${c.health}` : ''}</p>
+                </div>
+                {isAdmin && (cbusy.startsWith(`${c.name}:`) ? <Loader2 size={12} className="animate-spin text-cyan-400" /> : (
+                  <div className="flex items-center gap-0.5">
+                    {!running && <button type="button" onClick={() => act(c.name, 'start')} title="Start" className="h-7 w-7 rounded-lg text-emerald-300 hover:bg-emerald-500/10 flex items-center justify-center"><Play size={11} /></button>}
+                    {running && <button type="button" onClick={() => act(c.name, 'restart')} title="Restart" className="h-7 w-7 rounded-lg text-slate-300 hover:bg-white/10 flex items-center justify-center"><RotateCcw size={11} /></button>}
+                    {running && <button type="button" onClick={() => act(c.name, 'stop')} title="Stop" className="h-7 w-7 rounded-lg text-rose-300 hover:bg-rose-500/10 flex items-center justify-center"><Square size={11} /></button>}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-white/[0.04] flex-wrap">
+        <button type="button" onClick={() => onOpen(stack.name, false)} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Layers size={12} /> Open</button>
+        {isAdmin && <button type="button" onClick={() => onOpen(stack.name, true)} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Pencil size={12} /> Edit compose</button>}
+      </div>
+    </div>
+  )
+}
+
 function MemberStacks({ member, live, isAdmin, onStackAction, busyKey }: { member: FleetMemberBase; live?: FleetMemberLive; isAdmin: boolean; onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void; busyKey: string }) {
   const stacks = live?.stacks ?? []
   if (!live) return <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Reading {member.name}'s stacks…</p>
@@ -216,9 +277,11 @@ interface VmRowProps {
   onDeploy: (m: FleetMemberBase) => void
   onLink: (p: MemberSheetPrefill) => void
   onMemberMenu: (m: FleetMemberBase) => void
+  /** open the stack on the VMs page (edit: straight into its compose) */
+  onOpen: (stack: string, edit: boolean) => void
 }
 
-function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onStackAction, onDeploy, onLink, onMemberMenu }: VmRowProps) {
+function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onStackAction, onDeploy, onLink, onMemberMenu, onOpen }: VmRowProps) {
   const acts = actionsFor(vm)
   const found = scan?.dcs && !scan.member ? scan.dcs : null
   return (
@@ -267,7 +330,9 @@ function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onSt
             <span className="text-slate-600 font-mono truncate">{member.url}</span>
             {member.matched_by && <span className="text-slate-600" title={MATCH_LABEL[member.matched_by]}>· {member.matched_by === 'manual' ? 'mapped by hand' : member.matched_by === 'provision' ? 'built by the hub' : `matched by ${member.matched_by}`}</span>}
           </div>
-          <MemberStacks member={member} live={live} isAdmin={isAdmin} onStackAction={onStackAction} busyKey={busyKey} />
+          {live?.reachable && live.stacks.length === 1
+            ? <VmContainers member={member} live={live} stack={live.stacks[0]} isAdmin={isAdmin} onStackAction={onStackAction} busyKey={busyKey} onOpen={onOpen} />
+            : <MemberStacks member={member} live={live} isAdmin={isAdmin} onStackAction={onStackAction} busyKey={busyKey} />}
           {isAdmin && (
             <div className="flex items-center gap-2 flex-wrap">
               <button type="button" onClick={() => onDeploy(member)} className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-amber-500/25 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20"><Rocket size={13} /> Deploy here</button>
@@ -567,7 +632,7 @@ export default function Proxmox() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {list.map((vm) => {
                   const m = memberByVm.get(vm.vmid)
-                  return <VmRow key={`${vm.node}/${vm.type}/${vm.vmid}`} vm={vm} isAdmin={isAdmin} isHub={isHub || role === 'standalone'} member={m} live={m ? liveById.get(m.id) : undefined} scan={scanByVm.get(vm.vmid)} busyKey={busyKey}
+                  return <VmRow key={`${vm.node}/${vm.type}/${vm.vmid}`} onOpen={(st, edit) => setCurrentPage('stacks', edit ? { highlight: st, editCompose: true } : { highlight: st })} vm={vm} isAdmin={isAdmin} isHub={isHub || role === 'standalone'} member={m} live={m ? liveById.get(m.id) : undefined} scan={scanByVm.get(vm.vmid)} busyKey={busyKey}
                     onAction={(v, a) => setPending({ vm: v, action: a })} onStackAction={stackAction} onDeploy={deployTo} onLink={(p) => setAdding(p)} onMemberMenu={(mm) => setMenu(mm)} />
                 })}
               </div>

@@ -132,6 +132,8 @@ export interface StackInfo {
   placement?: 'hub' | 'vm'
   member?: string
   member_name?: string
+  /** the member's API address (a VM stack on a hub) */
+  member_url?: string | null
   vmid?: number | null
   node?: string | null
   reachable?: boolean
@@ -2885,6 +2887,8 @@ export interface FleetMemberLive extends FleetMemberBase {
   stacks_total: number
   containers_running: number
   containers_total: number
+  /** the member's containers as of the last snapshot (the VM card lists them) */
+  containers?: ContainerInfo[]
 }
 
 export interface FleetOverview {
@@ -2976,7 +2980,7 @@ export interface FleetProvisionDefaults {
   defaults: { cores: number; memory_mb: number; disk_gb: number }
 }
 
-export interface FleetVmPlan { stack: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string }
+export interface FleetVmPlan { stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string }
 export interface FleetProvisionRequest {
   node: string
   storage: string
