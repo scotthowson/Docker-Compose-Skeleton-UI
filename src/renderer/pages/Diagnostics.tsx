@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { usePolling } from '../hooks/usePolling'
+import { useFleetScope } from '../hooks/useFleetScope'
 import {
   fetchServerStatus, fetchHealthReport, fetchContainers,
   fetchImages, fetchNetworks, fetchEvents, fetchSystemInfo,
@@ -1369,7 +1370,9 @@ export default function Diagnostics() {
   })
   React.useEffect(() => { if (systemInfoPoll.data) onPollSuccess() }, [systemInfoPoll.data, onPollSuccess])
 
-  const healthScorePoll = usePolling<HealthScoreResponse>(fetchHealthScore, 15000, {
+  const { scope: fleetScope } = useFleetScope()
+  const fetchScopedScore = React.useCallback(() => fetchHealthScore(fleetScope), [fleetScope])
+  const healthScorePoll = usePolling<HealthScoreResponse>(fetchScopedScore, 15000, {
     enabled: isConnected, onError: onPollError,
   })
   React.useEffect(() => { if (healthScorePoll.data) onPollSuccess() }, [healthScorePoll.data, onPollSuccess])

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useFleetScope } from '../../hooks/useFleetScope'
 
 function InfoRow({ icon, label, value, color }: {
   icon: React.ReactNode
@@ -26,6 +27,7 @@ function InfoRow({ icon, label, value, color }: {
 }
 
 export default function ServerInfo() {
+  const { hasFleet } = useFleetScope()
   const status = useSystemStore((s) => s.status)
   const version = useSystemStore((s) => s.version)
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -106,19 +108,19 @@ export default function ServerInfo() {
         />
         <InfoRow
           icon={<Layers size={12} />}
-          label="Stacks"
+          label={hasFleet ? 'Stacks here' : 'Stacks'}
           value={`${status.stacks.running} / ${status.stacks.total} running`}
           color={status.stacks.running === status.stacks.total ? 'text-emerald-400' : 'text-amber-400'}
         />
         <InfoRow
           icon={<Box size={12} />}
-          label="Containers"
+          label={hasFleet ? 'Containers here' : 'Containers'}
           value={`${status.docker.containers.running} running, ${status.docker.containers.stopped} stopped`}
           color={status.docker.containers.stopped > 0 ? 'text-amber-400' : 'text-emerald-400'}
         />
         <InfoRow
           icon={<Activity size={12} />}
-          label="Images"
+          label={hasFleet ? 'Images here' : 'Images'}
           value={`${status.docker.images} images`}
           color="text-cyan-400"
         />

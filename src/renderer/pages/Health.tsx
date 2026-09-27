@@ -28,7 +28,8 @@ import { usePolling } from '../hooks/usePolling'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
-import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore, fetchStacks } from '../api/endpoints'
+import { fetchHealthReport, fetchContainers, fetchSystemMetrics, fetchHealthScore } from '../api/endpoints'
+import { useStackCounts } from '../hooks/useStackCounts'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
@@ -331,13 +332,8 @@ export default function Health() {
 
   // Poll health score for scoring + factor breakdown
   const fetchScopedScore = React.useCallback(() => fetchHealthScore(scope), [scope])
-  // the stacks, so the page can say how many run where (a hub's /stacks carries every VM's, tagged)
-  const { data: stacksData } = usePolling(fetchStacks, 30000, { enabled: isConnected })
-  const stackCounts = useMemo(() => {
-    const all = stacksData?.stacks ?? []
-    const mine = scope === 'all' ? all : scope === 'hub' ? all.filter((st) => st.placement !== 'vm') : all.filter((st) => st.member === scopeMember)
-    return { total: mine.length, running: mine.filter((st) => st.status === 'running').length }
-  }, [stacksData, scope, scopeMember])
+  // the stacks, so the page can say how many run where — the same numbers the dashboard shows
+  const stackCounts = useStackCounts(scope)
   const { data: healthScoreData, loading: scoreLoading, refresh: refreshScore } = usePolling<HealthScoreResponse>(fetchScopedScore, 15000, {
     enabled: isConnected,
   })
@@ -503,7 +499,7 @@ export default function Health() {
 
       {/* Everywhere: how each DCS is doing */}
       {scope === 'all' && report?.members && report.members.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-wrap">
           {report.members.map((mb) => {
             const dot = !mb.reachable ? 'bg-slate-600' : mb.status === 'critical' ? 'bg-rose-400' : mb.status === 'degraded' ? 'bg-amber-400' : 'bg-emerald-400'
             const label = !mb.reachable ? 'not answering' : mb.summary ? `${mb.summary.healthy}/${mb.summary.total} healthy${mb.summary.unhealthy ? ` · ${mb.summary.unhealthy} unhealthy` : ''}${mb.summary.stopped ? ` · ${mb.summary.stopped} stopped` : ''}` : mb.status
@@ -513,7 +509,7 @@ export default function Health() {
                 type="button"
                 onClick={() => setScope(mb.id ?? 'hub')}
                 title={mb.reachable ? `Only ${mb.id ? `the VM ${mb.name}` : 'the hub'}` : mb.error || 'not answering'}
-                className={`inline-flex items-center gap-2 h-8 px-2.5 rounded-lg border text-[11px] transition-colors ${!mb.reachable ? 'border-white/[0.06] text-slate-500' : mb.status === 'critical' ? 'bg-rose-500/[0.06] border-rose-500/20 text-rose-200' : mb.status === 'degraded' ? 'bg-amber-500/[0.06] border-amber-500/20 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
+                className={`inline-flex items-center gap-2 h-8 px-2.5 rounded-lg border text-[11px] transition-colors shrink-0 whitespace-nowrap ${!mb.reachable ? 'border-white/[0.06] text-slate-500' : mb.status === 'critical' ? 'bg-rose-500/[0.06] border-rose-500/20 text-rose-200' : mb.status === 'degraded' ? 'bg-amber-500/[0.06] border-amber-500/20 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
                 <span className="font-medium">{mb.id ? `VM${mb.vmid ? ` #${mb.vmid}` : ''} · ${mb.name}` : 'Hub'}</span>

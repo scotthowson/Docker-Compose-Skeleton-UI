@@ -9,6 +9,7 @@ import { useHealthStore } from '../stores/healthStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useContainerStore } from '../stores/containerStore'
 import { fetchServerStatus, fetchHealthReport, fetchContainers, checkSystemUpdate } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
 
 const STATUS_INTERVAL = 5000
 const HEALTH_INTERVAL = 10000
@@ -16,6 +17,10 @@ const CONTAINERS_INTERVAL = 10000
 const UPDATE_CHECK_DELAY = 15000 // delay initial check to avoid competing with startup
 
 export function GlobalPoller() {
+  // the health badge and the dashboard read the whole fleet on a hub with VMs (the Health page's own choice does not narrow them)
+  const { hasFleet } = useFleetScope()
+  const fleetScopeRef = useRef<string>('hub')
+  fleetScopeRef.current = hasFleet ? 'all' : 'hub'
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const setSystemStatus = useSystemStore((s) => s.setStatus)
   const setHealthReport = useHealthStore((s) => s.setReport)
@@ -49,7 +54,7 @@ export function GlobalPoller() {
     if (fetchingHealth.current || !mountedRef.current) return
     fetchingHealth.current = true
     try {
-      const data = await fetchHealthReport()
+      const data = await fetchHealthReport(fleetScopeRef.current)
       if (mountedRef.current) setHealthReport(data)
     } catch { /* silent */ }
     fetchingHealth.current = false

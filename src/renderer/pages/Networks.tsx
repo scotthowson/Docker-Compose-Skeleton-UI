@@ -884,7 +884,7 @@ export default function Networks() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
             <button
               onClick={() => setShowCreateModal(true)}
@@ -989,7 +989,7 @@ export default function Networks() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {filteredNetworks.map((net) => (
             <NetworkCard
-              key={net.id}
+              key={`${net.member ?? ''}|${net.id}`}
               net={net}
               onInspect={() => setInspectNetwork(net)}
               onDelete={() => setDeleteTarget(net.name)}

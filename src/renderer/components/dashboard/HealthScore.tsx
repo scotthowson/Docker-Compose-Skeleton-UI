@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { HeartPulse, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { fetchHealthScore } from '../../api/endpoints'
+import { useFleetScope } from '../../hooks/useFleetScope'
 import type { HealthScoreResponse } from '../../../shared/types'
 import { useSettingsStore } from '../../stores/settingsStore'
 
@@ -32,12 +33,13 @@ export function HealthScore() {
   const [data, setData] = useState<HealthScoreResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const setCurrentPage = useSettingsStore(s => s.setCurrentPage)
+  const { scope } = useFleetScope()
 
   useEffect(() => {
     let mounted = true
     const load = async () => {
       try {
-        const res = await fetchHealthScore()
+        const res = await fetchHealthScore(scope)
         if (mounted) setData(res)
       } catch { /* ignore */ }
       if (mounted) setLoading(false)
@@ -45,7 +47,7 @@ export function HealthScore() {
     load()
     const interval = setInterval(load, 30000)
     return () => { mounted = false; clearInterval(interval) }
-  }, [])
+  }, [scope])
 
   const score = data?.score ?? 0
   const grade = data?.grade ?? getGrade(score)
@@ -107,7 +109,7 @@ export function HealthScore() {
             [1,2,3,4].map(i => <div key={i} className="h-4 skeleton rounded" />)
           ) : factors && (
             <>
-              <FactorBar label="Stacks" value={factors.stacks.score} />
+              <FactorBar label="Containers" value={factors.stacks.score} />
               <FactorBar label="Resources" value={factors.resources.score} />
               <FactorBar label="Images" value={factors.images.score} />
               <FactorBar label="Uptime" value={factors.uptime.score} />

@@ -382,7 +382,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       {/* Search, filter, and sort bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Search input */}
-        <div className="relative flex-1 min-w-0 md:min-w-[200px] max-w-md">
+        <div className="relative flex-1 min-w-0 md:min-w-[200px] max-w-md basis-full sm:basis-auto sm:flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input
             type="text"

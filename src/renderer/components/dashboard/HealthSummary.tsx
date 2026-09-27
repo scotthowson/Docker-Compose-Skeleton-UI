@@ -10,6 +10,8 @@ import {
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { fetchHealthScore } from '../../api/endpoints'
+import { useFleetScope } from '../../hooks/useFleetScope'
+import { useStackCounts } from '../../hooks/useStackCounts'
 import type { HealthContainer, HealthScoreResponse } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -196,13 +198,16 @@ export default function HealthSummary() {
 
   const [scoreData, setScoreData] = useState<HealthScoreResponse | null>(null)
   const [scoreLoading, setScoreLoading] = useState(true)
+  // the same scope the Health page uses (everywhere on a hub with VMs), so both say the same
+  const { scope, hasFleet } = useFleetScope()
+  const stackCounts = useStackCounts(scope)
 
   useEffect(() => {
     if (!isConnected) return
     let mounted = true
     const load = async () => {
       try {
-        const res = await fetchHealthScore()
+        const res = await fetchHealthScore(scope)
         if (mounted) setScoreData(res)
       } catch { /* ignore */ }
       if (mounted) setScoreLoading(false)
@@ -210,7 +215,7 @@ export default function HealthSummary() {
     load()
     const interval = setInterval(load, 30000)
     return () => { mounted = false; clearInterval(interval) }
-  }, [isConnected])
+  }, [isConnected, scope])
 
   // Skeleton
   if (!report && isConnected) {
@@ -285,7 +290,8 @@ export default function HealthSummary() {
             </div>
           ) : factors ? (
             <div className="space-y-2">
-              <FactorBar label="Stacks" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total}`} />
+              <FactorBar label="Stacks" value={stackCounts.total > 0 ? Math.round((stackCounts.running / stackCounts.total) * 100) : 100} detail={`${stackCounts.running}/${stackCounts.total} running${hasFleet && scope === 'all' ? ' · whole fleet' : ''}`} />
+              <FactorBar label="Containers" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total} healthy`} />
               <FactorBar label="Resources" value={factors.resources.score} detail={`${factors.resources.cpu_pct}% cpu`} />
               <FactorBar label="Images" value={factors.images.score} detail={factors.images.stale > 0 ? `${factors.images.stale} stale` : 'fresh'} />
               <FactorBar label="Uptime" value={factors.uptime.score} detail={formatUptime(factors.uptime.seconds)} />

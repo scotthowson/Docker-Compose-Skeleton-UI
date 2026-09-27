@@ -957,7 +957,7 @@ export default function Volumes() {
                   const isSelected = selectedVolumes.has(vol.name)
                   return (
                     <tr
-                      key={vol.name}
+                      key={`${vol.member ?? ''}|${vol.name}`}
                       onClick={batchMode ? () => toggleVolumeSelection(vol.name) : undefined}
                       className={`
                         border-b border-white/[0.03] group transition-colors duration-150

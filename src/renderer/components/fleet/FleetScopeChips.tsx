@@ -9,11 +9,12 @@ import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 export default function FleetScopeChips({ scope, members, onChange, label = 'Show', busy = false }: {
   scope: FleetScope; members: ScopeMember[]; onChange: (s: FleetScope) => void; label?: string; busy?: boolean
 }) {
-  const base = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+  const base = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 whitespace-nowrap'
   const off = 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1">{label}</span>
+    // a phone gets one swipeable row (sixteen VMs would otherwise push the page down); wider screens wrap
+    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-wrap">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1 shrink-0">{label}</span>
       <button
         type="button"
         onClick={() => onChange('all')}
