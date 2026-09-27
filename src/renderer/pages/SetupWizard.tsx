@@ -231,6 +231,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [provDefaults, setProvDefaults] = useState<FleetProvisionDefaults | null>(null)
   const [caps, setCaps] = useState<ProxmoxCapabilities | null>(null)
   const [vmSettings, setVmSettings] = useState<VmSettings | null>(null)
+  const vmEditedRef = useRef(false) // a re-test refreshes the VM settings from the hub's defaults unless they were edited
   const [placements, setPlacements] = useState<Record<string, 'hub' | 'vm'>>({})
   const [vmSpecs, setVmSpecs] = useState<Record<string, { cores: number; memGb: number; diskGb: number }>>({})
   const [showVmSettings, setShowVmSettings] = useState(false)
@@ -259,7 +260,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         const pve = { url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify }
         void Promise.allSettled([fetchProxmoxCapabilities(pve), fetchFleetProvisionDefaults(pve)]).then(([c, d]) => {
           if (c.status === 'fulfilled') setCaps(c.value)
-          if (d.status === 'fulfilled') { setProvDefaults(d.value); setVmSettings((v) => v ?? settingsFromDefaults(d.value)) }
+          if (d.status === 'fulfilled') { setProvDefaults(d.value); setVmSettings((v) => (v && vmEditedRef.current) ? v : settingsFromDefaults(d.value)) }
         })
       } else { setCaps(null); setProvDefaults(null); setVmSettings(null) }
     } catch (e) {
@@ -2355,7 +2356,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showVmSettings && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <p className="text-[11px] text-slate-500">Prefilled from Proxmox and this hub's network. Each VM gets the next free address from the first one, cores/RAM/disk per stack, user <span className="font-mono">{provDefaults?.vm_user || 'dcs'}</span> with the hub's ssh key, and the admin <span className="font-mono">{provDefaults?.admin_user || adminUsername}</span> with a generated password kept in the hub's secret store.</p>
-                      <VmSettingsFields value={vmSettings} onChange={setVmSettings} defaults={provDefaults} />
+                      <VmSettingsFields value={vmSettings} onChange={(v) => { vmEditedRef.current = true; setVmSettings(v) }} defaults={provDefaults} />
                     </div>
                   )}
                 </div>

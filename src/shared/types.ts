@@ -2842,9 +2842,11 @@ export interface FleetIdentity {
   server_name: string
   os: string
   virt: string
+  /** false for an API-only DCS (a member the hub built): it serves no dashboard of its own */
+  dashboard?: boolean
 }
 
-export type FleetMatchedBy = 'uuid' | 'ip' | 'name' | 'manual'
+export type FleetMatchedBy = 'uuid' | 'ip' | 'name' | 'manual' | 'provision'
 
 export interface FleetMember {
   id: string

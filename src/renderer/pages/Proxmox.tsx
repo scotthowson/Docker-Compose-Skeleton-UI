@@ -265,13 +265,13 @@ function VmRow({ vm, isAdmin, isHub, member, live, scan, busyKey, onAction, onSt
             </span>
             {live?.reachable && <span className="text-slate-400">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span>}
             <span className="text-slate-600 font-mono truncate">{member.url}</span>
-            {member.matched_by && <span className="text-slate-600" title={MATCH_LABEL[member.matched_by]}>· {member.matched_by === 'manual' ? 'mapped by hand' : `matched by ${member.matched_by}`}</span>}
+            {member.matched_by && <span className="text-slate-600" title={MATCH_LABEL[member.matched_by]}>· {member.matched_by === 'manual' ? 'mapped by hand' : member.matched_by === 'provision' ? 'built by the hub' : `matched by ${member.matched_by}`}</span>}
           </div>
           <MemberStacks member={member} live={live} isAdmin={isAdmin} onStackAction={onStackAction} busyKey={busyKey} />
           {isAdmin && (
             <div className="flex items-center gap-2 flex-wrap">
               <button type="button" onClick={() => onDeploy(member)} className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-amber-500/25 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20"><Rocket size={13} /> Deploy here</button>
-              <a href={member.url.replace(/:\d+$/, ':3000')} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-white/10 text-slate-300 bg-white/5 hover:bg-white/10" title="Open that server's own dashboard (port 3000)"><ExternalLink size={13} /> Its dashboard</a>
+              {member.identity?.dashboard !== false && <a href={member.url.replace(/:\d+$/, ':3000')} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-white/10 text-slate-300 bg-white/5 hover:bg-white/10" title="Open that server's own dashboard (port 3000)"><ExternalLink size={13} /> Its dashboard</a>}
             </div>
           )}
         </div>
@@ -367,6 +367,8 @@ export default function Proxmox() {
   const overview = usePolling(fetchFleetOverview, LIST_POLL, { enabled: isConnected && memberCount > 0 })
   const scan = usePolling(fetchFleetDiscover, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
   const localStacks = usePolling(fetchStacks, LIST_POLL, { enabled: isConnected && (isHub || role === 'member') })
+  // the hub's own stacks only: GET /stacks also carries the members' stacks (placement "vm")
+  const hubOwn = (localStacks.data?.stacks ?? []).filter((s) => s.placement !== 'vm')
   // VMs being built by the hub, and what creating one needs
   const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && isAdmin && configured && reachable })
   const provDefaults = usePolling(fetchFleetProvisionDefaults, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
@@ -525,16 +527,16 @@ export default function Proxmox() {
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2"><Home size={12} /> This server{fleet.data?.server_name ? ` · ${fleet.data.server_name}` : ''}{isHub ? ' (hub)' : ''}</h2>
               <div className="glass-card rounded-2xl p-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                  <p className="text-[11px] text-slate-400">{localStacks.data.total} stack{localStacks.data.total === 1 ? '' : 's'} run here, on DCS {fleet.data?.version}{isHub ? ' — the hub itself keeps stacks like any member' : ''}</p>
+                  <p className="text-[11px] text-slate-400">{hubOwn.length} stack{hubOwn.length === 1 ? '' : 's'} run here, on DCS {fleet.data?.version}{isHub ? ' — the hub itself keeps stacks like any member' : ''}</p>
                   <button type="button" onClick={() => setCurrentPage('stacks')} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Layers size={12} /> Stacks page</button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {localStacks.data.stacks.map((st) => (
+                  {hubOwn.map((st) => (
                     <button key={st.name} type="button" onClick={() => setCurrentPage('stacks', { highlight: st.name })} className="h-8 px-2.5 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5">
                       <span className={`inline-block w-1.5 h-1.5 rounded-full ${st.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} /> {st.name} <span className="text-slate-600">{st.running_containers}</span>
                     </button>
                   ))}
-                  {localStacks.data.stacks.length === 0 && <span className="text-[11px] text-slate-500">no stacks yet</span>}
+                  {hubOwn.length === 0 && <span className="text-[11px] text-slate-500">no stacks yet</span>}
                 </div>
               </div>
             </section>

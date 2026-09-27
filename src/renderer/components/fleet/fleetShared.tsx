@@ -35,6 +35,7 @@ export const MATCH_LABEL: Record<string, string> = {
   uuid: 'matched by the VM\'s SMBIOS uuid',
   ip: 'matched by address',
   name: 'matched by name',
+  provision: 'built by the hub — no guest matched yet (Test re-matches)',
   manual: 'mapped by hand',
 }
 
