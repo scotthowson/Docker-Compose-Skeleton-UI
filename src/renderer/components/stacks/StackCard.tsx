@@ -189,16 +189,12 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
               <p className="text-xs text-slate-500 truncate mt-0.5 font-mono flex items-center gap-1">
                 {stack.name}
                 <CopyButton text={stack.name} className="opacity-0 group-hover:opacity-100" size={10} />
-                {stack.placement === 'vm' && (
-                  <span className={`ml-1 inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[9px] font-sans font-semibold border ${stack.reachable === false ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20'}`} title={`Runs in its own VM${stack.vmid ? ` (#${stack.vmid})` : ''}${stack.reachable === false ? ' — not answering the hub' : ''}`}>
-                    VM{stack.vmid ? ` ${stack.vmid}` : ''}{stack.reachable === false ? ' · offline' : ''}
-                  </span>
-                )}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5">
             {!batchMode && onEdit && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(stack.name) }}
@@ -247,6 +243,13 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
               />
               {isRunning ? 'Running' : 'Stopped'}
             </span>
+          </div>
+          {stack.placement === 'vm' && (
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ring-1 ${stack.reachable === false ? 'bg-rose-500/10 text-rose-300 ring-rose-500/25' : 'bg-amber-500/15 text-amber-200 ring-amber-500/25'}`} title={stack.reachable === false ? 'The VM is off or not answering' : `Runs in its own VM${stack.node ? ` on ${stack.node}` : ''}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${stack.reachable === false ? 'bg-rose-400' : 'bg-amber-300'}`} />
+              VM{stack.vmid ? ` #${stack.vmid}` : ''}{stack.reachable === false ? ' · off' : ''}
+            </span>
+          )}
           </div>
         </div>
 

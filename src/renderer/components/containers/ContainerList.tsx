@@ -2,6 +2,7 @@
 // ContainerList — Full container table + mobile cards with favorites, stats
 // =============================================================================
 
+import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useState, useMemo, useCallback } from 'react'
 import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
@@ -196,6 +197,18 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
       return compareValues(a[sort.key], b[sort.key], sort.direction)
     })
   }, [filtered, sort, favorites])
+
+  // a hub: the VMs are the stacks — containers sit under their VM, the hub's own last
+  const { isHub: hubMode } = useFleetRole()
+  const groups = useMemo(() => {
+    if (!hubMode || !sorted.some((c) => c.member)) return [{ key: 'all', header: '', rows: sorted }]
+    const byVm = new Map<string, ContainerInfo[]>()
+    for (const c of sorted) { const k = c.member ?? 'hub'; if (!byVm.has(k)) byVm.set(k, []); byVm.get(k)!.push(c) }
+    const vms = [...byVm.entries()].filter(([k]) => k !== 'hub').sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, rows]) => ({ key: k, header: `VM${rows[0].vmid ? ` #${rows[0].vmid}` : ''} · ${rows[0].member_name || k}`, rows }))
+    const hub = byVm.get('hub')
+    return hub ? [...vms, { key: 'hub', header: 'On the hub — this server', rows: hub }] : vms
+  }, [hubMode, sorted])
 
   const handleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -471,7 +484,19 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                   </td>
                 </tr>
               ) : (
-                sorted.map((container) => (
+                groups.flatMap((g) => [
+                  ...(g.header ? [(
+                    <tr key={`group-${g.key}`} className="bg-white/[0.02]">
+                      <td colSpan={COLUMNS.length + 3} className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`w-1.5 h-1.5 rounded-full ${g.key === 'hub' ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+                          {g.header}
+                          <span className="text-slate-600 normal-case tracking-normal">{g.rows.filter((c) => c.state === 'running').length}/{g.rows.length} running</span>
+                        </span>
+                      </td>
+                    </tr>
+                  )] : []),
+                  ...g.rows.map((container) => (
                   <ContainerRow
                     key={container.name}
                     container={container}
@@ -484,7 +509,8 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                     onQuickAction={handleQuickAction}
                     quickActionLoading={quickActionLoading}
                   />
-                ))
+                  )),
+                ])
               )}
             </tbody>
           </table>

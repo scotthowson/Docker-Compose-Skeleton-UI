@@ -24,7 +24,7 @@ import { isWebMode } from '../lib/env'
 import type { SetupDefaultsResponse, FleetStatus, FleetJoinHubResponse, FleetProvisionDefaults, ProxmoxCapabilities } from '../../shared/types'
 import { usePolling } from '../hooks/usePolling'
 import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
-import { VmSettingsFields, CapabilityNote, settingsFromDefaults, type VmSettings } from '../components/fleet/NewVmSheet'
+import { VmSettingsFields, CapabilityNote, settingsFromDefaults, vmSettingsToRequest, osLabel, type VmSettings } from '../components/fleet/NewVmSheet'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 
@@ -747,7 +747,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 3c. The VMs: one per stack placed in a VM, built by the hub in the background
       if (vmPlan.length > 0 && vmSettings) {
         try {
-          const r = await provisionFleet({ ...vmSettings, vms: vmPlan.map((v) => ({ stack: v.stack, source: v.source, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
+          const r = await provisionFleet({ ...vmSettingsToRequest(vmSettings), vms: vmPlan.map((v) => ({ stack: v.stack, source: v.source, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
           setVmQueued(r.jobs.length)
           results.push({ label: `${r.jobs.length} VM${r.jobs.length === 1 ? '' : 's'} being built by the hub: ${r.jobs.map((j) => `${j.stack} at ${j.ip}`).join(', ')}`, ok: true, detail: 'Each VM gets Docker and DCS, joins this hub and runs its stack — follow them below or on the Proxmox page' })
         } catch (err) {
@@ -2357,7 +2357,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="flex items-center gap-2 min-w-0">
                       <Server size={14} className="text-amber-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-300">VM settings</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono truncate">{vmSettings.node} · {vmSettings.storage} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono truncate">{osLabel(vmSettings, provDefaults)} · {vmSettings.node} · {vmSettings.storage} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway}</span>
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showVmSettings ? 'rotate-90' : ''}`} />
                   </button>
@@ -2572,7 +2572,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       ))}
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Network</span>
-                        <span className="text-[10px] font-mono text-slate-300">{vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway} · DNS {vmSettings.dns}</span>
+                        <span className="text-[10px] font-mono text-slate-300">{osLabel(vmSettings, provDefaults)} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway} · DNS {vmSettings.dns}</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Proxmox</span>

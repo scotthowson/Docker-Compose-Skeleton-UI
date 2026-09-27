@@ -2,6 +2,8 @@
 // Sidebar — Collapsible navigation with glassmorphism, badges, health status
 // =============================================================================
 
+import { usePolling } from '../../hooks/usePolling'
+import { fetchStacks } from '../../api/endpoints'
 import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useEffect } from 'react'
 import {
@@ -116,6 +118,11 @@ export const navItems: NavItem[] = [
 function navLabel(item: NavItem, isHub: boolean): string { return item.id === 'stacks' && isHub ? 'VMs' : item.label }
 
 export function Sidebar() {
+  // a hub: the badge counts the VMs (the merged stack list), not this server's own stacks
+  const { isHub } = useFleetRole()
+  const isConnectedForVms = useConnectionStore((st) => st.status === 'connected')
+  const vmList = usePolling(fetchStacks, 30000, { enabled: isConnectedForVms && isHub })
+  const vmStacks = vmList.data ? { total: vmList.data.stacks.filter((x) => x.placement === 'vm').length, up: vmList.data.stacks.filter((x) => x.placement === 'vm' && x.status === 'running').length } : null
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed)
@@ -152,10 +159,9 @@ export function Sidebar() {
       value: `${systemStatus.docker.containers.running}`,
       color: systemStatus.docker.containers.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
     }
-    badges.stacks = {
-      value: `${systemStatus.stacks.running}`,
-      color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
-    }
+    badges.stacks = isHub && vmStacks !== null
+      ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs
+      : { value: `${systemStatus.stacks.running}`, color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400' }
     badges.images = {
       value: `${systemStatus.docker.images}`,
       color: 'bg-cyan-500/20 text-cyan-400',

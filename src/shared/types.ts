@@ -2958,10 +2958,16 @@ export interface ProxmoxStorage {
 export interface ProxmoxStorageResponse { node: string; storages: ProxmoxStorage[] }
 
 /** GET /fleet/provision/defaults — prefilled values for creating VMs */
+/** A cloud image the hub can have Proxmox download (cloud-init; apt or dnf inside) */
+export interface FleetImage { id: string; label: string; url: string; file: string; family?: string }
+/** A file already on a Proxmox storage: an imported cloud image, or an installer ISO */
+export interface FleetStoredImage { volid: string; file: string; size: number; storage: string }
 export interface FleetProvisionDefaults {
   proxmox_linked: boolean
   node: string
   storages: ProxmoxStorage[]
+  /** what a VM can be built from: the catalogue (cloud images by URL), and what Proxmox already holds */
+  images?: { catalogue: FleetImage[]; on_proxmox: { imports: FleetStoredImage[]; isos: FleetStoredImage[] } }
   storage: string
   image_storage: string
   bridge: string
@@ -2980,7 +2986,7 @@ export interface FleetProvisionDefaults {
   defaults: { cores: number; memory_mb: number; disk_gb: number }
 }
 
-export interface FleetVmPlan { stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string }
+export interface FleetVmPlan { stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string; /** per-VM operating system, one of: */ image?: string; image_url?: string; image_file?: string; iso?: string }
 export interface FleetProvisionRequest {
   node: string
   storage: string
@@ -2991,6 +2997,11 @@ export interface FleetProvisionRequest {
   dns?: string
   ip_start?: string
   vms: FleetVmPlan[]
+  /** the operating system for every VM of the request (a VM's own choice wins): a catalogue id, a URL, a file on the import storage, or an installer ISO */
+  image?: string
+  image_url?: string
+  image_file?: string
+  iso?: string
 }
 export interface FleetProvisionResponse { success: boolean; jobs: { id: string; stack: string; ip: string }[] }
 
@@ -2999,6 +3010,15 @@ export interface FleetJobStep { id: string; label: string; hint: string; state: 
 export interface FleetJob {
   id: string
   stack: string
+  /** cloud: built and joined unattended; iso: the VM boots an installer, you install by hand and join */
+  image_kind?: 'cloud' | 'iso'
+  image_id?: string
+  family?: string
+  iso?: string
+  /** an ISO build: done at the boot, closed by the VM's later join */
+  manual?: boolean
+  join_token?: string
+  hub_url?: string
   status: 'queued' | 'running' | 'done' | 'failed'
   node: string
   storage: string
