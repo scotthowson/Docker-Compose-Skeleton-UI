@@ -248,7 +248,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
                 >
                   <Play size={13} />
-                  Start All
+                  <span className="hidden sm:inline">Start All</span>
                 </button>
               )}
               {runningCount > 0 && (
@@ -260,7 +260,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all"
                 >
                   <Square size={13} />
-                  Stop All
+                  <span className="hidden sm:inline">Stop All</span>
                 </button>
               )}
             </>
@@ -279,7 +279,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               `}
             >
               <ListChecks size={15} />
-              {batchMode ? 'Exit Batch' : 'Batch'}
+              <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch'}</span>
             </button>
           )}
 
@@ -290,7 +290,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
             >
               {lintAllLoading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />}
-              Lint All
+              <span className="hidden sm:inline">Lint All</span>
             </button>
           )}
 

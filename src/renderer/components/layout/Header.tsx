@@ -411,7 +411,7 @@ export function Header() {
       className="
         drag-region
         flex items-center justify-between
-        h-11 md:h-14 px-3 md:px-5
+        h-14 px-4 md:px-5
         bg-slate-900/80 backdrop-blur-2xl
         border-b border-white/5
         shrink-0
@@ -420,7 +420,7 @@ export function Header() {
       {/* Left: Page title + breadcrumbs */}
       <div className="no-drag flex items-center gap-3">
         <div className="flex flex-col">
-          <h1 className="text-sm font-semibold text-slate-200 select-none tracking-wide">
+          <h1 className="text-base md:text-sm font-semibold text-slate-200 select-none tracking-wide">
             {title}
           </h1>
           <div className="hidden md:block">
@@ -443,7 +443,7 @@ export function Header() {
         <button
           onClick={toggleDrawer}
           className="
-            relative flex items-center justify-center w-9 h-9 md:w-8 md:h-8
+            relative flex items-center justify-center w-11 h-11 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/5
             hover:bg-white/10 hover:text-slate-200
@@ -492,7 +492,7 @@ export function Header() {
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="
-                flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1 md:py-1.5 rounded-lg
+                flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1.5 rounded-lg min-h-[44px] md:min-h-0
                 bg-white/[0.03] border border-white/5
                 hover:bg-white/5 hover:border-white/10
                 transition-all duration-200 press
@@ -521,7 +521,7 @@ export function Header() {
         <button
           onClick={toggleTheme}
           className="
-            flex items-center justify-center w-9 h-9 md:w-8 md:h-8
+            flex items-center justify-center w-11 h-11 md:w-8 md:h-8
             rounded-lg text-slate-400
             bg-white/[0.03] border border-white/5
             hover:bg-white/10 hover:text-slate-200

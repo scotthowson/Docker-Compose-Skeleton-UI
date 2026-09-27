@@ -294,7 +294,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                   disabled={isDisabled}
                   title={label}
                   className={`
-                    relative flex items-center justify-center w-8 h-8 rounded-lg
+                    relative flex items-center justify-center w-10 h-10 md:w-8 md:h-8 rounded-lg
                     transition-all duration-200
                     ${
                       isDisabled

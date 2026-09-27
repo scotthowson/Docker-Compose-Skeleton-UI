@@ -893,8 +893,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     <div className="flex flex-col gap-5 animate-fade-in">
       {/* ---- Back button + title ---- */}
       <div className="flex flex-col gap-3">
-        {/* Top row: back + name + badges */}
-        <div className="flex items-center gap-3 min-w-0">
+        {/* Top row: back + name + badges (badges drop to their own line on phones) */}
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
           <button
             onClick={onBack}
             title="Back to containers (Esc)"
@@ -932,7 +932,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             </div>
           ) : (
             <>
-              <h1 className="text-base md:text-xl font-bold text-white truncate">{containerName}</h1>
+              <h1 className="text-lg md:text-xl font-bold text-white truncate min-w-0 flex-1">{containerName}</h1>
               <button
                 onClick={() => setRenaming(true)}
                 title="Rename container"
@@ -942,7 +942,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               </button>
             </>
           )}
-          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
             <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
             <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
           </div>

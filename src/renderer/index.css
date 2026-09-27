@@ -1278,8 +1278,18 @@
    ══════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
   :root {
-    font-size: 15px;
+    font-size: 16px;
   }
+
+  /* Phone shell: readable type, thumb-sized controls, cards that breathe */
+  main .text-\[9px\], main .text-\[10px\] { font-size: 12px !important; line-height: 1.1rem !important; }
+  main .text-\[11px\] { font-size: 13px !important; line-height: 1.2rem !important; }
+  main .text-xs { font-size: 0.8125rem !important; line-height: 1.25rem !important; }
+  main button:not([class*=" h-"]):not([class^="h-"]):not([class*=" w-"]):not([class^="w-"]) { min-height: 2.5rem; }
+  main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), main select, main textarea { font-size: 16px; min-height: 2.75rem; }
+  main table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
+  main .glass, main .glass-subtle { border-radius: 1.125rem; }
+  .dashboard-grid > * { max-height: none !important; overflow: visible !important; }
 
   ::-webkit-scrollbar {
     width: 3px;
@@ -1304,8 +1314,6 @@
     grid-column: unset !important;
     grid-row: unset !important;
     height: auto !important;
-    max-height: 400px;
-    overflow-y: auto;
   }
 }
 
@@ -1387,6 +1395,19 @@
   .gauge-grid .donut-box {
     width: 5.5rem !important;
     height: 5.5rem !important;
+  }
+  /* A GPU adds two gauges: on a narrow card they get their own centred row
+     under CPU · Memory · Disk instead of breaking the three-up rhythm */
+  .gauge-grid .gpu-gauges {
+    display: flex;
+    grid-column: 1 / -1;
+    order: 10;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 2.5rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 0.25rem;
   }
 }
 @container (max-width: 380px) {

@@ -1226,10 +1226,10 @@ export default function Notifications() {
 
       {/* ── Add Rule Modal (inline overlay) ─────────────────────────────── */}
       {showAddModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
+        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-0 sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
-          <div className="w-full max-w-lg mx-4 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin">
+          <div className="w-full sm:max-w-lg sm:mx-4 max-h-[92vh] bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/40 animate-slide-up sm:animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
               <div className="flex items-center gap-2">

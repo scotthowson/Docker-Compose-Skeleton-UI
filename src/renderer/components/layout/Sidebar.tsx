@@ -59,14 +59,14 @@ import { ServerSwitcher } from '../common/ServerSwitcher'
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 
-interface NavItem {
+export interface NavItem {
   id: PageId
   label: string
   icon: React.ElementType
   section?: 'main' | 'system'
 }
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   // ── Core ──
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'main' },
   { id: 'stacks', label: 'Stacks', icon: Layers, section: 'main' },
@@ -225,7 +225,7 @@ export function Sidebar() {
   return (
     <aside
       className={`
-        relative flex flex-col h-full
+        relative hidden md:flex flex-col h-full
         bg-slate-900/60 backdrop-blur-2xl
         border-r border-white/5
         transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]

@@ -53,7 +53,7 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
           <Layers size={14} className="text-violet-400" />
           <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Stacks</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-14 rounded-lg bg-slate-800/40 animate-pulse" />
           ))}
@@ -76,19 +76,17 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
         </div>
         <span className="text-xs text-slate-500">{list.length} total</span>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
         {list.map((s) => (
           <div
             key={s.name}
-            className="rounded-lg bg-white/[0.03] border border-white/5 p-2.5 hover:bg-white/5 transition-colors"
+            className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5 hover:bg-white/5 transition-colors flex items-center gap-2.5 min-h-[44px]"
           >
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-              <span className="text-xs font-medium text-slate-200 truncate">{s.name}</span>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              {s.running_containers} running
-            </p>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+            <span className="text-xs font-medium text-slate-200 truncate flex-1">{s.name}</span>
+            <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
+              {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
+            </span>
           </div>
         ))}
       </div>

@@ -56,6 +56,7 @@ import Export from './pages/Export'
 import SetupWizard from './pages/SetupWizard'
 import KeyboardShortcutsPanel from './components/common/KeyboardShortcutsPanel'
 import { BackToTop } from './components/common/BackToTop'
+import { MobileNav } from './components/layout/MobileNav'
 import { apiClient } from './api/client'
 import { sseClient } from './lib/sse'
 import type { PageId } from '../shared/types'
@@ -650,7 +651,7 @@ export default function App() {
           <Sidebar />
 
           {/* Main content area */}
-          <main ref={mainRef} className="flex-1 overflow-y-auto p-3 md:p-6 transition-all duration-300 scrollbar-thin">
+          <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 scrollbar-thin overscroll-contain">
             <div className={`max-w-[1600px] mx-auto transition-all duration-150 ${transitioning ? 'opacity-0 translate-y-0.5 scale-[0.998]' : 'opacity-100 translate-y-0 scale-100'}`}>
               <ErrorBoundary
                 key={transitionPage}
@@ -664,9 +665,10 @@ export default function App() {
           </main>
         </div>
 
-        {/* Status bar */}
+        {/* Status bar (desktop) and the phone's bottom navigation */}
         <div className="relative z-10">
           <StatusBar />
+          <MobileNav />
         </div>
       </div>
     </ToastProvider>

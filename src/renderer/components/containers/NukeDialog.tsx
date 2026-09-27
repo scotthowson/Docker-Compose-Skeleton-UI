@@ -75,9 +75,10 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
   // A portal: the page wrapper animates with a transform, which would otherwise pin
   // this fixed overlay to the container card instead of the whole screen
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Nuke and reinstall ${containerName}`}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={`Nuke and reinstall ${containerName}`}>
       <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => !busy && onClose()} />
-      <div className="relative w-full max-w-lg rounded-2xl border border-rose-500/20 bg-slate-900/95 shadow-2xl shadow-black/50 overflow-hidden animate-scale-in">
+      <div className="relative w-full sm:max-w-lg max-h-[94vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-rose-500/20 bg-slate-900/95 shadow-2xl shadow-black/50 overflow-hidden animate-slide-up sm:animate-scale-in" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="sm:hidden pt-2 flex justify-center"><span className="h-1.5 w-12 rounded-full bg-white/15" /></div>
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400"><Bomb size={18} /></div>

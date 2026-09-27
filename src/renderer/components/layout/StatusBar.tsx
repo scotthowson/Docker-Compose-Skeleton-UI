@@ -213,7 +213,7 @@ export function StatusBar() {
       </div>
 
       {/* ---- Mobile: two rows ---- */}
-      <div className="flex md:hidden flex-col gap-1 px-3 py-2 text-[9px]">
+      <div className="hidden">
         {/* Row 1: connection + health + containers + clock */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

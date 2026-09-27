@@ -277,7 +277,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
     <div
       onClick={() => onClick(container.name)}
       className={`
-        group cursor-pointer rounded-xl p-3.5 transition-all duration-200
+        group cursor-pointer rounded-2xl p-4 transition-all duration-200
         border
         ${batchMode && batchSelected
           ? 'bg-cyan-500/[0.08] border-cyan-500/20'
@@ -307,7 +307,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
           />
         </button>
         <Box className="h-4 w-4 text-slate-500 flex-shrink-0" />
-        <span className="text-sm font-semibold text-slate-200 truncate flex-1">
+        <span className="text-[15px] font-semibold text-slate-200 truncate flex-1">
           {container.name}
         </span>
         <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0" />

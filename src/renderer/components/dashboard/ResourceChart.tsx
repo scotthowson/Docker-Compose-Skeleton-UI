@@ -457,7 +457,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
               unit="%"
             />
             {hasGpu && (
-              <>
+              <div className="gpu-gauges contents">
                 <DonutChart
                   title="GPU"
                   subtitle={gpuInfo?.name?.replace('NVIDIA ', '').replace('GeForce ', '') ?? undefined}
@@ -490,7 +490,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                   </div>
                   <p className="text-[9px] text-slate-500 mt-0.5">{gpuTemp}°C</p>
                 </div>
-              </>
+              </div>
             )}
             <>
               <DonutChart

@@ -48,7 +48,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
       onClick={handleOverlayClick}
       className="
         fixed inset-0 z-[9999]
-        flex items-center justify-center p-4
+        flex items-end sm:items-center justify-center p-0 sm:p-4
         bg-black/60 backdrop-blur-sm
         animate-fade-in
       "
@@ -56,9 +56,9 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
       <div
         className="
           relative
-          w-full max-w-lg
+          w-full sm:max-w-lg max-h-[92vh] overflow-y-auto overscroll-contain
           bg-slate-900/90 backdrop-blur-2xl
-          border border-white/10 rounded-2xl
+          border border-white/10 rounded-t-3xl sm:rounded-2xl
           shadow-2xl shadow-black/50
           animate-fade-in
         "
@@ -66,6 +66,7 @@ export function Modal({ open, onClose, title, children, actions }: ModalProps) {
         aria-modal="true"
         aria-labelledby="modal-title"
       >
+        <div className="sm:hidden pt-2 flex justify-center"><span className="h-1.5 w-12 rounded-full bg-white/15" /></div>
         {/* Title bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <h2
