@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { usePolling } from '../../hooks/usePolling'
-import { fetchStacks } from '../../api/endpoints'
+import { fetchStacks, fetchFleetOverview } from '../../api/endpoints'
 import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useEffect } from 'react'
 import {
@@ -122,6 +122,8 @@ export function Sidebar() {
   const { isHub } = useFleetRole()
   const isConnectedForVms = useConnectionStore((st) => st.status === 'connected')
   const vmList = usePolling(fetchStacks, 30000, { enabled: isConnectedForVms && isHub })
+  const fleetOverview = usePolling(fetchFleetOverview, 30000, { enabled: isConnectedForVms && isHub })
+  const fleetTotals = fleetOverview.data?.totals ?? null
   const vmStacks = vmList.data ? { total: vmList.data.stacks.filter((x) => x.placement === 'vm').length, up: vmList.data.stacks.filter((x) => x.placement === 'vm' && x.status === 'running').length } : null
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
@@ -155,9 +157,11 @@ export function Sidebar() {
   const badges: Partial<Record<PageId, { value: string; color: string }>> = {}
 
   if (systemStatus) {
+    // a hub counts the whole fleet's running containers: its own plus every VM's
+    const runningContainers = systemStatus.docker.containers.running + (isHub ? (fleetTotals?.containers_running ?? 0) : 0)
     badges.containers = {
-      value: `${systemStatus.docker.containers.running}`,
-      color: systemStatus.docker.containers.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
+      value: `${runningContainers}`,
+      color: runningContainers > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
     }
     badges.stacks = isHub && vmStacks !== null
       ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs

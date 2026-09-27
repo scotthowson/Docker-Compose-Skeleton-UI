@@ -2,7 +2,7 @@
 // Updates — System + Image Update Checker with registry check and bulk updates
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Download,
   RefreshCw,
@@ -20,15 +20,17 @@ import {
   Monitor,
   Power,
   Info,
+  Boxes,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
+import { useFleetRole } from '../hooks/useFleetRole'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory } from '../api/endpoints'
-import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, SystemUpdateHistoryResponse, APIVersion } from '../../shared/types'
+import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory, fetchFleetVersions, updateFleet, fetchFleetImages, checkFleetImageRegistry } from '../api/endpoints'
+import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, SystemUpdateHistoryResponse, APIVersion, FleetVersions, FleetUpdateRound } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
 // ---------------------------------------------------------------------------
@@ -165,6 +167,9 @@ function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** A row's identity in the fleet view: the image on its DCS (the hub's rows have no member) */
+const rowKey = (img: ImageUpdateInfo) => `${img.member ?? ''}|${img.image}`
+
 function formatRelativeTime(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000)
   if (diff < 10) return 'just now'
@@ -178,7 +183,43 @@ function formatRelativeTime(ts: number): string {
 // Updates Page Component
 // ---------------------------------------------------------------------------
 
+// One line every card shares: up to date or not, when it was checked, when it last changed
+function StatusLine({ ok, okText, warnText, checkedAt, updatedAt, updatedLabel = 'Last updated', tone = 'amber' }: {
+  ok: boolean; okText: string; warnText: string
+  checkedAt?: number | string | null; updatedAt?: number | string | null; updatedLabel?: string; tone?: 'amber' | 'rose'
+}) {
+  const toMs = (v?: number | string | null) => (!v ? 0 : typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(v) || 0)
+  const c = toMs(checkedAt); const u = toMs(updatedAt)
+  const warn = tone === 'rose' ? 'text-rose-300 bg-rose-500/10 border-rose-500/20' : 'text-amber-200 bg-amber-500/10 border-amber-500/20'
+  return (
+    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[10px] text-slate-500">
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-semibold ${ok ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : warn}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : tone === 'rose' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+        {ok ? okText : warnText}
+      </span>
+      <span title={c ? new Date(c).toLocaleString() : undefined}>Checked {c ? formatRelativeTime(c) : 'never'}</span>
+      <span title={u ? new Date(u).toLocaleString() : undefined}>{updatedLabel} {u ? new Date(u).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}</span>
+    </div>
+  )
+}
+
 function UpdateStatusBadge({ res }: { res: SystemUpdateCheckResponse }) {
+  if (res.state === 'member') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-200 bg-amber-500/10 px-2 py-0.5 rounded-full" title={res.note}>
+        <Boxes size={10} />
+        Updated by its hub
+      </span>
+    )
+  }
+  if (res.state === 'manual') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-300 bg-white/[0.06] px-2 py-0.5 rounded-full" title={res.note}>
+        <Info size={10} />
+        Installed without git
+      </span>
+    )
+  }
   if (res.checked === false) {
     return (
       <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full">
@@ -232,6 +273,7 @@ export default function Updates() {
   // ---- System update state ----
   const [sysUpdate, setSysUpdate] = useState<SystemUpdateCheckResponse | null>(null)
   const [sysChecking, setSysChecking] = useState(false)
+  const [sysCheckError, setSysCheckError] = useState<string | null>(null)
   const [sysApplying, setSysApplying] = useState(false)
   const [sysRollingBack, setSysRollingBack] = useState(false)
   const [replaceLocal, setReplaceLocal] = useState(false)
@@ -260,8 +302,42 @@ export default function Updates() {
   // API version info
   const [apiVersionInfo, setApiVersionInfo] = useState<APIVersion | null>(null)
 
+  // ---- The fleet: a hub keeps its VMs on its own DCS version ----
+  const { isHub } = useFleetRole()
+  const { data: fvData, refresh: refreshFleetVersions } = usePolling<FleetVersions>(fetchFleetVersions, 60000, { enabled: isConnected && isHub })
+  const fv = isHub ? fvData : null
+  const fleetMembers = useMemo(() => fv?.members ?? [], [fv])
+  const [fleetUpdating, setFleetUpdating] = useState(false)
+  // with the hub's own update: bring the VMs along (the server queues the round for after its restart)
+  const [fleetAfter, setFleetAfter] = useState(true)
+  const [fleetReport, setFleetReport] = useState<FleetUpdateRound | null>(null)
+  const handleUpdateFleet = useCallback(async (members: string[] | 'all' = 'all') => {
+    if (fleetUpdating) return
+    setFleetUpdating(true)
+    setFleetReport(null)
+    try {
+      const r = await updateFleet(members)
+      setFleetReport(r)
+      addToast({
+        type: r.failed ? (r.updated ? 'warning' : 'error') : 'success',
+        message: r.failed
+          ? `${r.updated} VM${r.updated === 1 ? '' : 's'} updated, ${r.failed} failed — see the fleet card`
+          : `${r.updated} VM${r.updated === 1 ? '' : 's'} now on DCS ${r.hub_version}`,
+        duration: 8000,
+      })
+      // the members re-execute on the new code: ask again once they are back
+      setTimeout(refreshFleetVersions, 6000)
+      setTimeout(refreshFleetVersions, 15000)
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The fleet update failed' })
+    } finally {
+      setFleetUpdating(false)
+    }
+  }, [fleetUpdating, addToast, refreshFleetVersions])
+
   const ingestCheck = useCallback((res: SystemUpdateCheckResponse) => {
     setSysUpdate(res)
+    setSysCheckError(null)
     setUiUpdateAvailable(!!res.ui_update?.available)
     useSettingsStore.getState().updateSetting('updatesAvailable', res.available ? Math.max(1, res.commits_behind) : 0)
     if (res.last_backup_tag) {
@@ -297,7 +373,9 @@ export default function Updates() {
     try {
       const result = await checkSystemUpdate()
       ingestCheck(result)
-      if (result.checked === false) {
+      if (result.state === 'member' || result.state === 'manual') {
+        addToast({ type: 'info', message: result.note || 'Updates are not fetched here' })
+      } else if (result.checked === false) {
         addToast({ type: 'error', message: `Could not check for updates: ${result.error || 'GitHub is unreachable'}` })
       } else if (result.available) {
         addToast({ type: 'info', message: `DCS ${result.latest_version || result.latest_name || ''} is available (${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''})` })
@@ -307,6 +385,7 @@ export default function Updates() {
         addToast({ type: 'success', message: 'Everything is up to date' })
       }
     } catch (err) {
+      setSysCheckError(err instanceof Error ? err.message : 'Failed to check for updates')
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })
     } finally {
       setSysChecking(false)
@@ -324,8 +403,13 @@ export default function Updates() {
     setApplyReport(null)
     setRestartHint(null)
     try {
-      const result = await applySystemUpdate({ replaceLocal, restart: restartAfter })
+      const result = await applySystemUpdate({ replaceLocal, restart: restartAfter, fleet: isHub && fleetMembers.length > 0 && fleetAfter })
       if (result.updated) {
+        if (result.fleet_update_queued) {
+          addToast({ type: 'info', message: `The ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} follow once the hub is back on the new version`, duration: 8000 })
+          setTimeout(refreshFleetVersions, 30000)
+          setTimeout(refreshFleetVersions, 70000)
+        }
         setApplyReport(result)
         const tag = result.backup_tag
         setLastBackupTag(tag)
@@ -355,7 +439,7 @@ export default function Updates() {
     } finally {
       setSysApplying(false)
     }
-  }, [sysApplying, sysUpdate, replaceLocal, restartAfter, addToast, ingestCheck, waitForApi])
+  }, [sysApplying, sysUpdate, replaceLocal, restartAfter, addToast, ingestCheck, waitForApi, isHub, fleetMembers.length, fleetAfter, refreshFleetVersions])
 
   const handleRollback = useCallback(async () => {
     if (sysRollingBack || !lastBackupTag) return
@@ -415,7 +499,7 @@ export default function Updates() {
   // Auto-check for system + UI updates on mount
   useEffect(() => {
     if (isConnected && !sysUpdate && !sysChecking) {
-      checkSystemUpdate().then(ingestCheck).catch(() => {})
+      checkSystemUpdate().then(ingestCheck).catch((e) => setSysCheckError(e instanceof Error ? e.message : 'The check failed'))
       fetchVersion().then(setApiVersionInfo).catch(() => {})
     }
   }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -430,7 +514,7 @@ export default function Updates() {
   useEffect(() => {
     if (!isConnected || !autoCheckUpdates || autoCheckUpdates <= 0) return
     const timer = setInterval(() => {
-      checkSystemUpdate().then(ingestCheck).catch(() => {})
+      checkSystemUpdate().then(ingestCheck).catch((e) => setSysCheckError(e instanceof Error ? e.message : 'The check failed'))
     }, autoCheckUpdates)
     return () => clearInterval(timer)
   }, [isConnected, autoCheckUpdates, ingestCheck])
@@ -450,14 +534,35 @@ export default function Updates() {
   // Outcome of the last bulk run per image, shown in the row until the next registry check
   const [bulkResults, setBulkResults] = useState<Record<string, 'done' | 'failed'>>({})
 
+  // ---- Whose images: everywhere (the hub and every VM), the hub alone, or one VM ----
+  // null = not chosen yet: a hub with VMs opens on everywhere, anything else on itself
+  const [imgScopeChoice, setImgScope] = useState<string | null>(null)
+  const imgScope = imgScopeChoice ?? (isHub && fleetMembers.length > 0 ? 'all' : 'hub')
+  const scopeMember = imgScope === 'all' || imgScope === 'hub' ? null : imgScope
+  const scopeName = scopeMember ? (fleetMembers.find((m) => m.id === scopeMember)?.name ?? scopeMember) : ''
+  const fetchScopedImages = useCallback(() => (imgScope === 'all' ? fetchFleetImages() : fetchImageUpdates(scopeMember)), [imgScope, scopeMember])
+
   // ---- Polling: local staleness data ----
   const {
     data,
     loading,
     refresh,
-  } = usePolling<ImageCheckResponse>(fetchImageUpdates, 30000, {
+  } = usePolling<ImageCheckResponse>(fetchScopedImages, 30000, {
     enabled: isConnected,
   })
+  // a scope switch fetches at once; the rows of the other DCS fade until the answer lands
+  const [switching, setSwitching] = useState(false)
+  const scopeRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (scopeRef.current === imgScope) return
+    scopeRef.current = imgScope
+    if (data) { setSwitching(true); setBulkResults({}); refresh() }
+  }, [imgScope, data, refresh])
+  useEffect(() => { setSwitching(false) }, [data])
+  // a VM that vanished from the fleet: back to everywhere
+  useEffect(() => {
+    if (scopeMember && fv && !fleetMembers.some((m) => m.id === scopeMember)) setImgScope(null)
+  }, [scopeMember, fv, fleetMembers])
 
   const images = data?.images ?? []
 
@@ -494,18 +599,27 @@ export default function Updates() {
   }, [updatableImages, staleImages])
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null)
 
-  // ---- Check registry for updates (slow POST) ----
+  // ---- Check registry for updates (slow POST): everywhere at once, or one DCS ----
   const handleCheckRegistry = useCallback(async () => {
     if (registryChecking) return
     setRegistryChecking(true)
     setBulkResults({})
     try {
-      const result = await checkImageRegistry()
-      addToast({
-        type: 'info',
-        message: `Registry check complete: ${result.updates_available} update${result.updates_available !== 1 ? 's' : ''} available out of ${result.total} image${result.total !== 1 ? 's' : ''}`,
-        duration: 5000,
-      })
+      if (imgScope === 'all') {
+        const r = await checkFleetImageRegistry()
+        addToast({
+          type: r.unreachable ? 'warning' : 'info',
+          message: `Registry check complete: ${r.updates_available} update${r.updates_available !== 1 ? 's' : ''} across ${r.members.length} DCS (${r.total} image${r.total !== 1 ? 's' : ''})${r.unreachable ? ` — ${r.unreachable} not answering` : ''}`,
+          duration: 6000,
+        })
+      } else {
+        const result = await checkImageRegistry(scopeMember)
+        addToast({
+          type: 'info',
+          message: `Registry check complete: ${result.updates_available} update${result.updates_available !== 1 ? 's' : ''} available out of ${result.total} image${result.total !== 1 ? 's' : ''}${scopeName ? ` on ${scopeName}` : ''}`,
+          duration: 5000,
+        })
+      }
       // Refresh local data to pick up any new staleness info
       refresh()
     } catch (err) {
@@ -516,15 +630,18 @@ export default function Updates() {
     } finally {
       setRegistryChecking(false)
     }
-  }, [registryChecking, addToast, refresh])
+  }, [registryChecking, addToast, refresh, imgScope, scopeMember, scopeName])
 
-  // ---- Update a single image ----
+  // ---- Update a single image, on the DCS its row belongs to ----
   const handleUpdateImage = useCallback(
-    async (imageName: string) => {
-      if (updatingImages.has(imageName)) return
-      setUpdatingImages((prev) => new Set(prev).add(imageName))
+    async (img: ImageUpdateInfo) => {
+      const key = rowKey(img)
+      const member = img.member ?? scopeMember
+      const where = img.member && imgScope === 'all' ? ` on ${img.member_name || img.member}` : ''
+      if (updatingImages.has(key)) return
+      setUpdatingImages((prev) => new Set(prev).add(key))
       try {
-        const result = await updateImage(imageName, { recreate })
+        const result = await updateImage(img.image, { recreate }, member)
         if (result.success) {
           const parts: string[] = []
           if (result.containers_restarted.length > 0) parts.push(`recreated ${result.containers_restarted.join(', ')}`)
@@ -535,31 +652,31 @@ export default function Updates() {
             : recreate ? ' — no running container uses it' : ' — containers keep running on the old image until they are recreated'
           addToast({
             type: result.containers_failed?.length ? 'warning' : 'success',
-            message: `Pulled ${imageName}${tail}`,
+            message: `Pulled ${img.image}${where}${tail}`,
             duration: 6000,
           })
-          setBulkResults((prev) => ({ ...prev, [imageName]: 'done' }))
+          setBulkResults((prev) => ({ ...prev, [key]: 'done' }))
           refresh()
         } else {
-          addToast({ type: 'error', message: `Failed to update ${imageName}` })
+          addToast({ type: 'error', message: `Failed to update ${img.image}${where}` })
         }
       } catch (err) {
         addToast({
           type: 'error',
-          message: err instanceof Error ? err.message : `Failed to update ${imageName}`,
+          message: err instanceof Error ? err.message : `Failed to update ${img.image}${where}`,
         })
       } finally {
         setUpdatingImages((prev) => {
           const next = new Set(prev)
-          next.delete(imageName)
+          next.delete(key)
           return next
         })
       }
     },
-    [updatingImages, addToast, refresh, recreate],
+    [updatingImages, addToast, refresh, recreate, imgScope, scopeMember],
   )
 
-  // ---- Update every image with a confirmed update or a stale age ----
+  // ---- Update every image with a confirmed update or a stale age, each on its own DCS ----
   const handleUpdateAllStale = useCallback(async () => {
     if (bulkUpdating || bulkTargets.length === 0) return
     setBulkUpdating(true)
@@ -572,22 +689,23 @@ export default function Updates() {
 
     for (let i = 0; i < bulkTargets.length; i++) {
       const img = bulkTargets[i]
-      setBulkProgress({ done: i, total: bulkTargets.length, current: img.image })
+      const key = rowKey(img)
+      setBulkProgress({ done: i, total: bulkTargets.length, current: key })
       try {
-        const result = await updateImage(img.image, { recreate })
+        const result = await updateImage(img.image, { recreate }, img.member ?? scopeMember)
         if (result.success) {
           successCount++
           restarted.push(...result.containers_restarted)
           skipped.push(...(result.containers_skipped ?? []))
           failedContainers.push(...(result.containers_failed ?? []))
-          setBulkResults((prev) => ({ ...prev, [img.image]: 'done' }))
+          setBulkResults((prev) => ({ ...prev, [key]: 'done' }))
         } else {
           failCount++
-          setBulkResults((prev) => ({ ...prev, [img.image]: 'failed' }))
+          setBulkResults((prev) => ({ ...prev, [key]: 'failed' }))
         }
       } catch {
         failCount++
-        setBulkResults((prev) => ({ ...prev, [img.image]: 'failed' }))
+        setBulkResults((prev) => ({ ...prev, [key]: 'failed' }))
       }
     }
     setBulkProgress(null)
@@ -600,7 +718,7 @@ export default function Updates() {
       if (!recreate) parts.push('containers keep running on the old image until they are recreated')
       addToast({
         type: failedContainers.length ? 'warning' : 'success',
-        message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
+        message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${imgScope === 'all' ? ' across the fleet' : scopeName ? ` on ${scopeName}` : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
         duration: 8000,
       })
     }
@@ -613,7 +731,7 @@ export default function Updates() {
 
     refresh()
     setBulkUpdating(false)
-  }, [bulkUpdating, bulkTargets, addToast, refresh, recreate])
+  }, [bulkUpdating, bulkTargets, addToast, refresh, recreate, imgScope, scopeMember, scopeName])
 
   // ---- Disconnected ----
   if (!isConnected) {
@@ -718,17 +836,34 @@ export default function Updates() {
                     </span>
                   </div>
                 )}
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Channel</span>
-                  <span className="text-xs font-mono text-slate-400" title="Change it under Server Config → Environment → Update Channel">
-                    {sysUpdate.channel || 'stable'}
-                    <span className="text-slate-600"> · {sysUpdate.branch.replace(/^heads\//, '')}</span>
-                  </span>
-                </div>
+                {sysUpdate.state === 'member' || sysUpdate.state === 'manual' ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Updated by</span>
+                    <span className="text-xs text-slate-300 text-right" title={sysUpdate.hub?.url || sysUpdate.note}>
+                      {sysUpdate.state === 'member' ? `its hub${sysUpdate.hub?.name ? ` · ${sysUpdate.hub.name}` : ''}${sysUpdate.hub?.version ? ` (DCS ${sysUpdate.hub.version})` : ''}` : 'by hand — no git here'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Channel</span>
+                    <span className="text-xs font-mono text-slate-400" title="Change it under Server Config → Environment → Update Channel">
+                      {sysUpdate.channel || 'stable'}
+                      <span className="text-slate-600"> · {(sysUpdate.branch || '').replace(/^heads\//, '')}</span>
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
                   <UpdateStatusBadge res={sysUpdate} />
                 </div>
+                <StatusLine
+                  ok={!sysUpdate.available && sysUpdate.checked !== false}
+                  okText={sysUpdate.state === 'member' ? 'Follows the hub' : sysUpdate.state === 'manual' ? 'Nothing fetched here' : 'Up to date'}
+                  warnText={sysUpdate.checked === false ? 'Check failed' : `${sysUpdate.latest_version || sysUpdate.latest_name || 'A release'} available`}
+                  checkedAt={lastChecked}
+                  updatedAt={sysUpdate.last_updated_at}
+                  tone={sysUpdate.checked === false ? 'rose' : 'amber'}
+                />
 
                 {apiVersionInfo && (
                   <>
@@ -816,6 +951,12 @@ export default function Updates() {
                         {sysUpdate.restart_method === 'manual' && <span className="text-amber-400/80"> — not possible from here on this install; a hint follows</span>}
                       </span>
                     </label>
+                    {isHub && fleetMembers.length > 0 && (
+                      <label className="flex items-start gap-2 text-[10px] text-slate-400 cursor-pointer" title="Once the hub runs the new version, every VM fetches its code and restarts its API in place (data and stacks stay)">
+                        <input type="checkbox" checked={fleetAfter} onChange={(e) => setFleetAfter(e.target.checked)} className="accent-amber-500 mt-0.5" />
+                        <span>Then update the {fleetMembers.length} VM{fleetMembers.length === 1 ? '' : 's'} to the same version{!restartAfter && <span className="text-amber-400/80"> — after the API is restarted</span>}</span>
+                      </label>
+                    )}
                     <button
                       onClick={handleApplySystemUpdate}
                       disabled={sysApplying || !!restartingApi || (conflicts.length > 0 && !replaceLocal)}
@@ -919,6 +1060,25 @@ export default function Updates() {
                   </div>
                 )}
               </div>
+            ) : sysCheckError ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Installed</span>
+                  <span className="text-xs font-mono text-slate-300">{apiVersionInfo?.framework_version || '—'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full"><AlertTriangle size={10} /> Check failed</span>
+                </div>
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.06] border border-rose-500/15">
+                  <Info size={12} className="text-rose-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-rose-200 break-words">{sysCheckError}</p>
+                </div>
+                <StatusLine ok={false} okText="" warnText="Not checked" checkedAt={lastChecked} updatedAt={null} tone="rose" />
+                <button onClick={handleCheckSystemUpdate} disabled={sysChecking} className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all">
+                  {sysChecking ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Try again
+                </button>
+              </div>
             ) : (
               <div className="space-y-2.5">
                 {[...Array(3)].map((_, i) => (
@@ -970,6 +1130,7 @@ export default function Updates() {
                   </span>
                 )}
               </div>
+              <StatusLine ok={!uiUpdateAvailable} okText="Up to date" warnText="Update available" checkedAt={lastChecked} updatedAt={BUILD_DATE} updatedLabel="Built" />
             </div>
             {uiUpdateAvailable && (
               <div className="mt-3 pt-3 border-t border-white/[0.03]">
@@ -1019,6 +1180,86 @@ export default function Updates() {
             </div>
           </div>
         </div>
+
+        {/* The VMs: a hub keeps them on its own DCS version */}
+        {isHub && fv && fleetMembers.length > 0 && (
+          <div className={`rounded-xl border p-5 mt-4 transition-all duration-300 ${fv.behind > 0 ? 'bg-amber-500/[0.04] border-amber-500/15' : 'bg-white/[0.03] border-white/5'}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
+                  <Boxes size={16} className="text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">The VMs</p>
+                  <p className="text-[10px] text-slate-500">
+                    {fv.behind > 0
+                      ? `${fv.behind} of ${fleetMembers.length} behind the hub (DCS ${fv.hub.version})`
+                      : fv.unreachable > 0
+                        ? `${fleetMembers.length - fv.unreachable} on DCS ${fv.hub.version} · ${fv.unreachable} not answering`
+                        : `All ${fleetMembers.length} on DCS ${fv.hub.version}, like the hub`}
+                  </p>
+                </div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => handleUpdateFleet('all')}
+                  disabled={fleetUpdating || fv.pending || fleetMembers.every((m) => !m.reachable)}
+                  title="Every answering VM fetches the hub's code, keeps its data and stacks, and restarts its API in place"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-200 border border-amber-500/25 hover:bg-amber-500/25 disabled:opacity-50 transition-all duration-200 shrink-0"
+                >
+                  {fleetUpdating ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                  {fleetUpdating ? 'Updating the VMs…' : fv.pending ? 'Queued after the restart' : fv.behind > 0 ? `Update ${fv.behind} VM${fv.behind === 1 ? '' : 's'}` : 'Update all VMs'}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {fleetMembers.map((m) => {
+                const r = fleetReport?.results.find((x) => x.id === m.id)
+                return (
+                  <span
+                    key={m.id}
+                    title={!m.reachable ? 'not answering' : m.behind ? `DCS ${m.version} — the hub runs ${fv.hub.version}` : `DCS ${m.version}${m.vmid ? ` · VM #${m.vmid}` : ''}`}
+                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border ${!m.reachable ? 'border-white/[0.06] text-slate-500' : m.behind ? 'bg-amber-500/10 border-amber-500/25 text-amber-200' : 'bg-emerald-500/[0.06] border-emerald-500/15 text-emerald-200/90'}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${!m.reachable ? 'bg-slate-600' : m.behind ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                    {m.name}
+                    <span className="font-mono text-[10px] opacity-80">{m.version || '?'}</span>
+                    {r && (r.success ? <CheckCircle size={11} className="text-emerald-400" /> : <AlertTriangle size={11} className="text-rose-400" />)}
+                  </span>
+                )
+              })}
+            </div>
+            <div className="mt-3">
+              <StatusLine
+                ok={fv.behind === 0 && fv.unreachable === 0}
+                okText={`All ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} up to date`}
+                warnText={fv.behind > 0 ? `${fv.behind} VM${fv.behind === 1 ? '' : 's'} behind` : `${fv.unreachable} not answering`}
+                checkedAt={fv.checked_at}
+                updatedAt={fleetReport?.at ?? fv.last_round?.at}
+              />
+            </div>
+            {(fleetReport ?? fv.last_round) && (
+              <div className="mt-3 pt-3 border-t border-white/[0.03] text-[10px] text-slate-400 space-y-1">
+                {(() => {
+                  const lr = (fleetReport ?? fv.last_round) as FleetUpdateRound
+                  return (
+                    <>
+                      <p className="text-slate-300 font-medium">
+                        {fleetReport ? 'This round' : 'Last round'}: {lr.updated} updated{lr.failed ? `, ${lr.failed} failed` : ''} · DCS {lr.hub_version} · {new Date(lr.at * 1000).toLocaleString()}
+                      </p>
+                      {lr.results.filter((x) => !x.success).map((x) => (
+                        <p key={x.id} className="text-rose-300">{x.id}: {x.message}</p>
+                      ))}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
+            <p className="text-[10px] text-slate-500 mt-3">
+              Each VM fetches the hub's code, keeps its own data, accounts, stacks and settings, and restarts its API in place. A hub update with "then update the VMs" ticked does this on its own once the hub is back.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -1034,7 +1275,7 @@ export default function Updates() {
           <div>
             <h2 className="text-lg font-bold text-slate-100">Image Updates</h2>
             <p className="text-xs text-slate-500">
-              Check Docker images for available updates and apply them
+              {imgScope === 'all' ? `Every image on the hub and its ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
             </p>
           </div>
         </div>
@@ -1112,6 +1353,51 @@ export default function Updates() {
         </div>
       </div>
 
+      {/* ---- Whose images: everywhere, the hub, or one VM — and the one-line status ---- */}
+      <div className="flex flex-col gap-2">
+        {isHub && fleetMembers.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1">Images on</span>
+            <button
+              onClick={() => setImgScope('all')}
+              title={`The hub and its ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} in one list`}
+              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors ${imgScope === 'all' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
+            >
+              <Boxes size={11} /> Everywhere
+            </button>
+            <button
+              onClick={() => setImgScope('hub')}
+              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors ${imgScope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
+            >
+              <Server size={11} /> Hub
+            </button>
+            {fleetMembers.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => { if (m.reachable) setImgScope(m.id) }}
+                disabled={!m.reachable}
+                title={m.reachable ? `VM${m.vmid ? ` #${m.vmid}` : ''} · DCS ${m.version}` : 'not answering'}
+                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${imgScope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                {m.name}
+              </button>
+            ))}
+            {switching && <Loader2 size={12} className="animate-spin text-slate-500" />}
+          </div>
+        )}
+        {data && (
+          <StatusLine
+            ok={counts.updates === 0}
+            okText={data.registry_checked_at ? `All ${counts.total} image${counts.total === 1 ? '' : 's'} up to date` : `No updates known for ${counts.total} image${counts.total === 1 ? '' : 's'} — check the registry`}
+            warnText={`${counts.updates} image update${counts.updates === 1 ? '' : 's'} available`}
+            checkedAt={data.registry_checked_at}
+            updatedAt={data.last_update_at}
+            updatedLabel="Last pulled"
+          />
+        )}
+      </div>
+
       {/* ---- Summary stat cards ---- */}
       <div className={`grid grid-cols-2 ${counts.updates > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3 stagger-children`}>
         <SummaryCard
@@ -1157,7 +1443,7 @@ export default function Updates() {
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-200">
-            Tracked Images
+            Tracked Images{imgScope === 'all' && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-medium text-cyan-200 align-middle">Hub + {fleetMembers.length} VM{fleetMembers.length === 1 ? '' : 's'}</span>}{scopeMember && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 align-middle">VM · {scopeName}</span>}
           </h3>
           <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
             Age shows when the image was built. Click "Check Registry" to compare digests against upstream — this shows definitive "Update" or "Latest" badges without pulling images.
@@ -1225,6 +1511,11 @@ export default function Updates() {
                   <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider hidden sm:table-cell">
                     Stack
                   </th>
+                  {imgScope === 'all' && (
+                    <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
+                      Where
+                    </th>
+                  )}
                   <th className="text-right px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
                     Age (days)
                   </th>
@@ -1236,16 +1527,17 @@ export default function Updates() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.03]">
+              <tbody className={`divide-y divide-white/[0.03] transition-opacity ${switching ? 'opacity-40' : ''}`}>
                 {images.map((img: ImageUpdateInfo) => {
                   // Only the image being pulled right now is "updating"; the rest
                   // of a bulk run is queued, finished or failed
-                  const isUpdating = updatingImages.has(img.image) || bulkProgress?.current === img.image
-                  const bulkState = bulkResults[img.image]
-                  const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => t.image === img.image)
+                  const key = rowKey(img)
+                  const isUpdating = updatingImages.has(key) || bulkProgress?.current === key
+                  const bulkState = bulkResults[key]
+                  const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => rowKey(t) === key)
                   return (
                     <tr
-                      key={img.image}
+                      key={key}
                       className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors duration-150"
                     >
                       {/* Image name */}
@@ -1272,6 +1564,31 @@ export default function Updates() {
                           <span className="text-xs text-slate-500">-</span>
                         )}
                       </td>
+
+                      {/* Where it runs (the fleet view) */}
+                      {imgScope === 'all' && (
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {img.member ? (
+                            <button
+                              onClick={() => setImgScope(img.member as string)}
+                              title={`Only the images of the VM ${img.member_name || img.member}`}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 hover:bg-amber-500/20"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              VM · {img.member_name || img.member}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setImgScope('hub')}
+                              title="Only the hub's own images"
+                              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-200/90 hover:bg-emerald-500/20"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              Hub
+                            </button>
+                          )}
+                        </td>
+                      )}
 
                       {/* Stack (hidden on mobile) */}
                       <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
@@ -1330,7 +1647,7 @@ export default function Updates() {
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {isAdmin ? (
                           <button
-                            onClick={() => handleUpdateImage(img.image)}
+                            onClick={() => handleUpdateImage(img)}
                             disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true)}
                             title={img.update_available === true ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated') : img.staleness === 'stale' ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated') : 'Nothing newer is known for this tag'}
                             className={`

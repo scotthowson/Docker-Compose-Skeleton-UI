@@ -1141,9 +1141,18 @@ export type SystemRestartMethod = 'reexec' | 'systemd' | 'relaunch' | 'manual'
 export interface SystemUpdateCheckResponse {
   available: boolean
   /** current | behind | ahead | diverged | unknown */
+  /** behind / current / ahead / unknown; `member` = a VM the hub updates, `manual` = installed without git */
   state?: string
   /** false when GitHub could not be reached; `error` says why */
   checked?: boolean
+  /** hub (a VM built by the hub) or manual (no git): who brings updates here */
+  managed_by?: 'hub' | 'manual'
+  /** a member: its hub */
+  hub?: { name?: string; url?: string; version?: string } | null
+  /** the newest update this install took (ISO), "" when none */
+  last_updated_at?: string
+  /** a member or a manual install: the one-line explanation */
+  note?: string
   error?: string
   channel?: string
   branch: string
@@ -1173,6 +1182,8 @@ export interface SystemRestartInfo {
 export interface SystemUpdateApplyResponse {
   success?: boolean
   updated?: boolean
+  /** a hub: the VMs are updated once the API is back on the new code */
+  fleet_update_queued?: boolean
   state?: string
   channel?: string
   branch?: string
@@ -1635,6 +1646,10 @@ export interface MetricsTrendsResponse {
 // GET/POST /images/check-updates
 export interface ImageUpdateInfo {
   image: string
+  /** the fleet view: which member runs it (null = the hub / this server) */
+  member?: string | null
+  member_name?: string
+  vmid?: number | null
   repository?: string
   tag?: string
   age_days: number
@@ -1656,7 +1671,18 @@ export interface ImageCheckResponse {
   updates_available?: number
   /** When the registry digests were last compared (cache file time) */
   registry_checked_at?: string
+  /** When an image was last pulled here (the newest pull across the fleet in the fleet view) */
+  last_update_at?: string
+  /** GET /fleet/images: true when members were merged in */
+  fleet?: boolean
+  /** GET /fleet/images: one entry per DCS (the hub first, id null) */
+  members?: FleetImagesMember[]
 }
+
+/** One DCS in the fleet-wide image view */
+export interface FleetImagesMember { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; total: number; updates_available: number; stale: number; registry_checked_at: string; last_update_at: string }
+/** POST /fleet/images/check — the registry check everywhere at once */
+export interface FleetImagesCheckResponse { members: { id: string | null; name: string; reachable: boolean; error: string; total: number; updates_available: number }[]; total: number; updates_available: number; unreachable: number; checked_at: string }
 
 export interface ImageRegistryCheckResponse {
   images: { image: string; old_id: string; new_id: string; update_available: boolean }[]
@@ -2962,12 +2988,21 @@ export interface ProxmoxStorageResponse { node: string; storages: ProxmoxStorage
 export interface FleetImage { id: string; label: string; url: string; file: string; family?: string }
 /** A file already on a Proxmox storage: an imported cloud image, or an installer ISO */
 export interface FleetStoredImage { volid: string; file: string; size: number; storage: string }
+/** A DCS template the hub baked: VMs cloned from it build in about 40 s */
+export interface FleetTemplate { vmid: number; node: string; image_id: string; image_file: string; family: string; name: string; baked_at: number; dcs_version: string }
+
+/** GET /fleet/versions — the hub's DCS version next to every member's (asked live) */
+export interface FleetMemberVersion { id: string; name: string; vmid: number | null; url: string; /** the version recorded at join/last update */ recorded: string; version: string; reachable: boolean; /** answering, on another version than the hub */ behind: boolean }
+export interface FleetUpdateResult { id: string; success: boolean; message: string; from?: string; to?: string; restart?: string }
+export interface FleetUpdateRound { at: number; hub_version: string; results: FleetUpdateResult[]; updated: number; failed: number }
+export interface FleetVersions { hub: { version: string }; members: FleetMemberVersion[]; behind: number; unreachable: number; /** a round is queued for after the hub's own restart */ pending: boolean; last_round: FleetUpdateRound | null; /** when the members were asked (epoch seconds) */ checked_at: number }
+export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean }
 export interface FleetProvisionDefaults {
   proxmox_linked: boolean
   node: string
   storages: ProxmoxStorage[]
   /** what a VM can be built from: the catalogue (cloud images by URL), and what Proxmox already holds */
-  images?: { catalogue: FleetImage[]; on_proxmox: { imports: FleetStoredImage[]; isos: FleetStoredImage[] } }
+  images?: { catalogue: FleetImage[]; on_proxmox: { imports: FleetStoredImage[]; isos: FleetStoredImage[] }; templates?: FleetTemplate[] }
   storage: string
   image_storage: string
   bridge: string
@@ -3002,6 +3037,10 @@ export interface FleetProvisionRequest {
   image_url?: string
   image_file?: string
   iso?: string
+  /** bake a DCS template for the image first (once) — the builds then clone it */
+  bake?: boolean
+  /** clone the DCS template when one exists (the default) */
+  from_template?: boolean
 }
 export interface FleetProvisionResponse { success: boolean; jobs: { id: string; stack: string; ip: string }[] }
 
@@ -3010,6 +3049,10 @@ export interface FleetJobStep { id: string; label: string; hint: string; state: 
 export interface FleetJob {
   id: string
   stack: string
+  /** build: a VM for a stack; bake: a DCS template other VMs clone */
+  kind?: 'build' | 'bake'
+  template_for?: string
+  cloned_from?: number
   /** cloud: built and joined unattended; iso: the VM boots an installer, you install by hand and join */
   image_kind?: 'cloud' | 'iso'
   image_id?: string

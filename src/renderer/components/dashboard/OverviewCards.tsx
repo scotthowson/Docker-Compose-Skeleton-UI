@@ -2,6 +2,9 @@
 // OverviewCards — Quick stats grid (4 columns) for the Dashboard
 // =============================================================================
 
+import { useFleetRole } from '../../hooks/useFleetRole'
+import { usePolling } from '../../hooks/usePolling'
+import { fetchStacks, fetchFleetOverview } from '../../api/endpoints'
 import React, { useEffect, useRef, useState } from 'react'
 import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
@@ -253,15 +256,23 @@ export default function OverviewCards() {
   const statusLoading = !status
 
   // --- Stacks ---
-  const runningStacks = status?.stacks.running ?? 0
-  const totalStacks = status?.stacks.total ?? 0
+  // a hub: the cards count the whole fleet — its own stacks and containers plus every VM's
+  const { isHub } = useFleetRole()
+  const isConnectedFleet = useConnectionStore((s) => s.status === 'connected')
+  const fleetStacks = usePolling(fetchStacks, 30000, { enabled: isConnectedFleet && isHub })
+  const fleetOverview = usePolling(fetchFleetOverview, 30000, { enabled: isConnectedFleet && isHub })
+  const vmStacks = isHub ? (fleetStacks.data?.stacks ?? []).filter((s) => s.placement === 'vm') : []
+  const runningStacks = (status?.stacks.running ?? 0) + vmStacks.filter((s) => s.status === 'running').length
+  const totalStacks = (status?.stacks.total ?? 0) + vmStacks.length
   const stackTrend: CardProps['trend'] =
     totalStacks === 0 ? 'stable' : runningStacks === totalStacks ? 'up' : 'down'
 
   // --- Containers ---
-  const runningContainers = status?.docker.containers.running ?? 0
-  const totalContainers = status?.docker.containers.total ?? 0
-  const stoppedContainers = status?.docker.containers.stopped ?? 0
+  const fleetRunning = isHub ? (fleetOverview.data?.totals.containers_running ?? 0) : 0
+  const fleetTotal = isHub ? (fleetOverview.data?.totals.containers_total ?? 0) : 0
+  const runningContainers = (status?.docker.containers.running ?? 0) + fleetRunning
+  const totalContainers = (status?.docker.containers.total ?? 0) + fleetTotal
+  const stoppedContainers = (status?.docker.containers.stopped ?? 0) + Math.max(0, fleetTotal - fleetRunning)
   const containerTrend: CardProps['trend'] =
     stoppedContainers > 0 ? 'down' : runningContainers > 0 ? 'up' : 'stable'
 

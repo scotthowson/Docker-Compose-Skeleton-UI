@@ -12,11 +12,12 @@ import { fetchFleetProvisionDefaults, provisionFleet } from '../../api/endpoints
 import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
 import { Sheet, inputCls, labelCls } from './fleetShared'
 
-export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string; /** what the VMs are built from: cat:<id> (catalogue), url, pve:<file> (imported already), iso:<volid> (installer, by hand) */ os: string; image_url: string }
+export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string; /** what the VMs are built from: cat:<id> (catalogue), url, pve:<file> (imported already), iso:<volid> (installer, by hand) */ os: string; image_url: string; /** bake a DCS template first when the chosen image has none, then clone it for every VM */ bake: boolean }
 
 /** The operating-system choices: the catalogue, what Proxmox already holds, a URL */
 export function osChoices(d: FleetProvisionDefaults | null): { value: string; label: string; group: string; byHand?: boolean }[] {
   const out: { value: string; label: string; group: string; byHand?: boolean }[] = []
+  for (const tp of d?.images?.templates ?? []) out.push({ value: `tpl:${tp.image_id}`, label: `${d?.images?.catalogue.find((c) => c.id === tp.image_id)?.label.replace(/ — .*$/, '') ?? tp.image_id} — DCS template VM ${tp.vmid}, baked ${new Date(tp.baked_at * 1000).toLocaleDateString()}`, group: 'Baked DCS templates — cloned in about 40 s' })
   for (const c of d?.images?.catalogue ?? []) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — built and joined by the hub' })
   for (const i of d?.images?.on_proxmox?.imports ?? []) out.push({ value: `pve:${i.file}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB, on ${i.storage})`, group: 'On Proxmox already — cloud images' })
   for (const i of d?.images?.on_proxmox?.isos ?? []) out.push({ value: `iso:${i.volid}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB) — install by hand, then join`, group: 'On Proxmox already — installer ISOs', byHand: true })
@@ -32,8 +33,8 @@ export function osLabel(s: VmSettings | null, d: FleetProvisionDefaults | null):
 }
 /** The request fields the settings stand for (the hub takes image | image_url | image_file | iso) */
 export function vmSettingsToRequest(s: VmSettings): Omit<FleetProvisionRequest, 'vms'> {
-  const { os, image_url, ...rest } = s
-  const pick: Partial<FleetProvisionRequest> = os.startsWith('cat:') ? { image: os.slice(4) } : os === 'url' ? { image_url } : os.startsWith('pve:') ? { image_file: os.slice(4) } : os.startsWith('iso:') ? { iso: os.slice(4) } : {}
+  const { os, image_url, bake, ...rest } = s
+  const pick: Partial<FleetProvisionRequest> = os.startsWith('cat:') ? { image: os.slice(4), bake } : os.startsWith('tpl:') ? { image: os.slice(4), from_template: true } : os === 'url' ? { image_url, bake } : os.startsWith('pve:') ? { image_file: os.slice(4), bake } : os.startsWith('iso:') ? { iso: os.slice(4) } : {}
   return { ...rest, ...pick }
 }
 // remembered per hub (another hub has other storages and another network)
@@ -51,8 +52,9 @@ export function settingsFromDefaults(d: FleetProvisionDefaults, saved: Partial<V
     node: saved.node && (!d.node || saved.node === d.node) ? saved.node : d.node,
     storage: has(saved.storage) ? (saved.storage as string) : d.storage,
     image_storage: has(saved.image_storage) ? (saved.image_storage as string) : (d.image_storage || 'local'),
-    os: saved.os && osChoices(d).some((o) => o.value === saved.os) ? saved.os : `cat:${d.images?.catalogue?.[0]?.id ?? 'debian-13'}`,
+    os: saved.os && osChoices(d).some((o) => o.value === saved.os) ? saved.os : (d.images?.templates?.[0] ? `tpl:${d.images.templates[0].image_id}` : `cat:${d.images?.catalogue?.[0]?.id ?? 'debian-13'}`),
     image_url: saved.image_url || '',
+    bake: saved.bake ?? true,
     bridge: saved.bridge || d.bridge || 'vmbr0',
     cidr: saved.cidr || d.cidr || 24,
     gateway: saved.gateway || d.gateway,
@@ -63,7 +65,7 @@ export function settingsFromDefaults(d: FleetProvisionDefaults, saved: Partial<V
 
 /** The VM settings block shared by the wizard's layout step and the New VM sheet */
 export function VmSettingsFields({ value, onChange, defaults, disabled = false }: { value: VmSettings; onChange: (v: VmSettings) => void; defaults: FleetProvisionDefaults | null; disabled?: boolean }) {
-  const set = (k: keyof VmSettings, v: string | number) => onChange({ ...value, [k]: v })
+  const set = (k: keyof VmSettings, v: string | number) => onChange({ ...value, [k]: k === 'bake' ? Boolean(v) : v })
   const storages = defaults?.storages ?? []
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -77,8 +79,14 @@ export function VmSettingsFields({ value, onChange, defaults, disabled = false }
           </select>
           {value.os === 'url' && <input value={value.image_url} onChange={(e) => set('image_url', e.target.value)} className={`${inputCls} flex-[2] min-w-[16rem]`} disabled={disabled} placeholder="https://…/image.qcow2 (cloud-init, apt or dnf)" />}
         </div>
+        {!value.os.startsWith('iso:') && !value.os.startsWith('tpl:') && (
+          <label className="mt-2 flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={value.bake} onChange={(e) => set('bake', e.target.checked ? 1 : 0)} disabled={disabled} className="mt-0.5 accent-amber-400" />
+            <span>Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about 40 s instead of about 85 s, and the template stays for the next builds.</span>
+          </label>
+        )}
         <p className="text-[10px] text-slate-500 mt-1">
-          {value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
+          {value.os.startsWith('tpl:') ? 'A baked DCS template: the VM is a clone with the tools, Docker and the guest agent already in place; only cloud-init, the fresh DCS code and the join run.' : value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
         </p>
       </div>
       <div>
@@ -145,7 +153,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
   const [memGb, setMemGb] = useState(Math.round((defaults?.defaults.memory_mb ?? 4096) / 1024))
   const [diskGb, setDiskGb] = useState(defaults?.defaults.disk_gb ?? 32)
   const [ip, setIp] = useState('')
-  const [settings, setSettings] = useState<VmSettings>(() => defaults ? settingsFromDefaults(defaults, loadVmSettings()) : { node: '', storage: '', image_storage: 'local', bridge: 'vmbr0', cidr: 24, gateway: '', dns: '', ip_start: '', os: 'cat:debian-13', image_url: '' })
+  const [settings, setSettings] = useState<VmSettings>(() => defaults ? settingsFromDefaults(defaults, loadVmSettings()) : { node: '', storage: '', image_storage: 'local', bridge: 'vmbr0', cidr: 24, gateway: '', dns: '', ip_start: '', os: 'cat:debian-13', image_url: '', bake: true })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   useEffect(() => { if (defaults) setSettings((s) => (s.node ? s : settingsFromDefaults(defaults, loadVmSettings()))) }, [defaults])

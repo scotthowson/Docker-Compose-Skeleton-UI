@@ -2572,7 +2572,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       ))}
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Network</span>
-                        <span className="text-[10px] font-mono text-slate-300">{osLabel(vmSettings, provDefaults)} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway} · DNS {vmSettings.dns}</span>
+                        <span className="text-[10px] font-mono text-slate-300">{osLabel(vmSettings, provDefaults)}{vmSettings.bake && !vmSettings.os.startsWith('tpl:') && !vmSettings.os.startsWith('iso:') ? ' · a DCS template is baked first, then each VM clones it' : vmSettings.os.startsWith('tpl:') ? ' · cloned from the baked template' : ''} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway} · DNS {vmSettings.dns}</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Proxmox</span>

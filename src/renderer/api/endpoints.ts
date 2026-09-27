@@ -4,6 +4,9 @@
 
 import { apiClient } from './client'
 import type {
+  FleetVersions,
+  FleetUpdateResponse,
+  FleetImagesCheckResponse,
   APIRoot,
   APIVersion,
   ServerStatus,
@@ -991,18 +994,18 @@ export function fetchMetricsTrends(range: string = '1h'): Promise<MetricsTrendsR
 }
 
 /** GET /images/check-updates — Quick local staleness check */
-export function fetchImageUpdates(): Promise<ImageCheckResponse> {
-  return apiClient.get<ImageCheckResponse>('/images/check-updates')
+export function fetchImageUpdates(member?: string | null): Promise<ImageCheckResponse> {
+  return apiClient.get<ImageCheckResponse>(memberPath(member, '/images/check-updates'))
 }
 
 /** POST /images/check-updates — Registry check for updates (slow) */
-export function checkImageRegistry(): Promise<ImageRegistryCheckResponse> {
-  return apiClient.post<ImageRegistryCheckResponse>('/images/check-updates', undefined, 120000)
+export function checkImageRegistry(member?: string | null): Promise<ImageRegistryCheckResponse> {
+  return apiClient.post<ImageRegistryCheckResponse>(memberPath(member, '/images/check-updates'), undefined, 120000)
 }
 
 /** POST /images/update — Pull an image; recreate the Compose services that use it unless recreate is false */
-export function updateImage(name: string, opts: { recreate?: boolean } = {}): Promise<ImageUpdateResponse> {
-  return apiClient.post<ImageUpdateResponse>('/images/update', { image: name, recreate: opts.recreate ?? true }, 600000)
+export function updateImage(name: string, opts: { recreate?: boolean } = {}, member?: string | null): Promise<ImageUpdateResponse> {
+  return apiClient.post<ImageUpdateResponse>(memberPath(member, '/images/update'), { image: name, recreate: opts.recreate ?? true }, 600000)
 }
 
 /** GET /notifications/rules — List notification rules */
@@ -1714,8 +1717,8 @@ export function checkSystemUpdate(): Promise<SystemUpdateCheckResponse> {
 }
 
 /** POST /system/update/apply — Update to the channel's release; user files are kept, a backup tag allows rollback */
-export function applySystemUpdate(opts: { replaceLocal?: boolean; restart?: boolean } = {}): Promise<SystemUpdateApplyResponse> {
-  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: true, replace_local: !!opts.replaceLocal, restart: !!opts.restart }, 180000)
+export function applySystemUpdate(opts: { replaceLocal?: boolean; restart?: boolean; /** a hub: then bring the VMs to the new version */ fleet?: boolean } = {}): Promise<SystemUpdateApplyResponse> {
+  return apiClient.post<SystemUpdateApplyResponse>('/system/update/apply', { confirm: true, replace_local: !!opts.replaceLocal, restart: !!opts.restart, fleet: !!opts.fleet }, 180000)
 }
 
 /** POST /system/update/rollback — Return to a backup tag; user files are kept */
@@ -1978,6 +1981,26 @@ export function revokeFleetJoinToken(token: string): Promise<{ success: boolean 
 }
 
 /** POST /fleet/join-hub — make this server a member of a hub */
+/** GET /fleet/images — every image on the hub and on each member, tagged with where it runs */
+export function fetchFleetImages(): Promise<ImageCheckResponse> {
+  return apiClient.get<ImageCheckResponse>('/fleet/images')
+}
+
+/** POST /fleet/images/check — the registry check on the hub and every member at once (slow) */
+export function checkFleetImageRegistry(): Promise<FleetImagesCheckResponse> {
+  return apiClient.post<FleetImagesCheckResponse>('/fleet/images/check', undefined, 200000)
+}
+
+/** GET /fleet/versions — the hub's DCS version next to every member's, asked live */
+export function fetchFleetVersions(): Promise<FleetVersions> {
+  return apiClient.get<FleetVersions>('/fleet/versions')
+}
+
+/** POST /fleet/update — bring members (ids, or "all") to the hub's DCS version: each fetches the hub's code and re-executes */
+export function updateFleet(members: string[] | 'all' = 'all'): Promise<FleetUpdateResponse> {
+  return apiClient.post<FleetUpdateResponse>('/fleet/update', { members }, 600000)
+}
+
 export function joinFleetHub(body: { hub_url?: string; token?: string; name?: string; url?: string; pending?: boolean }): Promise<FleetJoinHubResponse> {
   return apiClient.post<FleetJoinHubResponse>('/fleet/join-hub', body, 120000)
 }

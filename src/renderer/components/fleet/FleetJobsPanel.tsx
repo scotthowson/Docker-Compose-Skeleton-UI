@@ -23,6 +23,7 @@ function jobCurrent(j: FleetJob): number {
 function jobStatus(j: FleetJob): string {
   if (j.status === 'queued') return 'Waiting for its turn (VMs are built one at a time)'
   if (j.status === 'failed') return j.error || 'Failed'
+  if (j.kind === 'bake' && j.status === 'done') return `DCS template VM ${j.vmid} for ${j.template_for ?? j.image_id} is baked — VMs built from it clone it in about 40 s`
   if (j.status === 'done' && j.manual && !j.member_id) return `VM ${j.vmid} boots the installer — install the system in its Proxmox console, then join with the code below`
   if (j.status === 'done' && j.manual) return `VM ${j.vmid} at ${j.ip} was installed by hand and joined as ${j.stack}`
   if (j.status === 'done') return `VM ${j.vmid} at ${j.ip} runs the stack ${j.stack}`
@@ -31,6 +32,8 @@ function jobStatus(j: FleetJob): string {
 }
 
 function pill(j: FleetJob): { text: string; cls: string } {
+  if (j.kind === 'bake' && j.status === 'done') return { text: 'template ready', cls: 'bg-amber-500/10 text-amber-200 border-amber-500/25' }
+  if (j.kind === 'bake' && j.status === 'running') return { text: 'baking', cls: 'bg-amber-500/10 text-amber-200 border-amber-500/25' }
   if (j.status === 'queued') return { text: 'waiting', cls: 'bg-white/5 text-slate-400 border-white/10' }
   if (j.status === 'running') return { text: 'building', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25' }
   if (j.status === 'failed') return { text: 'failed', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/25' }
@@ -73,7 +76,7 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
         <Server size={15} className={job.status === 'done' ? 'text-emerald-400' : job.status === 'failed' ? 'text-rose-400' : 'text-cyan-400'} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-100 truncate flex items-center gap-2 flex-wrap">
-            <span>VM for {job.stack}{job.vmid ? <span className="text-slate-500 font-normal"> · #{job.vmid}</span> : null}</span>
+            <span>{job.kind === 'bake' ? `DCS template for ${job.template_for ?? job.image_id}` : `VM for ${job.stack}`}{job.vmid ? <span className="text-slate-500 font-normal"> · #{job.vmid}</span> : null}{job.cloned_from ? <span className="text-amber-300/80 font-normal text-[11px]"> · cloned from template {job.cloned_from}</span> : null}</span>
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${pill(job).cls}`}>{pill(job).text}</span>
           </p>
           <p className="text-[11px] text-slate-500 truncate">
