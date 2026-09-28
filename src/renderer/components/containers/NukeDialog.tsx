@@ -8,19 +8,23 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bomb, Loader2, FolderX, Database, ShieldCheck, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { fetchContainerResetPreview, resetContainer } from '../../api/endpoints'
+import { fetchContainerResetPreviewOn, resetContainerOn } from '../../api/fleetScoped'
 import type { ContainerResetPreview, ContainerResetResponse } from '../../../shared/types'
+import type { RowMember } from '../../../shared/fleetScoped'
 import { useToast } from '../common/Toast'
 
 interface NukeDialogProps {
   containerName: string
+  /** The server the container runs on: a fleet member id rides the hub's proxy; null or undefined = this server */
+  member?: RowMember
+  memberName?: string
   open: boolean
   onClose: () => void
   /** Called after a successful reinstall so lists and details refresh */
   onDone?: () => void
 }
 
-export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogProps) {
+export function NukeDialog({ containerName, member = null, memberName = '', open, onClose, onDone }: NukeDialogProps) {
   const { addToast } = useToast()
   const [preview, setPreview] = useState<ContainerResetPreview | null>(null)
   const [error, setError] = useState('')
@@ -34,13 +38,13 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
   const load = useCallback(async () => {
     setLoading(true); setError(''); setPreview(null); setResult(null); setTyped('')
     try {
-      setPreview(await fetchContainerResetPreview(containerName))
+      setPreview(await fetchContainerResetPreviewOn(containerName, member))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [containerName])
+  }, [containerName, member])
 
   useEffect(() => { if (open) void load() }, [open, load])
   useEffect(() => {
@@ -54,10 +58,10 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
     if (typed !== containerName || busy) return
     setBusy(true)
     try {
-      const r = await resetContainer(containerName, { confirm: containerName, wipe_app_data: true, wipe_volumes: wipeVolumes, pull })
+      const r = await resetContainerOn(containerName, { confirm: containerName, wipe_app_data: true, wipe_volumes: wipeVolumes, pull }, member)
       setResult(r)
       if (r.success) {
-        addToast({ type: 'success', message: `${containerName} reinstalled from scratch` })
+        addToast({ type: 'success', message: `${containerName} reinstalled from scratch${member ? ` on VM ${memberName || member}` : ''}` })
         onDone?.()
       } else {
         addToast({ type: 'error', message: r.message || `Reinstall of ${containerName} hit errors`, duration: 8000 })
@@ -67,7 +71,7 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
     } finally {
       setBusy(false)
     }
-  }, [typed, containerName, busy, wipeVolumes, pull, addToast, onDone])
+  }, [typed, containerName, member, memberName, busy, wipeVolumes, pull, addToast, onDone])
 
   if (!open) return null
   const canGo = !!preview && typed === containerName && !busy && !result
@@ -83,8 +87,8 @@ export function NukeDialog({ containerName, open, onClose, onDone }: NukeDialogP
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400"><Bomb size={18} /></div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-100">Nuke &amp; reinstall {containerName}</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">A fresh install: the container and its files go, then it is created again from the compose file.</p>
+              <h3 className="text-sm font-semibold text-slate-100">Nuke &amp; reinstall {containerName}{member && <span className="ml-1.5 text-[11px] font-medium text-amber-200/90">· VM {memberName || member}</span>}</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">A fresh install{member ? ` inside the VM ${memberName || member}` : ''}: the container and its files go, then it is created again from the compose file.</p>
             </div>
           </div>
           <button onClick={onClose} disabled={busy} className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40" aria-label="Close"><X size={16} /></button>

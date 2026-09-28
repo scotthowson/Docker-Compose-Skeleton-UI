@@ -27,6 +27,10 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import { apiClient } from '../api/client'
+import { memberPath } from '../api/endpoints'
 import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
 import type { MetricsTrendsResponse, AlertConfigResponse, AlertThresholds } from '../../shared/types'
 import {
@@ -357,8 +361,13 @@ export default function Trends() {
     return () => document.removeEventListener('keydown', handler)
   }, [showAlertConfig])
 
-  // Fetch trends data with polling
-  const fetchTrends = useCallback(() => fetchMetricsTrends(range), [range])
+  // Trends are per server: the hub's, or one VM's through the hub (Everywhere shows the hub's)
+  const { scope, setScope, member: scopeMember, memberName: scopeName, members: scopeMembers, hasFleet } = useFleetScope()
+  const trendsMember = scope === 'all' ? null : scopeMember
+  const fetchTrends = useCallback(
+    () => (trendsMember ? apiClient.get<MetricsTrendsResponse>(memberPath(trendsMember, `/metrics/trends?range=${range}`)) : fetchMetricsTrends(range)),
+    [range, trendsMember],
+  )
 
   const { data, loading, error, refresh } = usePolling<MetricsTrendsResponse>(
     fetchTrends,
@@ -462,6 +471,13 @@ export default function Trends() {
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
+      {hasFleet && (
+        <div className="mb-3">
+          <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Trends of" busy={loading && !!data} />
+          {scope === 'all' && <p className="mt-1 text-[10px] text-slate-500">Trends are kept per server: this is the hub's. Pick a VM to see its own.</p>}
+          {trendsMember && <p className="mt-1 text-[10px] text-slate-500">The VM {scopeName}'s trends, read through the hub.</p>}
+        </div>
+      )}
       {/* ----------------------------------------------------------------- */}
       {/* Page header                                                        */}
       {/* ----------------------------------------------------------------- */}

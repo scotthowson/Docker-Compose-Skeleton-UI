@@ -6,6 +6,7 @@ import React, { useState } from 'react'
 import { Box, Image, Network, Settings, Activity, Zap, ChevronDown } from 'lucide-react'
 import { useLogStore } from '../../stores/logStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import VmCapsule from '../fleet/VmCapsule'
 import type { EventEntry } from '../../../shared/types'
 
 function eventTypeConfig(type: string): { icon: React.ReactNode; color: string; bg: string } {
@@ -76,6 +77,9 @@ function EventRow({ event, index }: { event: EventEntry; index: number }) {
       <span className={`flex-shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium ${actionBadge(event.action)}`}>
         {event.action}
       </span>
+
+      {/* Where it happened (only rows of a fleet view carry it) */}
+      {event.member !== undefined && <VmCapsule member={event.member} name={event.member_name} vmid={event.vmid} size="xs" />}
 
       {/* Name */}
       <span className="min-w-0 flex-1 truncate text-sm text-slate-300 group-hover:text-white transition-colors font-mono text-xs">

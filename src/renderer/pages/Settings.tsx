@@ -15,6 +15,9 @@ import {
 import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
+import ThemesPanel from '../components/settings/ThemesPanel'
+import { useThemeStore, resolveTheme } from '../stores/themeStore'
+import { CSS_SANITIZE_NOTE } from '../lib/cssSanitize'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
 import { discoverServer } from '../lib/discover'
@@ -832,6 +835,12 @@ function DiskLabelManager() {
 
 function AppearanceSettings() {
   const theme = useSettingsStore((s) => s.theme)
+  // the theme in effect (personal or the server's) decides the mode while it is on
+  const themeName = useSettingsStore((s) => s.themeName)
+  const serverThemeActive = useSettingsStore((s) => s.serverThemeActive)
+  useThemeStore((s) => s.metas)
+  useThemeStore((s) => s.localThemes)
+  const activeTheme = resolveTheme(themeName || serverThemeActive)?.theme ?? null
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Docker Compose Skeleton'
   const updateSetting = useSettingsStore((s) => s.updateSetting)
@@ -997,6 +1006,11 @@ function AppearanceSettings() {
             <span className="text-xs font-medium">Light</span>
           </button>
         </div>
+        {activeTheme && (
+          <p className="text-[10px] text-slate-500 mt-2">
+            The theme <span className="text-slate-300">{activeTheme.title}</span> is on and it is a {activeTheme.mode} theme, so it decides the mode while it is active. Pick a theme of the other mode, or follow the server, in Themes below.
+          </p>
+        )}
       </div>
 
       {/* Background Image */}
@@ -2675,7 +2689,7 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
       </button>
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${
-          collapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'
+          collapsed ? 'max-h-0 opacity-0' : 'max-h-[6000px] opacity-100'
         }`}
       >
         <div className="p-5">{children}</div>
@@ -2916,6 +2930,16 @@ export default function Settings() {
         )}
 
         </div>
+        {/* Themes — everyone picks their own; admins set the one every dashboard follows */}
+        <SectionCard
+          icon={<Palette size={16} className="text-emerald-400" />}
+          title="Themes"
+          accentColor="border-t-emerald-500"
+          fullWidth
+        >
+          <ThemesPanel />
+        </SectionCard>
+
         {/* Custom CSS — admin only */}
         {isAdmin && <SectionCard
           icon={<Palette size={16} className="text-violet-400" />}
@@ -2950,7 +2974,7 @@ export default function Settings() {
               </button>
             </div>
             <p className="text-[10px] text-slate-500">
-              Use browser dev tools to inspect element classes.
+              Use browser dev tools to inspect element classes. {CSS_SANITIZE_NOTE} Your CSS is applied after the active theme, so it wins.
             </p>
           </div>
         </SectionCard>}

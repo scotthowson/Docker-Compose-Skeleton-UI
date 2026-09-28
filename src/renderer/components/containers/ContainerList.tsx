@@ -1,15 +1,19 @@
 // =============================================================================
-// ContainerList — Full container table + mobile cards with favorites, stats
+// ContainerList — Full container table + mobile cards with favorites, stats.
+// On a hub the rows come from the chosen fleet scope (everywhere, the hub, one
+// VM); every quick and batch action goes to the server the row lives on.
 // =============================================================================
 
-import { useFleetRole } from '../../hooks/useFleetRole'
 import React, { useState, useMemo, useCallback } from 'react'
 import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
-import { startContainer, stopContainer, restartContainer, removeContainer } from '../../api/endpoints'
+import { containerActionOn, rowKey, type ContainerActionName } from '../../api/fleetScoped'
 import ContainerRow, { ContainerCard } from './ContainerRow'
 import { useConfirm } from '../common/ConfirmDialog'
+import { useToast } from '../common/Toast'
 import { EmptyState } from '../common/PageState'
+import FleetScopeChips from '../fleet/FleetScopeChips'
+import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 import {
   Search,
   ChevronUp,
@@ -75,41 +79,63 @@ const COLUMNS: ColumnDef[] = [
 // ---------------------------------------------------------------------------
 
 interface ContainerListProps {
-  selectedName: string | null
-  onSelect: (name: string) => void
+  /** The rows of the chosen scope, each tagged with the server it lives on (member undefined or null = the hub) */
+  containers: ContainerInfo[]
+  loading: boolean
+  error?: Error | null
+  /** rowKey() of the open container */
+  selectedKey: string | null
+  onSelect: (container: ContainerInfo) => void
   isAdmin?: boolean
   onRefresh?: () => void
+  /** a hub: everywhere, the hub alone, or one VM */
+  scope: FleetScope
+  setScope: (s: FleetScope) => void
+  scopeMember: string | null
+  memberName: string
+  members: ScopeMember[]
+  hasFleet: boolean
+  /** a fetch is running behind rows already shown */
+  busy?: boolean
 }
 
-const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, isAdmin = false, onRefresh }) => {
-  const containers = useContainerStore((s) => s.containers)
-  const loading = useContainerStore((s) => s.loading)
+const ContainerList: React.FC<ContainerListProps> = ({
+  containers, loading, error, selectedKey, onSelect, isAdmin = false, onRefresh,
+  scope, setScope, scopeMember, memberName, members, hasFleet, busy = false,
+}) => {
   const favorites = useContainerStore((s) => s.favorites)
   const toggleFavorite = useContainerStore((s) => s.toggleFavorite)
   const confirm = useConfirm()
+  const { addToast } = useToast()
 
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortConfig>({ key: 'name', direction: 'asc' })
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped' | 'paused'>('all')
 
-  // Batch selection state
+  // Batch selection state (rows by key: two servers may each run a container of the same name)
   const [batchMode, setBatchMode] = useState(false)
   const [selectedContainers, setSelectedContainers] = useState<Set<string>>(new Set())
   const [batchLoading, setBatchLoading] = useState(false)
-  const [batchResults, setBatchResults] = useState<{ name: string; action: string; success: boolean }[] | null>(null)
+  const [batchResults, setBatchResults] = useState<{ key: string; name: string; where: string; action: string; success: boolean }[] | null>(null)
 
-  const toggleContainer = useCallback((name: string) => {
+  // The server a row's action goes to: the row's own (a VM's rows are tagged, the hub's are not), else the VM chosen above
+  const targetOf = useCallback((c: ContainerInfo): string | null => c.member ?? scopeMember, [scopeMember])
+
+  const whereOf = useCallback((c: ContainerInfo): string => (c.member ? `VM ${c.member_name || c.member}` : hasFleet ? 'the hub' : ''), [hasFleet])
+
+  const toggleContainer = useCallback((c: ContainerInfo) => {
+    const key = rowKey(c)
     setSelectedContainers((prev) => {
       const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }, [])
 
   const selectAll = useCallback(() => {
-    setSelectedContainers(new Set(containers.map((c) => c.name)))
+    setSelectedContainers(new Set(containers.map(rowKey)))
   }, [containers])
 
   const clearSelection = useCallback(() => {
@@ -118,35 +144,37 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
 
   const handleBatchAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'remove') => {
     if (selectedContainers.size === 0) return
+    const rows = containers.filter((c) => selectedContainers.has(rowKey(c)))
     if (action === 'remove') {
-      if (!(await confirm({ title: 'Remove containers', message: `Remove ${selectedContainers.size} container(s)? This will force-remove them and cannot be undone.`, confirmLabel: 'Remove', danger: true }))) return
+      if (!(await confirm({ title: 'Remove containers', message: `Remove ${rows.length} container(s)? This will force-remove them and cannot be undone.`, confirmLabel: 'Remove', danger: true }))) return
     }
     setBatchLoading(true)
     setBatchResults(null)
-    const results: { name: string; action: string; success: boolean }[] = []
-    const actionFn = action === 'start' ? startContainer : action === 'stop' ? stopContainer : action === 'restart' ? restartContainer : removeContainer
-    for (const name of selectedContainers) {
+    const results: { key: string; name: string; where: string; action: string; success: boolean }[] = []
+    // one call per row, each on its own server
+    for (const c of rows) {
       try {
-        await actionFn(name, containers.find((c) => c.name === name)?.member)
-        results.push({ name, action, success: true })
+        const r = await containerActionOn(c.name, action, targetOf(c))
+        results.push({ key: rowKey(c), name: c.name, where: whereOf(c), action, success: r.success !== false })
       } catch {
-        results.push({ name, action, success: false })
+        results.push({ key: rowKey(c), name: c.name, where: whereOf(c), action, success: false })
       }
     }
     setBatchResults(results)
     setBatchLoading(false)
+    onRefresh?.()
     // After remove, clear successfully removed containers from selection
     if (action === 'remove') {
-      const removed = new Set(results.filter((r) => r.success).map((r) => r.name))
+      const removed = new Set(results.filter((r) => r.success).map((r) => r.key))
       if (removed.size > 0) {
         setSelectedContainers((prev) => {
           const next = new Set(prev)
-          for (const name of removed) next.delete(name)
+          for (const key of removed) next.delete(key)
           return next
         })
       }
     }
-  }, [selectedContainers, containers, confirm])
+  }, [selectedContainers, containers, confirm, targetOf, whereOf, onRefresh])
 
   const exitBatchMode = useCallback(() => {
     setBatchMode(false)
@@ -154,17 +182,17 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     setBatchResults(null)
   }, [])
 
-  const handleQuickAction = useCallback(async (name: string, action: 'start' | 'stop' | 'restart') => {
+  const handleQuickAction = useCallback(async (c: ContainerInfo, action: 'start' | 'stop' | 'restart') => {
     if (quickActionLoading) return
-    setQuickActionLoading(`${name}-${action}`)
+    setQuickActionLoading(`${rowKey(c)}-${action}`)
     try {
-      const member = containers.find((c) => c.name === name)?.member
-      if (action === 'start') await startContainer(name, member)
-      else if (action === 'stop') await stopContainer(name, member)
-      else if (action === 'restart') await restartContainer(name, member)
-    } catch { /* silent */ }
-    finally { setQuickActionLoading(null) }
-  }, [quickActionLoading, containers])
+      const r = await containerActionOn(c.name, action as ContainerActionName, targetOf(c))
+      if (r.success === false) addToast({ type: 'error', message: `Could not ${action} ${c.name}${c.member ? ` on VM ${c.member_name || c.member}` : ''}: ${r.output || 'unknown error'}`, duration: 6000 })
+      onRefresh?.()
+    } catch (err) {
+      addToast({ type: 'error', message: `Could not ${action} ${c.name}${c.member ? ` on VM ${c.member_name || c.member}` : ''}: ${err instanceof Error ? err.message : String(err)}`, duration: 6000 })
+    } finally { setQuickActionLoading(null) }
+  }, [quickActionLoading, targetOf, addToast, onRefresh])
 
   // Filter by tab + search
   const filtered = useMemo(() => {
@@ -183,7 +211,9 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           c.name.toLowerCase().includes(q) ||
           c.image.toLowerCase().includes(q) ||
           c.state.toLowerCase().includes(q) ||
-          c.health.toLowerCase().includes(q),
+          c.health.toLowerCase().includes(q) ||
+          (c.member_name ?? '').toLowerCase().includes(q) ||
+          (c.stack ?? '').toLowerCase().includes(q),
       )
     }
     return result
@@ -201,17 +231,16 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     })
   }, [filtered, sort, favorites])
 
-  // a hub: the VMs are the stacks — containers sit under their VM, the hub's own last
-  const { isHub: hubMode } = useFleetRole()
+  // Everywhere: the VMs are the stacks — containers sit under their VM, the hub's own last
   const groups = useMemo(() => {
-    if (!hubMode || !sorted.some((c) => c.member)) return [{ key: 'all', header: '', rows: sorted }]
+    if (scope !== 'all' || !sorted.some((c) => c.member)) return [{ key: 'all', header: '', rows: sorted }]
     const byVm = new Map<string, ContainerInfo[]>()
     for (const c of sorted) { const k = c.member ?? 'hub'; if (!byVm.has(k)) byVm.set(k, []); byVm.get(k)!.push(c) }
     const vms = [...byVm.entries()].filter(([k]) => k !== 'hub').sort(([a], [b]) => a.localeCompare(b))
       .map(([k, rows]) => ({ key: k, header: `VM${rows[0].vmid ? ` #${rows[0].vmid}` : ''} · ${rows[0].member_name || k}`, rows }))
     const hub = byVm.get('hub')
     return hub ? [...vms, { key: 'hub', header: 'On the hub — this server', rows: hub }] : vms
-  }, [hubMode, sorted])
+  }, [scope, sorted])
 
   const handleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -221,7 +250,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
     )
   }
 
-  // Summary counts
+  // Summary counts (the whole scope: everywhere adds up across servers)
   const runningCount = containers.filter((c) => c.state.toLowerCase() === 'running').length
   const stoppedCount = containers.filter((c) => ['exited', 'dead'].includes(c.state.toLowerCase())).length
   const pausedCount = containers.filter((c) => c.state.toLowerCase() === 'paused').length
@@ -234,23 +263,26 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
   }
 
   const favSet = new Set(favorites)
+  const subtitle = scope === 'all'
+    ? `Every container on the hub and its ${members.length} VM${members.length === 1 ? '' : 's'}`
+    : scopeMember ? `The containers inside the VM ${memberName}` : 'Manage and monitor all Docker containers'
+  const emptyHint = search ? 'Try another name, image, stack or VM.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : scopeMember ? `Nothing runs inside the VM ${memberName} yet — deploy a template there and its containers appear here.` : 'Start a stack or deploy a template and its containers appear here.'
 
   return (
     <div className="flex flex-col gap-4 md:gap-5 animate-fade-in">
       {/* ---- Header ---- */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl md:text-2xl font-bold text-white">Containers</h1>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl md:text-2xl font-bold text-white">Containers{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
             <span className="text-xs md:text-sm text-slate-400 mt-0.5">
               <span className="text-emerald-400 font-semibold">{runningCount} running</span>
               <span className="mx-1.5 text-slate-500">&middot;</span>
               <span>{containers.length} total</span>
             </span>
           </div>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
-            Manage and monitor all Docker containers
-          </p>
+          <p className="text-xs md:text-sm text-slate-400 mt-1">{subtitle}</p>
+          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={members} onChange={setScope} busy={busy} /></div>}
         </div>
         <div className="flex items-center gap-2">
           {onRefresh && (
@@ -259,7 +291,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 press"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={loading || busy ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           )}
@@ -282,6 +314,13 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
         </div>
       </div>
 
+      {/* ---- Could not load ---- */}
+      {error && containers.length === 0 && (
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3 text-xs text-rose-300">
+          Could not load the containers{scopeMember ? ` of the VM ${memberName}` : ''}: {error.message}
+        </div>
+      )}
+
       {/* ---- Batch Action Bar ---- */}
       {batchMode && (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 animate-fade-in">
@@ -290,6 +329,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
             <button onClick={selectAll} className="text-[11px] text-slate-400 hover:text-cyan-400 transition-colors">Select All</button>
             <span className="text-white/10">|</span>
             <button onClick={clearSelection} className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
+            {scope === 'all' && <span className="hidden sm:inline text-[10px] text-slate-500">each row acts on its own server</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => handleBatchAction('start')} disabled={batchLoading || selectedContainers.size === 0}
@@ -322,11 +362,12 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {batchResults.map((r) => (
-              <div key={r.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${
+              <div key={r.key} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${
                 r.success ? 'bg-emerald-500/[0.06] border-emerald-500/15 text-emerald-400' : 'bg-rose-500/[0.06] border-rose-500/15 text-rose-400'
-              }`}>
-                {r.success ? <CircleCheck size={12} /> : <CircleX size={12} />}
+              }`} title={r.where ? `${r.action} on ${r.where}` : r.action}>
+                {r.success ? <CircleCheck size={12} className="shrink-0" /> : <CircleX size={12} className="shrink-0" />}
                 <span className="truncate font-medium">{r.name}</span>
+                {r.where && <span className="truncate text-[10px] text-slate-500 ml-auto">{r.where}</span>}
               </div>
             ))}
           </div>
@@ -377,7 +418,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search containers..."
+          placeholder={scope === 'all' ? 'Search containers, stacks and VMs...' : 'Search containers...'}
           className="
             w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
             bg-white/5 border border-white/10
@@ -405,21 +446,33 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
           <EmptyState
             icon={<Box size={32} />}
             title={search ? 'No containers match your search.' : 'No containers found.'}
-            hint={search ? 'Try another name, image or stack.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : 'Start a stack or deploy a template and its containers appear here.'}
+            hint={emptyHint}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-2.5 animate-fade-in">
-            {sorted.map((container) => (
-              <ContainerCard
-                key={container.name}
-                container={container}
-                isSelected={selectedName === container.name}
-                onClick={batchMode ? () => toggleContainer(container.name) : onSelect}
-                batchMode={batchMode}
-                batchSelected={selectedContainers.has(container.name)}
-                isFavorite={favSet.has(container.name)}
-                onToggleFavorite={toggleFavorite}
-              />
+          <div className="flex flex-col gap-2.5 animate-fade-in">
+            {groups.map((g) => (
+              <React.Fragment key={`group-${g.key}`}>
+                {g.header && (
+                  <div className="flex items-center gap-2 px-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    <span className={`w-1.5 h-1.5 rounded-full ${g.key === 'hub' ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+                    {g.header}
+                    <span className="text-slate-600 normal-case tracking-normal">{g.rows.filter((c) => c.state === 'running').length}/{g.rows.length} running</span>
+                  </div>
+                )}
+                {g.rows.map((container) => (
+                  <ContainerCard
+                    key={rowKey(container)}
+                    container={container}
+                    isSelected={selectedKey === rowKey(container)}
+                    onClick={batchMode ? toggleContainer : onSelect}
+                    batchMode={batchMode}
+                    batchSelected={selectedContainers.has(rowKey(container))}
+                    isFavorite={favSet.has(container.name)}
+                    onToggleFavorite={toggleFavorite}
+                    showCapsule={scope === 'all'}
+                  />
+                ))}
+              </React.Fragment>
             ))}
           </div>
         )}
@@ -484,7 +537,7 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                     <EmptyState
                       icon={<Box size={32} />}
                       title={search ? 'No containers match your search.' : 'No containers found.'}
-                      hint={search ? 'Try another name, image or stack.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : 'Start a stack or deploy a template and its containers appear here.'}
+                      hint={emptyHint}
                     />
                   </td>
                 </tr>
@@ -503,16 +556,17 @@ const ContainerList: React.FC<ContainerListProps> = ({ selectedName, onSelect, i
                   )] : []),
                   ...g.rows.map((container) => (
                   <ContainerRow
-                    key={container.name}
+                    key={rowKey(container)}
                     container={container}
-                    isSelected={selectedName === container.name}
-                    onClick={batchMode ? () => toggleContainer(container.name) : onSelect}
+                    isSelected={selectedKey === rowKey(container)}
+                    onClick={batchMode ? toggleContainer : onSelect}
                     batchMode={batchMode}
-                    batchSelected={selectedContainers.has(container.name)}
+                    batchSelected={selectedContainers.has(rowKey(container))}
                     isFavorite={favSet.has(container.name)}
                     onToggleFavorite={toggleFavorite}
                     onQuickAction={handleQuickAction}
                     quickActionLoading={quickActionLoading}
+                    showCapsule={scope === 'all'}
                   />
                   )),
                 ])

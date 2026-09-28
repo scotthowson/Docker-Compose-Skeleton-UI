@@ -1,23 +1,27 @@
 // =============================================================================
 // FileBrowser — Container File Browser for exploring filesystem inside
 //               running Docker containers via the DCS REST API
+// On a hub: the hub's containers or one VM's (every call rides the hub's
+// proxy to that VM); a file's text comes back as JSON, so it can be saved.
 // =============================================================================
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   FolderOpen, FileText, Link, Folder, ChevronRight,
   Loader2, WifiOff, AlertTriangle, X, ArrowUp,
-  RefreshCw, Search, Box,
+  RefreshCw, Search, Box, Download,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import {
-  fetchContainers,
-  fetchContainerFiles,
-  fetchContainerFileContent,
-} from '../api/endpoints'
+  fetchContainersScoped,
+  fetchContainerFilesScoped,
+  fetchContainerFileContentScoped,
+} from '../api/fleetScopedOps'
 import type {
   ContainerFilesResponse,
   ContainerFileContentResponse,
@@ -82,10 +86,25 @@ interface FileViewerProps {
   filePath: string
   content: string
   size: number
+  /** where the container runs, for the title */
+  where?: string
   onClose: () => void
 }
 
-function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
+/** the text the API returned, saved from the browser (it came as JSON, so it rides the hub's proxy fine) */
+function saveText(filePath: string, content: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filePath.split('/').filter(Boolean).pop() || 'file.txt'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps) {
   const isEmpty = !content || content.length === 0
   const isTooLarge = size > 1024 * 1024 // 1 MB
 
@@ -93,20 +112,31 @@ function FileViewer({ filePath, content, size, onClose }: FileViewerProps) {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
       <div className="w-full max-w-6xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-cyan-400 shrink-0" />
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-slate-200 truncate">{filePath}</h3>
-              <p className="text-[10px] text-slate-500">{formatBytes(size)}</p>
+              <p className="text-[10px] text-slate-500">{formatBytes(size)}{where ? ` · ${where}` : ''}{isTooLarge ? ' · first part only' : ''}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => saveText(filePath, content)}
+              disabled={isEmpty}
+              title={isEmpty ? 'Nothing to save: the file is empty or binary' : isTooLarge ? 'Saves the retrieved part of the file as text' : 'Save this text as a file'}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={14} />
+              <span className="hidden sm:inline">Save</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -144,12 +174,19 @@ export default function FileBrowser() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
 
+  // Files live on one server: the hub or one VM (Everywhere reads as the hub here)
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const pageScope = scope === 'all' ? 'hub' : scope
+  const member = pageScope === 'hub' ? null : scopeMember
+  const whereLabel = hasFleet ? (member ? `VM ${memberName}` : 'the hub') : ''
+
   // -------------------------------------------------------------------------
   // State
   // -------------------------------------------------------------------------
 
   const [containers, setContainers] = useState<ContainerInfo[]>([])
   const [containersLoading, setContainersLoading] = useState(false)
+  const [containersError, setContainersError] = useState<string | null>(null)
 
   const [selectedContainer, setSelectedContainer] = useState<string>('')
   const [currentPath, setCurrentPath] = useState<string>('/')
@@ -166,24 +203,41 @@ export default function FileBrowser() {
   // Fetch running containers
   // -------------------------------------------------------------------------
 
+  // the load a listing belongs to: a slow answer from the previous server never overwrites the current one's
+  const containersLoadRef = useRef(0)
   const loadContainers = useCallback(async () => {
     if (!isConnected) return
+    const load = ++containersLoadRef.current
     setContainersLoading(true)
+    setContainers([])
+    setContainersError(null)
     try {
-      const data = await fetchContainers()
+      const data = await fetchContainersScoped(member)
+      if (load !== containersLoadRef.current) return
+      // a hub's own list carries its VMs' containers too (tagged member): the Hub view keeps only its own
       setContainers(
-        (data.containers ?? []).filter((c) => c.state === 'running'),
+        (data.containers ?? []).filter((c) => c.state === 'running' && (member ? true : !c.member)),
       )
-    } catch {
-      // Silently fail — the user will see no containers
+    } catch (err) {
+      if (load !== containersLoadRef.current) return
+      setContainersError(err instanceof Error ? err.message : 'Could not list the containers')
     } finally {
-      setContainersLoading(false)
+      if (load === containersLoadRef.current) setContainersLoading(false)
     }
-  }, [isConnected])
+  }, [isConnected, member])
 
   useEffect(() => {
     loadContainers()
   }, [loadContainers])
+
+  // another server: its own containers, from the top
+  useEffect(() => {
+    setSelectedContainer('')
+    setCurrentPath('/')
+    setEntries([])
+    setFileContent(null)
+    setError(null)
+  }, [member])
 
   // -------------------------------------------------------------------------
   // Fetch directory listing
@@ -194,7 +248,8 @@ export default function FileBrowser() {
     setLoading(true)
     setError(null)
     try {
-      const data: ContainerFilesResponse = await fetchContainerFiles(
+      const data: ContainerFilesResponse = await fetchContainerFilesScoped(
+        member,
         selectedContainer,
         currentPath,
       )
@@ -214,7 +269,7 @@ export default function FileBrowser() {
     } finally {
       setLoading(false)
     }
-  }, [selectedContainer, currentPath, isConnected])
+  }, [selectedContainer, currentPath, isConnected, member])
 
   useEffect(() => {
     loadDirectory()
@@ -267,7 +322,7 @@ export default function FileBrowser() {
             ? `/${entry.name}`
             : `${currentPath}/${entry.name}`
         const data: ContainerFileContentResponse =
-          await fetchContainerFileContent(selectedContainer, filePath)
+          await fetchContainerFileContentScoped(member, selectedContainer, filePath)
         setFileContent({
           path: data.path,
           content: data.content,
@@ -281,7 +336,7 @@ export default function FileBrowser() {
         setLoading(false)
       }
     },
-    [currentPath, selectedContainer, addToast, navigateTo],
+    [currentPath, selectedContainer, addToast, navigateTo, member],
   )
 
   const handleRefresh = useCallback(() => {
@@ -337,10 +392,11 @@ export default function FileBrowser() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
             <FolderOpen size={20} />
           </div>
-          <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">File Browser</span></h2>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold"><span className="text-gradient">File Browser</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Files of" busy={containersLoading} everywhere={false} /></div>}
             <p className="text-xs text-slate-500">
-              Browse files inside running containers
+              {hasFleet ? `Browse files inside the running containers on ${whereLabel}` : 'Browse files inside running containers'}
             </p>
           </div>
         </div>
@@ -374,7 +430,7 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4">
         <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 block font-semibold">
-          Select Container
+          Select Container{whereLabel ? ` on ${whereLabel}` : ''}
         </label>
         <div className="relative">
           <Box size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
@@ -388,7 +444,7 @@ export default function FileBrowser() {
               {containersLoading
                 ? 'Loading containers...'
                 : containers.length === 0
-                  ? 'No running containers'
+                  ? `No running containers${whereLabel ? ` on ${whereLabel}` : ''}`
                   : '-- Choose a container --'}
             </option>
             {containers.map((c) => (
@@ -407,6 +463,12 @@ export default function FileBrowser() {
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none rotate-90"
           />
         </div>
+        {containersError && (
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-rose-300">
+            <span className="flex items-center gap-1.5 min-w-0"><AlertTriangle size={12} className="shrink-0" /><span className="truncate">Could not list the containers{whereLabel ? ` on ${whereLabel}` : ''}: {containersError}</span></span>
+            <button onClick={loadContainers} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10 transition-all duration-200 shrink-0">Retry</button>
+          </div>
+        )}
       </div>
 
       {/* ----------------------------------------------------------------- */}
@@ -601,6 +663,7 @@ export default function FileBrowser() {
           filePath={fileContent.path}
           content={fileContent.content}
           size={fileContent.size}
+          where={hasFleet ? `${selectedContainer} on ${whereLabel}` : selectedContainer}
           onClose={() => setFileContent(null)}
         />
       )}

@@ -16,6 +16,23 @@ export interface SSEMessage {
 
 type SSEListener = (event: SSEMessage) => void
 
+/** What the stream carries on a hub: the hub's own docker events ('hub'), every VM's too ('all'), or one VM's (its member id) */
+export type SSEScope = 'hub' | 'all' | (string & {})
+
+/** The tag a hub puts on a VM's event: which member it came from (null = the hub itself) */
+export interface FleetTag { member: string | null; member_name?: string; vmid?: number | null }
+
+/** The fleet tag in an event's data, null when it carries none */
+export function fleetTagOf(data: unknown): FleetTag | null {
+  if (!data || typeof data !== 'object' || !('member' in data)) return null
+  const d = data as { member?: unknown; member_name?: unknown; vmid?: unknown }
+  return {
+    member: typeof d.member === 'string' && d.member ? d.member : null,
+    member_name: typeof d.member_name === 'string' ? d.member_name : undefined,
+    vmid: typeof d.vmid === 'number' ? d.vmid : null,
+  }
+}
+
 class SSEClient {
   private eventSource: EventSource | null = null
   private listeners: Map<SSEEventType | '*', Set<SSEListener>> = new Map()
@@ -24,17 +41,27 @@ class SSEClient {
   private maxReconnectAttempts = 20
   private _connected = false
   private _authFailed = false
+  private scope: SSEScope = 'hub'
+  /** connect() was asked for and disconnect() has not been since (a scope change then reconnects at once) */
+  private wanted = false
 
   connect(): void {
-    this.disconnect()
+    // close what is open without forgetting the retry count: disconnect() also resets it, which made every
+    // reconnect start the backoff from zero (and the give-up limits never trigger)
+    this.closeSource()
+    this.wanted = true
     this._authFailed = false
 
     const { serverUrl } = useSettingsStore.getState()
-    // Pass auth token as query parameter since EventSource can't set headers
+    // Pass auth token as query parameter since EventSource can't set headers;
+    // on a hub, fleet=1 adds every VM's docker events and member=<id> asks for one VM's
+    const params = new URLSearchParams()
     const token = apiClient.getAuthToken()
-    const url = token
-      ? `${serverUrl}/stream?token=${encodeURIComponent(token)}`
-      : `${serverUrl}/stream`
+    if (token) params.set('token', token)
+    if (this.scope === 'all') params.set('fleet', '1')
+    else if (this.scope !== 'hub') params.set('member', this.scope)
+    const query = params.toString()
+    const url = `${serverUrl}/stream${query ? `?${query}` : ''}`
 
     try {
       this.eventSource = new EventSource(url)
@@ -75,7 +102,14 @@ class SSEClient {
     }
   }
 
+  /** the stream is not wanted any more: close it and start the retry count afresh next time */
   disconnect(): void {
+    this.wanted = false
+    this.closeSource()
+    this.reconnectAttempts = 0
+  }
+
+  private closeSource(): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
@@ -85,11 +119,21 @@ class SSEClient {
       this.eventSource = null
     }
     this._connected = false
-    this.reconnectAttempts = 0
   }
 
   isConnected(): boolean {
     return this._connected
+  }
+
+  getScope(): SSEScope {
+    return this.scope
+  }
+
+  /** Reconnects with the new scope at once when the stream is running; the same scope again does nothing */
+  setScope(scope: SSEScope): void {
+    if (scope === this.scope) return
+    this.scope = scope
+    if (this.wanted) this.connect()
   }
 
   on(type: SSEEventType | '*', listener: SSEListener): () => void {

@@ -1,8 +1,10 @@
 // =============================================================================
 // System — System info, Docker disk usage, and Maintenance operations
+// On a hub: the hub's own facts or one VM's (through the hub's proxy). OS
+// updates on a VM the hub built run unattended: its API has passwordless sudo.
 // =============================================================================
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Monitor,
   Cpu,
@@ -25,7 +27,12 @@ import {
   Shield,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchSystemInfo, runDockerPrune, runImagePrune, terminalAuth, checkOsUpdates, applyOsUpdates, getOsUpdateStatus } from '../api/endpoints'
+import {
+  fetchSystemInfoScoped, fetchSudoReadyScoped, runDockerPruneScoped, runImagePruneScoped,
+  terminalAuthScoped, checkOsUpdatesScoped, applyOsUpdatesScoped, getOsUpdateStatusScoped,
+} from '../api/fleetScopedOps'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import { useSystemStore } from '../stores/systemStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
@@ -33,6 +40,9 @@ import type { SystemInfo, DockerDiskUsage, OsUpdateCheckResponse } from '../../s
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import { LoadingState } from '../components/common/PageState'
+
+/** which server a panel talks to: null is the hub (or a server without a fleet) */
+interface ScopedProps { member: string | null; whereLabel: string }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,7 +116,7 @@ function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
 // Maintenance Panel
 // ---------------------------------------------------------------------------
 
-function MaintenancePanel() {
+function MaintenancePanel({ member, whereLabel }: ScopedProps) {
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const [pruning, setPruning] = useState(false)
   const [imagePruning, setImagePruning] = useState(false)
@@ -116,15 +126,17 @@ function MaintenancePanel() {
   // Hide entire panel for non-admin users
   if (!isAdmin) return null
 
+  const where = whereLabel ? ` on ${whereLabel}` : ''
+
   const handlePrune = async () => {
     setConfirmAction(null)
     setPruning(true)
     setResult(null)
     try {
-      const res = await runDockerPrune()
+      const res = await runDockerPruneScoped(member)
       setResult({
         success: res.success,
-        message: res.success ? 'Docker system prune completed successfully' : (res.output || 'Prune failed'),
+        message: res.success ? `Docker system prune completed${where}` : (res.output || 'Prune failed'),
       })
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : 'Prune failed' })
@@ -138,10 +150,10 @@ function MaintenancePanel() {
     setImagePruning(true)
     setResult(null)
     try {
-      const res = await runImagePrune()
+      const res = await runImagePruneScoped(member)
       setResult({
         success: res.success,
-        message: res.success ? 'Image prune completed successfully' : (res.output || 'Image prune failed'),
+        message: res.success ? `Image prune completed${where}` : (res.output || 'Image prune failed'),
       })
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : 'Image prune failed' })
@@ -153,10 +165,10 @@ function MaintenancePanel() {
   return (
     <SectionCard
       icon={<Wrench size={16} className="text-amber-400" />}
-      title="Maintenance"
+      title={whereLabel ? `Maintenance · ${whereLabel}` : 'Maintenance'}
     >
       <p className="text-xs text-slate-500 mb-4">
-        Clean up unused Docker resources to reclaim disk space.
+        Clean up unused Docker resources{where} to reclaim disk space.
       </p>
 
       {/* Result banner */}
@@ -180,7 +192,7 @@ function MaintenancePanel() {
             <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-medium text-amber-300">
-                {confirmAction === 'prune' ? 'Run Docker System Prune?' : 'Run Image Prune?'}
+                {confirmAction === 'prune' ? 'Run Docker System Prune' : 'Run Image Prune'}{where}?
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 {confirmAction === 'prune'
@@ -263,12 +275,15 @@ function MaintenancePanel() {
 // OS Package Updates Panel
 // ---------------------------------------------------------------------------
 
-function OsUpdatesPanel() {
+function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
+  const where = whereLabel ? ` on ${whereLabel}` : ''
 
   // Auth state — store password in memory for sudo -S during session
+  // (the remembered terminal session is the hub's: a VM signs in on its own)
   const [termToken, setTermToken] = useState<string | null>(() => {
+    if (member) return null
     try {
       const raw = sessionStorage.getItem('terminal-session')
       if (!raw) return null
@@ -284,6 +299,19 @@ function OsUpdatesPanel() {
   const [authing, setAuthing] = useState(false)
   const [authError, setAuthError] = useState('')
 
+  // A VM the hub built runs its API with passwordless sudo: the server answers without a terminal token
+  // (null while being asked). The hub keeps its Linux sign-in.
+  const [sudoReady, setSudoReady] = useState<boolean | null>(member ? null : false)
+  useEffect(() => {
+    if (!member || !isAdmin) return
+    let alive = true
+    fetchSudoReadyScoped(member)
+      .then((ready) => { if (alive) setSudoReady(ready) })
+      .catch(() => { if (alive) setSudoReady(false) })
+    return () => { alive = false }
+  }, [member, isAdmin])
+  const unattended = !!member && sudoReady === true
+
   // Update state
   const [updateData, setUpdateData] = useState<OsUpdateCheckResponse | null>(null)
   const [checking, setChecking] = useState(false)
@@ -293,22 +321,30 @@ function OsUpdatesPanel() {
 
   if (!isAdmin) return null
 
+  const forgetSession = () => {
+    setTermToken(null)
+    setSudoPassword(null)
+    if (!member) sessionStorage.removeItem('terminal-session')
+  }
+
   const handleAuth = async () => {
     if (!authUsername.trim() || !authPassword) return
     setAuthing(true)
     setAuthError('')
     try {
-      const res = await terminalAuth(authUsername.trim(), authPassword)
+      const res = await terminalAuthScoped(member, authUsername.trim(), authPassword)
       if (res.success && res.token) {
         setTermToken(res.token)
         setSudoPassword(authPassword)  // Keep password in memory for sudo -S
-        sessionStorage.setItem('terminal-session', JSON.stringify({
-          token: res.token,
-          username: res.username,
-          expiresAt: Date.now() + (res.expires_in * 1000),
-        }))
+        if (!member) {
+          sessionStorage.setItem('terminal-session', JSON.stringify({
+            token: res.token,
+            username: res.username,
+            expiresAt: Date.now() + (res.expires_in * 1000),
+          }))
+        }
         setAuthPassword('')
-        addToast({ type: 'success', message: `Authenticated as ${res.username}` })
+        addToast({ type: 'success', message: `Authenticated as ${res.username}${where}` })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Authentication failed'
@@ -321,19 +357,19 @@ function OsUpdatesPanel() {
   }
 
   const handleCheck = async () => {
-    if (!termToken) return
+    if (!termToken && !unattended) return
     setChecking(true)
     try {
-      const res = await checkOsUpdates(termToken, sudoPassword || undefined)
+      const res = unattended ? await checkOsUpdatesScoped(member) : await checkOsUpdatesScoped(member, termToken, sudoPassword || undefined)
       setUpdateData(res)
       if (res.available) {
-        addToast({ type: 'info', message: `${res.count} package update${res.count !== 1 ? 's' : ''} available` })
+        addToast({ type: 'info', message: `${res.count} package update${res.count !== 1 ? 's' : ''} available${where}` })
       } else {
-        addToast({ type: 'success', message: 'System is up to date' })
+        addToast({ type: 'success', message: `System is up to date${where}` })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Check failed'
-      if (msg.includes('401')) { setTermToken(null); sessionStorage.removeItem('terminal-session') }
+      if (msg.includes('401') && !unattended) forgetSession()
       addToast({ type: 'error', message: msg })
     } finally {
       setChecking(false)
@@ -341,24 +377,25 @@ function OsUpdatesPanel() {
   }
 
   const handleApply = async () => {
-    if (!termToken) return
+    if (!termToken && !unattended) return
     setApplying(true)
     setApplyOutput(null)
     try {
       // Start background update
-      await applyOsUpdates(termToken, sudoPassword || undefined)
-      addToast({ type: 'info', message: 'OS update started — this may take a few minutes' })
+      if (unattended) await applyOsUpdatesScoped(member)
+      else await applyOsUpdatesScoped(member, termToken, sudoPassword || undefined)
+      addToast({ type: 'info', message: `OS update started${where} — this may take a few minutes` })
 
       // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
-          const status = await getOsUpdateStatus()
+          const status = await getOsUpdateStatusScoped(member)
           if (status.status === 'complete') {
             clearInterval(pollInterval)
             setApplying(false)
             setApplyOutput(status.output || null)
             if (status.success) {
-              addToast({ type: 'success', message: status.message || 'System updated successfully' })
+              addToast({ type: 'success', message: status.message || `System updated${where}` })
               setUpdateData(null)
             } else {
               addToast({ type: 'error', message: status.message || 'Update completed with errors' })
@@ -376,7 +413,7 @@ function OsUpdatesPanel() {
       }, 600000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed'
-      if (msg.includes('401')) { setTermToken(null); setSudoPassword(null); sessionStorage.removeItem('terminal-session') }
+      if (msg.includes('401') && !unattended) forgetSession()
       addToast({ type: 'error', message: msg })
       setApplying(false)
     }
@@ -385,15 +422,22 @@ function OsUpdatesPanel() {
   return (
     <SectionCard
       icon={<Download size={16} className="text-emerald-400" />}
-      title="OS Package Updates"
+      title={whereLabel ? `OS Package Updates · ${whereLabel}` : 'OS Package Updates'}
     >
-      {/* Not authenticated — show auth form */}
-      {!termToken ? (
+      {member && sudoReady === null ? (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 size={13} className="animate-spin" />
+          Asking the VM whether it updates unattended…
+        </div>
+      ) : !termToken && !unattended ? (
+        /* Not authenticated — show auth form */
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
             <Shield size={14} className="text-amber-400 mt-0.5 shrink-0" />
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Linux system credentials are required to check and apply OS updates. Your password is sent securely to the server and validated against your system account.
+              {member
+                ? `This VM's API has no passwordless sudo, so a Linux account on the VM ${whereLabel.replace(/^VM /, '')} is needed to check and apply its OS updates. The password goes to that VM through the hub and is validated against its system account.`
+                : 'Linux system credentials are required to check and apply OS updates. Your password is sent securely to the server and validated against your system account.'}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -442,8 +486,16 @@ function OsUpdatesPanel() {
           </button>
         </div>
       ) : (
-        /* Authenticated — show update controls */
+        /* Authenticated (or unattended on a VM) — show update controls */
         <div className="space-y-3">
+          {unattended && (
+            <div className="flex items-start gap-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5">
+              <CheckCircle size={14} className="text-emerald-400 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Unattended: the VM&apos;s API runs with passwordless sudo (the hub built it that way), so no Linux sign-in is needed here.
+              </p>
+            </div>
+          )}
           {/* Status banner */}
           {updateData ? (
             updateData.available ? (
@@ -468,7 +520,7 @@ function OsUpdatesPanel() {
               </div>
             )
           ) : (
-            <p className="text-xs text-slate-500">Click "Check for Updates" to scan for available OS package updates.</p>
+            <p className="text-xs text-slate-500">Click "Check for Updates" to scan for available OS package updates{where}.</p>
           )}
 
           {/* Package list */}
@@ -515,12 +567,14 @@ function OsUpdatesPanel() {
                 {applying ? 'Updating...' : 'Apply Updates'}
               </button>
             )}
-            <button
-              onClick={() => { setTermToken(null); setSudoPassword(null); sessionStorage.removeItem('terminal-session'); setUpdateData(null); setApplyOutput(null) }}
-              className="text-[10px] text-slate-500 hover:text-slate-300 ml-auto transition-colors"
-            >
-              Sign out
-            </button>
+            {!unattended && (
+              <button
+                onClick={() => { forgetSession(); setUpdateData(null); setApplyOutput(null) }}
+                className="text-[10px] text-slate-500 hover:text-slate-300 ml-auto transition-colors"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -536,13 +590,23 @@ export default function System() {
   const setSystem = useSystemStore((s) => s.setSystem)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
-  const { data, loading, error, refresh } = usePolling<SystemInfo>(fetchSystemInfo, 30000, {
+  // One server at a time: the hub or one VM (Everywhere reads as the hub here)
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const pageScope = scope === 'all' ? 'hub' : scope
+  const member = pageScope === 'hub' ? null : scopeMember
+  const whereLabel = hasFleet ? (member ? `VM ${memberName}` : 'the hub') : ''
+
+  const fetchScopedInfo = useCallback(() => fetchSystemInfoScoped(member), [member])
+  const { data, loading, error, refresh } = usePolling<SystemInfo>(fetchScopedInfo, 30000, {
     enabled: isConnected,
   })
+  const memberRef = useRef(member)
+  useEffect(() => { if (memberRef.current !== member) { memberRef.current = member; refresh() } }, [member, refresh])
 
+  // the global store describes the server the dashboard is signed in to, never a VM
   useEffect(() => {
-    if (data) setSystem(data)
-  }, [data, setSystem])
+    if (data && !member) setSystem(data)
+  }, [data, member, setSystem])
 
   const info = data
   const diskUsage: DockerDiskUsage[] = info?.docker_disk_usage ?? []
@@ -551,14 +615,15 @@ export default function System() {
     <div className="space-y-3 md:space-y-6">
       <DisconnectedBanner />
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5 shrink-0">
             <Monitor className="w-6 h-6 text-cyan-400" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">System Information</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Server resources, Docker runtime, and maintenance tools</p>
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold"><span className="text-gradient">System Information</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Server" busy={loading && !!data} everywhere={false} /></div>}
+            <p className="text-sm text-slate-400 mt-0.5">{hasFleet ? `Resources, Docker runtime, OS updates and maintenance on ${whereLabel}` : 'Server resources, Docker runtime, and maintenance tools'}</p>
           </div>
         </div>
         <button
@@ -569,7 +634,7 @@ export default function System() {
             text-xs font-medium text-slate-300
             bg-white/5 border border-white/10
             hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
+            disabled:opacity-50 transition-all duration-200 self-start sm:self-auto shrink-0
           "
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -653,11 +718,11 @@ export default function System() {
         </SectionCard>
       )}
 
-      {/* OS Package Updates */}
-      {isConnected && <OsUpdatesPanel />}
+      {/* OS Package Updates (a fresh panel per server: its own sign-in, its own results) */}
+      {isConnected && <OsUpdatesPanel key={`os-${member ?? 'hub'}`} member={member} whereLabel={whereLabel} />}
 
       {/* Maintenance Panel */}
-      {isConnected && <MaintenancePanel />}
+      {isConnected && <MaintenancePanel key={`maint-${member ?? 'hub'}`} member={member} whereLabel={whereLabel} />}
     </div>
   )
 }

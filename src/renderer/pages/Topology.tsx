@@ -17,12 +17,14 @@ import {
   ExternalLink, Download, Copy, Expand, Shrink, Link2,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
+import { useFleetScope } from '../hooks/useFleetScope'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { fetchTopology } from '../api/endpoints'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import { fetchTopologyOn } from '../api/fleetScoped'
 import type {
   TopologyResponse, TopologyNode, TopologyNetwork,
 } from '../../shared/types'
@@ -420,12 +422,22 @@ function DetailPanel({
 export default function Topology() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
-  const { data: topoData, loading, error, refresh } = usePolling<TopologyResponse>(
-    fetchTopology, 15000, { enabled: isConnected },
+  // a hub: the hub's own map or one VM's (through the hub's proxy). Everywhere is a
+  // view of lists; one graph of sixteen VMs would say nothing, so it shows the hub's
+  // map and says a VM's is one chip away.
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const fetchScoped = useCallback(async () => ({ member: scopeMember, res: await fetchTopologyOn(scopeMember) }), [scopeMember])
+  const { data: tagged, loading, error, refresh } = usePolling<{ member: string | null; res: TopologyResponse }>(
+    fetchScoped, 15000, { enabled: isConnected },
   )
+  // the answer for the server chosen above (a switch never draws the old map under the new label)
+  const topoData = tagged && tagged.member === scopeMember ? tagged.res : null
+  const memberRef = useRef(scopeMember)
+  useEffect(() => { if (memberRef.current !== scopeMember) { memberRef.current = scopeMember; refresh() } }, [scopeMember, refresh])
 
   const { addToast } = useToast()
-  const hostForExport = useSystemStore((s) => s.status?.hostname)
+  const hubHostname = useSystemStore((s) => s.status?.hostname)
+  const hostForExport = scopeMember ? memberName : hubHostname
   const reduceMotionPref = useSettingsStore((s) => s.reduceMotion)
   // Zoom & pan
   const containerRef = useRef<HTMLDivElement>(null)
@@ -443,6 +455,9 @@ export default function Topology() {
   const [hoveredStack, setHoveredStack] = useState<string | null>(null)
   const [hoveredContainer, setHoveredContainer] = useState<string | null>(null)
   const [hoveredNetwork, setHoveredNetwork] = useState<string | null>(null)
+
+  // a node of another server has no place on the new map
+  useEffect(() => { setSelectedNode(null) }, [scopeMember])
 
   // Escape key closes detail panel
   useEffect(() => {
@@ -745,16 +760,21 @@ export default function Topology() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400 shrink-0">
             <Network size={20} />
           </div>
-          <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Network Topology</span></h2>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold"><span className="text-gradient">Network Topology</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}{hasFleet && !scopeMember && <span className="ml-2 text-sm font-medium text-emerald-200/90">· Hub</span>}</h2>
             <p className="text-xs text-slate-500">
-              Hierarchical view of stacks, containers, and network connections
+              {scopeMember
+                ? `Stacks, containers and networks inside the VM ${memberName}`
+                : scope === 'all' && hasFleet
+                  ? 'The hub\'s own map — every VM has its own network, one chip away'
+                  : 'Hierarchical view of stacks, containers, and network connections'}
             </p>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Map of" busy={loading && !!topoData} /></div>}
           </div>
         </div>
         <button

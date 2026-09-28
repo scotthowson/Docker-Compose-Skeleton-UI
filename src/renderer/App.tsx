@@ -61,6 +61,8 @@ import { BackToTop } from './components/common/BackToTop'
 import { MobileNav } from './components/layout/MobileNav'
 import { apiClient } from './api/client'
 import { sseClient } from './lib/sse'
+import { sanitizeCss } from './lib/cssSanitize'
+import { useThemeStore, syncDocumentTheme, effectiveThemeNeedsDoc, THEME_POLL_MS } from './stores/themeStore'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -271,11 +273,28 @@ export default function App() {
     return () => sseClient.disconnect()
   }, [connectionStatus])
 
-  // Apply theme class to document
+  // The look: the person's theme, else the server's active theme, else the
+  // dark/light setting as before. Re-dressed whenever any of those change or
+  // a server theme's document (css) arrives.
+  const themeName = useSettingsStore((s) => s.themeName)
+  const serverThemeActive = useSettingsStore((s) => s.serverThemeActive)
+  const themeMetas = useThemeStore((s) => s.metas)
+  const themeDocs = useThemeStore((s) => s.docs)
+  const localThemes = useThemeStore((s) => s.localThemes)
   useEffect(() => {
-    document.documentElement.classList.toggle('light', theme === 'light')
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
+    syncDocumentTheme()
+    const pending = effectiveThemeNeedsDoc()
+    if (pending) useThemeStore.getState().ensureDoc(pending)
+  }, [theme, themeName, serverThemeActive, themeMetas, themeDocs, localThemes])
+
+  // Follow the server: read GET /themes on connect and every five minutes
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return
+    const refresh = () => { useThemeStore.getState().refresh() }
+    refresh()
+    const interval = setInterval(refresh, THEME_POLL_MS)
+    return () => clearInterval(interval)
+  }, [connectionStatus])
 
   // Apply per-user appearance (accent color + background image)
   const [accentColor, setAccentColor] = useState('emerald')
@@ -322,17 +341,9 @@ export default function App() {
       styleEl.id = 'custom-user-css'
       document.head.appendChild(styleEl)
     }
-    // SECURITY: Strip dangerous CSS that could exfiltrate data or load external resources
-    // @import can load external stylesheets, url() can make external requests,
-    // expression() is IE-specific JS execution, -moz-binding is Firefox XBL execution
-    let sanitized = customCSS || ''
-    sanitized = sanitized.replace(/@import\b[^;]*/gi, '/* @import blocked */')
-    sanitized = sanitized.replace(/expression\s*\(/gi, '/* expression blocked */(')
-    sanitized = sanitized.replace(/-moz-binding\s*:/gi, '/* -moz-binding blocked */:')
-    sanitized = sanitized.replace(/javascript\s*:/gi, '/* javascript: blocked */:')
-    // Block url() with external schemes (allow data: for inline images)
-    sanitized = sanitized.replace(/url\s*\(\s*(['"]?)\s*https?:/gi, 'url($1data:blocked')
-    styleEl.textContent = sanitized
+    // SECURITY: nothing that loads or runs anything survives (lib/cssSanitize —
+    // the same filter a theme's extra css goes through)
+    styleEl.textContent = sanitizeCss(customCSS).css
     return () => {
       // Don't remove on cleanup — persist across re-renders
     }

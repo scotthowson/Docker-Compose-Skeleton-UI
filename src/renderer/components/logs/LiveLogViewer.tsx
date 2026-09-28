@@ -8,9 +8,10 @@ import {
   ArrowDown, Filter, Loader2, RefreshCw,
   AlertTriangle, AlertCircle, Info, Bug,
 } from 'lucide-react'
-import { fetchContainerLogsLive, fetchAppLogsLive } from '../../api/endpoints'
+import { fetchContainerLogsLiveOn, fetchAppLogsLiveOn } from '../../api/fleetScoped'
 import { useConnectionStore } from '../../stores/connectionStore'
 import type { LogStreamEntry, LiveLogsResponse } from '../../../shared/types'
+import type { RowMember } from '../../../shared/fleetScoped'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,6 +20,8 @@ import type { LogStreamEntry, LiveLogsResponse } from '../../../shared/types'
 interface LiveLogViewerProps {
   /** Container name (omit for DCS app logs) */
   containerName?: string
+  /** The server whose log this is: a fleet member id polls that VM through the hub's proxy (streams cannot ride it); null or undefined = this server */
+  member?: RowMember
   /** Number of initial lines to fetch */
   initialLines?: number
   /** Polling interval in ms */
@@ -99,6 +102,7 @@ function formatTimestamp(ts: string): string {
 
 export default function LiveLogViewer({
   containerName,
+  member = null,
   initialLines = 100,
   pollInterval = 2000,
   maxLines = 5000,
@@ -123,15 +127,15 @@ export default function LiveLogViewer({
     try {
       let data: LiveLogsResponse
       if (containerName) {
-        data = await fetchContainerLogsLive(containerName, since ? 50 : initialLines, since)
+        data = await fetchContainerLogsLiveOn(containerName, member, since ? 50 : initialLines, since)
       } else {
-        data = await fetchAppLogsLive(since ? 50 : initialLines, since)
+        data = await fetchAppLogsLiveOn(member, since ? 50 : initialLines, since)
       }
       return data
     } catch {
       return null
     }
-  }, [containerName, initialLines])
+  }, [containerName, member, initialLines])
 
   // Initial fetch
   useEffect(() => {
@@ -238,10 +242,10 @@ export default function LiveLogViewer({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `logs-${containerName || 'app'}-${new Date().toISOString().slice(0, 19)}.txt`
+    a.download = `logs-${member ? `${member}-` : ''}${containerName || 'app'}-${new Date().toISOString().slice(0, 19)}.txt`
     a.click()
     URL.revokeObjectURL(url)
-  }, [filteredLines, containerName])
+  }, [filteredLines, containerName, member])
 
   // Clear buffer
   const handleClear = useCallback(() => {

@@ -1,8 +1,10 @@
 // =============================================================================
 // Environment — Root & per-stack .env editor with table view, validation, save
+// On a hub: the hub's files or one VM's (its root .env and its stacks' .env,
+// read and saved through the hub's proxy to that VM)
 // =============================================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import {
   FileCode, Save, CheckCircle, AlertTriangle, RefreshCw,
@@ -11,11 +13,15 @@ import {
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { fetchStacks } from '../api/endpoints'
 import {
-  fetchRootEnv, saveRootEnv, validateEnv,
-  fetchStacks, fetchStackEnv, saveStackEnv,
-} from '../api/endpoints'
+  fetchRootEnvScoped, saveRootEnvScoped, validateEnvScoped,
+  fetchStackEnvScoped, saveStackEnvScoped,
+} from '../api/fleetScopedOps'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import type {
   RootEnvResponse, StackEnvResponse, StackListResponse,
   EnvValidateResponse,
@@ -248,6 +254,13 @@ function ValidationResults({ result }: { result: EnvValidateResponse }) {
 export default function Environment() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const { addToast } = useToast()
+  const confirm = useConfirm()
+
+  // .env files live on one server: the hub or one VM (Everywhere reads as the hub here)
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const pageScope = scope === 'all' ? 'hub' : scope
+  const member = pageScope === 'hub' ? null : scopeMember
+  const whereLabel = hasFleet ? (member ? `VM ${memberName}` : 'the hub') : ''
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabId>('root')
@@ -260,11 +273,12 @@ export default function Environment() {
   const [rootValidating, setRootValidating] = useState(false)
   const [rootValidation, setRootValidation] = useState<EnvValidateResponse | null>(null)
 
+  const fetchScopedRoot = useCallback(() => fetchRootEnvScoped(member), [member])
   const {
     data: rootEnvData,
     loading: rootLoading,
     refresh: refreshRoot,
-  } = usePolling<RootEnvResponse>(fetchRootEnv, 60000, {
+  } = usePolling<RootEnvResponse>(fetchScopedRoot, 60000, {
     enabled: isConnected && activeTab === 'root',
   })
 
@@ -281,7 +295,7 @@ export default function Environment() {
   const handleRootValidate = useCallback(async () => {
     setRootValidating(true)
     try {
-      const result = await validateEnv(rootRaw)
+      const result = await validateEnvScoped(member, rootRaw)
       setRootValidation(result)
     } catch (err) {
       addToast({
@@ -291,16 +305,16 @@ export default function Environment() {
     } finally {
       setRootValidating(false)
     }
-  }, [rootRaw, addToast])
+  }, [rootRaw, addToast, member])
 
   const handleRootSave = useCallback(async () => {
     setRootSaving(true)
     try {
-      const result = await saveRootEnv(rootRaw)
+      const result = await saveRootEnvScoped(member, rootRaw)
       if (result.success) {
         setRootOriginal(rootRaw)
         setRootValidation(null)
-        addToast({ type: 'success', message: 'Root .env saved successfully (backup created)' })
+        addToast({ type: 'success', message: `Root .env saved${whereLabel ? ` on ${whereLabel}` : ''} (backup created)` })
         setTimeout(refreshRoot, 500)
       } else {
         addToast({ type: 'error', message: result.message || 'Failed to save' })
@@ -313,7 +327,7 @@ export default function Environment() {
     } finally {
       setRootSaving(false)
     }
-  }, [rootRaw, addToast, refreshRoot])
+  }, [rootRaw, addToast, refreshRoot, member, whereLabel])
 
   // ---- Stack .env state ----
   const [selectedStack, setSelectedStack] = useState('')
@@ -325,14 +339,28 @@ export default function Environment() {
   const [stackEnvEmpty, setStackEnvEmpty] = useState(false)
   const [stackViewMode, setStackViewMode] = useState<ViewMode>('table')
 
+  // a VM's own list through the proxy; the hub's list minus the stacks its VMs run
+  const fetchScopedStacks = useCallback(() => fetchStacks(member), [member])
   const {
     data: stacksData,
     loading: stacksLoading,
-  } = usePolling<StackListResponse>(fetchStacks, 60000, {
+    refresh: refreshStacks,
+  } = usePolling<StackListResponse>(fetchScopedStacks, 60000, {
     enabled: isConnected && activeTab === 'stack',
   })
 
-  const stacks = stacksData?.stacks ?? []
+  const stacks = (stacksData?.stacks ?? []).filter((s) => member ? true : s.placement !== 'vm')
+
+  // another server: its own files, nothing carried over
+  const memberRef = useRef(member)
+  useEffect(() => {
+    if (memberRef.current === member) return
+    memberRef.current = member
+    setSelectedStack('')
+    setRootValidation(null)
+    refreshRoot()
+    refreshStacks()
+  }, [member, refreshRoot, refreshStacks])
 
   // Fetch stack env when selection changes
   useEffect(() => {
@@ -348,7 +376,7 @@ export default function Environment() {
     setStackEnvLoading(true)
     setStackEnvEmpty(false)
 
-    fetchStackEnv(selectedStack)
+    fetchStackEnvScoped(member, selectedStack)
       .then((data) => {
         if (!mounted) return
         setStackEnvData(data)
@@ -368,7 +396,7 @@ export default function Environment() {
       })
 
     return () => { mounted = false }
-  }, [selectedStack])
+  }, [selectedStack, member])
 
   const stackHasChanges = stackRaw !== stackOriginal
 
@@ -376,10 +404,10 @@ export default function Environment() {
     if (!selectedStack) return
     setStackSaving(true)
     try {
-      const result = await saveStackEnv(selectedStack, stackRaw)
+      const result = await saveStackEnvScoped(member, selectedStack, stackRaw)
       if (result.success) {
         setStackOriginal(stackRaw)
-        addToast({ type: 'success', message: `${selectedStack} .env saved successfully` })
+        addToast({ type: 'success', message: `${selectedStack} .env saved${whereLabel ? ` on ${whereLabel}` : ''}` })
       } else {
         addToast({ type: 'error', message: result.message || 'Failed to save' })
       }
@@ -391,7 +419,18 @@ export default function Environment() {
     } finally {
       setStackSaving(false)
     }
-  }, [selectedStack, stackRaw, addToast])
+  }, [selectedStack, stackRaw, addToast, member, whereLabel])
+
+  // switching servers with unsaved edits: ask first (the editor is emptied for the other server's file)
+  const hasChanges = (activeTab === 'root' && rootHasChanges) || (activeTab === 'stack' && stackHasChanges)
+  const handleScopeChange = useCallback(async (next: string) => {
+    if (next === pageScope) return
+    if (hasChanges) {
+      const ok = await confirm({ title: 'Discard unsaved changes?', message: 'The .env you are editing has unsaved changes. Switching to another server drops them.', confirmLabel: 'Discard and switch', danger: true })
+      if (!ok) return
+    }
+    setScope(next)
+  }, [pageScope, hasChanges, confirm, setScope])
 
   // ---- Tab definitions ----
   const tabs: { id: TabId; label: string }[] = [
@@ -403,21 +442,22 @@ export default function Environment() {
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5 shrink-0">
             <FileCode size={24} className="text-emerald-400" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Environment Variables</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Manage root and per-stack .env configuration</p>
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold"><span className="text-gradient">Environment Variables</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={(s) => void handleScopeChange(s)} label=".env of" busy={rootLoading && !!rootEnvData} everywhere={false} /></div>}
+            <p className="text-sm text-slate-400 mt-0.5">{hasFleet ? `The root and per-stack .env files on ${whereLabel}` : 'Manage root and per-stack .env configuration'}</p>
           </div>
         </div>
         <button
           onClick={activeTab === 'root' ? refreshRoot : () => {
             if (selectedStack) {
               setStackEnvLoading(true)
-              fetchStackEnv(selectedStack)
+              fetchStackEnvScoped(member, selectedStack)
                 .then((data) => {
                   setStackEnvData(data)
                   setStackRaw(data.raw)
@@ -432,7 +472,7 @@ export default function Environment() {
             text-xs font-medium text-slate-300
             bg-white/5 border border-white/10
             hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
+            disabled:opacity-50 transition-all duration-200 self-start sm:self-auto shrink-0
           "
         >
           <RefreshCw
@@ -475,7 +515,7 @@ export default function Environment() {
       {activeTab === 'root' && (
         <div className="space-y-4">
           {/* Toolbar */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             {/* View mode toggle */}
             <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/5 p-1">
               <button
@@ -575,7 +615,7 @@ export default function Environment() {
               {/* Footer */}
               <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {rootEnvData.variables.length} variable{rootEnvData.variables.length !== 1 ? 's' : ''}
+                  {rootEnvData.variables.length} variable{rootEnvData.variables.length !== 1 ? 's' : ''}{whereLabel ? ` · root .env on ${whereLabel}` : ''}
                 </span>
                 {rootHasChanges && (
                   <span className="flex items-center gap-1.5 text-[11px] text-amber-400">
@@ -595,8 +635,8 @@ export default function Environment() {
       {activeTab === 'stack' && (
         <div className="space-y-4">
           {/* Stack selector + toolbar */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="relative flex-1 sm:max-w-sm">
               <select
                 value={selectedStack}
                 onChange={(e) => setSelectedStack(e.target.value)}
@@ -613,7 +653,7 @@ export default function Environment() {
                 "
               >
                 <option value="" className="bg-slate-900 text-slate-400">
-                  Select a stack...
+                  {stacksLoading && stacks.length === 0 ? 'Loading stacks...' : stacks.length === 0 ? `No stacks${whereLabel ? ` on ${whereLabel}` : ''}` : `Select a stack${whereLabel ? ` on ${whereLabel}` : ''}...`}
                 </option>
                 {stacks.map((s) => (
                   <option key={s.name} value={s.name} className="bg-slate-900 text-slate-200">
@@ -727,7 +767,7 @@ export default function Environment() {
               <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
                 <span className="text-[11px] text-slate-500 font-mono">
                   {stackEnvData.variables.length} variable{stackEnvData.variables.length !== 1 ? 's' : ''}
-                  {' '}&middot; {selectedStack}
+                  {' '}&middot; {selectedStack}{whereLabel ? ` on ${whereLabel}` : ''}
                 </span>
                 {stackHasChanges && (
                   <span className="flex items-center gap-1.5 text-[11px] text-amber-400">

@@ -157,12 +157,20 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
 
       {!own ? (
         <div className="space-y-3">
-          {error && !loading ? (
-            <p className="text-xs text-rose-300 flex items-center gap-1.5"><AlertTriangle size={13} /> Could not read the engine: {error instanceof Error ? error.message : String(error)}</p>
+          {error ? (
+            <p className="text-xs text-rose-300 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>
+                {/404|not found/i.test(error instanceof Error ? error.message : String(error))
+                  ? 'This server\'s DCS is older than the dashboard: update the framework (the card above) and this card fills in.'
+                  : `Could not read the engine: ${error instanceof Error ? error.message : String(error)}`}
+              </span>
+            </p>
           ) : (
             <>
               <div className="h-3 w-2/3 rounded bg-white/5 animate-pulse" />
               <div className="h-3 w-1/2 rounded bg-white/5 animate-pulse" />
+              <p className="text-[10px] text-slate-500">Reading the engine…</p>
             </>
           )}
         </div>
@@ -176,6 +184,12 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
               <span className="text-xs font-mono text-sky-300">{own.candidate}</span>
+            </div>
+          )}
+          {!own.upgradable && own.checking && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
+              <span className="text-xs text-slate-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> asking the package source…</span>
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
@@ -197,7 +211,7 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
 
           {/* the one-line status, like the other cards: up to date · checked · last updated */}
           <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] rounded-lg border px-2.5 py-1.5 ${uptodate ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : own.version ? 'text-sky-200 bg-sky-500/10 border-sky-500/20' : 'text-rose-300 bg-rose-500/10 border-rose-500/20'}`}>
-            <span className="font-medium">{uptodate ? 'Engine up to date' : own.version ? `${own.candidate || 'A newer engine'} available` : 'Docker is not answering'}</span>
+            <span className="font-medium">{uptodate ? (own.checking ? 'Engine running' : 'Engine up to date') : own.version ? `${own.candidate || 'A newer engine'} available` : 'Docker is not answering'}</span>
             {checkedAt > 0 && <span className="text-current/70">· checked {ago(checkedAt)}</span>}
             {last?.finished_at && last.status !== 'running' && <span className="text-current/70">· last updated {ago(last.finished_at)}{last.status === 'failed' ? ' (failed)' : ''}</span>}
           </div>

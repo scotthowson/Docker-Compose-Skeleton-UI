@@ -12,6 +12,7 @@ import {
   Play, RotateCw, Square as SquareStop,
 } from 'lucide-react'
 import { CopyButton } from '../common/CopyButton'
+import VmCapsule from '../fleet/VmCapsule'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,13 +95,25 @@ function MiniBar({ percent, label }: { percent: number; label: string }) {
 interface ContainerRowProps {
   container: ContainerInfo
   isSelected: boolean
-  onClick: (name: string) => void
+  /** The row itself: two servers of a fleet may each run a container of the same name */
+  onClick: (container: ContainerInfo) => void
   batchMode?: boolean
   batchSelected?: boolean
   isFavorite?: boolean
   onToggleFavorite?: (name: string) => void
-  onQuickAction?: (name: string, action: 'start' | 'stop' | 'restart') => void
+  onQuickAction?: (container: ContainerInfo, action: 'start' | 'stop' | 'restart') => void
+  /** `${member}|${name}-${action}` of the row whose quick action is running */
   quickActionLoading?: string | null
+  /** The Everywhere view of a hub: say where the row lives (the hub, or a VM by number and name) */
+  showCapsule?: boolean
+}
+
+/** A row's own live usage when the list carries it, else what the stats poller stored under its name */
+function rowUsage(container: ContainerInfo, stats: ContainerStats | undefined): { cpuPct: number; memPct: number; has: boolean } {
+  if (container.cpu_percent != null || container.mem_percent != null) {
+    return { cpuPct: container.cpu_percent ?? 0, memPct: container.mem_percent ?? 0, has: true }
+  }
+  return { cpuPct: parseCpuPercent(stats?.cpu_percent), memPct: parseMemPercent(stats?.memory_percent), has: !!stats }
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +125,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
   batchMode, batchSelected,
   isFavorite, onToggleFavorite,
   onQuickAction, quickActionLoading,
+  showCapsule = false,
 }) => {
   const stats: ContainerStats | undefined = useContainerStore((s) => s.stats[container.name])
 
@@ -120,13 +134,13 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
   const healthKey = container.health.toLowerCase()
   const hv = HEALTH_VARIANTS[healthKey] ?? DEFAULT_HEALTH_VARIANT
 
-  const cpuPct = parseCpuPercent(stats?.cpu_percent)
-  const memPct = parseMemPercent(stats?.memory_percent)
+  const { cpuPct, memPct, has: hasUsage } = rowUsage(container, stats)
   const isRunning = stateKey === 'running'
+  const busyKey = `${container.member ?? ''}|${container.name}-`
 
   return (
     <tr
-      onClick={() => onClick(container.name)}
+      onClick={() => onClick(container)}
       className={`
         group cursor-pointer transition-all duration-200 border-b border-white/[0.03]
         ${batchMode && batchSelected
@@ -166,6 +180,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
         <div className="flex items-center gap-2.5">
           <Box className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
           <ContainerNameWithPopover container={container} formatUptime={formatUptime} />
+          {showCapsule && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
         </div>
       </td>
 
@@ -181,14 +196,13 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
             <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
             {container.state}
             {container.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>}
-            {container.member && <span className="text-[9px] text-amber-300/90" title={'Runs in the VM ' + (container.member_name || container.member) + (container.vmid ? ' (#' + container.vmid + ')' : '')}>· VM {container.vmid ?? container.member_name ?? container.member}</span>}
           </span>
         )}
       </td>
 
       {/* CPU + Memory (inline stats) */}
       <td className="px-3 py-3">
-        {isRunning && stats ? (
+        {isRunning && hasUsage ? (
           <div className="flex flex-col gap-0.5">
             <MiniBar percent={cpuPct} label="CPU" />
             <MiniBar percent={memPct} label="Memory" />
@@ -223,29 +237,29 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {container.state !== 'running' && (
             <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'start') }}
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'start') }}
               className="p-1 rounded hover:bg-emerald-500/10 text-slate-600 hover:text-emerald-400 transition-colors"
               title="Start"
             >
-              <Play size={13} />
+              {quickActionLoading === `${busyKey}start` ? <RefreshCw size={13} className="animate-spin text-emerald-400" /> : <Play size={13} />}
             </button>
           )}
           {container.state === 'running' && (
             <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'restart') }}
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'restart') }}
               className="p-1 rounded hover:bg-amber-500/10 text-slate-600 hover:text-amber-400 transition-colors"
               title="Restart"
             >
-              <RotateCw size={13} />
+              {quickActionLoading === `${busyKey}restart` ? <RefreshCw size={13} className="animate-spin text-amber-400" /> : <RotateCw size={13} />}
             </button>
           )}
           {container.state === 'running' && (
             <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container.name, 'stop') }}
+              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'stop') }}
               className="p-1 rounded hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-colors"
               title="Stop"
             >
-              <SquareStop size={13} />
+              {quickActionLoading === `${busyKey}stop` ? <RefreshCw size={13} className="animate-spin text-rose-400" /> : <SquareStop size={13} />}
             </button>
           )}
         </div>
@@ -262,6 +276,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
   container, isSelected, onClick,
   batchMode, batchSelected,
   isFavorite, onToggleFavorite,
+  showCapsule = false,
 }) => {
   const stats: ContainerStats | undefined = useContainerStore((s) => s.stats[container.name])
 
@@ -270,13 +285,12 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
   const healthKey = container.health.toLowerCase()
   const hv = HEALTH_VARIANTS[healthKey] ?? DEFAULT_HEALTH_VARIANT
 
-  const cpuPct = parseCpuPercent(stats?.cpu_percent)
-  const memPct = parseMemPercent(stats?.memory_percent)
+  const { cpuPct, memPct, has: hasUsage } = rowUsage(container, stats)
   const isRunning = stateKey === 'running'
 
   return (
     <div
-      onClick={() => onClick(container.name)}
+      onClick={() => onClick(container)}
       className={`
         group cursor-pointer rounded-2xl p-4 transition-all duration-200
         border
@@ -315,7 +329,8 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
       </div>
 
       {/* Middle: badges */}
-      <div className="flex items-center gap-2 mt-2.5">
+      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+        {showCapsule && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1 ${sv.bg} ${sv.text} ${sv.ring}`}>
           <span className={`h-1 w-1 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
           {container.state}
@@ -333,7 +348,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
 
       {/* Bottom: stats + uptime */}
       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.03]">
-        {isRunning && stats ? (
+        {isRunning && hasUsage ? (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <Cpu size={10} className="text-cyan-400" />

@@ -8,20 +8,18 @@ import { useContainerStore, selectStatsHistory } from '../../stores/containerSto
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
 import {
-  fetchContainer,
-  fetchContainerStats,
-  fetchContainerLogs,
-  startContainer,
-  stopContainer,
-  restartContainer,
-  recreateContainer,
-  removeContainer,
-  fetchContainerProcesses,
-  execContainerCommand,
-  renameContainer,
-  updateContainerEnv,
-  setContainerSablier,
-} from '../../api/endpoints'
+  fetchContainerOn,
+  fetchContainerStatsOn,
+  fetchContainerLogsOn,
+  containerActionOn,
+  fetchContainerProcessesOn,
+  execContainerCommandOn,
+  renameContainerOn,
+  updateContainerEnvOn,
+  setContainerSablierOn,
+} from '../../api/fleetScoped'
+import type { RowMember } from '../../../shared/fleetScoped'
+import VmCapsule from '../fleet/VmCapsule'
 import { apiClient } from '../../api/client'
 import ContainerFileBrowser from './ContainerFileBrowser'
 import { CopyButton } from '../common/CopyButton'
@@ -461,6 +459,11 @@ interface ContainerDetailProps {
   containerName: string
   /** The basic container info from the list (available immediately). */
   containerInfo: ContainerInfo
+  /** The server the container runs on: a fleet member id rides the hub's proxy; null or undefined = this server */
+  member?: RowMember
+  memberName?: string
+  /** A hub with VMs: say where the container lives next to its name */
+  showCapsule?: boolean
   onBack: () => void
   /** Trigger immediate refresh of the containers list after actions. */
   onRefreshList?: () => void
@@ -471,6 +474,9 @@ interface ContainerDetailProps {
 const ContainerDetail: React.FC<ContainerDetailProps> = ({
   containerName,
   containerInfo,
+  member = null,
+  memberName = '',
+  showCapsule = false,
   onBack,
   onRefreshList,
   isAdmin = false,
@@ -539,7 +545,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     setDetailLoading(true)
     setDetailError(null)
     try {
-      const d = await fetchContainer(containerName)
+      const d = await fetchContainerOn(containerName, member)
       if (mountedRef.current) {
         setDetail(d)
         setDetailError(null)
@@ -554,7 +560,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         setDetailLoading(false)
       }
     }
-  }, [containerName])
+  }, [containerName, member])
 
   useEffect(() => {
     fetchDetail()
@@ -567,7 +573,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   // Fetch stats on mount and every 10s
   const fetchStats = useCallback(async () => {
     try {
-      const s = await fetchContainerStats(containerName)
+      const s = await fetchContainerStatsOn(containerName, member)
       if (mountedRef.current) {
         setLocalStats(s)
         setStats(containerName, s)
@@ -581,7 +587,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } catch {
       if (mountedRef.current) setStatsLoading(false)
     }
-  }, [containerName, setStats, pushStatsHistory])
+  }, [containerName, member, setStats, pushStatsHistory])
 
   useEffect(() => {
     mountedRef.current = true
@@ -610,7 +616,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     if (!ok) return
     setSablierBusy(true)
     try {
-      const res = await setContainerSablier(containerName, { enabled: turningOn })
+      const res = await setContainerSablierOn(containerName, { enabled: turningOn }, member)
       addToast({ type: 'success', message: res.message || (turningOn ? 'On-demand start enabled' : 'On-demand start disabled') })
       if (res.traefik_restarted) addToast({ type: 'info', message: 'Traefik restarted to load the Sablier plugin' })
       onRefreshList?.()
@@ -620,7 +626,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setSablierBusy(false)
     }
-  }, [detail, containerName, addToast, onRefreshList, confirm])
+  }, [detail, containerName, member, addToast, onRefreshList, confirm, fetchDetail])
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'recreate' | 'remove') => {
     const pastTense: Record<typeof action, string> = { start: 'started', stop: 'stopped', restart: 'restarted', recreate: 'recreated', remove: 'removed' }
@@ -631,11 +637,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     }
 
     setActionLoading(action)
-    addToast({ type: 'info', message: `${gerund[action]} "${containerName}"...`, duration: 2000 })
+    addToast({ type: 'info', message: `${gerund[action]} "${containerName}"${member ? ` on VM ${memberName || member}` : ''}...`, duration: 2000 })
 
     try {
-      const actionFn = { start: startContainer, stop: stopContainer, restart: restartContainer, recreate: recreateContainer, remove: removeContainer }[action]
-      const result = await actionFn(containerName)
+      const result = await containerActionOn(containerName, action, member)
 
       if (result.success) {
         addToast({ type: 'success', message: `"${containerName}" ${pastTense[action]} successfully!` })
@@ -660,7 +665,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setActionLoading(null)
     }
-  }, [containerName, fetchStats, addToast, onRefreshList, onBack, confirm])
+  }, [containerName, member, memberName, fetchStats, addToast, onRefreshList, onBack, confirm])
 
   // ---- Environment editing (Compose-managed containers only) ----
   const composeService = detail?.compose_service || ''
@@ -698,7 +703,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     if (Object.keys(set).length === 0 && unset.length === 0) return
     setEnvSaving(true)
     try {
-      const res = await updateContainerEnv(containerName, { set, unset, recreate: envRecreate })
+      const res = await updateContainerEnvOn(containerName, { set, unset, recreate: envRecreate }, member)
       const parts: string[] = []
       if (res.compose_changed.length) parts.push(`${res.compose_changed.join(', ')} in docker-compose.yml`)
       if (res.env_changed.length) parts.push(`${res.env_changed.map((e) => e.split('=')[1] || e).join(', ')} in the stack .env`)
@@ -717,7 +722,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setEnvSaving(false)
     }
-  }, [detail, envSaving, envDrafts, envRemovals, envAdditions, currentEnv, containerName, envRecreate, addToast, discardEnv, onRefreshList, fetchDetail, fetchStats])
+  }, [detail, envSaving, envDrafts, envRemovals, envAdditions, currentEnv, containerName, member, envRecreate, addToast, discardEnv, onRefreshList, fetchDetail, fetchStats])
   const openComposeEditor = useCallback(() => {
     if (!composeProject) return
     setCurrentPage('stacks', { highlight: composeProject, editCompose: true, focusService: composeService })
@@ -727,7 +732,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const handleFetchLogs = useCallback(async () => {
     setLogsLoading(true)
     try {
-      const result = await fetchContainerLogs(containerName)
+      const result = await fetchContainerLogsOn(containerName, member)
       setContainerLogs(result.logs)
       setShowLogs(true)
     } catch {
@@ -735,7 +740,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setLogsLoading(false)
     }
-  }, [containerName])
+  }, [containerName, member])
 
   // Download logs as text file
   const handleDownloadLogs = useCallback(() => {
@@ -766,7 +771,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     }
     setRenameLoading(true)
     try {
-      const result = await renameContainer(containerName, newName)
+      const result = await renameContainerOn(containerName, newName, member)
       if (result.success) {
         addToast({ type: 'success', message: `Renamed to "${newName}"` })
         onRefreshList?.()
@@ -780,13 +785,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       setRenameLoading(false)
       setRenaming(false)
     }
-  }, [containerName, renameValue, addToast, onRefreshList, onBack])
+  }, [containerName, member, renameValue, addToast, onRefreshList, onBack])
 
   // Fetch container processes
   const handleFetchProcesses = useCallback(async () => {
     setProcessesLoading(true)
     try {
-      const result = await fetchContainerProcesses(containerName)
+      const result = await fetchContainerProcessesOn(containerName, member)
       if (mountedRef.current) {
         setProcesses(result.processes)
       }
@@ -799,7 +804,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         setProcessesLoading(false)
       }
     }
-  }, [containerName])
+  }, [containerName, member])
 
   // Toggle process viewer — auto-refresh every 10s while visible
   const handleToggleProcesses = useCallback(() => {
@@ -837,7 +842,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     setExecLoading(true)
     setExecOutput(null)
     try {
-      const result = await execContainerCommand(containerName, cmd)
+      const result = await execContainerCommandOn(containerName, cmd, member)
       setExecOutput({
         command: cmd,
         output: result.output,
@@ -857,7 +862,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
     } finally {
       setExecLoading(false)
     }
-  }, [execCommand, execLoading, containerName])
+  }, [execCommand, execLoading, containerName, member])
 
   // Derived data
   const envEntries = detail ? parseEnvString(detail.environment) : []
@@ -949,6 +954,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             </>
           )}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
+            {showCapsule && <VmCapsule member={member} name={memberName || containerInfo.member_name} vmid={containerInfo.vmid} />}
             <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
             <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
           </div>
@@ -1046,6 +1052,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               </button>
               <NukeDialog
                 containerName={containerName}
+                member={member}
+                memberName={memberName}
                 open={nukeOpen}
                 onClose={() => setNukeOpen(false)}
                 onDone={() => { onRefreshList?.(); void fetchDetail(); setTimeout(() => fetchStats(), 1500) }}
@@ -1313,7 +1321,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           </div>
           {liveLogsMode ? (
             <div className="mt-3 h-80">
-              <LiveLogViewer containerName={containerName} initialLines={100} pollInterval={2000} />
+              <LiveLogViewer containerName={containerName} member={member} initialLines={100} pollInterval={member ? 3000 : 2000} />
             </div>
           ) : (
             <pre
@@ -2019,7 +2027,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
       {/* ---- File Browser ---- */}
       {detail?.state === 'running' && (
-        <ContainerFileBrowser containerName={containerName} />
+        <ContainerFileBrowser containerName={containerName} member={member} />
       )}
     </div>
   )

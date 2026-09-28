@@ -612,6 +612,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [showSablierOptions, setShowSablierOptions] = useState(false)
   // Homarr integration state
   const [homarrActive, setHomarrActive] = useState(false)
+  const [homarrHasKey, setHomarrHasKey] = useState(false)
   const [addToHomarr, setAddToHomarr] = useState(false)
   // Resource limits state
   const [enableResourceLimits, setEnableResourceLimits] = useState(false)
@@ -644,7 +645,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   useEffect(() => {
     if (!isConnected || template.name === 'homarr') return
     fetchHomarrStatus()
-      .then((res) => setHomarrActive(res.active && res.has_api_key))
+      .then((res) => { setHomarrActive(res.active); setHomarrHasKey(res.has_api_key) })
       .catch(() => {})
   }, [isConnected, template.name])
 
@@ -1781,7 +1782,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 </div>
               )}
 
-              {/* Homarr Dashboard Toggle — only visible when Homarr is deployed with API key */}
+              {/* Homarr Dashboard Toggle — visible when Homarr is deployed; without an API key the app only lands in its library */}
               {homarrActive && (
                 <div className="rounded-lg border border-white/5 bg-orange-500/[0.02] overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5">
@@ -1797,6 +1798,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${addToHomarr ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                     </button>
                   </div>
+                  {!homarrHasKey && (
+                    <p className="px-3 pb-2 -mt-0.5 text-[10px] text-slate-500">Without an API key the app lands in Homarr's library only — add the key in Server Config → Integrations</p>
+                  )}
                 </div>
               )}
 

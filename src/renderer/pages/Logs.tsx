@@ -10,10 +10,12 @@ import {
   Radio,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchLogsFiltered, fetchLogStats, fetchLogArchives } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import { fetchLogsOn, fetchLogStatsOn, fetchLogArchivesOn } from '../api/fleetScoped'
 import { useLogStore } from '../stores/logStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import LiveLogViewer from '../components/logs/LiveLogViewer'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { ErrorState, EmptyState } from '../components/common/PageState'
@@ -98,23 +100,32 @@ export default function Logs() {
   const setLogs = useLogStore((s) => s.setLogs)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
-  // Server-side filtered fetch function
-  const fetchFn = useCallback(() => {
-    return fetchLogsFiltered({
+  // a hub: the hub's own framework log or one VM's (through the hub's proxy, polled — streams do not ride it);
+  // Everywhere is a view of lists, so here it shows the hub's log and says a VM's is one chip away
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+
+  // Server-side filtered fetch function, tagged with the server it asked so a switch never shows the old log under the new label
+  const fetchFn = useCallback(async () => ({
+    member: scopeMember,
+    res: await fetchLogsOn({
       lines: lineCount,
       level: serverLevel || undefined,
       search: serverSearch || undefined,
-    })
-  }, [lineCount, serverLevel, serverSearch])
+    }, scopeMember),
+  }), [lineCount, serverLevel, serverSearch, scopeMember])
 
-  const { data, loading, error, refresh } = usePolling<LogsResponse>(fetchFn, 3000, {
+  const { data: tagged, loading: polling, error, refresh } = usePolling<{ member: string | null; res: LogsResponse }>(fetchFn, scopeMember ? 5000 : 3000, {
     enabled: isConnected,
   })
+  const data = tagged && tagged.member === scopeMember ? tagged.res : null
+  const loading = polling || !data
+  const memberRef = useRef(scopeMember)
+  useEffect(() => { if (memberRef.current !== scopeMember) { memberRef.current = scopeMember; refresh() } }, [scopeMember, refresh])
 
-  // Sync to store
+  // Sync to store (a VM's log is not this server's: it stays on this page)
   useEffect(() => {
-    if (data) setLogs(data.logs, data.log_file)
-  }, [data, setLogs])
+    if (data && !scopeMember) setLogs(data.logs, data.log_file)
+  }, [data, setLogs, scopeMember])
 
   const rawLogs = data?.logs ?? ''
   const logFile = data?.log_file ?? ''
@@ -212,32 +223,35 @@ export default function Logs() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `docker-services-${new Date().toISOString().slice(0, 10)}.log`
+    a.download = `docker-services-${scopeMember ? `${scopeMember}-` : ''}${new Date().toISOString().slice(0, 10)}.log`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [filteredLines])
+  }, [filteredLines, scopeMember])
 
   // Fetch stats on demand
   const loadStats = useCallback(async () => {
     setStatsLoading(true)
     setStatsError(null)
     try {
-      const result = await fetchLogStats()
+      const result = await fetchLogStatsOn(scopeMember)
       setStats(result)
     } catch (err: unknown) {
       setStatsError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       setStatsLoading(false)
     }
-  }, [])
+  }, [scopeMember])
 
   // Toggle stats panel
   const handleToggleStats = useCallback(() => {
-    const willOpen = !showStats
-    setShowStats(willOpen)
-    if (willOpen) loadStats()
+    setShowStats((open) => !open)
+  }, [])
+
+  // An open stats panel loads when opened and again when the server chosen above changes
+  useEffect(() => {
+    if (showStats) { setStats(null); loadStats() }
   }, [showStats, loadStats])
 
   // Fetch archives on demand
@@ -245,18 +259,18 @@ export default function Logs() {
     setArchivesLoading(true)
     setArchivesError(null)
     try {
-      const result = await fetchLogArchives()
+      const result = await fetchLogArchivesOn(scopeMember)
       setArchives(result)
     } catch (err: unknown) {
       setArchivesError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       setArchivesLoading(false)
     }
-  }, [])
+  }, [scopeMember])
 
-  // Load archives when switching to that tab
+  // Load archives when switching to that tab (and again when the server changes)
   useEffect(() => {
-    if (activeTab === 'archives') loadArchives()
+    if (activeTab === 'archives') { setArchives(null); loadArchives() }
   }, [activeTab, loadArchives])
 
   const hasFilters = activeLevels.size > 0 || searchQuery.trim().length > 0
@@ -277,9 +291,16 @@ export default function Logs() {
           <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
             <ScrollText className="w-6 h-6 text-amber-400" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Log Viewer</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Framework logs, filtering, and search</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold"><span className="text-gradient">Log Viewer</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}{hasFleet && !scopeMember && <span className="ml-2 text-sm font-medium text-emerald-200/90">· Hub</span>}</h1>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {scopeMember
+                ? `The framework log inside the VM ${memberName}, polled through the hub`
+                : scope === 'all' && hasFleet
+                  ? 'The hub\'s own framework log — every VM keeps its own, one chip away'
+                  : 'Framework logs, filtering, and search'}
+            </p>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Log of" busy={polling && !!data} /></div>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -445,7 +466,7 @@ export default function Logs() {
       {/* Error state */}
       {error && (
         <div className="glass rounded-xl p-4 border border-rose-500/20 shrink-0">
-          <p className="text-sm text-rose-400">Failed to fetch logs: {error.message}</p>
+          <p className="text-sm text-rose-400">Failed to fetch {scopeMember ? `the log of the VM ${memberName}` : 'logs'}: {error.message}</p>
         </div>
       )}
 
@@ -677,7 +698,7 @@ export default function Logs() {
       {/* ================================================================= */}
       {activeTab === 'live' && (
         <div className="flex-1 min-h-0">
-          <LiveLogViewer initialLines={200} pollInterval={2000} maxLines={5000} />
+          <LiveLogViewer key={scopeMember ?? 'hub'} member={scopeMember} initialLines={200} pollInterval={scopeMember ? 3000 : 2000} maxLines={5000} />
         </div>
       )}
 

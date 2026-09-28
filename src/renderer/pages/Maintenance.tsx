@@ -1,47 +1,50 @@
 // =============================================================================
 // Maintenance — Docker system maintenance, orphan detection, disk analysis
+// On a hub: Everywhere adds the hub's and every VM's numbers up (each asked at
+// the same time) and runs each action on all of them; Hub or a VM: that one.
 // =============================================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Wrench, RefreshCw, Loader2, Trash2, RotateCcw, AlertTriangle,
   CheckCircle2, Box, Image, HardDrive, Network, FileText, Scissors,
-  BookOpen, ChevronRight, ChevronDown, X, Search,
+  BookOpen, ChevronRight, ChevronDown, X, Search, Boxes,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
-  fetchMaintenanceReport,
-  fetchMaintenanceOrphans,
-  fetchMaintenanceDisk,
-  triggerDeepPrune,
-  triggerLogRotate,
-  runDockerPrune,
-  runImagePrune,
-} from '../api/endpoints'
+  fetchFleetMaintenanceReport,
+  fetchFleetOrphans,
+  fetchFleetDisk,
+  triggerDeepPruneScoped,
+  triggerLogRotateScoped,
+  runDockerPruneScoped,
+  runImagePruneScoped,
+  fleetTargets,
+  fanOut,
+  summarizeOutcomes,
+  parseSizeBytes,
+} from '../api/fleetScopedOps'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import type { MaintenanceReport, OrphanReport, DiskAnalysis } from '../../shared/types'
+import type { FleetTarget, MemberOutcome, FleetMaintenanceReport, FleetOrphanReport, FleetDiskAnalysis } from '../../shared/fleetScopedOps'
 import { LoadingState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Parse size strings like "1.2 GB", "450 MB" to a numeric value for bar width */
-function parseSizeToMb(size: string): number {
-  const match = size.match(/([\d.]+)\s*(B|KB|MB|GB|TB)/i)
-  if (!match) return 0
-  const val = parseFloat(match[1])
-  const unit = match[2].toUpperCase()
-  switch (unit) {
-    case 'TB': return val * 1024 * 1024
-    case 'GB': return val * 1024
-    case 'MB': return val
-    case 'KB': return val / 1024
-    default: return val / (1024 * 1024)
-  }
+/** a row key: the resource on its DCS (one server's rows share one member) */
+const rowKey = (member: string | null, id: string) => `${member ?? ''}|${id}`
+
+/** who answered and who did not, for the Everywhere strip */
+function answered(members: MemberOutcome<unknown>[]): { ok: number; failed: MemberOutcome<unknown>[] } {
+  return { ok: members.filter((m) => m.ok).length, failed: members.filter((m) => !m.ok) }
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +111,22 @@ Does not affect Docker container logs — only
 the DCS framework operational log.`,
   },
   {
+    title: 'A Proxmox fleet',
+    icon: Boxes,
+    content: `On a hub every VM runs its own Docker:
+
+Everywhere  the hub's and every VM's numbers
+            added up, each row marked with
+            where it is; an action runs on the
+            hub and on every VM that answers,
+            one summary at the end
+Hub         only the hub itself
+VM chip     only that VM (through the hub)
+
+A VM that does not answer is left out and
+named in the strip under the header.`,
+  },
+  {
     title: 'Orphan Detection',
     icon: Search,
     content: `Scans for unused Docker resources:
@@ -135,25 +154,54 @@ important is accidentally removed.`,
 export default function Maintenance() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
-  // ---- Polling ----
+  // ---- Scope: everywhere (the hub and every VM that answers), the hub, or one VM ----
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const everywhere = scope === 'all'
+  const targets = useMemo<FleetTarget[]>(() => {
+    if (everywhere) return fleetTargets(scopeMembers)
+    if (scopeMember) return [{ id: scopeMember, name: memberName, vmid: scopeMembers.find((m) => m.id === scopeMember)?.vmid ?? null }]
+    return [{ id: null, name: 'Hub', vmid: null }]
+  }, [everywhere, scopeMember, memberName, scopeMembers])
+  // the poll functions read the latest targets without restarting the poll every time the member list refreshes
+  const targetsRef = useRef(targets)
+  useEffect(() => { targetsRef.current = targets }, [targets])
+  const whereLabel = hasFleet ? (everywhere ? 'everywhere' : scopeMember ? `VM ${memberName}` : 'the hub') : ''
+  const vmCount = Math.max(targets.length - 1, 0)
+
+  // ---- Polling (one fan-out per card; a single server is a fan-out of one) ----
+  // Everywhere asks every server three questions per round: a slower round keeps a 16-VM hub under its request budget
+  const fetchReport = useCallback(() => fetchFleetMaintenanceReport(targetsRef.current), [])
   const {
-    data: report,
+    data: reportData,
     loading: reportLoading,
     refresh: refreshReport,
-  } = usePolling<MaintenanceReport>(fetchMaintenanceReport, 10000, { enabled: isConnected })
+  } = usePolling<FleetMaintenanceReport>(fetchReport, everywhere ? 45000 : 10000, { enabled: isConnected })
 
+  const fetchOrphans = useCallback(() => fetchFleetOrphans(targetsRef.current), [])
   const {
     data: orphans,
     loading: orphansLoading,
     refresh: refreshOrphans,
-  } = usePolling<OrphanReport>(fetchMaintenanceOrphans, 15000, { enabled: isConnected })
+  } = usePolling<FleetOrphanReport>(fetchOrphans, everywhere ? 60000 : 15000, { enabled: isConnected })
 
+  const fetchDisk = useCallback(() => fetchFleetDisk(targetsRef.current), [])
   const {
     data: disk,
     loading: diskLoading,
     refresh: refreshDisk,
-  } = usePolling<DiskAnalysis>(fetchMaintenanceDisk, 15000, { enabled: isConnected })
+  } = usePolling<FleetDiskAnalysis>(fetchDisk, everywhere ? 60000 : 15000, { enabled: isConnected })
+
+  // another view: ask again right away
+  const scopeRef = useRef(scope)
+  useEffect(() => {
+    if (scopeRef.current === scope) return
+    scopeRef.current = scope
+    refreshReport(); refreshOrphans(); refreshDisk()
+  }, [scope, refreshReport, refreshOrphans, refreshDisk])
+
+  const report = reportData?.totals ?? null
 
   // ---- Action state ----
   const [pruning, setPruning] = useState(false)
@@ -174,77 +222,60 @@ export default function Maintenance() {
     return () => document.removeEventListener('keydown', handler)
   }, [showDeepPruneModal])
 
-  // ---- Action handlers ----
-  const handleSafePrune = async () => {
-    setPruning(true)
-    try {
-      const res = await runDockerPrune()
-      addToast({
-        type: res.success ? 'success' : 'error',
-        message: res.success ? 'Docker system prune completed' : (res.output || 'Prune failed'),
+  // ---- Action handlers: one server, or on Everywhere the hub and every VM at once ----
+  type ActionResult = { success: boolean; output?: string; message?: string }
+  const runAction = useCallback(async (opts: {
+    verb: string
+    done: string
+    call: (member: string | null) => Promise<ActionResult>
+    setBusy: (b: boolean) => void
+    /** the deep-prune modal already asked */
+    confirmed?: boolean
+    danger?: boolean
+  }) => {
+    const { verb, done, call, setBusy } = opts
+    if (everywhere && !opts.confirmed) {
+      const ok = await confirm({
+        title: `${verb} everywhere`,
+        message: `Run ${verb.toLowerCase()} on the hub and on ${vmCount} VM${vmCount === 1 ? '' : 's'}? Each server cleans its own Docker; one that fails does not stop the others.`,
+        confirmLabel: 'Run everywhere',
+        danger: opts.danger,
       })
+      if (!ok) return
+    }
+    setBusy(true)
+    try {
+      if (everywhere) {
+        const outcomes = await fanOut(targets, call)
+        // a server that answered but reported a failure counts as one
+        const graded = outcomes.map((o) => (o.ok && o.value && o.value.success === false ? { ...o, ok: false, error: o.value.message || o.value.output || 'failed' } : o))
+        const summary = summarizeOutcomes(graded, done)
+        addToast({ type: summary.ok ? 'success' : 'error', message: summary.message, duration: summary.ok ? 5000 : 9000 })
+      } else {
+        const res = await call(scopeMember)
+        const where = whereLabel ? ` on ${whereLabel}` : ''
+        addToast({
+          type: res.success ? 'success' : 'error',
+          message: res.success ? `${done}${where}` : (res.message || res.output || `${verb} failed`),
+        })
+      }
       refreshReport()
       refreshOrphans()
       refreshDisk()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Prune failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `${verb} failed` })
     } finally {
-      setPruning(false)
+      setBusy(false)
     }
-  }
+  }, [everywhere, vmCount, targets, scopeMember, whereLabel, confirm, addToast, refreshReport, refreshOrphans, refreshDisk])
 
-  const handleImagePrune = async () => {
-    setImagePruning(true)
-    try {
-      const res = await runImagePrune()
-      addToast({
-        type: res.success ? 'success' : 'error',
-        message: res.success ? 'Image prune completed' : (res.output || 'Image prune failed'),
-      })
-      refreshReport()
-      refreshOrphans()
-      refreshDisk()
-    } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Image prune failed' })
-    } finally {
-      setImagePruning(false)
-    }
-  }
-
-  const handleDeepPrune = async () => {
+  const handleSafePrune = () => runAction({ verb: 'Safe prune', done: 'Docker system prune completed', call: runDockerPruneScoped, setBusy: setPruning })
+  const handleImagePrune = () => runAction({ verb: 'Image prune', done: 'Image prune completed', call: runImagePruneScoped, setBusy: setImagePruning })
+  const handleDeepPrune = () => {
     setShowDeepPruneModal(false)
-    setDeepPruning(true)
-    try {
-      const res = await triggerDeepPrune()
-      addToast({
-        type: res.success ? 'success' : 'error',
-        message: res.success ? 'Deep prune completed — all unused resources removed' : (res.output || 'Deep prune failed'),
-      })
-      refreshReport()
-      refreshOrphans()
-      refreshDisk()
-    } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Deep prune failed' })
-    } finally {
-      setDeepPruning(false)
-    }
+    void runAction({ verb: 'Deep prune', done: 'Deep prune completed — all unused resources removed', call: triggerDeepPruneScoped, setBusy: setDeepPruning, confirmed: true, danger: true })
   }
-
-  const handleLogRotate = async () => {
-    setRotating(true)
-    try {
-      const res = await triggerLogRotate()
-      addToast({
-        type: res.success ? 'success' : 'error',
-        message: res.success ? (res.message || 'Logs rotated successfully') : (res.message || 'Log rotation failed'),
-      })
-      refreshReport()
-    } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Log rotation failed' })
-    } finally {
-      setRotating(false)
-    }
-  }
+  const handleLogRotate = () => runAction({ verb: 'Log rotation', done: 'Logs rotated', call: triggerLogRotateScoped, setBusy: setRotating })
 
   // ---- Refresh all ----
   const handleRefreshAll = () => {
@@ -263,7 +294,10 @@ export default function Maintenance() {
 
   // ---- Disk bar sizing ----
   const stackSizes = disk?.stack_sizes ?? []
-  const maxStackMb = stackSizes.reduce((max, s) => Math.max(max, parseSizeToMb(s.size)), 0) || 1
+  const maxStackBytes = stackSizes.reduce((max, s) => Math.max(max, parseSizeBytes(s.size) ?? 0), 0) || 1
+
+  // ---- Who answered (Everywhere) ----
+  const reportAnswered = reportData ? answered(reportData.members) : null
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
@@ -306,6 +340,13 @@ export default function Maintenance() {
               Containers that Traefik starts on demand (Sablier) are stopped on purpose: they, their images, volumes and networks are left alone.
             </p>
 
+            {hasFleet && (
+              <p className="text-[11px] text-amber-200/90 mb-4 flex items-center gap-1.5">
+                <Boxes size={12} className="shrink-0" />
+                {everywhere ? `Runs on the hub and on ${vmCount} VM${vmCount === 1 ? '' : 's'}, each cleaning its own Docker.` : `Runs on ${whereLabel} only.`}
+              </p>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowDeepPruneModal(false)}
@@ -318,7 +359,7 @@ export default function Maintenance() {
                 className="h-10 inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium text-white bg-rose-500 border border-rose-400/40 hover:bg-rose-400 transition-all press whitespace-nowrap"
               >
                 <Trash2 size={14} />
-                Delete everything
+                {everywhere ? 'Delete everywhere' : 'Delete everything'}
               </button>
             </div>
           </div>
@@ -327,17 +368,25 @@ export default function Maintenance() {
       )}
 
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <Wrench size={20} className="text-amber-400" />
-            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Maintenance</span></h2>
+            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Maintenance</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
           </div>
+          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={reportLoading && !!reportData} /></div>}
           <p className="mt-0.5 text-sm text-slate-500">
-            Docker system maintenance and cleanup
+            {hasFleet ? (everywhere ? 'Docker cleanup on the hub and every VM: numbers added up, actions run on all of them' : `Docker cleanup on ${whereLabel}`) : 'Docker system maintenance and cleanup'}
           </p>
+          {everywhere && reportAnswered && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              {reportAnswered.ok} of {targets.length} server{targets.length === 1 ? '' : 's'} answered
+              {scopeMembers.some((m) => !m.reachable) && <span> · {scopeMembers.filter((m) => !m.reachable).length} VM{scopeMembers.filter((m) => !m.reachable).length === 1 ? '' : 's'} not answering ({scopeMembers.filter((m) => !m.reachable).map((m) => m.name).join(', ')})</span>}
+              {reportAnswered.failed.length > 0 && <span className="text-amber-300/80"> · no report from {reportAnswered.failed.map((m) => m.name).join(', ')}</span>}
+            </p>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowGuide((v) => !v)}
             className={`
@@ -420,7 +469,7 @@ export default function Maintenance() {
       {/* 1. Actions */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3">Actions</h3>
+        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Actions{hasFleet && <span className="text-[11px] font-normal text-slate-500">{everywhere ? `on the hub and ${vmCount} VM${vmCount === 1 ? '' : 's'}` : `on ${whereLabel}`}</span>}</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Safe Prune */}
           <button
@@ -495,7 +544,7 @@ export default function Maintenance() {
       {/* 2. System Report */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3">System Report</h3>
+        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">System Report{everywhere && <span className="text-[11px] font-normal text-slate-500">added up across {targets.length} server{targets.length === 1 ? '' : 's'}</span>}</h3>
 
         {reportLoading && !report ? (
           <LoadingState compact label="Loading…" />
@@ -638,8 +687,8 @@ export default function Maintenance() {
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {orphanContainers.map((c) => (
-                        <tr key={c.name} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs">{c.name}</td>
+                        <tr key={rowKey(c.member, c.name)} className="hover:bg-white/[0.03] transition-colors duration-150">
+                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{c.name}{everywhere && <VmCapsule member={c.member} name={c.member_name} vmid={c.vmid} size="xs" onClick={() => setScope(c.member ?? 'hub')} />}</span></td>
                           <td className="px-4 py-2 font-mono text-slate-400 text-xs">{c.image}</td>
                           <td className="px-4 py-2">
                             <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-400">
@@ -672,8 +721,8 @@ export default function Maintenance() {
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {danglingImages.map((img) => (
-                        <tr key={img.id} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs">{img.id.slice(0, 12)}</td>
+                        <tr key={rowKey(img.member, img.id)} className="hover:bg-white/[0.03] transition-colors duration-150">
+                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{img.id.slice(0, 12)}{everywhere && <VmCapsule member={img.member} name={img.member_name} vmid={img.vmid} size="xs" onClick={() => setScope(img.member ?? 'hub')} />}</span></td>
                           <td className="px-4 py-2 font-mono text-amber-400 text-xs">{img.size}</td>
                           <td className="px-4 py-2 text-slate-400 text-xs">{img.created}</td>
                         </tr>
@@ -701,8 +750,8 @@ export default function Maintenance() {
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {danglingVolumes.map((vol) => (
-                        <tr key={vol.name} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs">{vol.name}</td>
+                        <tr key={rowKey(vol.member, vol.name)} className="hover:bg-white/[0.03] transition-colors duration-150">
+                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{vol.name}{everywhere && <VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" onClick={() => setScope(vol.member ?? 'hub')} />}</span></td>
                           <td className="px-4 py-2">
                             <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
                               {vol.driver}
@@ -721,8 +770,8 @@ export default function Maintenance() {
               <div className="flex items-center justify-center py-6">
                 <div className="text-center">
                   <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-300">No orphaned resources detected</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Your Docker environment is tidy</p>
+                  <p className="text-sm text-slate-300">No orphaned resources detected{whereLabel ? ` ${everywhere ? 'anywhere' : `on ${whereLabel}`}` : ''}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{everywhere ? 'Every server that answered is tidy' : 'Your Docker environment is tidy'}</p>
                 </div>
               </div>
             )}
@@ -734,7 +783,7 @@ export default function Maintenance() {
       {/* 4. Disk Analysis */}
       {/* ================================================================== */}
       <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3">Disk Analysis</h3>
+        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Disk Analysis{everywhere && <span className="text-[11px] font-normal text-slate-500">every server&apos;s stacks; Docker&apos;s table added up per type</span>}</h3>
 
         {diskLoading && !disk ? (
           <LoadingState compact label="Loading…" />
@@ -753,11 +802,11 @@ export default function Maintenance() {
                 <p className="text-xs font-medium text-slate-400 mb-3">Per-Stack App-Data</p>
                 <div className="space-y-2">
                   {stackSizes.map((entry) => {
-                    const pct = Math.max((parseSizeToMb(entry.size) / maxStackMb) * 100, 2)
+                    const pct = Math.max(((parseSizeBytes(entry.size) ?? 0) / maxStackBytes) * 100, 2)
                     return (
-                      <div key={entry.name}>
+                      <div key={rowKey(entry.member, entry.name)}>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-slate-300 font-mono truncate mr-3">{entry.name}</span>
+                          <span className="text-xs text-slate-300 font-mono truncate mr-3 inline-flex items-center gap-2 min-w-0"><span className="truncate">{entry.name}</span>{everywhere && <VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} />}</span>
                           <span className="text-xs text-slate-400 font-mono shrink-0">{entry.size}</span>
                         </div>
                         <div className="h-2 rounded-full bg-slate-800 overflow-hidden">

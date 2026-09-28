@@ -5,7 +5,17 @@ import { AppSettings, PageId, ADMIN_ONLY_PAGES } from '../../shared/types'
 import { useAuthStore } from './authStore'
 import { getDefaultServerUrl } from '../lib/env'
 
-export const DEFAULT_SETTINGS: AppSettings = {
+/** the theme choice, persisted with the other settings */
+export interface ThemeSettings {
+  /** this person's theme: a built-in or server theme name; '' = follow the server's active theme */
+  themeName: string
+  /** cache of GET /themes → active, so the server's theme applies before the first fetch answers */
+  serverThemeActive: string
+}
+
+export type PersistedSettings = AppSettings & ThemeSettings
+
+export const DEFAULT_SETTINGS: PersistedSettings = {
   serverUrl: getDefaultServerUrl(),
   pollingInterval: 10000,
   containerPollingInterval: 5000,
@@ -32,15 +42,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultPage: 'dashboard',
   use24hClock: true,
   reduceMotion: false,
+  themeName: '',
+  serverThemeActive: '',
 }
 
-interface SettingsState extends AppSettings {
+interface SettingsState extends PersistedSettings {
   currentPage: PageId
   navigationPayload: Record<string, unknown> | null
   setCurrentPage: (page: PageId, payload?: Record<string, unknown>) => void
   consumeNavigationPayload: () => Record<string, unknown> | null
   toggleSidebar: () => void
-  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
+  updateSetting: <K extends keyof PersistedSettings>(key: K, value: PersistedSettings[K]) => void
   loadSettings: () => Promise<void>
 }
 
@@ -61,10 +73,10 @@ async function persistSetting(key: string, value: unknown): Promise<void> {
 }
 
 /** Load all settings from electron-store IPC or localStorage fallback. */
-async function loadPersistedSettings(): Promise<Partial<AppSettings>> {
+async function loadPersistedSettings(): Promise<Partial<PersistedSettings>> {
   if (window.electronAPI) {
     const stored = await window.electronAPI.getSettings()
-    return stored as Partial<AppSettings>
+    return stored as Partial<PersistedSettings>
   }
   try {
     const raw = localStorage.getItem('app-settings')

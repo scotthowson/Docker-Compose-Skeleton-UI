@@ -4,8 +4,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { fetchContainerFiles, fetchContainerFileContent } from '../../api/endpoints'
+import { fetchContainerFilesOn, fetchContainerFileContentOn } from '../../api/fleetScoped'
 import type { ContainerFileEntry } from '../../../shared/types'
+import type { RowMember } from '../../../shared/fleetScoped'
 import {
   Folder,
   File,
@@ -27,6 +28,8 @@ import {
 
 interface Props {
   containerName: string
+  /** The server the container runs on: a fleet member id rides the hub's proxy; null or undefined = this server */
+  member?: RowMember
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +179,13 @@ function SkeletonRows({ count = 8 }: { count?: number }) {
 
 interface FileViewerProps {
   containerName: string
+  member?: RowMember
   filePath: string
   fileName: string
   onClose: () => void
 }
 
-function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerProps) {
+function FileViewer({ containerName, member = null, filePath, fileName, onClose }: FileViewerProps) {
   const [content, setContent] = useState<string | null>(null)
   const [fileSize, setFileSize] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -197,7 +201,7 @@ function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerPr
     setError(null)
     setContent(null)
 
-    fetchContainerFileContent(containerName, filePath)
+    fetchContainerFileContentOn(containerName, filePath, member)
       .then((res) => {
         if (!cancelled) {
           setContent(res.content)
@@ -383,7 +387,7 @@ function FileViewer({ containerName, filePath, fileName, onClose }: FileViewerPr
 // ContainerFileBrowser Component
 // ---------------------------------------------------------------------------
 
-const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
+const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null }) => {
   const [currentPath, setCurrentPath] = useState('/')
   const [entries, setEntries] = useState<ContainerFileEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -409,7 +413,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetchContainerFiles(containerName, path)
+        const res = await fetchContainerFilesOn(containerName, path, member)
         setEntries(res.entries)
         setCurrentPath(res.path || path)
       } catch (err) {
@@ -426,7 +430,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
         setLoading(false)
       }
     },
-    [containerName],
+    [containerName, member],
   )
 
   // Initial load
@@ -701,6 +705,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName }) => {
       {viewingFile && (
         <FileViewer
           containerName={containerName}
+          member={member}
           filePath={viewingFile.path}
           fileName={viewingFile.name}
           onClose={() => setViewingFile(null)}

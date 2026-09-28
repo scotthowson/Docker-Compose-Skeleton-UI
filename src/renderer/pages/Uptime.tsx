@@ -18,9 +18,13 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchContainers, fetchHealthReport, fetchEvents } from '../api/endpoints'
+import { useFleetScope } from '../hooks/useFleetScope'
+import { fetchContainersScoped, scopeContainerRows, fetchHealthScoped, fetchEventsScoped, rowKey } from '../api/fleetScoped'
 import { useConnectionStore } from '../stores/connectionStore'
-import type { ContainerInfo, HealthReport, EventEntry } from '../../shared/types'
+import type { ContainerInfo, HealthReport, EventEntry, EventsResponse, FleetHealthMember } from '../../shared/types'
+import type { FleetContainerListResponse, ScopeMemberTag } from '../../shared/fleetScoped'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
 import { LoadingState, EmptyState } from '../components/common/PageState'
@@ -341,35 +345,63 @@ export default function Uptime() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const isConnected = connectionStatus === 'connected'
 
-  // Fetch data via polling
+  // a hub: everywhere (the hub and every VM), the hub alone, or one VM — the choice every fleet-aware page shares
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const vmTag = useMemo<ScopeMemberTag | null>(
+    () => (scopeMember ? { id: scopeMember, name: memberName, vmid: scopeMembers.find((m) => m.id === scopeMember)?.vmid ?? null } : null),
+    [scopeMember, memberName, scopeMembers],
+  )
+
+  // Fetch data via polling. Everywhere: a hub's own container list already
+  // carries every VM's rows, and the health report and the events are asked
+  // for the whole fleet in one answer (the hub asks every VM in parallel and
+  // says which did not answer); a VM is asked through the hub's proxy. Each
+  // answer is tagged with the scope it was asked for, so a switch never shows
+  // the old rows under the new label.
+  const fetchScopedContainers = useCallback(async () => ({ scope, res: await fetchContainersScoped(scope) }), [scope])
+  const fetchScopedHealth = useCallback(async () => ({ scope, res: await fetchHealthScoped(scope) }), [scope])
+  const fetchScopedEvents = useCallback(async () => ({ scope, res: await fetchEventsScoped(scope) }), [scope])
+  const fleetWide = scope === 'all'
+
   const {
-    data: containerData,
+    data: containerTagged,
     loading: containersLoading,
     error: containersError,
     refresh: refreshContainers,
-  } = usePolling(() => fetchContainers(), 10000, { enabled: isConnected })
+  } = usePolling<{ scope: string; res: FleetContainerListResponse }>(fetchScopedContainers, fleetWide ? 15000 : 10000, { enabled: isConnected })
 
   const {
-    data: healthData,
+    data: healthTagged,
     loading: healthLoading,
     refresh: refreshHealth,
-  } = usePolling(() => fetchHealthReport(), 10000, { enabled: isConnected })
+  } = usePolling<{ scope: string; res: HealthReport }>(fetchScopedHealth, fleetWide ? 15000 : 10000, { enabled: isConnected })
 
   const {
-    data: eventsData,
+    data: eventsTagged,
     loading: eventsLoading,
     refresh: refreshEvents,
-  } = usePolling(() => fetchEvents(), 15000, { enabled: isConnected })
+  } = usePolling<{ scope: string; res: EventsResponse }>(fetchScopedEvents, fleetWide ? 20000 : 15000, { enabled: isConnected })
 
-  const loading = containersLoading || healthLoading || eventsLoading
-  const containers: ContainerInfo[] = containerData?.containers ?? []
+  const containerData = containerTagged && containerTagged.scope === scope ? containerTagged.res : null
+  const healthData = healthTagged && healthTagged.scope === scope ? healthTagged.res : null
+  const eventsData = eventsTagged && eventsTagged.scope === scope ? eventsTagged.res : null
+
+  const loading = containersLoading || healthLoading || eventsLoading || !containerData
+  const containers: ContainerInfo[] = useMemo(
+    () => scopeContainerRows(scope, containerData?.containers ?? [], vmTag),
+    [scope, containerData, vmTag],
+  )
   const events: EventEntry[] = eventsData?.events ?? []
+  // Everywhere: how each DCS answered (a VM that did not answer is shown as such)
+  const fleetMembers: FleetHealthMember[] | undefined = fleetWide ? healthData?.members : undefined
 
   const refresh = useCallback(() => {
     refreshContainers()
     refreshHealth()
     refreshEvents()
   }, [refreshContainers, refreshHealth, refreshEvents])
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refresh() } }, [scope, refresh])
 
   // Listen for global refresh
   useEffect(() => {
@@ -377,6 +409,12 @@ export default function Uptime() {
     window.addEventListener('app-refresh', handler)
     return () => window.removeEventListener('app-refresh', handler)
   }, [refresh])
+
+  // An event belongs to the server it is tagged with (the fleet view); a VM's own list carries no tag
+  const eventsFor = useCallback((c: ContainerInfo): EventEntry[] => {
+    const owner = c.member ?? null
+    return events.filter((e) => e.name === c.name && (e.member ?? scopeMember ?? null) === owner)
+  }, [events, scopeMember])
 
   // ---------------------------------------------------------------------------
   // Computed stats
@@ -386,25 +424,27 @@ export default function Uptime() {
     const total = containers.length
     const running = containers.filter((c) => c.state === 'running').length
     const overallAvailability = total > 0 ? Math.round((running / total) * 10000) / 100 : 0
-    const healthyCount = healthData?.summary?.healthy ?? containers.filter(
+    const healthyInRows = containers.filter(
       (c) => c.state === 'running' && (c.health === 'healthy' || c.health === '' || c.health === 'none'),
     ).length
+    // the report's own count covers exactly this scope for the fleet and for a VM; a hub's plain report is read from the rows
+    const healthyCount = scope === 'hub' ? healthyInRows : (healthData?.summary?.healthy ?? healthyInRows)
     const avgUptimeSec = total > 0
       ? containers.reduce((sum, c) => sum + c.uptime_seconds, 0) / total
       : 0
     const totalRestarts = containers.reduce((sum, c) => sum + c.restart_count, 0)
 
     return { total, running, overallAvailability, healthyCount, avgUptimeSec, totalRestarts }
-  }, [containers, healthData])
+  }, [containers, healthData, scope])
 
-  // Build segments map
+  // Build segments map (rows keyed by server and name: two servers may each run a container of the same name)
   const segmentsMap = useMemo(() => {
     const map = new Map<string, Segment[]>()
     for (const c of containers) {
-      map.set(c.name, buildSegments(c, events))
+      map.set(rowKey(c), buildSegments(c, eventsFor(c)))
     }
     return map
-  }, [containers, events])
+  }, [containers, eventsFor])
 
   // Sort containers: running first, then by name
   const sortedContainers = useMemo(() => {
@@ -427,12 +467,10 @@ export default function Uptime() {
 
   // Get last event for a container
   const getLastEvent = useCallback(
-    (name: string): EventEntry | undefined => {
-      return events
-        .filter((e) => e.name === name)
-        .sort((a, b) => b.timestamp - a.timestamp)[0]
+    (c: ContainerInfo): EventEntry | undefined => {
+      return eventsFor(c).sort((a, b) => b.timestamp - a.timestamp)[0]
     },
-    [events],
+    [eventsFor],
   )
 
   // ---------------------------------------------------------------------------
@@ -444,18 +482,23 @@ export default function Uptime() {
       <DisconnectedBanner />
       <OnDemandMissingBanner />
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Uptime Monitor</span></h2>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Uptime Monitor</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
             </span>
           </div>
           <p className="mt-0.5 text-sm text-slate-500">
-            Container availability and uptime tracking across all stacks
+            {fleetWide && hasFleet
+              ? `Availability of every container on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}`
+              : scopeMember
+                ? `Availability of the containers inside the VM ${memberName}`
+                : 'Container availability and uptime tracking across all stacks'}
           </p>
+          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} busy={containersLoading && !!containerData} /></div>}
         </div>
         <button
           onClick={refresh}
@@ -473,10 +516,29 @@ export default function Uptime() {
         </button>
       </div>
 
+      {/* Everywhere: how each DCS answered */}
+      {fleetMembers && fleetMembers.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-wrap">
+          {fleetMembers.map((mb) => (
+            <button
+              key={mb.id ?? 'hub'}
+              type="button"
+              onClick={() => { if (mb.reachable) setScope(mb.id ?? 'hub') }}
+              title={mb.reachable ? `Only ${mb.id ? `the VM ${mb.name}` : 'the hub'}` : mb.error || 'not answering'}
+              className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border text-[11px] transition-colors shrink-0 whitespace-nowrap ${!mb.reachable ? 'border-white/[0.06] text-slate-500 cursor-default' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${!mb.reachable ? 'bg-slate-600' : mb.id ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+              <span className="font-medium">{mb.id ? `VM${mb.vmid ? ` #${mb.vmid}` : ''} · ${mb.name}` : 'Hub'}</span>
+              <span className="text-slate-500">{mb.reachable ? `${mb.summary?.total ?? 0} monitored` : 'not answering'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Error state */}
       {containersError && (
         <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/20 rounded-xl p-4">
-          <p className="text-sm text-rose-400">Failed to fetch data: {containersError.message}</p>
+          <p className="text-sm text-rose-400">Failed to fetch {scopeMember ? `the containers of the VM ${memberName}` : 'data'}: {containersError.message}</p>
         </div>
       )}
 
@@ -549,18 +611,18 @@ export default function Uptime() {
 
         {/* No containers */}
         {!loading && containers.length === 0 && (
-          <EmptyState compact icon={<Server size={22} />} title="No containers found" hint="Uptime is tracked for every container Docker reports on this host." />
+          <EmptyState compact icon={<Server size={22} />} title="No containers found" hint={scopeMember ? `Nothing runs inside the VM ${memberName} yet.` : 'Uptime is tracked for every container Docker reports on this host.'} />
         )}
 
         {/* Container rows */}
         <div className="divide-y divide-white/[0.03]">
           {sortedContainers.map((container, idx) => {
-            const segments = segmentsMap.get(container.name) ?? []
+            const segments = segmentsMap.get(rowKey(container)) ?? []
             const availability = calculateAvailability(container)
 
             return (
               <div
-                key={container.name}
+                key={rowKey(container)}
                 className={`grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up${container.state === 'running' && (container.health === 'healthy' || container.health === '' || container.health === 'none') ? ' glow-emerald' : ''}`}
                 style={{
                   animationDelay: `${Math.min(idx * 30, 600)}ms`,
@@ -569,10 +631,11 @@ export default function Uptime() {
               >
                 {/* Left: name + image + status */}
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <p className="font-mono text-sm text-slate-200 truncate">
                       {container.name}
                     </p>
+                    {fleetWide && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" onClick={() => setScope(container.member ?? 'hub')} />}
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[10px] text-slate-500 font-mono truncate min-w-0" title={container.image}>
@@ -625,11 +688,11 @@ export default function Uptime() {
 
           <div className="divide-y divide-white/[0.03]">
             {incidents.map((container, idx) => {
-              const lastEvent = getLastEvent(container.name)
+              const lastEvent = getLastEvent(container)
 
               return (
                 <div
-                  key={container.name}
+                  key={rowKey(container)}
                   className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up"
                   style={{
                     animationDelay: `${idx * 60}ms`,
@@ -656,7 +719,7 @@ export default function Uptime() {
                   {/* Container info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-mono text-sm text-slate-200 truncate min-w-0">{container.name}</p>
+                      <p className="font-mono text-sm text-slate-200 truncate min-w-0 flex items-center gap-2"><span className="truncate">{container.name}</span>{fleetWide && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}</p>
                       <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-500">

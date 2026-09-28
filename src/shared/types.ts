@@ -3109,6 +3109,9 @@ export interface DockerEngineInfo {
   source: string
   /** the newest version the package source offers ('' when unknown) */
   candidate: string
+  /** the package source has not been asked yet (it is being asked in the background) */
+  checking?: boolean
+  candidate_checked_at?: number
   package_manager: string
   upgradable: boolean
   /** this API may update it unattended (root or passwordless sudo) */

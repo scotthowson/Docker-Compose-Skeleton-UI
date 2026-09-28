@@ -1,22 +1,31 @@
 // =============================================================================
 // Backup — Backup and restore management page with status, trigger, and archive
+// On a hub: Everywhere lists every server's archives, a stack is backed up where
+// it lives (the hub or its VM), a restore acts on the server that keeps the file.
 // =============================================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { fetchStacks } from '../api/endpoints'
 import {
-  fetchBackups,
-  fetchBackupStatus,
-  fetchBackupConfig,
-  triggerBackup,
-  restoreBackup,
-  cancelBackup,
-  fetchStacks,
-} from '../api/endpoints'
+  fetchBackupsScoped,
+  fetchBackupStatusScoped,
+  fetchBackupConfigScoped,
+  triggerBackupScoped,
+  restoreBackupScoped,
+  cancelBackupScoped,
+  fleetTargets,
+  fanOut,
+  summarizeOutcomes,
+} from '../api/fleetScopedOps'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import {
   Archive,
   Play,
@@ -34,13 +43,15 @@ import {
   ChevronRight,
   Layers,
   XCircle,
+  Boxes,
+  Info,
 } from 'lucide-react'
 import type {
   BackupStatusResponse,
-  BackupEntry,
   BackupConfigResponse,
-  BackupListResponse,
+  BackupTriggerResponse,
 } from '../../shared/types'
+import type { FleetBackupEntry, FleetBackupListResponse, BackupStackChoice, MemberOutcome } from '../../shared/fleetScopedOps'
 import { LoadingState } from '../components/common/PageState'
 import RecoveryBundleCard from '../components/backup/RecoveryBundleCard'
 
@@ -70,6 +81,18 @@ function formatDateString(dateStr: string): string {
     minute: '2-digit',
   })
 }
+
+/** a row key: the archive on its DCS (the hub's rows have no member) */
+const backupKey = (b: { member?: string | null; filename: string }) => `${b.member ?? ''}|${b.filename}`
+
+/** the drop-down value of a stack: where it lives, then its name */
+const stackKey = (member: string | null, name: string) => `${member ?? ''}|${name}`
+const parseStackKey = (key: string): { member: string | null; name: string } => {
+  const i = key.indexOf('|')
+  return { member: i > 0 ? key.slice(0, i) : null, name: key.slice(i + 1) }
+}
+
+const vmLabel = (name: string, vmid: number | null | undefined) => `VM${vmid ? ` #${vmid}` : ''} · ${name}`
 
 // ---------------------------------------------------------------------------
 // Component
@@ -121,6 +144,29 @@ configuration. Useful for quick saves before
 making changes to a specific stack.`,
   },
   {
+    title: 'Backups in a Proxmox fleet',
+    icon: Boxes,
+    content: `On a hub every VM runs its own DCS, and a
+backup runs where the stack lives:
+
+• The stack drop-down lists the hub's stacks
+  first, then each VM's ("VM #103 · media")
+• "Backup Stack" for a VM stack runs on that
+  VM and the status card follows it
+• Everywhere lists every server's archives;
+  Hub or a VM chip shows one server's
+• "Back up everything" starts a full backup
+  on the hub and on every VM at once
+• A restore always acts on the server that
+  keeps the archive
+• Each VM has its own BACKUP_DEST_DIR and
+  retention: pick the VM chip to see them
+
+The hub cannot carry an archive to your
+browser: a VM's file stays on that VM's disk
+(copy it over ssh from its BACKUP_DEST_DIR).`,
+  },
+  {
     title: 'Restoring from Backup',
     icon: RotateCcw,
     content: `To restore from a backup archive:
@@ -142,17 +188,23 @@ an older one, so you can roll back if needed.`,
 export default function Backup() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
+  const confirm = useConfirm()
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
 
   // ---- State ----
   const [triggerLoading, setTriggerLoading] = useState(false)
   const [selectedStack, setSelectedStack] = useState<string>('')
-  const [stackNames, setStackNames] = useState<string[]>([])
-  const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null)
+  const [stackChoices, setStackChoices] = useState<BackupStackChoice[]>([])
+  const [restoreTarget, setRestoreTarget] = useState<FleetBackupEntry | null>(null)
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [restoreLoading, setRestoreLoading] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
+  // Everywhere: the server whose progress the status card follows (the last one a backup was started on)
+  const [watchMember, setWatchMember] = useState<string | null>(null)
+  // the last "back up everything": what every server answered
+  const [fleetRun, setFleetRun] = useState<MemberOutcome<BackupTriggerResponse>[] | null>(null)
 
   // Close topmost modal on Escape
   useEffect(() => {
@@ -168,54 +220,104 @@ export default function Backup() {
     return () => document.removeEventListener('keydown', handler)
   }, [restoreTarget, restoreLoading])
 
+  // ---- Which server the status and the config cards talk about ----
+  const watchStillThere = watchMember === null || scopeMembers.some((m) => m.id === watchMember)
+  const statusMember: string | null = scope === 'all' ? (watchStillThere ? watchMember : null) : scopeMember
+  const statusName = statusMember ? (scopeMembers.find((m) => m.id === statusMember)?.name ?? statusMember) : ''
+  const statusVmid = statusMember ? (scopeMembers.find((m) => m.id === statusMember)?.vmid ?? null) : null
+  // the config panel shows one server's settings: on Everywhere the hub's, with a note
+  const configMember: string | null = scope === 'all' ? null : scopeMember
+
   // ---- Polling ----
+  const fetchScopedStatus = useCallback(() => fetchBackupStatusScoped(statusMember), [statusMember])
   const {
     data: statusData,
     loading: statusLoading,
     refresh: refreshStatus,
-  } = usePolling<BackupStatusResponse>(fetchBackupStatus, 5000, {
+  } = usePolling<BackupStatusResponse>(fetchScopedStatus, 5000, {
     enabled: isConnected,
   })
+  const statusRef = useRef(statusMember)
+  useEffect(() => { if (statusRef.current !== statusMember) { statusRef.current = statusMember; refreshStatus() } }, [statusMember, refreshStatus])
 
+  const fetchScopedBackups = useCallback(() => fetchBackupsScoped(scope), [scope])
   const {
     data: backupsData,
     loading: backupsLoading,
     refresh: refreshBackups,
-  } = usePolling<BackupListResponse>(fetchBackups, 15000, {
+  } = usePolling<FleetBackupListResponse>(fetchScopedBackups, 15000, {
     enabled: isConnected,
   })
+  const scopeRef = useRef(scope)
+  useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; refreshBackups(); setSelectedStack('') } }, [scope, refreshBackups])
 
+  const fetchScopedConfig = useCallback(() => fetchBackupConfigScoped(configMember), [configMember])
   const {
     data: configData,
-  } = usePolling<BackupConfigResponse>(fetchBackupConfig, 30000, {
+    refresh: refreshConfig,
+  } = usePolling<BackupConfigResponse>(fetchScopedConfig, 30000, {
     enabled: isConnected,
   })
+  const configRef = useRef(configMember)
+  useEffect(() => { if (configRef.current !== configMember) { configRef.current = configMember; refreshConfig() } }, [configMember, refreshConfig])
 
-  // ---- Fetch stacks for dropdown ----
+  // ---- The stacks the drop-down offers: the hub's first, then each VM's (a hub's /stacks lists them all) ----
   useEffect(() => {
     if (!isConnected) return
     fetchStacks()
-      .then((res) => setStackNames(res.stacks.map((s) => s.name)))
+      .then((res) => {
+        const hub: BackupStackChoice[] = []
+        const vm: BackupStackChoice[] = []
+        for (const s of res.stacks) {
+          if (s.placement === 'vm' && s.member) {
+            vm.push({ name: s.name, member: s.member, member_name: s.member_name ?? s.member, vmid: s.vmid ?? null, reachable: s.reachable !== false })
+          } else {
+            hub.push({ name: s.name, member: null, member_name: 'Hub', vmid: null, reachable: true })
+          }
+        }
+        vm.sort((a, b) => (a.vmid ?? 0) - (b.vmid ?? 0) || a.member_name.localeCompare(b.member_name) || a.name.localeCompare(b.name))
+        setStackChoices([...hub, ...vm])
+      })
       .catch(() => {})
-  }, [isConnected])
+  }, [isConnected, scope])
+
+  // what the current view can back up: everything, the hub's stacks, or one VM's
+  const visibleStacks = useMemo(
+    () => stackChoices.filter((s) => (scope === 'all' ? true : scope === 'hub' ? s.member === null : s.member === scopeMember)),
+    [stackChoices, scope, scopeMember],
+  )
+  const stackGroups = useMemo(() => {
+    const groups: { key: string; label: string; stacks: BackupStackChoice[] }[] = []
+    for (const s of visibleStacks) {
+      const key = s.member ?? ''
+      let g = groups.find((x) => x.key === key)
+      if (!g) { g = { key, label: s.member ? vmLabel(s.member_name, s.vmid) : 'Hub', stacks: [] }; groups.push(g) }
+      g.stacks.push(s)
+    }
+    return groups
+  }, [visibleStacks])
 
   // ---- Handlers ----
   const handleTriggerBackup = useCallback(
-    async (stack?: string) => {
+    async (member: string | null, stack?: string) => {
       setTriggerLoading(true)
+      const where = member ? ` on ${scopeMembers.find((m) => m.id === member)?.name ?? member}` : hasFleet ? ' on the hub' : ''
       addToast({
         type: 'info',
-        message: stack ? `Starting backup for "${stack}"...` : 'Starting full backup...',
+        message: stack ? `Starting backup for "${stack}"${where}...` : `Starting full backup${where}...`,
         duration: 2500,
       })
       try {
-        const result = await triggerBackup(stack || undefined)
+        const result = await triggerBackupScoped(member, stack || undefined)
         if (result.success) {
           addToast({
             type: 'success',
-            message: result.message || `Backup "${result.filename}" started`,
+            message: result.message || `Backup "${result.filename}" started${where}`,
           })
+          // the status card follows the server the backup runs on
+          if (scope === 'all') setWatchMember(member)
           refreshBackups()
+          refreshStatus()
         } else {
           addToast({
             type: 'error',
@@ -230,13 +332,40 @@ export default function Backup() {
         setTriggerLoading(false)
       }
     },
-    [addToast, refreshBackups],
+    [addToast, refreshBackups, refreshStatus, scope, scopeMembers, hasFleet],
   )
+
+  /** Everywhere: a full backup on the hub and on every VM that answers, at the same time */
+  const handleBackupEverything = useCallback(async () => {
+    const targets = fleetTargets(scopeMembers)
+    const vms = targets.length - 1
+    const ok = await confirm({
+      title: 'Back up everything',
+      message: `Start a full backup on the hub and on ${vms} VM${vms === 1 ? '' : 's'}? Each server writes its own archive to its own BACKUP_DEST_DIR; a VM that is not configured for backups reports that and the others carry on.`,
+      confirmLabel: 'Start everywhere',
+    })
+    if (!ok) return
+    setTriggerLoading(true)
+    setFleetRun(null)
+    try {
+      const outcomes = await fanOut(targets, (m) => triggerBackupScoped(m))
+      // a server that answered but refused (not configured) counts as a failure too
+      const graded = outcomes.map((o) => (o.ok && o.value && o.value.success === false ? { ...o, ok: false, error: o.value.message || 'refused' } : o))
+      setFleetRun(graded)
+      const summary = summarizeOutcomes(graded, 'Backup started')
+      addToast({ type: summary.ok ? 'success' : 'error', message: summary.message, duration: summary.ok ? 5000 : 9000 })
+      setWatchMember(null)
+      refreshBackups()
+      refreshStatus()
+    } finally {
+      setTriggerLoading(false)
+    }
+  }, [scopeMembers, confirm, addToast, refreshBackups, refreshStatus])
 
   const handleCancelBackup = useCallback(async () => {
     setCancelling(true)
     try {
-      const result = await cancelBackup()
+      const result = await cancelBackupScoped(statusMember)
       addToast({ type: result.success ? 'info' : 'error', message: result.message })
       refreshStatus()
     } catch (err) {
@@ -244,10 +373,12 @@ export default function Backup() {
     } finally {
       setCancelling(false)
     }
-  }, [addToast, refreshStatus])
+  }, [addToast, refreshStatus, statusMember])
 
   const handleRestore = useCallback(async () => {
     if (!restoreTarget) return
+    // the archive's own server: a fleet row says so, a single server's list is the scope's
+    const member = restoreTarget.member !== undefined ? restoreTarget.member : scopeMember
     setRestoreLoading(true)
     addToast({
       type: 'info',
@@ -255,7 +386,7 @@ export default function Backup() {
       duration: 3000,
     })
     try {
-      const result = await restoreBackup(restoreTarget.filename)
+      const result = await restoreBackupScoped(member, restoreTarget.filename)
       if (result.success) {
         addToast({
           type: 'success',
@@ -277,11 +408,18 @@ export default function Backup() {
       setRestoreConfirmText('')
       refreshBackups()
     }
-  }, [restoreTarget, addToast, refreshBackups])
+  }, [restoreTarget, addToast, refreshBackups, scopeMember])
 
-  const backups: BackupEntry[] = backupsData?.backups ?? []
+  const backups: FleetBackupEntry[] = backupsData?.backups ?? []
+  const fleetMembers = backupsData?.members ?? []
+  const silentMembers = fleetMembers.filter((m) => m.id !== null && !m.reachable)
   const status = statusData?.status ?? 'idle'
   const isConfigured = configData?.configured ?? true
+  const busy = status === 'running' || status === 'restoring'
+  const selected = selectedStack ? parseStackKey(selectedStack) : null
+  const selectedChoice = selected ? visibleStacks.find((s) => s.name === selected.name && s.member === selected.member) ?? null : null
+  const configName = configMember ? (scopeMembers.find((m) => m.id === configMember)?.name ?? configMember) : ''
+  const configVmid = configMember ? (scopeMembers.find((m) => m.id === configMember)?.vmid ?? null) : null
 
   // ---- Not connected ----
   if (!isConnected) {
@@ -296,13 +434,16 @@ export default function Backup() {
       <div className="flex flex-col gap-5 animate-fade-in">
         {/* ---- Header ---- */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Backup & Restore</span></h1>
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight"><span className="text-gradient">Backup & Restore</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
+            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={backupsLoading && !!backupsData} /></div>}
             <p className="text-sm text-slate-400 mt-1">
-              Create, manage, and restore server backups
+              {hasFleet
+                ? scope === 'all' ? 'Every server\'s archives; a backup runs where the stack lives' : scopeMember ? `Archives, backups and restores on the VM ${memberName}` : 'The hub\'s own archives, backups and restores'
+                : 'Create, manage, and restore server backups'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowGuide(!showGuide)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15 transition-all duration-200"
@@ -311,7 +452,7 @@ export default function Backup() {
               <span className="hidden sm:inline">Guide</span>
             </button>
             <button
-              onClick={refreshBackups}
+              onClick={() => { refreshBackups(); refreshStatus(); refreshConfig() }}
               disabled={backupsLoading}
               className="
                 flex items-center gap-2 rounded-lg px-3 py-2
@@ -377,9 +518,26 @@ export default function Backup() {
         {/* Backup Status                                                     */}
         {/* ================================================================= */}
         <div className="glass rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center gap-2">
             <Shield size={16} className="text-cyan-400" />
             <h3 className="text-sm font-semibold text-slate-200">Backup Status</h3>
+            {hasFleet && <VmCapsule member={statusMember} name={statusName} vmid={statusVmid} size="xs" />}
+            {hasFleet && scope === 'all' && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 hidden sm:inline">Follow</span>
+                <select
+                  value={statusMember ?? ''}
+                  onChange={(e) => setWatchMember(e.target.value || null)}
+                  className="rounded-lg px-2 py-1 text-[11px] bg-white/5 border border-white/10 text-slate-300 focus:outline-none focus:border-cyan-500/30 appearance-none cursor-pointer"
+                  title="Whose progress the status card shows"
+                >
+                  <option value="" className="bg-slate-900">Hub</option>
+                  {scopeMembers.map((m) => (
+                    <option key={m.id} value={m.id} disabled={!m.reachable} className="bg-slate-900">{vmLabel(m.name, m.vmid)}{m.reachable ? '' : ' (not answering)'}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="p-5">
@@ -400,7 +558,7 @@ export default function Backup() {
                     <div className="mt-2 space-y-1">
                       <p className="text-sm text-slate-300">
                         Last backup:{' '}
-                        <span className="font-mono text-xs text-slate-400">
+                        <span className="font-mono text-xs text-slate-400 break-all">
                           {statusData.last_backup.filename}
                         </span>
                       </p>
@@ -431,7 +589,7 @@ export default function Backup() {
                       </span>
                     </div>
                     {statusData?.filename && (
-                      <p className="mt-1.5 text-sm text-slate-300 font-mono text-xs">
+                      <p className="mt-1.5 text-sm text-slate-300 font-mono text-xs break-all">
                         {statusData.filename}
                       </p>
                     )}
@@ -503,7 +661,7 @@ export default function Backup() {
                       </span>
                     </div>
                     {statusData?.filename && (
-                      <p className="mt-1.5 text-sm text-slate-300 font-mono text-xs">
+                      <p className="mt-1.5 text-sm text-slate-300 font-mono text-xs break-all">
                         {statusData.filename}
                       </p>
                     )}
@@ -530,18 +688,40 @@ export default function Backup() {
                 <span className="text-sm">Loading backup status...</span>
               </div>
             )}
+
+            {/* the last "back up everything": one line per server */}
+            {fleetRun && scope === 'all' && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Back up everything · {fleetRun.filter((o) => o.ok).length} of {fleetRun.length} started</p>
+                  <button onClick={() => setFleetRun(null)} className="text-[10px] text-slate-500 hover:text-slate-300">Dismiss</button>
+                </div>
+                <ul className="flex flex-wrap gap-1.5">
+                  {fleetRun.map((o) => (
+                    <li key={o.id ?? 'hub'} className="flex items-center gap-1.5 text-[11px]" title={o.ok ? o.value?.filename ?? 'started' : o.error ?? 'failed'}>
+                      <VmCapsule member={o.id} name={o.name} vmid={o.vmid} size="xs" onClick={() => setWatchMember(o.id)} />
+                      {o.ok ? <CheckCircle size={11} className="text-emerald-400" /> : <XCircle size={11} className="text-rose-400" />}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 
         {/* ================================================================= */}
+        {/* Recovery bundle: the hub's own (a VM's is on its own dashboard)    */}
+        {/* ================================================================= */}
+        {!scopeMember && <RecoveryBundleCard />}
+
+        {/* ================================================================= */}
         {/* Trigger Backup                                                    */}
         {/* ================================================================= */}
-        <RecoveryBundleCard />
-
         <div className="glass rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center gap-2">
             <Play size={16} className="text-emerald-400" />
             <h3 className="text-sm font-semibold text-slate-200">Trigger Backup</h3>
+            {hasFleet && <VmCapsule member={configMember} name={configName} vmid={configVmid} size="xs" />}
           </div>
 
           <div className="p-5">
@@ -549,9 +729,9 @@ export default function Backup() {
               <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4 mb-5">
                 <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-amber-300">Backup not configured</p>
+                  <p className="text-sm font-medium text-amber-300">Backup not configured{hasFleet ? (configMember ? ` on the VM ${configName}` : ' on the hub') : ''}</p>
                   <p className="text-xs text-amber-400/70 mt-1">
-                    Configure backup settings in your server's <code className="font-mono bg-amber-500/10 px-1.5 py-0.5 rounded">.env</code> file to enable backup functionality.
+                    Set <code className="font-mono bg-amber-500/10 px-1.5 py-0.5 rounded">BACKUP_DEST_DIR</code> in {configMember ? 'that VM\'s' : 'the server\'s'} <code className="font-mono bg-amber-500/10 px-1.5 py-0.5 rounded">.env</code> file (the Environment page) to enable backups there.
                   </p>
                 </div>
               </div>
@@ -559,59 +739,90 @@ export default function Backup() {
 
             {/* Config summary */}
             {configData && isConfigured && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                <div className="glass border border-white/5 rounded-lg p-3">
-                  <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Destination</p>
-                  <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.destination}>
-                    {configData.destination || 'N/A'}
-                  </p>
+              <div className="mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="glass border border-white/5 rounded-lg p-3">
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Destination</p>
+                    <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.destination}>
+                      {configData.destination || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="glass border border-white/5 rounded-lg p-3">
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Source</p>
+                    <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.source}>
+                      {configData.source || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="glass border border-white/5 rounded-lg p-3">
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Retention</p>
+                    <p className="mt-1 text-xs font-mono text-slate-300">
+                      {configData.retention_count} backup{configData.retention_count !== 1 ? 's' : ''}
+                    </p>
+                  </div>
                 </div>
-                <div className="glass border border-white/5 rounded-lg p-3">
-                  <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Source</p>
-                  <p className="mt-1 text-xs font-mono text-slate-300 truncate" title={configData.source}>
-                    {configData.source || 'N/A'}
+                {hasFleet && scope === 'all' && (
+                  <p className="mt-2 text-[11px] text-slate-500 flex items-start gap-1.5">
+                    <Info size={12} className="mt-0.5 shrink-0 text-slate-500" />
+                    <span>These are the hub&apos;s settings. Every VM keeps its own destination and retention: pick a VM chip above to see and use them.</span>
                   </p>
-                </div>
-                <div className="glass border border-white/5 rounded-lg p-3">
-                  <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Retention</p>
-                  <p className="mt-1 text-xs font-mono text-slate-300">
-                    {configData.retention_count} backup{configData.retention_count !== 1 ? 's' : ''}
-                  </p>
-                </div>
+                )}
               </div>
             )}
 
             {/* Action row */}
-            <div className="flex items-center gap-3">
-              {/* Full backup button */}
-              <button
-                onClick={() => handleTriggerBackup()}
-                disabled={triggerLoading || status === 'running' || status === 'restoring' || !isConfigured}
-                className="
-                  flex items-center gap-2.5 rounded-lg px-5 py-2.5
-                  text-sm font-semibold text-white
-                  bg-emerald-600 hover:bg-emerald-500
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-all duration-200
-                  shadow-lg shadow-emerald-500/20 press
-                "
-              >
-                {triggerLoading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Archive size={16} />
-                )}
-                Full Backup
-              </button>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              {/* Full backup: this server, or on Everywhere the hub and every VM */}
+              {scope === 'all' ? (
+                <button
+                  onClick={handleBackupEverything}
+                  disabled={triggerLoading || busy}
+                  title="A full backup on the hub and on every VM that answers, started at the same time"
+                  className="
+                    flex items-center justify-center gap-2.5 rounded-lg px-5 py-2.5
+                    text-sm font-semibold text-white
+                    bg-emerald-600 hover:bg-emerald-500
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    transition-all duration-200
+                    shadow-lg shadow-emerald-500/20 press
+                  "
+                >
+                  {triggerLoading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Boxes size={16} />
+                  )}
+                  Back up everything
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleTriggerBackup(scopeMember)}
+                  disabled={triggerLoading || busy || !isConfigured}
+                  className="
+                    flex items-center justify-center gap-2.5 rounded-lg px-5 py-2.5
+                    text-sm font-semibold text-white
+                    bg-emerald-600 hover:bg-emerald-500
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    transition-all duration-200
+                    shadow-lg shadow-emerald-500/20 press
+                  "
+                >
+                  {triggerLoading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Archive size={16} />
+                  )}
+                  Full Backup{scopeMember ? ` of ${memberName}` : ''}
+                </button>
+              )}
 
-              {/* Stack selector */}
-              <div className="flex items-center gap-2 flex-1">
+              {/* Stack selector: where each stack lives is part of the choice */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
                 <select
                   value={selectedStack}
                   onChange={(e) => setSelectedStack(e.target.value)}
-                  disabled={!isConfigured}
+                  disabled={!isConfigured && scope !== 'all'}
                   className="
-                    flex-1 rounded-lg px-3 py-2.5 text-sm
+                    flex-1 min-w-0 rounded-lg px-3 py-2.5 text-sm
                     bg-white/5 border border-white/10
                     text-slate-200
                     focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30
@@ -621,32 +832,35 @@ export default function Backup() {
                   "
                 >
                   <option value="" className="bg-slate-900 text-slate-400">
-                    Select stack for targeted backup...
+                    {visibleStacks.length === 0 ? 'No stacks here' : 'Select stack for targeted backup...'}
                   </option>
-                  {stackNames.map((name) => (
-                    <option key={name} value={name} className="bg-slate-900 text-slate-200">
-                      {name}
+                  {hasFleet ? stackGroups.map((g) => (
+                    <optgroup key={g.key || 'hub'} label={g.label} className="bg-slate-900 text-slate-400">
+                      {g.stacks.map((s) => (
+                        <option key={stackKey(s.member, s.name)} value={stackKey(s.member, s.name)} disabled={!s.reachable} className="bg-slate-900 text-slate-200">
+                          {s.name}{s.member ? ` — ${vmLabel(s.member_name, s.vmid)}` : scope === 'all' ? ' — Hub' : ''}{s.reachable ? '' : ' (not answering)'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )) : visibleStacks.map((s) => (
+                    <option key={s.name} value={stackKey(null, s.name)} className="bg-slate-900 text-slate-200">
+                      {s.name}
                     </option>
                   ))}
                 </select>
                 <button
                   onClick={() => {
-                    if (selectedStack) handleTriggerBackup(selectedStack)
+                    if (selectedChoice) handleTriggerBackup(selectedChoice.member, selectedChoice.name)
                   }}
-                  disabled={
-                    !selectedStack ||
-                    triggerLoading ||
-                    status === 'running' ||
-                    status === 'restoring' ||
-                    !isConfigured
-                  }
+                  disabled={!selectedChoice || !selectedChoice.reachable || triggerLoading || busy}
+                  title={selectedChoice?.member ? `Runs on ${vmLabel(selectedChoice.member_name, selectedChoice.vmid)}` : selectedChoice && hasFleet ? 'Runs on the hub' : undefined}
                   className="
-                    flex items-center gap-2 rounded-lg px-4 py-2.5
+                    flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
                     text-sm font-medium text-slate-300
                     bg-white/5 border border-white/10
                     hover:bg-white/10 hover:border-white/10
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-all duration-200
+                    transition-all duration-200 shrink-0
                   "
                 >
                   <Download size={15} />
@@ -654,6 +868,12 @@ export default function Backup() {
                 </button>
               </div>
             </div>
+            {selectedChoice && hasFleet && (
+              <p className="mt-2 text-[11px] text-slate-500 flex items-center gap-1.5">
+                <span>Runs where the stack lives:</span>
+                <VmCapsule member={selectedChoice.member} name={selectedChoice.member_name} vmid={selectedChoice.vmid} size="xs" />
+              </p>
+            )}
           </div>
         </div>
 
@@ -661,7 +881,7 @@ export default function Backup() {
         {/* Backup Archives                                                   */}
         {/* ================================================================= */}
         <div className="glass border border-white/5 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <HardDrive size={16} className="text-cyan-400" />
               Backup Archives
@@ -669,6 +889,12 @@ export default function Backup() {
                 ({backups.length})
               </span>
             </h3>
+            {backupsData?.fleet && (
+              <p className="text-[11px] text-slate-500">
+                the hub and {Math.max(fleetMembers.length - 1, 0)} VM{fleetMembers.length - 1 === 1 ? '' : 's'}
+                {silentMembers.length > 0 && <span className="text-amber-300/80"> · {silentMembers.length} not answering ({silentMembers.map((m) => m.name).join(', ')})</span>}
+              </p>
+            )}
           </div>
 
           <div className="overflow-x-auto">
@@ -695,7 +921,7 @@ export default function Backup() {
                     <td colSpan={4} className="px-5 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <Archive size={32} className="text-slate-500" />
-                        <p className="text-sm text-slate-500">No backup archives found</p>
+                        <p className="text-sm text-slate-500">No backup archives found{scopeMember ? ` on the VM ${memberName}` : ''}</p>
                         <p className="text-xs text-slate-500">
                           Trigger a backup above to create your first archive
                         </p>
@@ -711,50 +937,63 @@ export default function Backup() {
                     </td>
                   </tr>
                 )}
-                {backups.map((backup) => (
-                  <tr
-                    key={backup.filename}
-                    className="hover:bg-white/[0.03] transition-colors duration-150"
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Archive size={14} className="text-slate-500 shrink-0" />
-                        <span className="font-mono text-xs text-slate-200 truncate max-w-[200px] md:max-w-[320px]">
-                          {backup.filename}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs text-slate-400">{backup.size}</span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                        <Clock size={12} className="text-slate-500" />
-                        {formatTimestamp(backup.timestamp)}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => {
-                          setRestoreTarget(backup)
-                          setRestoreConfirmText('')
-                        }}
-                        disabled={status === 'running' || status === 'restoring'}
-                        className="
-                          inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5
-                          text-xs font-medium
-                          text-rose-400 bg-rose-500/10 border border-rose-500/20
-                          hover:bg-rose-500/20 hover:border-rose-500/30
-                          disabled:opacity-50 disabled:cursor-not-allowed
-                          transition-all duration-200
-                        "
-                      >
-                        <RotateCcw size={12} />
-                        Restore
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {backups.map((backup) => {
+                  const onVm = !!(backup.member ?? scopeMember)
+                  return (
+                    <tr
+                      key={backupKey(backup)}
+                      className="hover:bg-white/[0.03] transition-colors duration-150"
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Archive
+                            size={14}
+                            className="text-slate-500 shrink-0"
+                          />
+                          <span className="font-mono text-xs text-slate-200 truncate max-w-[200px] md:max-w-[320px]" title={backup.filename}>
+                            {backup.filename}
+                          </span>
+                          {backup.member !== undefined && <VmCapsule member={backup.member} name={backup.member_name} vmid={backup.vmid} size="xs" onClick={() => setScope(backup.member ?? 'hub')} />}
+                        </div>
+                        {onVm && (
+                          <p className="mt-1 text-[10px] text-slate-500 flex items-center gap-1" title="The hub's proxy carries JSON, not files: copy the archive over ssh from that VM's BACKUP_DEST_DIR">
+                            <Info size={10} /> stays on the VM&apos;s disk
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-xs text-slate-400">{backup.size}</span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 whitespace-nowrap">
+                          <Clock size={12} className="text-slate-500" />
+                          {formatTimestamp(backup.timestamp)}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            setRestoreTarget(backup)
+                            setRestoreConfirmText('')
+                          }}
+                          disabled={busy && (backup.member ?? null) === statusMember}
+                          title={onVm ? `Restores on ${backup.member_name ?? memberName}` : hasFleet ? 'Restores on the hub' : 'Restore'}
+                          className="
+                            inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5
+                            text-xs font-medium
+                            text-rose-400 bg-rose-500/10 border border-rose-500/20
+                            hover:bg-rose-500/20 hover:border-rose-500/30
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            transition-all duration-200
+                          "
+                        >
+                          <RotateCcw size={12} />
+                          Restore
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -806,7 +1045,7 @@ export default function Backup() {
               {/* Warning */}
               <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-4">
                 <p className="text-sm text-rose-300 font-medium">
-                  This will overwrite your current configuration and data files.
+                  This will overwrite the configuration and data files{hasFleet ? (restoreTarget.member ?? scopeMember) ? ` on the VM ${restoreTarget.member_name ?? memberName}` : ' on the hub' : ''}.
                 </p>
                 <p className="text-xs text-rose-400/70 mt-1.5">
                   This action cannot be undone. Make sure you have a current backup before proceeding.
@@ -818,11 +1057,12 @@ export default function Backup() {
                 <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-2">
                   Restoring from
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Archive size={14} className="text-slate-400 shrink-0" />
-                  <span className="font-mono text-xs text-slate-200 truncate">
+                  <span className="font-mono text-xs text-slate-200 break-all">
                     {restoreTarget.filename}
                   </span>
+                  {hasFleet && <VmCapsule member={restoreTarget.member ?? scopeMember} name={restoreTarget.member_name ?? (scopeMember ? memberName : undefined)} vmid={restoreTarget.vmid ?? (scopeMember ? scopeMembers.find((m) => m.id === scopeMember)?.vmid : null)} size="xs" />}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
                   {restoreTarget.size} &middot; {formatTimestamp(restoreTarget.timestamp)}

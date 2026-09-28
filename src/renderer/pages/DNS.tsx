@@ -38,6 +38,11 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import VmCapsule from '../components/fleet/VmCapsule'
+import { apiClient } from '../api/client'
+import { memberPath } from '../api/endpoints'
+// a route the hub's Traefik serves for a VM (from fleet-members.yml): the file lives on that VM
+type FleetRoute = RouteEntry & { member?: string; member_name?: string; vmid?: number | null; fleet?: boolean }
 import { LoadingState, EmptyState, ErrorState } from '../components/common/PageState'
 import {
   fetchRoutes, fetchDnsRecords, fetchDnsStatus, fetchDnsZones, checkSubdomain, updateRoute, deleteRoute, fetchRouteCertificates,
@@ -494,7 +499,9 @@ export default function DNS() {
     if (!newSub || newSub === route.subdomain.split('.')[0]) { setEditingRoute(null); return }
     setSaving(true)
     try {
-      await updateRoute(route.stack, route.service, newSub)
+      const fr = route as FleetRoute
+      if (fr.member) await apiClient.put(memberPath(fr.member, `/routes/${encodeURIComponent(route.stack)}/${encodeURIComponent(route.service)}`), { subdomain: newSub })
+      else await updateRoute(route.stack, route.service, newSub)
       addToast({ type: 'success', message: `Route renamed to ${newSub}.${domain} — the DNS record follows` })
       setEditingRoute(null)
       refreshAll()
@@ -508,7 +515,9 @@ export default function DNS() {
   const handleDeleteRoute = useCallback(async (route: RouteEntry) => {
     setDeleting(true)
     try {
-      await deleteRoute(route.stack, route.service)
+      const fr = route as FleetRoute
+      if (fr.member) await apiClient.delete(memberPath(fr.member, `/routes/${encodeURIComponent(route.stack)}/${encodeURIComponent(route.service)}`))
+      else await deleteRoute(route.stack, route.service)
       addToast({ type: 'success', message: `Route deleted: ${route.subdomain}` })
       setDeletingRoute(null)
       refreshAll()
@@ -885,6 +894,7 @@ function RoutesPanel(props: {
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="text-sm font-mono text-cyan-400 truncate min-w-0" title={route.subdomain}>{sub}</span>
                           <span className="text-[10px] text-slate-600 font-mono shrink-0">.{domain}</span>
+                          {(route as FleetRoute).member && <VmCapsule member={(route as FleetRoute).member} name={(route as FleetRoute).member_name} vmid={(route as FleetRoute).vmid} size="xs" />}
                           {route.conflict && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-rose-500/15 text-rose-400" title="Two routes claim this subdomain"><AlertTriangle size={9} /> conflict</span>}
                           {cfConfigured && rec && (
                             <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold shrink-0 ${rec.proxied ? 'bg-orange-500/10 text-orange-300' : 'bg-white/5 text-slate-400'}`} title={`${rec.type} → ${rec.content}${rec.proxied ? ' (proxied)' : ' (DNS only)'}`}>

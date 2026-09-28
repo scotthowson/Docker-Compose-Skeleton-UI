@@ -27,7 +27,7 @@ import {
   Container, LifeBuoy, BatteryCharging, ArrowUpCircle,
 } from 'lucide-react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
-import { ProxmoxTestPanel, TraefikFeedPanel } from '../components/settings/IntegrationPanels'
+import { ProxmoxTestPanel, TraefikFeedPanel, HomarrPanel } from '../components/settings/IntegrationPanels'
 import { usePolling } from '../hooks/usePolling'
 import { fetchConfig, updateConfig, setSecret } from '../api/endpoints'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -1025,6 +1025,8 @@ export default function Config() {
             <ToggleRow label="TLS on the routes" description="Off only when that Traefik serves plain http" configKey="TRAEFIK_FEED_TLS" value={Boolean(edits.TRAEFIK_FEED_TLS ?? true)} onChange={handleBoolChange} />
             <TextRow label="Certificate resolver" description="Its certResolver name, if it does not have a default" configKey="TRAEFIK_FEED_CERT_RESOLVER" value={String(edits.TRAEFIK_FEED_CERT_RESOLVER ?? '')} onChange={handleStringChange} placeholder="letsencrypt" />
             <TraefikFeedPanel enabled={Boolean(cfg?.traefik_feed_enabled)} />
+            <SectionLabel>Integrations · Homarr dashboard</SectionLabel>
+            <HomarrPanel onOpenSecrets={() => setCurrentPage('secrets')} />
           </GroupCard>
 
           {/* ── Proxmox ── */}
