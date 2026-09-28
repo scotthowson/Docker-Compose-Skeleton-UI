@@ -2798,7 +2798,31 @@ export interface SablierToggleResponse {
   middleware: string
   route_file: string
   traefik_restarted: boolean
+  /** the settings written (3.9.4) */
+  session?: string
+  theme?: string
+  display_name?: string
+  show_details?: boolean
   message?: string
+}
+
+// GET /containers/{name}/sablier (3.9.4) — the current on-demand settings
+export interface SablierSettingsResponse {
+  container: string
+  enabled: boolean
+  middleware: string
+  /** idle time before Sablier stops it, Go duration ("30m") */
+  session: string
+  /** waiting page: ghost, shuffle, hacker-terminal, matrix */
+  theme: string
+  display_name: string
+  show_details: boolean
+  /** a Traefik route points at the container (on-demand needs one) */
+  traefik_routed: boolean
+  sablier_deployed: boolean
+  route_file: string
+  /** a hand-written Sablier block wakes it together with other containers (never changed here) */
+  group?: boolean
 }
 
 // =============================================================================

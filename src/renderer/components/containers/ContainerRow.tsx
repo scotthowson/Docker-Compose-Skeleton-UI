@@ -9,8 +9,7 @@ import { useContainerStore } from '../../stores/containerStore'
 import {
   Box, RefreshCw, CheckSquare, Square,
   Star, Cpu, MemoryStick, Clock, ChevronRight,
-  Play, RotateCw, Square as SquareStop,
-} from 'lucide-react'
+  Play, RotateCw, Square as SquareStop, Moon } from 'lucide-react'
 import { CopyButton } from '../common/CopyButton'
 import VmCapsule from '../fleet/VmCapsule'
 
@@ -106,6 +105,8 @@ interface ContainerRowProps {
   quickActionLoading?: string | null
   /** The Everywhere view of a hub: say where the row lives (the hub, or a VM by number and name) */
   showCapsule?: boolean
+  /** an admin's click on the "on demand" badge: the on-demand settings (idle time, waiting page, off) */
+  onOnDemand?: (container: ContainerInfo) => void
 }
 
 /** A row's own live usage when the list carries it, else what the stats poller stored under its name */
@@ -125,7 +126,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
   batchMode, batchSelected,
   isFavorite, onToggleFavorite,
   onQuickAction, quickActionLoading,
-  showCapsule = false,
+  showCapsule = false, onOnDemand,
 }) => {
   const stats: ContainerStats | undefined = useContainerStore((s) => s.stats[container.name])
 
@@ -187,15 +188,29 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
       {/* State */}
       <td className="px-3 py-3">
         {container.on_demand && stateKey !== 'running' ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-            on demand
-          </span>
+          onOnDemand ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOnDemand(container) }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+              title="Stopped on purpose: Sablier starts it on the first request — click for the idle time, the waiting page, or to serve it normally"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+              on demand
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+              on demand
+            </span>
+          )
         ) : (
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${sv.bg} ${sv.text} ${sv.ring}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
             {container.state}
-            {container.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>}
+            {container.on_demand && (onOnDemand
+              ? <button type="button" onClick={(e) => { e.stopPropagation(); onOnDemand(container) }} className="text-[9px] text-indigo-300/80 hover:text-indigo-200 underline-offset-2 hover:underline" title="Sablier stops it when idle — click for the on-demand settings">· on demand</button>
+              : <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>)}
           </span>
         )}
       </td>
@@ -276,7 +291,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
   container, isSelected, onClick,
   batchMode, batchSelected,
   isFavorite, onToggleFavorite,
-  showCapsule = false,
+  showCapsule = false, onOnDemand,
 }) => {
   const stats: ContainerStats | undefined = useContainerStore((s) => s.stats[container.name])
 
@@ -335,6 +350,11 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
           <span className={`h-1 w-1 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
           {container.state}
         </span>
+        {container.on_demand && (
+          onOnDemand
+            ? <button type="button" onClick={(e) => { e.stopPropagation(); onOnDemand(container) }} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors" title="Sablier starts it on the first request and stops it when idle — tap for the settings"><Moon size={9} /> on demand</button>
+            : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Sablier starts it on the first request and stops it when idle"><Moon size={9} /> on demand</span>
+        )}
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1 ${hv.bg} ${hv.text} ${hv.ring}`}>
           <span className={`h-1 w-1 rounded-full ${hv.dot}`} />
           {container.health || 'none'}

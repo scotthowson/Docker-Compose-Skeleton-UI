@@ -9,7 +9,11 @@ import { usePolling } from './usePolling'
 import { useFleetRole } from './useFleetRole'
 import { useConnectionStore } from '../stores/connectionStore'
 import { fetchFleetMembers } from '../api/endpoints'
+import { sharedFetch } from '../lib/sharedFetch'
 import type { FleetMember } from '../../shared/types'
+
+// the global poller, the page and its cards all ask for the VMs: one request serves them
+const fleetMembersShared = sharedFetch(fetchFleetMembers, 10000)
 
 /** 'all' | 'hub' | a member id */
 export type FleetScope = string
@@ -26,7 +30,9 @@ export function scopeMember(scope: FleetScope): string | null { return scope ===
 export function useFleetScope() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { isHub } = useFleetRole()
-  const list = usePolling(fetchFleetMembers, 30000, { enabled: isConnected && isHub })
+  const list = usePolling(fleetMembersShared, 30000, { enabled: isConnected && isHub })
+  const listRefresh = list.refresh
+  const refreshMembers = useCallback(() => { fleetMembersShared.invalidate(); listRefresh() }, [listRefresh])
   const members: ScopeMember[] = useMemo(
     () => (list.data?.members ?? []).map((m: FleetMember) => ({ id: m.id, name: m.name, vmid: m.vmid, reachable: m.reachable, version: m.version })),
     [list.data],
@@ -43,5 +49,5 @@ export function useFleetScope() {
   }, [choice, list.data, members, setScope])
   const member = scopeMember(scope)
   const memberName = member ? (members.find((m) => m.id === member)?.name ?? member) : ''
-  return { scope, setScope, member, memberName, members, hasFleet, isHub, refresh: list.refresh }
+  return { scope, setScope, member, memberName, members, hasFleet, isHub, refresh: refreshMembers }
 }

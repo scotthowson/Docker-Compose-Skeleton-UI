@@ -289,16 +289,8 @@ function lintCompose(compose: string): LintWarning[] {
 // Traefik route generation helper
 // ---------------------------------------------------------------------------
 
-interface SablierOptions {
-  /** idle time before the container is stopped, Go duration ("30m", "2h") */
-  session: string
-  /** waiting page: ghost, shuffle, hacker-terminal, matrix */
-  theme: string
-  showDetails: boolean
-}
-const SABLIER_DEFAULTS: SablierOptions = { session: '30m', theme: 'ghost', showDetails: true }
-const SABLIER_SESSIONS = ['5m', '15m', '30m', '1h', '2h', '6h', '12h']
-const SABLIER_THEMES = ['ghost', 'shuffle', 'hacker-terminal', 'matrix']
+import { SABLIER_DEFAULTS, SABLIER_SESSIONS, SABLIER_THEMES, SABLIER_THEME_NOTES, describeSession } from '../lib/sablier'
+import type { SablierOptions } from '../lib/sablier'
 
 function generateRouteYaml(
   serviceName: string,
@@ -1698,7 +1690,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                       onChange={(e) => setSablierOpts((o) => ({ ...o, session: e.target.value }))}
                                       className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
                                     >
-                                      {SABLIER_SESSIONS.map((s) => <option key={s} value={s}>{s.replace('m', ' minutes').replace('h', ' hours').replace('1 hours', '1 hour')}</option>)}
+                                      {SABLIER_SESSIONS.map((s) => <option key={s} value={s}>{describeSession(s)}</option>)}
                                     </select>
                                   </label>
                                   <label className="text-[10px] text-slate-400">
@@ -1708,7 +1700,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                       onChange={(e) => setSablierOpts((o) => ({ ...o, theme: e.target.value }))}
                                       className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
                                     >
-                                      {SABLIER_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
+                                      {SABLIER_THEMES.map((t) => <option key={t} value={t}>{t} — {SABLIER_THEME_NOTES[t]}</option>)}
                                     </select>
                                   </label>
                                 </div>

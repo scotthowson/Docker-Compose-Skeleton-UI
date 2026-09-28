@@ -9,6 +9,7 @@ import { ContainerInfo } from '../../../shared/types'
 import { useContainerStore } from '../../stores/containerStore'
 import { containerActionOn, rowKey, type ContainerActionName } from '../../api/fleetScoped'
 import ContainerRow, { ContainerCard } from './ContainerRow'
+import OnDemandDialog from './OnDemandDialog'
 import { useConfirm } from '../common/ConfirmDialog'
 import { useToast } from '../common/Toast'
 import { EmptyState } from '../common/PageState'
@@ -109,6 +110,8 @@ const ContainerList: React.FC<ContainerListProps> = ({
   const { addToast } = useToast()
 
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null)
+  /** the row whose "on demand" badge was clicked: its settings dialog is open */
+  const [onDemandFor, setOnDemandFor] = useState<ContainerInfo | null>(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortConfig>({ key: 'name', direction: 'asc' })
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped' | 'paused'>('all')
@@ -270,6 +273,20 @@ const ContainerList: React.FC<ContainerListProps> = ({
 
   return (
     <div className="flex flex-col gap-4 md:gap-5 animate-fade-in">
+      {onDemandFor && (
+        <OnDemandDialog
+          containerName={onDemandFor.name}
+          member={onDemandFor.member ?? null}
+          onDemand={!!onDemandFor.on_demand}
+          onClose={() => setOnDemandFor(null)}
+          onChanged={(res) => {
+            addToast({ type: 'success', message: res.message || (res.enabled ? 'On-demand start enabled' : 'On-demand start disabled') })
+            if (res.traefik_restarted) addToast({ type: 'info', message: 'Traefik restarted to load the Sablier plugin' })
+            onRefresh?.()
+          }}
+          onError={(message) => addToast({ type: 'error', message })}
+        />
+      )}
       {/* ---- Header ---- */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
@@ -470,6 +487,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     isFavorite={favSet.has(container.name)}
                     onToggleFavorite={toggleFavorite}
                     showCapsule={scope === 'all'}
+                    onOnDemand={isAdmin && !batchMode ? setOnDemandFor : undefined}
                   />
                 ))}
               </React.Fragment>
@@ -567,6 +585,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     onQuickAction={handleQuickAction}
                     quickActionLoading={quickActionLoading}
                     showCapsule={scope === 'all'}
+                    onOnDemand={isAdmin && !batchMode ? setOnDemandFor : undefined}
                   />
                   )),
                 ])

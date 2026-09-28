@@ -12,6 +12,7 @@ export function DisconnectedBanner() {
   // Smooth height transition: render the wrapper always, but collapse when connected
   return (
     <div
+      aria-hidden={!isDisconnected}
       className={`overflow-hidden transition-all duration-300 ease-out ${
         isDisconnected ? 'max-h-16 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'
       }`}

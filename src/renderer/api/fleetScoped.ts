@@ -13,7 +13,7 @@ import type {
   ContainerFileContentResponse, ContainerFilesResponse, ContainerInfo, ContainerLogsResponse,
   ContainerProcessesResponse, ContainerRenameResponse, ContainerResetPreview, ContainerResetResponse,
   ContainerStats, EventsResponse, HealthReport, LiveLogsResponse, LogArchivesResponse, LogsResponse,
-  LogStatsResponse, SablierToggleResponse, TopologyResponse,
+  LogStatsResponse, SablierToggleResponse, SablierSettingsResponse, TopologyResponse,
 } from '../../shared/types'
 import type { FleetContainerListResponse, RowMember, ScopeMemberTag } from '../../shared/fleetScoped'
 
@@ -120,8 +120,13 @@ export function updateContainerEnvOn(name: string, opts: { set?: Record<string, 
 }
 
 /** POST /containers/:name/sablier — start on demand through Traefik, or serve normally again */
-export function setContainerSablierOn(name: string, body: { enabled: boolean; session?: string; display_name?: string; theme?: string }, member: RowMember): Promise<SablierToggleResponse> {
+export function setContainerSablierOn(name: string, body: { enabled: boolean; session?: string; display_name?: string; theme?: string; show_details?: boolean }, member: RowMember): Promise<SablierToggleResponse> {
   return apiClient.post<SablierToggleResponse>(memberPath(member, `/containers/${enc(name)}/sablier`), body)
+}
+
+/** GET /containers/:name/sablier — the container's current on-demand settings (3.9.4) */
+export function fetchContainerSablier(name: string, member: RowMember): Promise<SablierSettingsResponse> {
+  return apiClient.get<SablierSettingsResponse>(memberPath(member, `/containers/${enc(name)}/sablier`))
 }
 
 /** GET /containers/:name/reset — what a nuke & reinstall would remove */
