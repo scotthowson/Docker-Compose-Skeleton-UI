@@ -286,8 +286,8 @@ export default function Login() {
           return true
         }
         // Check if 2FA is required
-        if ((loginRes as Record<string, unknown>).requires_totp && (loginRes as Record<string, unknown>).totp_token) {
-          setTotpToken((loginRes as Record<string, unknown>).totp_token as string)
+        if ((loginRes as unknown as Record<string, unknown>).requires_totp && (loginRes as unknown as Record<string, unknown>).totp_token) {
+          setTotpToken((loginRes as unknown as Record<string, unknown>).totp_token as string)
           setShowTotpInput(true)
           return false // Don't complete login yet — need TOTP code
         }

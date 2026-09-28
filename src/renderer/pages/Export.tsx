@@ -108,7 +108,7 @@ async function fetchStackConfigs(): Promise<unknown> {
     stacks.map(async (s: { name: string; status: string; running_containers: number }) => {
       try {
         const compose = await fetchStackCompose(s.name)
-        return { name: s.name, compose: compose.content ?? compose.compose ?? '', status: s.status, running: s.running_containers }
+        return { name: s.name, compose: compose.content ?? '', status: s.status, running: s.running_containers }
       } catch {
         return { name: s.name, compose: undefined, status: s.status, running: s.running_containers }
       }

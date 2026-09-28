@@ -1353,6 +1353,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     required: false,
                     type: '',
                     isBoolean: v.defaultValue === 'true' || v.defaultValue === 'false',
+                    show_if: undefined,
+                    options: undefined,
                   })),
                 ]
 

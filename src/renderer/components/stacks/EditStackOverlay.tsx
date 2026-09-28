@@ -1129,7 +1129,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
               return (
                 <button
                   key={p.value}
-                  onClick={() => setAnnoPriority(p.value as StackAnnotation['priority'])}
+                  onClick={() => setAnnoPriority((p.value as StackAnnotation['priority']) ?? 'normal')}
                   className={`
                     flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-xs font-medium border transition-all duration-200
                     ${isActive

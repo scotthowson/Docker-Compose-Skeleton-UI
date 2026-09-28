@@ -268,7 +268,7 @@ function isLockedOut(): { locked: boolean; remainingMs: number } {
 const USER_ROLE_KEY_PREFIX = 'user-role-'
 
 /** Persist user role to localStorage (per-user, survives app restarts) */
-function persistUserRole(username: string | null, role: 'admin' | 'user' | null): void {
+function persistUserRole(username: string | null, role: 'admin' | 'user' | 'bot' | null): void {
   if (!username) return
   const key = `${USER_ROLE_KEY_PREFIX}${username}`
   if (role) {
@@ -279,11 +279,11 @@ function persistUserRole(username: string | null, role: 'admin' | 'user' | null)
 }
 
 /** Restore user role from localStorage */
-function getPersistedUserRole(username: string | null): 'admin' | 'user' | null {
+function getPersistedUserRole(username: string | null): 'admin' | 'user' | 'bot' | null {
   if (!username) return null
   try {
     const r = localStorage.getItem(`${USER_ROLE_KEY_PREFIX}${username}`)
-    return r === 'admin' || r === 'user' ? r : null
+    return r === 'admin' || r === 'user' || r === 'bot' ? r : null
   } catch {
     return null
   }
@@ -336,7 +336,7 @@ interface AuthState {
   isAuthenticated: boolean
   currentUser: string | null
   /** User role from server auth: 'admin' or 'user' */
-  userRole: 'admin' | 'user' | null
+  userRole: 'admin' | 'user' | 'bot' | null
   hasAccount: boolean
   loading: boolean
   initialized: boolean
@@ -358,7 +358,7 @@ interface AuthState {
   setApiToken: (token: string | null) => void
   /** Set the user role (from server auth response). Pass username explicitly
    *  when calling before login/register has set currentUser in the store. */
-  setUserRole: (role: 'admin' | 'user' | null, forUsername?: string) => void
+  setUserRole: (role: 'admin' | 'user' | 'bot' | null, forUsername?: string) => void
   /** Change password for the current user */
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
   /** Delete account */
@@ -563,7 +563,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ apiToken: token })
   },
 
-  setUserRole: (role: 'admin' | 'user' | null, forUsername?: string) => {
+  setUserRole: (role: 'admin' | 'user' | 'bot' | null, forUsername?: string) => {
     persistUserRole(forUsername || get().currentUser, role)
     set({ userRole: role })
   },

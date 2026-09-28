@@ -859,8 +859,8 @@ function AppearanceSettings() {
     let cancelled = false
     fetchConfig().then((cfg) => {
       if (cancelled) return
-      const sn = (cfg as Record<string, unknown>).server_name as string | undefined
-      const ss = (cfg as Record<string, unknown>).server_subtitle as string | undefined
+      const sn = (cfg as unknown as Record<string, unknown>).server_name as string | undefined
+      const ss = (cfg as unknown as Record<string, unknown>).server_subtitle as string | undefined
       if (sn && sn !== 'Docker Server' && projectName === 'DCS Manager') {
         updateSetting('projectName', sn)
         setNameInput(sn)

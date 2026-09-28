@@ -100,7 +100,7 @@ function DiskRow({ disk, label, onLabelChange }: {
                 {displayName}
               </span>
               {isNearCapacity && (
-                <ShieldAlert size={12} className="text-rose-400 shrink-0" title="Near capacity" />
+                <span title="Near capacity" className="shrink-0 inline-flex"><ShieldAlert size={12} className="text-rose-400" /></span>
               )}
               <button
                 onClick={() => { setEditValue(label); setEditing(true) }}
@@ -239,7 +239,7 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
                   custom
                 </span>
                 {isNearCapacity && (
-                  <ShieldAlert size={12} className="text-rose-400 shrink-0" title="Near capacity" />
+                  <span title="Near capacity" className="shrink-0 inline-flex"><ShieldAlert size={12} className="text-rose-400" /></span>
                 )}
                 <button
                   onClick={() => { setEditValue(label); setEditing(true) }}

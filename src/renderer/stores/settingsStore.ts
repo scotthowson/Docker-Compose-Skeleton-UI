@@ -86,7 +86,10 @@ async function loadPersistedSettings(): Promise<Partial<PersistedSettings>> {
   }
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+/** pages a refresh never returns to */
+const TRANSIENT_PAGES: ReadonlySet<string> = new Set(['setup', 'login'])
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
   currentPage: 'dashboard',
   navigationPayload: null,
@@ -102,13 +105,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
     set({ currentPage: page, navigationPayload: payload ?? null })
     // Persist last page so F5/refresh restores it (skip transient pages)
-    if (page !== 'setup' && page !== 'login') {
+    if (!TRANSIENT_PAGES.has(page)) {
       persistSetting('lastPage', page)
     }
   },
 
-  consumeNavigationPayload: () => {
-    const { navigationPayload } = useSettingsStore.getState()
+  consumeNavigationPayload: (): Record<string, unknown> | null => {
+    const { navigationPayload } = get()
     if (navigationPayload) set({ navigationPayload: null })
     return navigationPayload
   },
@@ -130,7 +133,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const lastPage = (stored as Record<string, unknown>).lastPage as PageId | undefined
     // Don't restore admin-only pages for non-admin users
     let restoredPage: PageId | undefined
-    if (lastPage && lastPage !== 'setup' && lastPage !== 'login') {
+    if (lastPage && !TRANSIENT_PAGES.has(lastPage)) {
       if (ADMIN_ONLY_PAGES.has(lastPage)) {
         try {
           const role = useAuthStore.getState().userRole

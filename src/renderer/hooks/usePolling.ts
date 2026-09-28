@@ -17,6 +17,8 @@ export interface UsePollingResult<T> {
   error: Error | null
   /** Trigger an immediate refetch outside the regular interval. */
   refresh: () => void
+  /** the same, under the name some cards use */
+  refetch: () => void
 }
 
 export function usePolling<T>(
@@ -133,5 +135,5 @@ export function usePolling<T>(
     }
   }, [enabled, intervalMs, doFetch])
 
-  return { data, loading, error, refresh }
+  return { data, loading, error, refresh, refetch: refresh }
 }

@@ -2182,6 +2182,7 @@ export interface StackRenameResponse {
   success: boolean
   old_name: string
   new_name: string
+  message?: string
 }
 
 // POST /stacks/reorder
@@ -2348,6 +2349,8 @@ export interface Schedule {
   id: string
   name: string
   schedule: string
+  /** the same expression under its older name (the API keeps both) */
+  cron?: string
   action: string
   target: string
   enabled: boolean
@@ -2375,6 +2378,8 @@ export interface ScheduleExecution {
   success: boolean
   duration_ms: number
   output: string
+  /** 'manual' when a person pressed Run now */
+  trigger?: string
 }
 
 export interface HealthScoreResponse {
