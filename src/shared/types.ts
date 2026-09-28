@@ -1563,6 +1563,28 @@ export interface TerminalAuthResponse {
 }
 
 // POST /terminal/auth/verify
+/** GET /fleet/members/{id}/terminal — can the hub open a shell in this VM (3.9.3)? */
+export interface MemberTerminalStatus {
+  available: boolean
+  member: string
+  member_name: string
+  vmid: number | null
+  /** the VM's address and the account the hub's ssh key opens */
+  host: string
+  user: string
+  /** why not, when it cannot */
+  reason: string
+}
+
+/** POST /fleet/members/{id}/terminal/exec — a command the hub ran inside a VM over its ssh key */
+export interface MemberTerminalExecResponse extends TerminalExecResponse {
+  member: string
+  member_name: string
+  vmid: number | null
+  host: string
+  user: string
+}
+
 export interface TerminalAuthVerifyResponse {
   valid: boolean
   username: string

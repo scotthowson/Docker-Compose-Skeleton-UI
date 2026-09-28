@@ -29,6 +29,8 @@ import type {
   OrphanReport,
   DiskAnalysis,
   LogRotateResponse,
+  MemberTerminalStatus,
+  MemberTerminalExecResponse,
 } from '../../shared/types'
 import type {
   FleetTarget,
@@ -272,12 +274,31 @@ export function fetchMaintenanceDiskScoped(member: string | null): Promise<DiskA
   return apiClient.get<DiskAnalysis>(memberPath(member, '/maintenance/disk'))
 }
 
+/** the hub and at least one VM: what a hub answers in one call with ?fleet=1 (3.9.3) */
+function wantsFleetAnswer(targets: FleetTarget[]): boolean {
+  return targets.some((t) => t.id === null) && targets.some((t) => t.id !== null)
+}
+
+/** the hub's merged answer, or null when this DCS is older and answered the plain shape (or nothing) */
+async function fleetAnswer<T extends { members: MemberOutcome<unknown>[] }>(path: string): Promise<T | null> {
+  try {
+    const r = await apiClient.get<T & { fleet?: boolean }>(path)
+    return r && r.fleet === true && Array.isArray(r.members) ? r : null
+  } catch {
+    return null
+  }
+}
+
 function placed<T>(o: MemberOutcome<unknown>, row: T): Placed<T> {
   return { ...row, member: o.id, member_name: o.name, vmid: o.vmid }
 }
 
 /** the hub's and every VM's numbers added up (each asked at the same time) */
 export async function fetchFleetMaintenanceReport(targets: FleetTarget[]): Promise<FleetMaintenanceReport> {
+  if (wantsFleetAnswer(targets)) {
+    const hub = await fleetAnswer<FleetMaintenanceReport>('/maintenance/report?fleet=1')
+    if (hub) return hub
+  }
   const members = await fanOut(targets, fetchMaintenanceReportScoped)
   const totals: MaintenanceReport = {
     containers: { total: 0, running: 0, stopped: 0 },
@@ -307,6 +328,10 @@ export async function fetchFleetMaintenanceReport(targets: FleetTarget[]): Promi
 
 /** every server's orphans in one list, each row tagged with where it is */
 export async function fetchFleetOrphans(targets: FleetTarget[]): Promise<FleetOrphanReport> {
+  if (wantsFleetAnswer(targets)) {
+    const hub = await fleetAnswer<FleetOrphanReport>('/maintenance/orphans?fleet=1')
+    if (hub) return hub
+  }
   const members = await fanOut(targets, fetchMaintenanceOrphansScoped)
   const out: FleetOrphanReport = { containers: [], images: [], volumes: [], members }
   for (const m of members) {
@@ -320,6 +345,10 @@ export async function fetchFleetOrphans(targets: FleetTarget[]): Promise<FleetOr
 
 /** every server's disk picture: stacks tagged, docker's tables added up per type */
 export async function fetchFleetDisk(targets: FleetTarget[]): Promise<FleetDiskAnalysis> {
+  if (wantsFleetAnswer(targets)) {
+    const hub = await fleetAnswer<FleetDiskAnalysis>('/maintenance/disk?fleet=1')
+    if (hub) return hub
+  }
   const members = await fanOut(targets, fetchMaintenanceDiskScoped)
   const stack_sizes: FleetDiskAnalysis['stack_sizes'] = []
   const byType = new Map<string, { total: number; active: number; size: number; sizeAny: boolean; reclaimable: string[] }>()
@@ -349,4 +378,21 @@ export async function fetchFleetDisk(targets: FleetTarget[]): Promise<FleetDiskA
     vmid: null,
   }))
   return { stack_sizes, docker_df, total_app_data: sumSizes(totals), members }
+}
+
+// ---------------------------------------------------------------------------
+// A shell inside a VM, opened by the hub (3.9.3): the hub's own Terminal
+// session unlocks it, the hub's ssh key carries the command
+// ---------------------------------------------------------------------------
+
+export function fetchMemberTerminal(member: string): Promise<MemberTerminalStatus> {
+  return apiClient.get<MemberTerminalStatus>(`/fleet/members/${encodeURIComponent(member)}/terminal`)
+}
+
+export function execMemberTerminalCommand(member: string, command: string, terminalToken: string, cwd?: string): Promise<MemberTerminalExecResponse> {
+  return apiClient.post<MemberTerminalExecResponse>(
+    `/fleet/members/${encodeURIComponent(member)}/terminal/exec`,
+    { command, terminal_token: terminalToken, ...(cwd ? { cwd } : {}) },
+    90000,
+  )
 }

@@ -65,7 +65,7 @@ export default function StackControls({ stacks, error, onRetry, onRefresh }: {
             const b = (op: Op) => busy === `${s.name}:${op}`
             const btn = 'p-1.5 rounded-md transition-colors disabled:opacity-40'
             return (
-              <div key={s.name} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03] transition-colors">
+              <div key={`${s.member ?? ''}|${s.name}`} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03] transition-colors">
                 <span className={`h-2 w-2 rounded-full shrink-0 ${isRunning ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-slate-600'}`} />
                 <button onClick={() => setCurrentPage('stacks', { highlight: s.name })} className="flex-1 min-w-0 text-left" title={`Open ${s.name}`}>
                   <span className="block text-xs font-medium text-slate-200 truncate font-mono">{s.name}</span>

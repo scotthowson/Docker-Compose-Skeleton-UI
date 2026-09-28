@@ -79,7 +79,7 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
         {list.map((s) => (
           <div
-            key={s.name}
+            key={`${s.member ?? ''}|${s.name}`}
             className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5 hover:bg-white/5 transition-colors flex items-center gap-2.5 min-h-[44px]"
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} />

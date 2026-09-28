@@ -129,7 +129,7 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
               {containers.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase())).map((c) => {
                 const on = draft.includes(c.name)
                 return (
-                  <button key={c.name} onClick={() => setDraft((d) => on ? d.filter((n) => n !== c.name) : [...d, c.name])} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${on ? 'bg-emerald-500/[0.08]' : 'hover:bg-white/[0.04]'}`}>
+                  <button key={`${c.member ?? ''}|${c.name}`} onClick={() => setDraft((d) => on ? d.filter((n) => n !== c.name) : [...d, c.name])} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${on ? 'bg-emerald-500/[0.08]' : 'hover:bg-white/[0.04]'}`}>
                     <span className={`flex items-center justify-center w-4 h-4 rounded border ${on ? 'bg-emerald-500 border-emerald-500' : 'border-white/20'}`}>{on && <Check size={11} className="text-white" strokeWidth={3} />}</span>
                     <span className="text-xs font-mono text-slate-200 truncate">{c.name}</span>
                     <span className="ml-auto text-[10px] text-slate-500">{c.state}</span>

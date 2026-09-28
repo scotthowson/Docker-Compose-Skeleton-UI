@@ -306,7 +306,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                       <select value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{STACK_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
                       <select value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
                         {!stacks.some((s) => s.name === a.target) && <option value={a.target}>{a.target || 'choose a stack'}</option>}
-                        {stacks.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+                        {stacks.map((s) => <option key={`${s.member ?? ''}|${s.name}`} value={s.name}>{s.name}{s.member_name ? ` · ${s.member_name}` : ''}</option>)}
                       </select>
                     </>
                   )}
@@ -315,7 +315,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                       <select value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{CONTAINER_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
                       <select value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
                         {!containers.some((c) => c.name === a.target) && <option value={a.target}>{a.target || 'choose a container'}</option>}
-                        {containers.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                        {containers.map((c) => <option key={`${c.member ?? ''}|${c.name}`} value={c.name}>{c.name}{c.member_name ? ` · ${c.member_name}` : ''}</option>)}
                       </select>
                     </>
                   )}

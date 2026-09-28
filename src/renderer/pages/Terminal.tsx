@@ -17,6 +17,10 @@ import {
   Loader2,
 } from 'lucide-react'
 import { execTerminalCommandAuth, terminalAuthVerify, terminalLogout } from '../api/endpoints'
+import { execMemberTerminalCommand, fetchMemberTerminal } from '../api/fleetScopedOps'
+import { useFleetScope } from '../hooks/useFleetScope'
+import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import type { MemberTerminalStatus } from '../../shared/types'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import TerminalAuthGate from '../components/terminal/TerminalAuthGate'
@@ -34,6 +38,9 @@ interface CommandEntry {
   exitCode: number
   success: boolean
   timestamp: string
+  /** the prompt the command ran under: the hub's account and host, or the VM's */
+  user: string
+  host: string
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +99,17 @@ export default function Terminal() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const hostname = useSystemStore((s) => s.status?.hostname) || 'host'
 
+  // On a hub the shell is the hub's own, or one inside a VM the hub built: the hub's Terminal
+  // session unlocks both, the command travels over the hub's ssh key (3.9.3)
+  const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
+  const pageScope = scope === 'all' ? 'hub' : scope
+  const member = hasFleet && pageScope !== 'hub' ? scopeMember : null
+  const [vmStatus, setVmStatus] = useState<MemberTerminalStatus | null>(null)
+  const [vmChecking, setVmChecking] = useState(false)
+  /** each server keeps its own working directory */
+  const cwdsRef = useRef<Record<string, string>>({})
+  const targetKey = member ?? 'hub'
+
   // Auth state
   const [authenticated, setAuthenticated] = useState(false)
   const [terminalToken, setTerminalToken] = useState('')
@@ -118,6 +136,35 @@ export default function Terminal() {
 
   // Keep loadingRef in sync
   useEffect(() => { loadingRef.current = loading }, [loading])
+
+  // another server: keep this one's directory, take that one's (its home until pwd answers)
+  const prevKeyRef = useRef(targetKey)
+  useEffect(() => {
+    if (prevKeyRef.current === targetKey) return
+    cwdsRef.current[prevKeyRef.current] = cwd
+    prevKeyRef.current = targetKey
+    setCwd(cwdsRef.current[targetKey] ?? '~')
+    queueRef.current = []
+    setQueueLength(0)
+  }, [targetKey, cwd])
+
+  // can the hub open a shell in the chosen VM?
+  useEffect(() => {
+    if (!member || !authenticated || !isConnected) { setVmStatus(null); return }
+    let alive = true
+    setVmChecking(true)
+    fetchMemberTerminal(member)
+      .then((st) => { if (alive) setVmStatus(st) })
+      .catch((err: unknown) => {
+        if (alive) setVmStatus({ available: false, member, member_name: memberName, vmid: null, host: '', user: '', reason: err instanceof Error ? err.message : 'the hub could not check this VM' })
+      })
+      .finally(() => { if (alive) setVmChecking(false) })
+    return () => { alive = false }
+  }, [member, memberName, authenticated, isConnected])
+
+  const promptUser = member ? (vmStatus?.user || 'dcs') : terminalUser
+  const promptHost = member ? memberName : hostname
+  const vmBlocked = !!member && !!vmStatus && !vmStatus.available
 
   // Auto-scroll to bottom on new output
   useEffect(() => {
@@ -163,15 +210,20 @@ export default function Terminal() {
     if (authenticated) inputRef.current?.focus()
   }, [authenticated])
 
-  // Fetch initial CWD on auth
+  // Fetch the working directory on auth, and the first time another server is chosen
   useEffect(() => {
     if (!authenticated || !terminalToken || !isConnected) return
-    execTerminalCommandAuth('pwd', terminalToken).then((res) => {
-      if (res.success && res.output.trim()) {
-        setCwd(res.output.trim())
+    if (member && !vmStatus?.available) return
+    if ((cwdsRef.current[member ?? 'hub'] ?? '~') !== '~') return
+    const run = member ? execMemberTerminalCommand(member, 'pwd', terminalToken) : execTerminalCommandAuth('pwd', terminalToken)
+    run.then((res) => {
+      const dir = res.output.trim() || (member ? res.cwd : '')
+      if (res.success && dir) {
+        cwdsRef.current[member ?? 'hub'] = dir
+        setCwd(dir)
       }
     }).catch(() => {})
-  }, [authenticated, terminalToken, isConnected])
+  }, [authenticated, terminalToken, isConnected, member, vmStatus?.available])
 
   // ---------------------------------------------------------------------------
   // Auth handlers
@@ -194,6 +246,7 @@ export default function Terminal() {
     setTerminalUser('')
     setEntries([])
     setCwd('~')
+    cwdsRef.current = {}
     queueRef.current = []
     setQueueLength(0)
   }
@@ -242,8 +295,18 @@ export default function Terminal() {
       return
     }
 
+    // a VM the hub cannot reach: say why instead of asking
+    if (member && vmBlocked) {
+      setEntries(prev => [...prev, { command, cwd, output: `The hub cannot open a shell in ${memberName}: ${vmStatus?.reason || 'not available'}`, exitCode: -1, success: false, timestamp: new Date().toISOString(), user: promptUser, host: promptHost }])
+      setLoading(false)
+      inputRef.current?.focus()
+      return
+    }
+
     try {
-      const result = await execTerminalCommandAuth(command, terminalToken, cwd === '~' ? undefined : cwd)
+      const result = member
+        ? await execMemberTerminalCommand(member, command, terminalToken, cwd === '~' ? undefined : cwd)
+        : await execTerminalCommandAuth(command, terminalToken, cwd === '~' ? undefined : cwd)
       const entry: CommandEntry = {
         command,
         cwd: result.cwd || cwd,
@@ -251,12 +314,15 @@ export default function Terminal() {
         exitCode: result.exit_code,
         success: result.success,
         timestamp: result.timestamp,
+        user: promptUser,
+        host: promptHost,
       }
       setEntries(prev => [...prev, entry])
 
       // Track CWD changes
       if (result.cwd) {
         setCwd(result.cwd)
+        cwdsRef.current[member ?? 'hub'] = result.cwd
       }
     } catch (err: unknown) {
       // Check for session expiry
@@ -274,6 +340,8 @@ export default function Terminal() {
         exitCode: -1,
         success: false,
         timestamp: new Date().toISOString(),
+        user: promptUser,
+        host: promptHost,
       }])
     } finally {
       setLoading(false)
@@ -286,7 +354,7 @@ export default function Terminal() {
         setTimeout(() => executeCommand(nextCmd), 0)
       }
     }
-  }, [commandInput, cwd, terminalToken])
+  }, [commandInput, cwd, terminalToken, member, memberName, vmBlocked, vmStatus?.reason, promptUser, promptHost])
 
   // ---------------------------------------------------------------------------
   // Keyboard handling
@@ -383,11 +451,16 @@ export default function Terminal() {
           </div>
         )}
         <TerminalAuthGate onAuthenticated={handleAuthenticated} />
+        {hasFleet && (
+          <p className="text-center text-[10px] text-slate-600 -mt-2 px-4">
+            This one unlock also opens a shell inside every VM the hub built — pick the server above the terminal afterwards.
+          </p>
+        )}
       </div>
     )
   }
 
-  const displayCwd = shortenCwd(cwd, terminalUser)
+  const displayCwd = shortenCwd(cwd, promptUser)
 
   // Authenticated — show terminal
   return (
@@ -402,6 +475,7 @@ export default function Terminal() {
           <p className="text-xs font-semibold text-emerald-300">Authenticated terminal session</p>
           <p className="text-[11px] text-emerald-400/60">
             Authenticated as <span className="font-mono font-semibold text-emerald-300">{terminalUser}</span> via Linux system credentials
+            {member && <> · shell inside the VM <span className="font-mono font-semibold text-amber-200">{memberName}</span></>}
           </p>
         </div>
         <button
@@ -418,6 +492,24 @@ export default function Terminal() {
           Lock
         </button>
       </div>
+
+      {/* On a hub: the hub's shell or one inside a VM */}
+      {hasFleet && (
+        <div className="flex flex-col gap-2">
+          <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Shell on" everywhere={false} busy={vmChecking} />
+          {vmBlocked && vmStatus && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
+              <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-200/80">The hub cannot open a shell in <span className="font-mono">{memberName}</span>: {vmStatus.reason}</p>
+            </div>
+          )}
+          {member && vmStatus?.available && (
+            <p className="text-[10px] text-slate-500">
+              Commands run inside the VM as <span className="font-mono text-slate-400">{vmStatus.user}@{vmStatus.host}</span> over the hub's ssh key — each one a fresh shell with a 60 s limit, written to the hub's terminal audit log.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Quick command buttons */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -486,11 +578,11 @@ export default function Terminal() {
             <div key={`${entry.timestamp}-${idx}`} className="group animate-fade-in border-b border-white/[0.02] pb-1 mb-1">
               {/* Prompt + command */}
               <div className="flex items-start gap-0">
-                <span className="text-emerald-500 select-none shrink-0">
-                  {terminalUser}@{hostname}
+                <span className={`${entry.host !== hostname ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+                  {entry.user}@{entry.host}
                 </span>
                 <span className="text-slate-500 select-none">:</span>
-                <span className="text-cyan-400 select-none">{shortenCwd(entry.cwd, terminalUser)}</span>
+                <span className="text-cyan-400 select-none">{shortenCwd(entry.cwd, entry.user)}</span>
                 <span className="text-slate-500 select-none mx-1">$</span>
                 <span className="text-slate-200">{entry.command}</span>
 
@@ -543,8 +635,8 @@ export default function Terminal() {
           {/* Loading indicator — blinking cursor block */}
           {loading && (
             <div className="flex items-center gap-0 py-1">
-              <span className="text-emerald-500 select-none shrink-0">
-                {terminalUser}@{hostname}
+              <span className={`${member ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+                {promptUser}@{promptHost}
               </span>
               <span className="text-slate-500 select-none">:</span>
               <span className="text-cyan-400 select-none">{displayCwd}</span>
@@ -562,8 +654,8 @@ export default function Terminal() {
         ${loading ? 'border-emerald-500/20 shadow-[0_0_8px_0_rgba(16,185,129,0.06)]' : 'border-white/5 focus-within:border-emerald-500/30'}
       `}>
         {/* Prompt prefix */}
-        <span className="text-emerald-500 select-none shrink-0">
-          {terminalUser}@{hostname}
+        <span className={`${member ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+          {promptUser}@{promptHost}
         </span>
         <span className="text-slate-500 select-none">:</span>
         <span className="text-cyan-400 select-none">{displayCwd}</span>

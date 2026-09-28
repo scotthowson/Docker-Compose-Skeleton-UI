@@ -182,7 +182,7 @@ export default function ContainerOverview({ containers }: { containers: Containe
           const hb = healthBadge(container.health)
           return (
             <div
-              key={container.name}
+              key={`${container.member ?? ''}|${container.name}`}
               className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-white/[0.03] transition-colors group"
             >
               {/* Status dot */}
