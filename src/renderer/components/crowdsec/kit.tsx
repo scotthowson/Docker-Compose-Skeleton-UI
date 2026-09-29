@@ -25,7 +25,7 @@ export const BTN_WARN = `${BTN} bg-amber-500/15 border border-amber-500/25 text-
 export const ICON_BTN = 'h-8 w-8 rounded-lg border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 inline-flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 export const INPUT = 'w-full h-10 px-3 rounded-lg bg-slate-800/50 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 disabled:opacity-60'
 export const TEXTAREA = 'w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 disabled:opacity-60'
-export const LABEL = 'block text-xs font-medium text-slate-400 mb-1'
+export const LABEL = 'block text-xs font-medium text-slate-500 mb-1'
 export const HINT = 'text-[11px] text-slate-500 mt-1'
 
 export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'mute'
@@ -34,7 +34,7 @@ export const TONE: Record<Tone, string> = {
   warn: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
   bad: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
   info: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-  mute: 'bg-white/[0.04] text-slate-400 border-white/10',
+  mute: 'bg-white/[0.04] text-slate-500 border-white/10',
 }
 export const DOT: Record<Tone, string> = { good: 'bg-emerald-400', warn: 'bg-amber-400', bad: 'bg-rose-400', info: 'bg-cyan-400', mute: 'bg-slate-500' }
 
@@ -52,7 +52,7 @@ export function SectionHead({ icon: Icon, title, count, right, className = '' }:
     <div className={`flex items-center justify-between gap-2 flex-wrap ${className}`}>
       <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2 min-w-0">
         {Icon && <Icon size={12} className="shrink-0" />} <span className="truncate">{title}</span>
-        {count !== undefined && count !== null && <span className="text-slate-600 tabular-nums normal-case tracking-normal font-normal">{count}</span>}
+        {count !== undefined && count !== null && <span className="text-slate-500 tabular-nums normal-case tracking-normal font-normal">{count}</span>}
       </h2>
       {right}
     </div>
@@ -101,11 +101,11 @@ export function Segmented<T extends string>({ value, options, onChange, ariaLabe
             disabled={o.disabled}
             aria-pressed={on}
             onClick={() => onChange(o.value)}
-            className={`h-7 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors border disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
+            className={`h-7 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors border disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
           >
             {Icon && <Icon size={12} />}
             {o.label}
-            {o.count !== undefined && <span className={`tabular-nums text-[10px] ${on ? 'text-emerald-300' : 'text-slate-600'}`}>{o.count}</span>}
+            {o.count !== undefined && <span className={`tabular-nums text-[10px] ${on ? 'text-emerald-300' : 'text-slate-500'}`}>{o.count}</span>}
           </button>
         )
       })}
@@ -175,7 +175,7 @@ export function CsSheet({ title, subtitle, icon, tone = 'good', onClose, childre
             {icon && <div className={`p-2.5 rounded-xl shrink-0 ${tile}`}>{icon}</div>}
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-slate-100 break-words">{title}</h3>
-              {subtitle && <p className="text-sm text-slate-400 mt-0.5 break-words">{subtitle}</p>}
+              {subtitle && <p className="text-sm text-slate-500 mt-0.5 break-words">{subtitle}</p>}
             </div>
             <button type="button" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5" aria-label="Close"><X size={16} /></button>
           </div>
@@ -300,7 +300,7 @@ export function flagsSupported(): boolean {
 /** [🇩🇪 DE] Germany — the code chip always, the flag when the platform draws flags, the name when asked */
 export function Country({ code, name = false, className = '' }: { code?: string | null; name?: boolean; className?: string }) {
   const cc = (code || '').toUpperCase()
-  if (!/^[A-Z]{2}$/.test(cc)) return <span className={`text-slate-600 text-xs ${className}`} title="The country is not known">—</span>
+  if (!/^[A-Z]{2}$/.test(cc)) return <span className={`text-slate-500 text-xs ${className}`} title="The country is not known">—</span>
   const full = countryName(cc)
   return (
     <span className={`inline-flex items-center gap-1.5 min-w-0 ${className}`} title={full}>

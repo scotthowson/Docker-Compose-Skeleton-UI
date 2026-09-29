@@ -58,7 +58,7 @@ export function TimelineChart({ points, bucketSeconds, height = 132, empty }: { 
           )
         })}
       </svg>
-      <div className="flex justify-between text-[10px] text-slate-600 mt-1 tabular-nums select-none">
+      <div className="flex justify-between text-[10px] text-slate-500 mt-1 tabular-nums select-none">
         <span>{tick(points[0].t, bucketSeconds)}</span>
         {n > 8 && <span className="hidden sm:inline">{tick(points[Math.floor(n / 2)].t, bucketSeconds)}</span>}
         <span>{tick(points[n - 1].t, bucketSeconds)}</span>

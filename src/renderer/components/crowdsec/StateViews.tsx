@@ -86,7 +86,7 @@ export function IssueBanners({ issues, onOpenTab }: { issues: CrowdSecIssue[]; o
             <Icon size={16} className={`shrink-0 mt-0.5 ${tone === 'warn' ? 'text-amber-400' : tone === 'bad' ? 'text-rose-400' : 'text-cyan-400'}`} />
             <div className="min-w-0 flex-1 basis-56">
               <p className="text-sm font-medium text-slate-100">{i.title}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{i.detail}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{i.detail}</p>
             </div>
             {i.fix && <FixButton fix={{ ...i.fix, primary: false }} busy={busy === i.fix.id} onRun={() => run(i.fix as CrowdSecFix)} />}
           </div>
@@ -138,13 +138,13 @@ export function ProblemView({ s, onRefresh, onDeploy }: { s: CrowdSecStatusRespo
           </div>
         </div>
         <div className="mt-5 pt-4 border-t border-white/5 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500">
-          {s.container && <span>Container <span className="font-mono text-slate-400">{s.container}</span></span>}
-          {s.container_state && <span>State <span className="text-slate-400">{s.container_state}</span></span>}
-          {s.health && <span>Health <span className="text-slate-400">{s.health}</span></span>}
-          {typeof s.restart_count === 'number' && s.restart_count > 0 && <span>Restarts <span className="text-slate-400 tabular-nums">{s.restart_count}</span></span>}
-          {s.exit_code ? <span>Exit code <span className="text-slate-400 tabular-nums">{s.exit_code}</span></span> : null}
-          {s.image && <span>Image <span className="font-mono text-slate-400">{s.image}</span></span>}
-          {s.docker?.version && <span>Docker <span className="text-slate-400">{s.docker.version}</span></span>}
+          {s.container && <span>Container <span className="font-mono text-slate-500">{s.container}</span></span>}
+          {s.container_state && <span>State <span className="text-slate-500">{s.container_state}</span></span>}
+          {s.health && <span>Health <span className="text-slate-500">{s.health}</span></span>}
+          {typeof s.restart_count === 'number' && s.restart_count > 0 && <span>Restarts <span className="text-slate-500 tabular-nums">{s.restart_count}</span></span>}
+          {s.exit_code ? <span>Exit code <span className="text-slate-500 tabular-nums">{s.exit_code}</span></span> : null}
+          {s.image && <span>Image <span className="font-mono text-slate-500">{s.image}</span></span>}
+          {s.docker?.version && <span>Docker <span className="text-slate-500">{s.docker.version}</span></span>}
         </div>
       </div>
       {showLog && <LogPanel initial={log} onRefresh={onRefresh} />}
@@ -169,8 +169,8 @@ function LogPanel({ initial, onRefresh }: { initial: string[]; onRefresh: () => 
   return (
     <div className={`${CARD} overflow-hidden`}>
       <div className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-slate-400 flex items-center gap-2"><ScrollText size={13} /> CrowdSec log <span className="text-slate-600 font-normal">last {lines.length} lines</span></p>
-        <button type="button" onClick={load} disabled={loading} className="text-[11px] text-slate-400 hover:text-slate-200 inline-flex items-center gap-1"><RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Reload</button>
+        <p className="text-xs font-semibold text-slate-500 flex items-center gap-2"><ScrollText size={13} /> CrowdSec log <span className="text-slate-500 font-normal">last {lines.length} lines</span></p>
+        <button type="button" onClick={load} disabled={loading} className="text-[11px] text-slate-500 hover:text-slate-200 inline-flex items-center gap-1"><RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Reload</button>
       </div>
       <pre className="p-4 text-[11px] leading-relaxed font-mono text-slate-300 overflow-x-auto max-h-80 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-words">{lines.length ? lines.join('\n') : 'No log lines yet.'}</pre>
     </div>
@@ -200,7 +200,7 @@ function Step({ icon: Icon, title, text, tone }: { icon: React.ElementType; titl
     <div className="flex-1 min-w-0 rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
       <div className={`w-9 h-9 rounded-xl border flex items-center justify-center ${tile}`}><Icon size={16} /></div>
       <p className="text-sm font-medium text-slate-100 mt-2.5">{title}</p>
-      <p className="text-xs text-slate-400 mt-0.5">{text}</p>
+      <p className="text-xs text-slate-500 mt-0.5">{text}</p>
     </div>
   )
 }
@@ -278,11 +278,11 @@ export function NotDeployed({ s, onRefresh }: { s: CrowdSecStatusResponse; onRef
         <div className="px-5 sm:px-7 pb-5 sm:pb-7">
           <div className="flex flex-col md:flex-row items-stretch gap-2 md:gap-1">
             <Step icon={FileText} tone="info" title="It reads the log" text="Traefik's access log is mounted read-only; nothing in your apps changes." />
-            <div className="flex items-center justify-center text-slate-600 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
+            <div className="flex items-center justify-center text-slate-500 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
             <Step icon={Radar} tone="warn" title="It decides" text="Scenarios spot probing, brute force and exploits; the community blocklist adds known bad addresses." />
-            <div className="flex items-center justify-center text-slate-600 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
+            <div className="flex items-center justify-center text-slate-500 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
             <Step icon={Ban} tone="bad" title="Traefik blocks" text="DCS registers a bouncer, so a ban is enforced at the door before any app sees the request." />
-            <div className="flex items-center justify-center text-slate-600 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
+            <div className="flex items-center justify-center text-slate-500 shrink-0"><ArrowRight size={16} className="hidden md:block" /><ArrowDown size={16} className="md:hidden" /></div>
             <Step icon={MessageSquare} tone="good" title="You hear about it" text="Every ban can post to Discord, in words a person understands (when a webhook is set)." />
           </div>
         </div>
@@ -350,7 +350,7 @@ export function NotDeployed({ s, onRefresh }: { s: CrowdSecStatusResponse; onRef
             {phase === 'failed' && <button type="button" onClick={deploy} className={`${BTN_WARN} ml-auto`}><RotateCw size={13} /> Try again</button>}
           </div>
           {error && <p className="px-4 py-3 text-sm text-rose-300 break-words">{error}</p>}
-          {output.length > 0 && <pre className="px-4 py-3 text-[11px] leading-relaxed font-mono text-slate-400 overflow-x-auto max-h-56 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-words">{output.slice(-40).join('\n')}</pre>}
+          {output.length > 0 && <pre className="px-4 py-3 text-[11px] leading-relaxed font-mono text-slate-500 overflow-x-auto max-h-56 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-words">{output.slice(-40).join('\n')}</pre>}
         </div>
       )}
     </div>
@@ -363,7 +363,7 @@ export function TooOld() {
     <div className={`${CARD} p-6 text-center`}>
       <PackageOpen size={30} className="mx-auto text-amber-400" />
       <h2 className="mt-3 text-lg font-semibold text-slate-100">This DCS is older than the CrowdSec page</h2>
-      <p className="mt-1.5 text-sm text-slate-400 max-w-lg mx-auto">The server did not report a CrowdSec state, so it predates the API this page uses. Update DCS on that server and come back.</p>
+      <p className="mt-1.5 text-sm text-slate-500 max-w-lg mx-auto">The server did not report a CrowdSec state, so it predates the API this page uses. Update DCS on that server and come back.</p>
       <button type="button" onClick={() => setCurrentPage('updates')} className={`${BTN_QUIET} mt-4`}><Boxes size={13} /> Open Updates</button>
     </div>
   )

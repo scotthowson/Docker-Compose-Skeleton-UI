@@ -113,7 +113,7 @@ export default function CrowdSec() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <div className={`hidden sm:flex items-center justify-center w-12 h-12 rounded-xl border border-white/5 shrink-0 ${healthy ? 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20' : state === 'not_deployed' || !s ? 'bg-white/[0.04]' : 'bg-gradient-to-br from-amber-500/20 to-rose-500/20'}`}>
-              {state === 'not_deployed' ? <ShieldOff className="w-6 h-6 text-slate-400" /> : <ShieldCheck className={`w-6 h-6 ${healthy ? 'text-emerald-400' : !s ? 'text-slate-500' : 'text-amber-400'}`} />}
+              {state === 'not_deployed' ? <ShieldOff className="w-6 h-6 text-slate-500" /> : <ShieldCheck className={`w-6 h-6 ${healthy ? 'text-emerald-400' : !s ? 'text-slate-500' : 'text-amber-400'}`} />}
             </div>
             <div className="min-w-0">
               <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 flex-wrap"><span className="text-gradient">CrowdSec</span>
@@ -121,7 +121,7 @@ export default function CrowdSec() {
                 {s && state && state !== 'healthy' && state !== 'not_deployed' && <Chip tone={state === 'starting' ? 'info' : state === 'crash_loop' || state === 'docker_unavailable' ? 'bad' : 'warn'}>{state.replace(/_/g, ' ')}</Chip>}
               </h1>
               {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Server" busy={status.loading && !!s} everywhere={false} /></div>}
-              <p className="text-sm text-slate-400 mt-0.5 truncate">{subtitle}</p>
+              <p className="text-sm text-slate-500 mt-0.5 truncate">{subtitle}</p>
             </div>
           </div>
           <button type="button" onClick={statusRefresh} disabled={status.loading} className={BTN_QUIET} aria-label="Refresh"><RefreshCw size={14} className={status.loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>

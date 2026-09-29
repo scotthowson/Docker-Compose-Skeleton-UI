@@ -102,7 +102,7 @@ export default function BanSheet({ initialValue = '', initialReason = '', onClos
           <DurationPicker value={duration} onChange={setDuration} allowPermanent maxSeconds={315360000} ariaLabel="Ban length" />
         </div>
         <div>
-          <label className={LABEL} htmlFor="ban-reason">Reason <span className="text-slate-600 font-normal">(optional, shown in the list and in Discord)</span></label>
+          <label className={LABEL} htmlFor="ban-reason">Reason <span className="text-slate-500 font-normal">(optional, shown in the list and in Discord)</span></label>
           <input id="ban-reason" className={INPUT} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="e.g. scanned my mail server" />
         </div>
         {error && (

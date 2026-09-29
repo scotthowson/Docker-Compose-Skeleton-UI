@@ -27,7 +27,7 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
           <Boxes size={11} /> Everywhere
         </button>
       )}
-      <button type="button" onClick={() => onChange('hub')} title="Only what runs on the hub itself" className={`${base} ${scope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : off}`}>
+      <button type="button" onClick={() => onChange('hub')} title="Only what runs on the hub itself" className={`${base} ${scope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : off}`}>
         <Server size={11} /> Hub
       </button>
       {members.map((m) => (
@@ -37,7 +37,7 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
           onClick={() => { if (m.reachable) onChange(m.id) }}
           disabled={!m.reachable}
           title={m.reachable ? `VM${m.vmid ? ` #${m.vmid}` : ''} · DCS ${m.version}` : 'not answering'}
-          className={`${base} ${scope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : off}`}
+          className={`${base} ${scope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' : off}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
           {m.name}

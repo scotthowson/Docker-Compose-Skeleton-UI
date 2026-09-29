@@ -163,14 +163,14 @@ export default function OverviewTab() {
                     {shownCountries.map((cn) => (
                       <BarRow key={cn.code} tone="bad" value={cn.alerts} max={maxCountry}
                         label={<Country code={cn.code} name />}
-                        valueLabel={<>{cn.alerts}<span className="text-slate-600 font-normal"> · {cn.sources} src</span></>}
+                        valueLabel={<>{cn.alerts}<span className="text-slate-500 font-normal"> · {cn.sources} src</span></>}
                         extra={bansBy.get(cn.code) ? <Chip tone="bad" title={`${bansBy.get(cn.code)} address${bansBy.get(cn.code) === 1 ? '' : 'es'} from ${countryName(cn.code)} banned right now`}>{bansBy.get(cn.code)} banned</Chip> : undefined}
                         title={`Detections from ${countryName(cn.code)}: open the alerts`} onClick={() => goTab('alerts', cn.code)} />
                     ))}
-                    {m.unknown_country > 0 && <BarRow tone="mute" value={m.unknown_country} max={maxCountry} label={<span className="text-xs text-slate-400">Country not known</span>} title="Private or unlisted addresses have no country" />}
+                    {m.unknown_country > 0 && <BarRow tone="mute" value={m.unknown_country} max={maxCountry} label={<span className="text-xs text-slate-500">Country not known</span>} title="Private or unlisted addresses have no country" />}
                   </div>
                 )}
-              {(countries.length > 0 || m.unknown_country > 0) && <p className="text-[11px] text-slate-600 mt-3 leading-relaxed">The country comes from the address, as CrowdSec reads it. Bans work on addresses and networks: the Traefik bouncer cannot block a whole country.</p>}
+              {(countries.length > 0 || m.unknown_country > 0) && <p className="text-[11px] text-slate-500 mt-3 leading-relaxed">The country comes from the address, as CrowdSec reads it. Bans work on addresses and networks: the Traefik bouncer cannot block a whole country.</p>}
             </Panel>
           </div>
 
@@ -181,7 +181,7 @@ export default function OverviewTab() {
                   {m.scenarios.slice(0, 7).map((sc) => (
                     <BarRow key={sc.scenario} tone={familyTone(sc.family)} value={sc.alerts} max={maxScen}
                       label={<span className="text-sm text-slate-200 truncate" title={sc.scenario}>{sc.label || sc.scenario}</span>}
-                      valueLabel={<>{sc.alerts}<span className="text-slate-600 font-normal"> · {sc.sources} src</span></>}
+                      valueLabel={<>{sc.alerts}<span className="text-slate-500 font-normal"> · {sc.sources} src</span></>}
                       title={`${sc.scenario}: open these alerts`} onClick={() => goTab('alerts', sc.scenario)} />
                   ))}
                 </div>
@@ -213,7 +213,7 @@ export default function OverviewTab() {
                       <BarRow key={n.as_number || n.as_name} tone="info" value={n.alerts} max={maxNet}
                         label={<span className="text-sm text-slate-200 truncate">{n.as_name || 'Network not known'}</span>}
                         sub={n.as_number ? `AS${n.as_number}` : undefined}
-                        valueLabel={<>{n.alerts}<span className="text-slate-600 font-normal"> · {n.sources} src</span></>} />
+                        valueLabel={<>{n.alerts}<span className="text-slate-500 font-normal"> · {n.sources} src</span></>} />
                     ))}
                   </div>
                 )
@@ -290,7 +290,7 @@ export default function OverviewTab() {
         <Panel title="Engine" icon={Cpu}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
             <dt className="text-slate-500">Version</dt><dd className="text-slate-200 tabular-nums">{s?.version_number ? `v${s.version_number}` : '—'}</dd>
-            <dt className="text-slate-500">Container</dt><dd className="text-slate-200 truncate" title={s?.image}>{s?.container ?? 'CrowdSec'}{s?.image ? <span className="text-slate-600"> · {s.image.split('/').pop()}</span> : null}</dd>
+            <dt className="text-slate-500">Container</dt><dd className="text-slate-200 truncate" title={s?.image}>{s?.container ?? 'CrowdSec'}{s?.image ? <span className="text-slate-500"> · {s.image.split('/').pop()}</span> : null}</dd>
             <dt className="text-slate-500">Running since</dt><dd className="text-slate-200">{s?.started_at ? <span title={fmtTime(s.started_at)}>{fmtAgo(s.started_at, now).replace(' ago', '')}</span> : '—'}{s && (s.restart_count ?? 0) > 0 ? <span className="text-amber-400"> · {s.restart_count} restart{s.restart_count === 1 ? '' : 's'}</span> : null}</dd>
             <dt className="text-slate-500">Reads</dt>
             <dd className="text-slate-200 min-w-0">
@@ -301,7 +301,7 @@ export default function OverviewTab() {
             {(acq?.sources ?? []).slice(0, 3).map((src) => (
               <FragmentRow key={src.name} name={src.name.replace(/^file:/, '')} reads={src.reads} parsed={src.parsed} />
             ))}
-            <dt className="text-slate-500">Bouncers</dt><dd className="text-slate-200 tabular-nums">{c?.bouncers ?? '—'} <span className="text-slate-600">· {c?.machines ?? '—'} machine{c?.machines === 1 ? '' : 's'}</span></dd>
+            <dt className="text-slate-500">Bouncers</dt><dd className="text-slate-200 tabular-nums">{c?.bouncers ?? '—'} <span className="text-slate-500">· {c?.machines ?? '—'} machine{c?.machines === 1 ? '' : 's'}</span></dd>
             <dt className="text-slate-500">Hub</dt><dd className="text-slate-200 tabular-nums">{c ? `${c.collections} collections, ${c.scenarios} scenarios` : '—'}{c && c.updates > 0 ? <button type="button" className="ml-2 text-cyan-400 hover:text-cyan-300" onClick={() => goTab('hub')}>{c.updates} update{c.updates === 1 ? '' : 's'}</button> : null}</dd>
           </dl>
           {isAdmin && (
@@ -322,8 +322,8 @@ export default function OverviewTab() {
 function FragmentRow({ name, reads, parsed }: { name: string; reads: number; parsed: number }) {
   return (
     <>
-      <dt className="text-slate-600 pl-3 truncate" title={name}>↳</dt>
-      <dd className="text-slate-400 truncate min-w-0" title={name}><span className="font-mono text-[11px]">{name.split('/').pop()}</span> <span className="tabular-nums text-slate-600">· {fmtNum(reads)} read, {fmtNum(parsed)} understood</span></dd>
+      <dt className="text-slate-500 pl-3 truncate" title={name}>↳</dt>
+      <dd className="text-slate-500 truncate min-w-0" title={name}><span className="font-mono text-[11px]">{name.split('/').pop()}</span> <span className="tabular-nums text-slate-500">· {fmtNum(reads)} read, {fmtNum(parsed)} understood</span></dd>
     </>
   )
 }

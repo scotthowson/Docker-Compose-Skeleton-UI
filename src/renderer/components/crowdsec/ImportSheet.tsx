@@ -63,11 +63,11 @@ export default function ImportSheet({ onClose, onDone }: { onClose: () => void; 
           {result.error && <p className="text-sm text-rose-300 flex gap-2"><AlertTriangle size={15} className="shrink-0 mt-0.5" /> {result.error}</p>}
           {result.skipped_entries.length > 0 && (
             <div className="rounded-xl border border-white/5 overflow-hidden">
-              <p className="px-3 py-2 text-[11px] font-semibold text-slate-400 bg-white/[0.03]">Not imported</p>
+              <p className="px-3 py-2 text-[11px] font-semibold text-slate-500 bg-white/[0.03]">Not imported</p>
               <ul className="divide-y divide-white/[0.04] max-h-64 overflow-y-auto scrollbar-thin">
                 {result.skipped_entries.map((e, i) => (
                   <li key={`${e.line}-${i}`} className="px-3 py-2 text-xs flex items-start gap-2">
-                    <span className="text-slate-600 tabular-nums w-8 shrink-0">#{e.line}</span>
+                    <span className="text-slate-500 tabular-nums w-8 shrink-0">#{e.line}</span>
                     <span className="font-mono text-slate-300 break-all min-w-0">{e.value}</span>
                     <span className="text-slate-500 ml-auto text-right basis-1/2 min-w-0 break-words">{e.message}</span>
                   </li>
@@ -94,7 +94,7 @@ export default function ImportSheet({ onClose, onDone }: { onClose: () => void; 
             <DurationPicker value={duration} onChange={setDuration} allowPermanent maxSeconds={315360000} ariaLabel="Default ban length" />
           </div>
           <div>
-            <label className={LABEL} htmlFor="import-reason">Reason for entries that name none <span className="text-slate-600 font-normal">(optional)</span></label>
+            <label className={LABEL} htmlFor="import-reason">Reason for entries that name none <span className="text-slate-500 font-normal">(optional)</span></label>
             <input id="import-reason" className={INPUT} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="Imported from DCS" />
           </div>
           {error && <p className="text-sm text-rose-300 flex gap-2" role="alert"><AlertTriangle size={15} className="shrink-0 mt-0.5" /> {error}</p>}

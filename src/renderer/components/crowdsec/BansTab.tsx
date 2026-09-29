@@ -185,7 +185,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
         <Select id="bans-sort" label="Sort" plain value={sort} onChange={(v) => setSort(v as Sort)}>
           {SORTS.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
         </Select>
-        <label className="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none h-9 px-1 col-span-2 sm:col-span-1">
+        <label className="inline-flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none h-9 px-1 col-span-2 sm:col-span-1">
           <input type="checkbox" checked={hideSim} onChange={(e) => setHideSim(e.target.checked)} className="accent-emerald-500" /> Hide simulated
         </label>
         {filtered && <button type="button" onClick={clearFilters} className="text-xs text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 h-9"><X size={12} /> Clear filters</button>}
@@ -196,7 +196,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
         <div className="sticky top-2 z-20 rounded-xl glass border border-emerald-500/20 px-3 py-2 flex items-center gap-3 flex-wrap animate-scale-in" role="region" aria-label="Selected bans">
           <span className="text-sm text-slate-100 tabular-nums">{selected.size} selected</span>
           <button type="button" onClick={unbanSelected} disabled={busy === 'bulk'} className={BTN_DANGER}>{busy === 'bulk' ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />} Lift {selected.size === 1 ? 'this ban' : `these ${selected.size} bans`}</button>
-          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-slate-400 hover:text-slate-200 ml-auto">Clear selection</button>
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-200 ml-auto">Clear selection</button>
         </div>
       )}
 
@@ -205,7 +205,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
 
       {data && rows.length === 0 && (
         <div className={`${CARD} px-6 py-14 text-center`}>
-          <ShieldOff size={30} className="mx-auto text-slate-600" />
+          <ShieldOff size={30} className="mx-auto text-slate-500" />
           <p className="mt-3 text-sm text-slate-300">{filtered ? 'No ban matches these filters.' : 'Nothing is banned right now.'}</p>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">{filtered ? 'Loosen a filter, or clear them all.' : 'When CrowdSec catches a scanner or a brute-forcer, it shows up here with its country, the reason and a live countdown.'}</p>
           <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
@@ -282,7 +282,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
                       <p className="text-xs text-slate-300 mt-1 truncate">{reasonOf(d).title}</p>
                       {d.as_name && <p className="text-[11px] text-slate-500 truncate">AS{d.as_number} · {d.as_name}</p>}
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0"><Expires d={d} /><span className="text-[10px] text-slate-600">ends in</span></div>
+                    <div className="flex flex-col items-end gap-1 shrink-0"><Expires d={d} /><span className="text-[10px] text-slate-500">ends in</span></div>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-white/5">
                     <div className="flex items-center gap-2 min-w-0"><Country code={d.country} /><Chip tone={originTone(d.origin ?? '')}>{originLabel(d.origin ?? '')}</Chip></div>
