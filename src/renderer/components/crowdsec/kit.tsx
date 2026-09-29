@@ -105,7 +105,7 @@ export function Segmented<T extends string>({ value, options, onChange, ariaLabe
           >
             {Icon && <Icon size={12} />}
             {o.label}
-            {o.count !== undefined && <span className={`tabular-nums text-[10px] ${on ? 'text-emerald-300/70' : 'text-slate-600'}`}>{o.count}</span>}
+            {o.count !== undefined && <span className={`tabular-nums text-[10px] ${on ? 'text-emerald-300' : 'text-slate-600'}`}>{o.count}</span>}
           </button>
         )
       })}
@@ -467,7 +467,7 @@ export function DurationPicker({ value, onChange, presets = ['1h', '4h', '24h', 
           <p className={`${HINT} ${bad ? '!text-rose-300' : ''}`}>{bad ? `Use minutes, hours, days or weeks between 1 minute and ${maxSeconds >= 3153600000 ? '10 years' : `${Math.round(maxSeconds / 86400)} days`}.` : 'Minutes (m), hours (h), days (d) or weeks (w); combine them, like 1d12h.'}</p>
         </div>
       )}
-      {isPerm && <p className="text-[11px] text-rose-300/90 mt-2">CrowdSec has no ban without an end, so a permanent ban lasts ten years.</p>}
+      {isPerm && <p className="text-[11px] text-rose-300 mt-2">CrowdSec has no ban without an end, so a permanent ban lasts ten years.</p>}
     </div>
   )
 }

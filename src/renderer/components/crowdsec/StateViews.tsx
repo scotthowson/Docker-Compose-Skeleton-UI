@@ -218,6 +218,9 @@ export function NotDeployed({ s, onRefresh }: { s: CrowdSecStatusResponse; onRef
   const [error, setError] = useState('')
   const [activity, setActivity] = useState<StackActivityResponse | null>(null)
   const started = useRef(0)
+  const progressRef = useRef<HTMLDivElement>(null)
+  // the progress card sits under the fold on a laptop: bring it into view when a deployment starts or fails
+  useEffect(() => { if (phase === 'deploying' || phase === 'failed') progressRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }) }, [phase])
   useEffect(() => { if (pre && !stack) setStack(pre.target_stack) }, [pre, stack])
   useEffect(() => { if (pre) setBouncer(pre.enforcement) }, [pre?.enforcement]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -302,7 +305,7 @@ export function NotDeployed({ s, onRefresh }: { s: CrowdSecStatusResponse; onRef
             </ul>
           )}
           {pre?.warnings.length ? (
-            <div className="mt-3 rounded-lg bg-amber-500/[0.06] border border-amber-500/20 px-3 py-2 text-[11px] text-amber-300/90 space-y-1">
+            <div className="mt-3 rounded-lg bg-amber-500/[0.06] border border-amber-500/20 px-3 py-2 text-[11px] text-amber-300 space-y-1">
               {pre.warnings.slice(0, 3).map((w) => <p key={w} className="flex gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-0.5" /> {w}</p>)}
             </div>
           ) : null}
@@ -330,14 +333,14 @@ export function NotDeployed({ s, onRefresh }: { s: CrowdSecStatusResponse; onRef
             <button type="button" onClick={deploy} disabled={!canDeploy || deploying || !stack} className={`${BTN_PRIMARY} w-full h-11 text-sm`}>
               {deploying ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} {deploying ? 'Deploying…' : 'Deploy CrowdSec'}
             </button>
-            {!isAdmin && <p className="text-[11px] text-amber-300/90 text-center">Only an admin can deploy.</p>}
+            {!isAdmin && <p className="text-[11px] text-amber-300 text-center">Only an admin can deploy.</p>}
             <button type="button" onClick={() => setCurrentPage('templates', { search: 'crowdsec' })} className="w-full text-[11px] text-slate-500 hover:text-slate-300 inline-flex items-center justify-center gap-1"><ExternalLink size={11} /> Prefer the Templates page? Open the template there</button>
           </div>
         </div>
       </div>
 
       {(deploying || phase === 'failed') && (
-        <div className={`${CARD} overflow-hidden ${phase === 'failed' ? 'border-rose-500/20' : ''}`} role="status" aria-live="polite">
+        <div ref={progressRef} className={`${CARD} overflow-hidden scroll-mb-6 ${phase === 'failed' ? 'border-rose-500/20' : ''}`} role="status" aria-live="polite">
           <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2.5 flex-wrap">
             {phase === 'failed' ? <XCircle size={16} className="text-rose-400" /> : <Loader2 size={16} className="animate-spin text-emerald-400" />}
             <p className="text-sm font-medium text-slate-100">{phase === 'failed' ? 'The deployment did not finish' : phase === 'deploying' ? 'Sending the deployment…' : 'CrowdSec is starting. This page opens when it is healthy.'}</p>
@@ -358,7 +361,7 @@ export function TooOld() {
   const setCurrentPage = useSettingsStore((st) => st.setCurrentPage)
   return (
     <div className={`${CARD} p-6 text-center`}>
-      <PackageOpen size={30} className="mx-auto text-amber-400/80" />
+      <PackageOpen size={30} className="mx-auto text-amber-400" />
       <h2 className="mt-3 text-lg font-semibold text-slate-100">This DCS is older than the CrowdSec page</h2>
       <p className="mt-1.5 text-sm text-slate-400 max-w-lg mx-auto">The server did not report a CrowdSec state, so it predates the API this page uses. Update DCS on that server and come back.</p>
       <button type="button" onClick={() => setCurrentPage('updates')} className={`${BTN_QUIET} mt-4`}><Boxes size={13} /> Open Updates</button>

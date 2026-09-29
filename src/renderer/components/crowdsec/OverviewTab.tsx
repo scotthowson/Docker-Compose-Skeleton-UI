@@ -28,7 +28,7 @@ function loadWin(): Win {
 function Panel({ title, icon, right, children, className = '' }: { title: string; icon: React.ElementType; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <section className={`${CARD} p-4 min-w-0 ${className}`} aria-label={title}>
-      <SectionHead icon={icon} title={title} right={right} className="mb-3" />
+      <SectionHead icon={icon} title={title} right={right} className="mb-3 min-h-[36px]" />
       {children}
     </section>
   )
@@ -72,7 +72,9 @@ export default function OverviewTab() {
   const metrics = usePolling<CrowdSecMetricsResponse>(() => crowdsecMetrics(winRef.current, member), 30000, { enabled: isConnected })
   const mRefresh = metrics.refresh
   useEffect(() => { mRefresh() }, [win, member, mRefresh])
-  const recent = usePolling(() => crowdsecAlerts({ window: '24h', limit: 6, simulated: 'any' }, member), 20000, { enabled: isConnected })
+  // manual bans are alerts too, but they are not detections: ask for a few more and leave them out
+  const recent = usePolling(() => crowdsecAlerts({ window: '24h', limit: 16, simulated: 'any' }, member), 20000, { enabled: isConnected })
+  const latest = useMemo(() => (recent.data?.alerts ?? []).filter((a) => a.kind !== 'cscli').slice(0, 6), [recent.data])
   const community = usePolling(() => crowdsecCommunity(member), 60000, { enabled: isConnected })
 
   const m = metrics.data
@@ -168,7 +170,7 @@ export default function OverviewTab() {
                     {m.unknown_country > 0 && <BarRow tone="mute" value={m.unknown_country} max={maxCountry} label={<span className="text-xs text-slate-400">Country not known</span>} title="Private or unlisted addresses have no country" />}
                   </div>
                 )}
-              <p className="text-[11px] text-slate-600 mt-3 leading-relaxed">The country comes from the address, as CrowdSec reads it. Bans work on addresses and networks: the Traefik bouncer cannot block a whole country.</p>
+              {(countries.length > 0 || m.unknown_country > 0) && <p className="text-[11px] text-slate-600 mt-3 leading-relaxed">The country comes from the address, as CrowdSec reads it. Bans work on addresses and networks: the Traefik bouncer cannot block a whole country.</p>}
             </Panel>
           </div>
 
@@ -220,9 +222,9 @@ export default function OverviewTab() {
 
             <Panel title="Latest detections" icon={Clock} right={<button type="button" className="text-[11px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1" onClick={() => goTab('alerts')}>All alerts <ArrowRight size={11} /></button>}>
               {!recent.data ? <div className="space-y-2">{[0, 1, 2, 3].map((i) => <Skel key={i} className="h-9" />)}</div>
-                : recent.data.alerts.length === 0 ? <Quiet>No detections in the last 24 hours.</Quiet> : (
+                : latest.length === 0 ? <Quiet>No detections in the last 24 hours.</Quiet> : (
                   <ul className="divide-y divide-white/5">
-                    {recent.data.alerts.map((a) => (
+                    {latest.map((a) => (
                       <li key={a.id}>
                         <button type="button" onClick={() => setAlertId(a.id)} className="w-full text-left py-2 flex items-center gap-3 hover:bg-white/[0.03] rounded-lg -mx-2 px-2 transition-colors" aria-label={`Alert ${a.id}: ${a.label} from ${a.source.value}`}>
                           <Dot tone={familyTone(a.family)} />

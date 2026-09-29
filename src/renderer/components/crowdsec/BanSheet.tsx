@@ -22,6 +22,15 @@ const REASONS: Record<string, string> = {
   already_banned: 'It is already banned for longer.',
 }
 
+/** how many addresses a network covers, when the server accepts it but it is a lot (a /8 to a /15 in IPv4, a /16 to a /31 in IPv6); wider ones the server refuses in its own words */
+function wideNetwork(t: string): string | null {
+  const [a, b] = t.split('/')
+  if (b === undefined) return null
+  const bits = Number(b)
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(a)) return bits >= 8 && bits < 16 ? `${(2 ** (32 - bits)).toLocaleString()} addresses` : null
+  return bits >= 16 && bits < 32 ? 'an enormous number of addresses' : null
+}
+
 export default function BanSheet({ initialValue = '', initialReason = '', onClose, onDone }: { initialValue?: string; initialReason?: string; onClose: () => void; onDone: () => void }) {
   const { member, status, goTab } = useCs()
   const { addToast } = useToast()
@@ -56,6 +65,8 @@ export default function BanSheet({ initialValue = '', initialReason = '', onClos
   const submit = async () => {
     if (!valid || !durOk || busy) return
     if (perm && !(await confirm({ title: 'Ban permanently?', message: `${target} will be banned for ten years. CrowdSec has no ban without an end. You can lift it any time from the list.`, confirmLabel: 'Ban permanently', danger: true }))) return
+    const wide = wideNetwork(target)
+    if (wide && !(await confirm({ title: 'Ban a very large network?', message: `${target} covers ${wide}. Everyone on those addresses, including people who never did anything, is refused until the ban ends.`, confirmLabel: 'Ban it anyway', danger: true }))) return
     setBusy(true); setError(null)
     try {
       const r = await crowdsecBan(perm ? { value: target, permanent: true, reason: reason.trim() || undefined } : { value: target, duration, reason: reason.trim() || undefined }, member)
@@ -99,7 +110,7 @@ export default function BanSheet({ initialValue = '', initialReason = '', onClos
             <AlertTriangle size={15} className="shrink-0 mt-0.5 text-rose-400" />
             <div className="min-w-0">
               <p className="break-words">{error.message}</p>
-              {error.reason && REASONS[error.reason] && error.reason !== 'already_banned' && <p className="text-[11px] text-rose-300/70 mt-1">{REASONS[error.reason]}</p>}
+              {error.reason && REASONS[error.reason] && error.reason !== 'already_banned' && <p className="text-[11px] text-rose-300 mt-1">{REASONS[error.reason]}</p>}
               {error.reason === 'allowlisted' && <button type="button" onClick={() => { onClose(); goTab('allowlist') }} className="mt-2 text-[11px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"><ShieldCheck size={11} /> Open the allowlist</button>}
             </div>
           </div>

@@ -117,7 +117,7 @@ export default function CrowdSec() {
             </div>
             <div className="min-w-0">
               <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 flex-wrap"><span className="text-gradient">CrowdSec</span>
-                {scopeMember && <span className="text-sm font-medium text-amber-300/90">· VM {memberName}</span>}
+                {scopeMember && <span className="text-sm font-medium text-amber-300">· VM {memberName}</span>}
                 {s && state && state !== 'healthy' && state !== 'not_deployed' && <Chip tone={state === 'starting' ? 'info' : state === 'crash_loop' || state === 'docker_unavailable' ? 'bad' : 'warn'}>{state.replace(/_/g, ' ')}</Chip>}
               </h1>
               {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Server" busy={status.loading && !!s} everywhere={false} /></div>}

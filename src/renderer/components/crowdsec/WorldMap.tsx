@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { useMemo, useState } from 'react'
-import { LAND_COLS, LAND_ROWS, LAND_CELL, LAND_RLE } from './worldMapData'
+import { LAND_COLS, LAND_ROWS, LAND_CELL, LAND_RLE, LAND_LAT_TOP, LAND_LAT_SPAN } from './worldMapData'
 import { countryName } from './kit'
 
 export interface MapPoint { lat: number; lon: number; country: string; alerts: number; sources: number }
@@ -37,7 +37,10 @@ export default function WorldMap({ points }: { points: MapPoint[] }) {
   const W = LAND_COLS * LAND_CELL, H = LAND_ROWS * LAND_CELL
   const max = useMemo(() => Math.max(1, ...points.map((p) => p.alerts)), [points])
   const land = landPath()
-  const proj = (lat: number, lon: number) => ({ x: ((lon + 180) / 360) * W, y: ((90 - lat) / 180) * H })
+  const proj = (lat: number, lon: number) => ({
+    x: Math.min(W - 2, Math.max(2, ((lon + 180) / 360) * W)),
+    y: Math.min(H - 2, Math.max(2, ((LAND_LAT_TOP - lat) / LAND_LAT_SPAN) * H)),
+  })
   const cur = hot !== null ? points[hot] : null
   return (
     <div>
@@ -45,7 +48,7 @@ export default function WorldMap({ points }: { points: MapPoint[] }) {
         {cur ? <span className="text-slate-300">{countryName(cur.country) || cur.country || 'Unknown'} <span className="text-slate-500">· {cur.alerts} detection{cur.alerts === 1 ? '' : 's'} from {cur.sources} address{cur.sources === 1 ? '' : 'es'}</span></span> : <span>Where the addresses are, by GeoIP</span>}
       </div>
       <svg role="img" aria-label={`Map of ${points.length} attacking location${points.length === 1 ? '' : 's'}`} viewBox={`0 0 ${W} ${H}`} className="w-full block text-slate-500" style={{ aspectRatio: `${W} / ${H}`, maxHeight: 260 }}>
-        {land ? <path d={land} stroke="currentColor" strokeOpacity="0.35" strokeWidth={LAND_CELL * 0.42} strokeLinecap="round" fill="none" /> : (
+        {land ? <path d={land} stroke="currentColor" strokeOpacity="0.42" strokeWidth={LAND_CELL * 0.5} strokeLinecap="round" fill="none" /> : (
           <g stroke="currentColor" strokeOpacity="0.12" strokeWidth="0.4" fill="none">
             {[-60, -30, 0, 30, 60].map((la) => <line key={la} x1="0" x2={W} y1={proj(la, 0).y} y2={proj(la, 0).y} />)}
             {[-120, -60, 0, 60, 120].map((lo) => <line key={lo} y1="0" y2={H} x1={proj(0, lo).x} x2={proj(0, lo).x} />)}
