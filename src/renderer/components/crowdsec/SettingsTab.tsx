@@ -14,6 +14,7 @@ import { BTN_DANGER, BTN_QUIET, errMsg, useCs } from './kit'
 import { Panel } from './SettingsTabParts'
 import ProfileCard from './SettingsTabProfile'
 import SimulationCard, { useSimulation } from './SettingsTabSimulation'
+import PluginSettings from './PluginSettings'
 
 function MaintenanceCard() {
   const { member, refreshStatus } = useCs()
@@ -66,6 +67,7 @@ export default function SettingsTab() {
     <div className="space-y-4">
       <ProfileCard scenarios={sim.installed} />
       <SimulationCard sim={sim} />
+      <PluginSettings />
       {isAdmin && <MaintenanceCard />}
     </div>
   )
