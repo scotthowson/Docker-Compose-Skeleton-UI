@@ -65,7 +65,7 @@ export default function PreviewPanel(p: PreviewPanelProps) {
 
       {p.approximate ? null : (
         <div>
-          <label htmlFor="notify-sample" className="block text-xs font-medium text-slate-400 mb-1">Example alert</label>
+          <label htmlFor="notify-sample" className="block text-xs font-medium text-slate-500 mb-1">Example alert</label>
           <div className="relative">
             <select id="notify-sample" value={p.sample} onChange={(e) => p.onSample(e.target.value)} className={`${INPUT} !h-9 !text-xs appearance-none pr-8 cursor-pointer`}>
               {p.samples.map((s) => <option key={s} value={s}>{sampleLabel(s)}</option>)}
@@ -114,7 +114,7 @@ export default function PreviewPanel(p: PreviewPanelProps) {
 
       {p.payload && (
         <details className="group text-xs">
-          <summary className="cursor-pointer text-slate-400 hover:text-slate-200 select-none inline-flex items-center gap-1.5 list-none [&::-webkit-details-marker]:hidden"><ChevronRight size={12} className="transition-transform group-open:rotate-90" /> The message as JSON</summary>
+          <summary className="cursor-pointer text-slate-500 hover:text-slate-200 select-none inline-flex items-center gap-1.5 list-none [&::-webkit-details-marker]:hidden"><ChevronRight size={12} className="transition-transform group-open:rotate-90" /> The message as JSON</summary>
           <div className="relative mt-2">
             <div className="absolute right-1 top-1"><CopyIcon text={json} label="Copy the message as JSON" /></div>
             <pre className="text-[11px] leading-relaxed font-mono text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-3 pr-9 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap break-words" tabIndex={0} aria-label="The message as JSON">{json}</pre>

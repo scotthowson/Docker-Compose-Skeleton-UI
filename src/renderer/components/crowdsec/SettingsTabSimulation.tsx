@@ -181,7 +181,7 @@ export default function SimulationCard({ sim }: { sim: Simulation }) {
             <p className={HINT}>Default: off.</p>
           </div>
           {isAdmin
-            ? <div className="flex items-center gap-2 shrink-0">{pending.includes('*') && <Loader2 size={14} className="animate-spin text-slate-400" aria-label="Working" />}<Switch checked={global} onChange={flipGlobal} label="Watch only: detect and alert but ban nothing" disabled={pending.includes('*')} /></div>
+            ? <div className="flex items-center gap-2 shrink-0">{pending.includes('*') && <Loader2 size={14} className="animate-spin text-slate-500" aria-label="Working" />}<Switch checked={global} onChange={flipGlobal} label="Watch only: detect and alert but ban nothing" disabled={pending.includes('*')} /></div>
             : <Chip tone={global ? 'bad' : 'mute'}>{global ? 'on' : 'off'}</Chip>}
         </div>
         {global && (
@@ -210,7 +210,7 @@ export default function SimulationCard({ sim }: { sim: Simulation }) {
 
         {rows.length === 0 ? (
           <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] px-5 py-8 text-center">
-            <Package size={26} className="mx-auto text-slate-600" aria-hidden="true" />
+            <Package size={26} className="mx-auto text-slate-500" aria-hidden="true" />
             <p className="mt-3 text-sm text-slate-300">No scenarios are installed</p>
             <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">CrowdSec has nothing to detect yet, so there is nothing to simulate. Install a collection from the Hub and its scenarios appear here.</p>
             <button type="button" className={`${BTN_QUIET} mt-4`} onClick={() => goTab('hub')}><ArrowRight size={13} /> Open the Hub</button>
@@ -235,7 +235,7 @@ export default function SimulationCard({ sim }: { sim: Simulation }) {
                     {!global && r.simulated && <Chip tone="warn" title="Only raises alerts: its bans are never enforced"><FlaskConical size={10} /> alerts only</Chip>}
                     {isAdmin ? (
                       <div className="flex items-center gap-2 shrink-0">
-                        {busy && <Loader2 size={13} className="animate-spin text-slate-400" aria-label="Working" />}
+                        {busy && <Loader2 size={13} className="animate-spin text-slate-500" aria-label="Working" />}
                         <Switch checked={r.simulated} onChange={(v) => sim.setScenario(r.name, v)} label={`Alerts only for ${r.name}`} />
                       </div>
                     ) : global && r.simulated ? <Chip tone="mute">alerts only</Chip> : null}
@@ -246,14 +246,14 @@ export default function SimulationCard({ sim }: { sim: Simulation }) {
             {shown.length > visible.length && (
               <div className="mt-3 flex items-center gap-3 flex-wrap">
                 <button type="button" className={BTN_QUIET} onClick={() => setAll(true)}>Show all {shown.length}</button>
-                <span className="text-[11px] text-slate-600 tabular-nums">Showing the first {visible.length}</span>
+                <span className="text-[11px] text-slate-500 tabular-nums">Showing the first {visible.length}</span>
               </div>
             )}
           </>
         )}
       </div>
 
-      <div className="mt-5 rounded-lg bg-white/[0.02] border border-white/5 px-3 py-2.5 flex items-start gap-2.5 text-xs text-slate-400 leading-relaxed">
+      <div className="mt-5 rounded-lg bg-white/[0.02] border border-white/5 px-3 py-2.5 flex items-start gap-2.5 text-xs text-slate-500 leading-relaxed">
         <Info size={14} className="shrink-0 mt-0.5 text-slate-500" aria-hidden="true" />
         <p>
           What a simulated ban looks like: the detection still shows in Alerts, and its ban appears in Bans with a <Chip tone="warn"><FlaskConical size={10} /> simulated</Chip> chip.

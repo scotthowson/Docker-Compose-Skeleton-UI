@@ -59,7 +59,7 @@ export function FieldShell({ id, label, right, counter, hint, def, onDefault, er
   return (
     <div>
       <div className="flex items-end justify-between gap-2 mb-1 min-h-[1.25rem]">
-        <label htmlFor={id} className="block text-xs font-medium text-slate-400">{label}</label>
+        <label htmlFor={id} className="block text-xs font-medium text-slate-500">{label}</label>
         <div className="flex items-center gap-2 shrink-0">{right}{counter}</div>
       </div>
       {children}
@@ -68,7 +68,7 @@ export function FieldShell({ id, label, right, counter, hint, def, onDefault, er
         <p id={`${id}-hint`} className={`${HINT} flex flex-wrap items-center gap-x-1.5`}>
           {hint && <span>{hint}</span>}
           {def !== undefined && (
-            <span className="text-slate-600 inline-flex items-center gap-1 min-w-0">
+            <span className="text-slate-500 inline-flex items-center gap-1 min-w-0">
               Default: <code className="font-mono text-slate-500 truncate max-w-[16rem]" title={def}>{def === '' ? 'empty' : shorten(def)}</code>
               {onDefault && <button type="button" onClick={onDefault} className="ml-1 py-1.5 -my-1.5 text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 whitespace-nowrap shrink-0"><RotateCcw size={10} /> Use the default</button>}
             </span>
@@ -86,7 +86,7 @@ export function ToggleRow({ id, label, help, checked, onChange, disabled, def }:
       <div className="pt-0.5"><Switch id={id} checked={checked} onChange={onChange} label={label} disabled={disabled} /></div>
       <div className="min-w-0 flex-1">
         <label htmlFor={id} className="block text-sm text-slate-200 cursor-pointer">{label}</label>
-        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{help}{def !== undefined && <span className="text-slate-600"> Default: {def}.</span>}</p>
+        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{help}{def !== undefined && <span className="text-slate-500"> Default: {def}.</span>}</p>
       </div>
     </div>
   )
@@ -196,7 +196,7 @@ function PlaceholderList({ items, onPick, target, onClose }: { items: CrowdSecPl
                   <span className="text-xs text-slate-200">{p.label}</span>
                 </span>
                 <span className="block text-[11px] text-slate-500 leading-snug mt-0.5">{p.description}</span>
-                <span className="block text-[11px] text-slate-600 truncate mt-0.5">Example: <span className="font-mono">{p.example.trim() === '' ? '(empty)' : p.example}</span></span>
+                <span className="block text-[11px] text-slate-500 truncate mt-0.5">Example: <span className="font-mono">{p.example.trim() === '' ? '(empty)' : p.example}</span></span>
               </button>
             ))}
           </div>
@@ -230,7 +230,7 @@ export function PlaceholderPicker({ items, onPick, target, label = 'Placeholders
       <button ref={trigger} type="button" disabled={disabled || items.length === 0} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
         aria-label={compact ? `Insert a placeholder: ${label}` : undefined} title="Insert a placeholder such as {ip} or {country_tag}"
         onMouseDown={(e) => e.preventDefault()}
-        className={compact ? 'h-8 sm:h-7 px-2 rounded-md text-[11px] text-slate-400 hover:text-slate-100 hover:bg-white/10 inline-flex items-center gap-1 transition-colors disabled:opacity-40' : `${BTN_QUIET} !h-8`}>
+        className={compact ? 'h-8 sm:h-7 px-2 rounded-md text-[11px] text-slate-500 hover:text-slate-100 hover:bg-white/10 inline-flex items-center gap-1 transition-colors disabled:opacity-40' : `${BTN_QUIET} !h-8`}>
         <Braces size={compact ? 12 : 13} /> {compact ? 'Insert' : label}
       </button>
       {open && wide && (
@@ -377,7 +377,7 @@ export function PlaceholderInput({ id, label, value, onChange, max, placeholders
                 className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-baseline gap-2 min-w-0 ${i === sug.i ? 'bg-white/10' : 'hover:bg-white/5'}`}>
                 <code className="font-mono text-[12px] text-emerald-300 shrink-0">{`{${p.name}}`}</code>
                 <span className="text-xs text-slate-300 shrink-0">{p.label}</span>
-                <span className="text-[11px] text-slate-600 truncate font-mono min-w-0">{p.example.trim() === '' ? '(empty)' : p.example}</span>
+                <span className="text-[11px] text-slate-500 truncate font-mono min-w-0">{p.example.trim() === '' ? '(empty)' : p.example}</span>
               </button>
             ))}
           </div>
@@ -479,7 +479,7 @@ export function NumberField({ id, label, value, onChange, min, max, unit, hint, 
   id: string; label: string; value: string; onChange: (v: string) => void; min: number; max: number; unit?: string; hint: ReactNode; def: string; error?: string; disabled?: boolean
 }) {
   return (
-    <FieldShell id={id} label={label} error={error} hint={<>{hint} <span className="text-slate-600">From {min} to {max}.</span></>} def={def} onDefault={value !== def ? () => onChange(def) : undefined}>
+    <FieldShell id={id} label={label} error={error} hint={<>{hint} <span className="text-slate-500">From {min} to {max}.</span></>} def={def} onDefault={value !== def ? () => onChange(def) : undefined}>
       <div className="flex items-center gap-2">
         <input id={id} type="text" inputMode="numeric" autoComplete="off" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, '').slice(0, 5))}
           className={`${INPUT} max-w-[7rem] tabular-nums ${error ? '!border-rose-500/40' : ''}`} aria-invalid={!!error} aria-describedby={`${id}-hint ${id}-err`} />
@@ -503,10 +503,10 @@ export function ColorField({ mode, color, onMode, onColor, error, defColor, disa
       {mode === 'auto' ? (
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5" aria-label="The colours automatic picks">
           {AUTO_COLORS.map((c) => (
-            <li key={c.label} className="flex items-center gap-2 text-xs text-slate-400 min-w-0">
+            <li key={c.label} className="flex items-center gap-2 text-xs text-slate-500 min-w-0">
               <span aria-hidden="true" className="h-3.5 w-3.5 rounded-full shrink-0 border border-white/20" style={{ background: c.hex }} />
               <span className="truncate">{c.label}</span>
-              <span className="font-mono text-[11px] text-slate-600">{c.hex}</span>
+              <span className="font-mono text-[11px] text-slate-500">{c.hex}</span>
             </li>
           ))}
         </ul>
@@ -576,7 +576,7 @@ export function ChoiceCards<T extends string>({ value, onChange, options, ariaLa
               <span aria-hidden="true" className={`h-3.5 w-3.5 rounded-full border shrink-0 flex items-center justify-center ${on ? 'border-emerald-400' : 'border-slate-500'}`}>{on && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}</span>
               <span className="text-sm font-medium text-slate-100">{o.title}</span>
             </span>
-            <span className="block text-xs text-slate-400 mt-1.5 leading-relaxed">{o.text}</span>
+            <span className="block text-xs text-slate-500 mt-1.5 leading-relaxed">{o.text}</span>
             {o.foot && <span className="block mt-2 min-w-0">{o.foot}</span>}
           </button>
         )
@@ -612,7 +612,7 @@ export function FieldsEditor({ fields, onChange, errors, max, placeholders, disa
             <span className="text-xs font-semibold text-slate-300 mr-auto">Field {i + 1}</span>
             <div className="flex items-center gap-2">
               <Switch id={`notify-field-${f.key}-inline`} checked={f.inline} onChange={(v) => set(i, { inline: v })} label={`Field ${i + 1} side by side`} disabled={disabled} />
-              <label htmlFor={`notify-field-${f.key}-inline`} className="text-xs text-slate-400 cursor-pointer" title="Inline fields sit next to each other, up to three in a row">Side by side</label>
+              <label htmlFor={`notify-field-${f.key}-inline`} className="text-xs text-slate-500 cursor-pointer" title="Inline fields sit next to each other, up to three in a row">Side by side</label>
             </div>
             <div className="flex items-center gap-1.5">
               <button type="button" className={ICON_BTN} disabled={disabled || i === 0} onClick={() => move(i, -1)} aria-label={`Move field ${i + 1} up`} title="Move up"><ArrowUp size={14} /></button>

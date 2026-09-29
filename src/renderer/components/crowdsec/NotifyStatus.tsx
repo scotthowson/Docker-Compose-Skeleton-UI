@@ -78,14 +78,14 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
   return (
     <section className={`${CARD} p-4`} aria-label="Status of the Discord alerts">
       <div className="flex items-start gap-3">
-        <div className={`h-10 w-10 rounded-xl border border-white/5 flex items-center justify-center shrink-0 ${h.tone === 'good' ? 'bg-emerald-500/15 text-emerald-400' : h.tone === 'warn' ? 'bg-amber-500/15 text-amber-400' : 'bg-white/[0.05] text-slate-400'}`}><MessageSquare size={18} /></div>
+        <div className={`h-10 w-10 rounded-xl border border-white/5 flex items-center justify-center shrink-0 ${h.tone === 'good' ? 'bg-emerald-500/15 text-emerald-400' : h.tone === 'warn' ? 'bg-amber-500/15 text-amber-400' : 'bg-white/[0.05] text-slate-500'}`}><MessageSquare size={18} /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-sm font-semibold text-slate-100">{h.title}</h2>
             <Chip tone={h.tone} className="hidden sm:inline-flex">{h.tone === 'good' ? 'working' : h.tone === 'warn' ? 'needs attention' : 'off'}</Chip>
             {refreshFailed && <Chip tone="warn" title="The last refresh failed. What you see is the last answer.">could not refresh</Chip>}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{h.detail}</p>
+          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{h.detail}</p>
           {isAdmin && !st.enabled && !st.wired && !data.status.last_apply && (
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">To start: choose where the messages go (Webhook), turn the switch below on, press Save and apply, then send a test message.</p>
           )}
@@ -121,14 +121,14 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
           : <Outcome icon={ShieldCheck} tone="mute" title="No change has been applied from this page yet">Settings you save here are written to CrowdSec, which restarts to load them.</Outcome>}
         {t
           ? <Outcome icon={t.ok ? Send : CircleAlert} tone={t.ok ? 'good' : 'bad'} title={t.ok ? `Last test message delivered ${fmtAgo(t.at, now)}` : `The last test message failed ${fmtAgo(t.at, now)}`}>
-              {redact(t.message)} <span className="text-slate-600">· {sampleLabel(t.sample)}{t.http ? ` · HTTP ${t.http}` : ''}</span>
+              {redact(t.message)} <span className="text-slate-500">· {sampleLabel(t.sample)}{t.http ? ` · HTTP ${t.http}` : ''}</span>
             </Outcome>
           : <Outcome icon={Send} tone="mute" title="No test message has been sent yet">{isAdmin ? 'Use “Send test message” next to the preview to see one arrive in your channel.' : 'An administrator can send a test message.'}</Outcome>}
         {errs.length > 0
           ? <Outcome icon={Radio} tone="warn" title={`${errs.length} delivery problem${errs.length === 1 ? '' : 's'} reported by CrowdSec in the last 24 hours`}>
               <ul className="space-y-1 mt-1">
                 {errs.map((e) => (
-                  <li key={`${e.time}-${e.message}`} className="min-w-0"><span className="text-slate-400 tabular-nums" title={fmtTime(e.time)}>{fmtAgo(e.time, now)}</span> <span className="font-mono text-[11px] text-amber-300 break-words">{redact(e.message)}</span></li>
+                  <li key={`${e.time}-${e.message}`} className="min-w-0"><span className="text-slate-500 tabular-nums" title={fmtTime(e.time)}>{fmtAgo(e.time, now)}</span> <span className="font-mono text-[11px] text-amber-300 break-words">{redact(e.message)}</span></li>
                 ))}
               </ul>
             </Outcome>
@@ -166,7 +166,7 @@ export function ApplyProgress({ startedAt, what }: { startedAt: number; what: st
     <div role="status" aria-live="polite" className="w-full">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-slate-100 flex items-center gap-2"><Loader2 size={14} className="animate-spin text-emerald-400" /> {what}</p>
-        <span className="text-xs tabular-nums text-slate-400">{sec}s · usually 10 to 40 seconds</span>
+        <span className="text-xs tabular-nums text-slate-500">{sec}s · usually 10 to 40 seconds</span>
       </div>
       <ol className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5" aria-label="Steps">
         {STEPS.map((s, i) => (

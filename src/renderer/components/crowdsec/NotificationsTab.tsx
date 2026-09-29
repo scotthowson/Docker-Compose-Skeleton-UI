@@ -440,7 +440,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                 <KV k="Sender name">{s.identity.name}</KV>
                 <KV k="Avatar">{s.identity.avatar_url ? <span className="font-mono text-xs break-all">{s.identity.avatar_url}</span> : 'The webhook’s own picture'}</KV>
                 <KV k="Colour">{s.embed.color_mode === 'auto' ? 'Automatic, by the kind of attack' : <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ background: s.embed.color }} /><span className="font-mono text-xs">{s.embed.color}</span></span>}</KV>
-                <KV k="Mention">{MENTION_WORDS[s.mention.mode].replace(/^./, (c) => c.toUpperCase())}{s.mention.id ? <span className="font-mono text-xs text-slate-400"> · {s.mention.id}</span> : null}{s.mention.text ? <span className="text-slate-400"> · “{s.mention.text}”</span> : null}</KV>
+                <KV k="Mention">{MENTION_WORDS[s.mention.mode].replace(/^./, (c) => c.toUpperCase())}{s.mention.id ? <span className="font-mono text-xs text-slate-500"> · {s.mention.id}</span> : null}{s.mention.text ? <span className="text-slate-500"> · “{s.mention.text}”</span> : null}</KV>
               </dl>
             </Section>
             <Section id="notify-triggers" icon={Filter} title="What triggers a message" summary={summaries.triggers} open={open.triggers} onToggle={() => toggle('triggers')}>
@@ -534,17 +534,17 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                     foot: o.value === 'custom' && form.mode === 'custom' && urlTyped !== '' && !urlProblem
                       ? <Chip tone="info">new address, not saved yet</Chip>
                       : src[o.value].configured
-                        ? <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 font-mono min-w-0 max-w-full"><Dot tone="good" /><span className="truncate">{src[o.value].masked}</span></span>
+                        ? <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 font-mono min-w-0 max-w-full"><Dot tone="good" /><span className="truncate">{src[o.value].masked}</span></span>
                         : <Chip tone={form.mode === o.value && form.enabled ? 'warn' : 'mute'}>not set</Chip>,
                   }))} />
                 {form.mode === 'global' && (
                   src.global.configured
-                    ? <p className="text-xs text-slate-400">DCS posts its own alerts to <span className="font-mono text-slate-300 break-all">{src.global.masked}</span>. CrowdSec’s alerts go there too. Change it under Server Config → Notifications.</p>
+                    ? <p className="text-xs text-slate-500">DCS posts its own alerts to <span className="font-mono text-slate-300 break-all">{src.global.masked}</span>. CrowdSec’s alerts go there too. Change it under Server Config → Notifications.</p>
                     : <Notice tone="warn" icon={AlertTriangle} title="No global webhook is set" action={<button type="button" onClick={() => setCurrentPage('config')} className="text-xs text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1">Open Server Config <ChevronRight size={12} /></button>}>DCS has no webhook of its own to share. Set <span className="font-mono">DISCORD_WEBHOOK_URL</span> under Server Config → Notifications, or choose Custom and add an address for CrowdSec alone.</Notice>
                 )}
                 {form.mode === 'keep' && (
                   src.keep.configured
-                    ? <p className="text-xs text-slate-400">CrowdSec’s notification file already posts to <span className="font-mono text-slate-300 break-all">{src.keep.masked}</span>. That address stays as it is.</p>
+                    ? <p className="text-xs text-slate-500">CrowdSec’s notification file already posts to <span className="font-mono text-slate-300 break-all">{src.keep.masked}</span>. That address stays as it is.</p>
                     : <Notice tone="warn" icon={AlertTriangle} title="There is no webhook in CrowdSec’s file to keep">Choose Global, or Custom with a new address.</Notice>
                 )}
                 {form.mode === 'custom' && (
@@ -725,7 +725,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                       <div className="min-w-0 flex-1 basis-40">
                         <p className="text-sm text-slate-100 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" /> You have unsaved changes</p>
                         <p className="text-[11px] text-slate-500 flex items-center gap-2 min-w-0"><span className="truncate" title={changes.join(', ')}>{changes.length ? changes.slice(0, 4).join(', ') + (changes.length > 4 ? ` and ${changes.length - 4} more` : '') : 'Edited'}</span><button type="button" onClick={() => setReview(true)} className="shrink-0 text-cyan-400 hover:text-cyan-300 py-2 -my-2 px-1">Review</button></p>
-                        {totalProblems > 0 && <button type="button" onClick={focusFirstProblem} className="text-[11px] text-rose-300 hover:text-rose-200 underline underline-offset-2">{totalProblems} thing{totalProblems === 1 ? '' : 's'} to fix first</button>}
+                        {totalProblems > 0 && <button type="button" onClick={focusFirstProblem} className="text-[11px] text-rose-300 hover:text-rose-300 underline underline-offset-2">{totalProblems} thing{totalProblems === 1 ? '' : 's'} to fix first</button>}
                       </div>
                     )
                     : <div className="min-w-0 flex-1 basis-40"><p className="text-xs text-slate-500">No unsaved changes.</p></div>}

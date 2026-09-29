@@ -91,13 +91,13 @@ function ApplyingPanel({ since }: { since: number }) {
     <div role="status" aria-live="polite" className="rounded-xl bg-slate-900 shadow-lg border border-cyan-500/25 px-4 py-3" data-testid="applying">
       <div className="flex items-center gap-2">
         <Loader2 size={15} className="animate-spin text-cyan-400 shrink-0" aria-hidden="true" />
-        <p className="text-sm text-slate-100">Applying the new ban profile… <span className="tabular-nums text-slate-400">{secs} s</span></p>
+        <p className="text-sm text-slate-100">Applying the new ban profile… <span className="tabular-nums text-slate-500">{secs} s</span></p>
       </div>
       <div className="relative h-1 mt-3 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent animate-shimmer" />
       </div>
-      <ol className="mt-3 flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] text-slate-400" aria-label="What happens, in order">
-        {APPLY_STEPS.map((st, i) => <li key={st.short} className="flex items-center gap-1.5"><span className="tabular-nums text-slate-600">{i + 1}</span><StepLabel step={st} /></li>)}
+      <ol className="mt-3 flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] text-slate-500" aria-label="What happens, in order">
+        {APPLY_STEPS.map((st, i) => <li key={st.short} className="flex items-center gap-1.5"><span className="tabular-nums text-slate-500">{i + 1}</span><StepLabel step={st} /></li>)}
       </ol>
       <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">It takes 10 to 40 seconds, and DCS cannot see which step it is on. Bans stay in place. If CrowdSec does not come back healthy, DCS puts the old file back by itself.</p>
     </div>
@@ -111,7 +111,7 @@ function Ago({ t }: { t: string }) {
 
 /** the read-only face of a length (a viewer, or a plain line of text) */
 function Static({ children, muted = false }: { children: React.ReactNode; muted?: boolean }) {
-  return <p className={`text-sm ${muted ? 'text-slate-400' : 'text-slate-200'}`}>{children}</p>
+  return <p className={`text-sm ${muted ? 'text-slate-500' : 'text-slate-200'}`}>{children}</p>
 }
 
 export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }) {
@@ -466,7 +466,7 @@ export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }
                   <LengthPicker key={`c${rev}`} value={draft.escalate.max} onChange={(v) => upd({ escalate: { ...draft.escalate, max: v } })} presets={CAP_PRESETS} ariaLabel="Longest ban for a repeat offender" disabled={disabled} error={problems.cap} />
                 </>
               ) : null}
-              {ladder && <p className="text-xs text-slate-400 mt-2.5 leading-relaxed">An address that keeps coming back is banned for {ladder}.</p>}
+              {ladder && <p className="text-xs text-slate-500 mt-2.5 leading-relaxed">An address that keeps coming back is banned for {ladder}.</p>}
               {problems.capNote && <p className="text-xs text-amber-300 mt-2 flex items-start gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-0.5" aria-hidden="true" /> {problems.capNote}</p>}
             </div>
           )}
@@ -521,16 +521,16 @@ export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }
           <dt className="text-slate-500">Discord alerts</dt>
           <dd className="text-slate-200 min-w-0">
             {live.notified
-              ? <><Chip tone="good">wired in</Chip> <span className="text-slate-400">Bans are sent to Discord. DCS keeps this wired when it saves.</span></>
-              : <><Chip tone="mute">not connected</Chip> <span className="text-slate-400">Bans are not sent to Discord.</span> <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={() => goTab('notifications')}>Set it up</button></>}
+              ? <><Chip tone="good">wired in</Chip> <span className="text-slate-500">Bans are sent to Discord. DCS keeps this wired when it saves.</span></>
+              : <><Chip tone="mute">not connected</Chip> <span className="text-slate-500">Bans are not sent to Discord.</span> <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={() => goTab('notifications')}>Set it up</button></>}
           </dd>
         </dl>
 
         <div className="mt-4">
-          <button type="button" onClick={() => setShowBackups((v) => !v)} aria-expanded={showBackups} className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors">
+          <button type="button" onClick={() => setShowBackups((v) => !v)} aria-expanded={showBackups} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-200 transition-colors">
             {showBackups ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            <Archive size={12} aria-hidden="true" /> Backups <span className="text-slate-600 tabular-nums">{server.backups.length}</span>
-            {server.backups[0] && <span className="text-slate-600">· newest <Ago t={server.backups[0].created_at} /></span>}
+            <Archive size={12} aria-hidden="true" /> Backups <span className="text-slate-500 tabular-nums">{server.backups.length}</span>
+            {server.backups[0] && <span className="text-slate-500">· newest <Ago t={server.backups[0].created_at} /></span>}
           </button>
           {showBackups && (
             <div className="mt-2.5">
@@ -540,13 +540,13 @@ export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }
               ) : (
                 <>
                   <table className="hidden sm:table w-full mt-3 text-xs">
-                    <thead><tr className="text-[10px] uppercase tracking-wider text-slate-600 text-left"><th className="font-semibold py-1.5 pr-3">File</th><th className="font-semibold py-1.5 pr-3">Kind</th><th className="font-semibold py-1.5 pr-3">Made</th><th className="font-semibold py-1.5 text-right">Size</th></tr></thead>
+                    <thead><tr className="text-[10px] uppercase tracking-wider text-slate-500 text-left"><th className="font-semibold py-1.5 pr-3">File</th><th className="font-semibold py-1.5 pr-3">Kind</th><th className="font-semibold py-1.5 pr-3">Made</th><th className="font-semibold py-1.5 text-right">Size</th></tr></thead>
                     <tbody className="divide-y divide-white/[0.04]">
                       {server.backups.map((b) => (
-                        <tr key={b.name} className="text-slate-400">
+                        <tr key={b.name} className="text-slate-500">
                           <td className="py-1.5 pr-3 font-mono text-[11px] text-slate-300 break-all">{b.name}</td>
                           <td className="py-1.5 pr-3">{b.kind === 'http' ? 'Discord message' : 'Ban profile'}</td>
-                          <td className="py-1.5 pr-3 whitespace-nowrap" title={fmtTime(b.created_at)}>{fmtTime(b.created_at)} <span className="text-slate-600">· <Ago t={b.created_at} /></span></td>
+                          <td className="py-1.5 pr-3 whitespace-nowrap" title={fmtTime(b.created_at)}>{fmtTime(b.created_at)} <span className="text-slate-500">· <Ago t={b.created_at} /></span></td>
                           <td className="py-1.5 text-right tabular-nums">{fmtBytes(b.size)}</td>
                         </tr>
                       ))}
@@ -554,7 +554,7 @@ export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }
                   </table>
                   <ul className="sm:hidden mt-3 divide-y divide-white/[0.04]">
                     {server.backups.map((b) => (
-                      <li key={b.name} className="py-2 text-xs text-slate-400">
+                      <li key={b.name} className="py-2 text-xs text-slate-500">
                         <p className="font-mono text-[11px] text-slate-300 break-all">{b.name}</p>
                         <p className="mt-0.5">{b.kind === 'http' ? 'Discord message' : 'Ban profile'} · {fmtTime(b.created_at)} · <Ago t={b.created_at} /> · <span className="tabular-nums">{fmtBytes(b.size)}</span></p>
                       </li>
@@ -573,7 +573,7 @@ export default function ProfileCard({ scenarios }: { scenarios: ScenarioInfo[] }
         {result && !busy && <ResultPanel result={result} onDismiss={dismissResult} onCheck={checkNow} onOpenFile={result.kind === 'fail' && result.custom ? () => setShowRaw(true) : undefined} />}
         {isAdmin && (
           <div className={`rounded-xl bg-slate-900 shadow-lg border px-3 py-2.5 md:pr-16 flex items-center gap-x-3 gap-y-2 flex-wrap ${edited ? 'border-emerald-500/25' : 'border-white/10'}`} role="group" aria-label="Save the ban profile">
-            <p className={`text-xs min-w-0 flex-1 basis-56 leading-relaxed ${errorCount > 0 && dirty ? 'text-rose-300' : 'text-slate-400'}`} aria-live="polite">
+            <p className={`text-xs min-w-0 flex-1 basis-56 leading-relaxed ${errorCount > 0 && dirty ? 'text-rose-300' : 'text-slate-500'}`} aria-live="polite">
               {busy ? 'Working… please wait.'
                 : locked && !dirty ? 'Take over the file to change it.'
                 : !dirty ? 'Nothing to save: these settings are in force.'
@@ -627,7 +627,7 @@ function OverridesEditor({ rows, problems, scenarios, presets, rev, editing, dis
             return (
               <li key={`${r.id}-${rev}`} className={`rounded-lg border p-2.5 ${pr.pattern || pr.length ? 'border-rose-500/25 bg-rose-500/[0.04]' : 'border-white/5 bg-white/[0.02]'}`}>
                 <div className="grid gap-2 lg:grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] lg:items-start">
-                  <span className="hidden lg:flex h-9 items-center justify-center text-[11px] tabular-nums text-slate-600" aria-hidden="true">{i + 1}</span>
+                  <span className="hidden lg:flex h-9 items-center justify-center text-[11px] tabular-nums text-slate-500" aria-hidden="true">{i + 1}</span>
                   <ScenarioInput value={r.pattern} onChange={(v) => onPatch(r.id, { pattern: v })} scenarios={scenarios} ariaLabel={`Scenario, row ${i + 1}`} invalid={!!pr.pattern} disabled={disabled} autoFocus={justAdded === r.id} />
                   <div className="flex items-center justify-between gap-2 lg:contents">
                     <CompactLength value={r.duration} onChange={(v) => onPatch(r.id, { duration: v })} presets={presets} ariaLabel={`Ban length, row ${i + 1}`} disabled={disabled} invalid={!!pr.length} />
@@ -653,7 +653,7 @@ function OverridesEditor({ rows, problems, scenarios, presets, rev, editing, dis
       )}
       <div className="mt-2.5 flex items-center gap-3 flex-wrap">
         <button type="button" className={BTN_QUIET} onClick={onAdd} disabled={disabled || rows.length >= maxRows}><Plus size={13} /> Add a length for an attack</button>
-        <span className="text-[11px] text-slate-600 tabular-nums">{rows.length} of {maxRows}</span>
+        <span className="text-[11px] text-slate-500 tabular-nums">{rows.length} of {maxRows}</span>
       </div>
     </div>
   )
@@ -675,7 +675,7 @@ function ResultPanel({ result, onDismiss, onCheck, onOpenFile }: { result: Resul
       <div className="rounded-xl bg-slate-900 shadow-lg">
         <Notice tone="good" icon={CircleCheck} role="status" title={result.message} onDismiss={onDismiss}>
           {result.restarted && (
-            <ol className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-400" aria-label="What was done">
+            <ol className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500" aria-label="What was done">
               {APPLY_STEPS.map((st) => <li key={st.short} className="flex items-center gap-1"><CircleCheck size={11} className="text-emerald-400 shrink-0" aria-hidden="true" /><StepLabel step={st} /></li>)}
             </ol>
           )}
@@ -694,7 +694,7 @@ function ResultPanel({ result, onDismiss, onCheck, onOpenFile }: { result: Resul
         <p>{result.body}</p>
         {result.detail && (
           <details className="mt-1.5">
-            <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">What the server said</summary>
+            <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-200">What the server said</summary>
             <p className="mt-1 font-mono text-[11px] text-slate-300 whitespace-pre-wrap break-words max-h-40 overflow-y-auto scrollbar-thin" data-testid="fail-detail">{result.detail}</p>
           </details>
         )}

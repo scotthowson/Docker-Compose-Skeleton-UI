@@ -302,7 +302,7 @@ export function Panel({ id, icon: Icon, title, sub, right, children, className =
   return (
     <section aria-labelledby={`${id}-title`} className={`${CARD} p-4 md:p-5 min-w-0 ${className}`} id={id}>
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <h2 id={`${id}-title`} className="text-sm font-semibold text-slate-200 flex items-center gap-2 min-w-[12rem] flex-1 pt-0.5"><Icon size={15} className="text-slate-400 shrink-0" aria-hidden="true" /> {title}</h2>
+        <h2 id={`${id}-title`} className="text-sm font-semibold text-slate-200 flex items-center gap-2 min-w-[12rem] flex-1 pt-0.5"><Icon size={15} className="text-slate-500 shrink-0" aria-hidden="true" /> {title}</h2>
         {right && <div className="flex items-center justify-end gap-2 flex-wrap">{right}</div>}
       </div>
       {sub && <div className="text-xs text-slate-500 mt-1.5 leading-relaxed">{sub}</div>}
@@ -485,7 +485,7 @@ export function ScenarioInput({ value, onChange, scenarios, ariaLabel, invalid =
               <span className="block text-[11px] text-slate-500 truncate">{o.hint}</span>
             </li>
           ))}
-          {more > 0 && <li role="presentation" className="px-2.5 py-1 text-[11px] text-slate-600">{more} more — keep typing to narrow it down</li>}
+          {more > 0 && <li role="presentation" className="px-2.5 py-1 text-[11px] text-slate-500">{more} more — keep typing to narrow it down</li>}
         </ul>
       )}
     </div>
