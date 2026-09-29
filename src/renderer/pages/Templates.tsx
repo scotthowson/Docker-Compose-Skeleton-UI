@@ -47,6 +47,7 @@ import {
   Satellite, Home,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { Switch } from '@mantine/core'
 import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -1410,13 +1411,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 {v.description && <p className="text-[10px] text-slate-500 mt-0.5">{v.description}</p>}
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">{v.name}</p>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleVariableChange(v.name, isOn ? 'false' : 'true')}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${isOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                              >
-                                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isOn ? 'translate-x-6' : 'translate-x-1'}`} />
-                              </button>
+                              <Switch aria-label={v.label} checked={isOn} onChange={() => handleVariableChange(v.name, isOn ? 'false' : 'true')} className="shrink-0 ml-3" />
                             </div>
                           )
                         }
@@ -1529,19 +1524,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       : 'Pull the images, create and start the containers right away'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAutoStart((prev) => !prev)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
-                    autoStart ? 'bg-emerald-500' : 'bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      autoStart ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                <Switch aria-label="Auto-start after deploy" checked={autoStart} onChange={() => setAutoStart((prev) => !prev)} className="shrink-0 ml-3" />
               </div>
 
               {/* Optional services toggles */}
@@ -1557,24 +1540,17 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <p className="text-[11px] text-slate-500">{opt.description}</p>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setExcludedServices((prev) => {
+                        <Switch
+                          aria-label={opt.label}
+                          checked={!isExcluded}
+                          onChange={() => setExcludedServices((prev) => {
                             const next = new Set(prev)
                             if (isExcluded) next.delete(opt.service)
                             else next.add(opt.service)
                             return next
                           })}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
-                            !isExcluded ? 'bg-emerald-500' : 'bg-slate-700'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                              !isExcluded ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
+                          className="shrink-0 ml-3"
+                        />
                       </div>
                     )
                   })}
@@ -1596,13 +1572,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     </button>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-500">{enableRouting ? `${routeServices.filter((s) => s.enabled).length} route${routeServices.filter((s) => s.enabled).length !== 1 ? 's' : ''}` : 'Off'}</span>
-                      <button
-                        type="button"
-                        onClick={() => setEnableRouting(!enableRouting)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableRouting ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                      >
-                        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableRouting ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                      </button>
+                      <Switch size="sm" aria-label="HTTPS routing" checked={enableRouting} onChange={() => setEnableRouting(!enableRouting)} className="shrink-0" />
                     </div>
                   </div>
 
@@ -1754,13 +1724,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Network size={12} className="text-slate-500" />
                       <span className="text-[11px] text-slate-400">Connect to <span className="text-emerald-400 font-medium">proxy</span> network</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setConnectProxy(!connectProxy)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${connectProxy ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${connectProxy ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" aria-label="Connect to the proxy network" checked={connectProxy} onChange={() => setConnectProxy(!connectProxy)} className="shrink-0" />
                   </div>
 
                   {/* Authelia SSO Protection Toggle */}
@@ -1769,13 +1733,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Shield size={12} className="text-violet-400" />
                       <span className="text-[11px] text-slate-400">Protect with <span className="text-violet-400 font-medium">Authelia</span> SSO</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setEnableAuthelia(!enableAuthelia)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableAuthelia ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" color="violet" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} className="shrink-0" />
                   </div>
                 </div>
               )}
@@ -1788,13 +1746,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Store size={13} className="text-orange-400" />
                       <span className="text-[11px] font-medium text-slate-300">Add to <span className="text-orange-400 font-medium">Homarr</span> Dashboard</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAddToHomarr(!addToHomarr)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${addToHomarr ? 'bg-orange-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${addToHomarr ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" color="orange" aria-label="Add to the Homarr dashboard" checked={addToHomarr} onChange={() => setAddToHomarr(!addToHomarr)} className="shrink-0" />
                   </div>
                   {!homarrHasKey && (
                     <p className="px-3 pb-2 -mt-0.5 text-[10px] text-slate-500">Without an API key the app lands in Homarr's library only — add the key in Server Config → Integrations</p>
@@ -1810,13 +1762,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <span className="text-[11px] font-medium text-slate-300">Resource Limits</span>
                     <span className="text-[10px] text-slate-500">per service</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnableResourceLimits(!enableResourceLimits)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableResourceLimits ? 'bg-amber-500' : 'bg-slate-700'}`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableResourceLimits ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                  </button>
+                  <Switch size="sm" color="amber" aria-label="Resource limits" checked={enableResourceLimits} onChange={() => setEnableResourceLimits(!enableResourceLimits)} className="shrink-0" />
                 </div>
                 {enableResourceLimits && (
                   <div className="px-3 py-3 border-t border-white/5 space-y-3 animate-fade-in">

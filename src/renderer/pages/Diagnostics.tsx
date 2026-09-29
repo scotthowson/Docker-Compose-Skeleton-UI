@@ -10,6 +10,7 @@ import {
   Lock, Trash2, RotateCcw, ExternalLink,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { Switch } from '@mantine/core'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetScope } from '../hooks/useFleetScope'
 import {
@@ -1208,15 +1209,7 @@ function FactoryResetCard() {
         <div className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-medium text-rose-300">Also wipe the stacks and their data</p>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={resetCompose}
-              onClick={() => setResetCompose(!resetCompose)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full ring-1 transition-colors duration-200 ${resetCompose ? 'bg-rose-500 ring-rose-400/40' : 'bg-slate-700 ring-white/10'}`}
-            >
-              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${resetCompose ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+            <Switch color="rose" aria-label="Also wipe the stacks and their data" checked={resetCompose} onChange={() => setResetCompose(!resetCompose)} className="shrink-0" />
           </div>
           <div>
             <p className="text-[10px] text-slate-500 leading-relaxed mt-1">

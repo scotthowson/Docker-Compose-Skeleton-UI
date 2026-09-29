@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Switch, Tooltip } from '@mantine/core'
 import {
   Server, CheckCircle2, User, Lock, Shield, Eye, EyeOff,
   Settings, Globe, Clock, FolderOpen, Layers, ChevronUp, ChevronDown,
@@ -153,13 +154,12 @@ function EnvToggle({ label, helpText, envKey, envVars, setEnvVars }: {
         <p className="text-xs text-slate-300">{label}</p>
         {helpText && <p className="text-[10px] text-slate-500">{helpText}</p>}
       </div>
-      <button
-        type="button"
-        onClick={() => setEnvVars({ ...envVars, [envKey]: isOn ? 'false' : 'true' })}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ${isOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
-      >
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isOn ? 'translate-x-6' : 'translate-x-1'}`} />
-      </button>
+      <Switch
+        aria-label={label}
+        checked={isOn}
+        onChange={() => setEnvVars({ ...envVars, [envKey]: isOn ? 'false' : 'true' })}
+        className="shrink-0"
+      />
     </div>
   )
 }
@@ -1830,13 +1830,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <p className="text-xs font-medium text-slate-300">Enable HTTPS with Traefik</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">Automatic TLS certificates via Let's Encrypt</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setEnableTraefik(!enableTraefik)}
-                          className={`relative w-10 h-5 rounded-full transition-colors ${enableTraefik ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                        >
-                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enableTraefik ? 'translate-x-5' : ''}`} />
-                        </button>
+                        <Switch size="sm" aria-label="Enable HTTPS with Traefik" checked={enableTraefik} onChange={() => setEnableTraefik(!enableTraefik)} className="shrink-0" />
                       </div>
 
                       {enableTraefik && (
@@ -1903,15 +1897,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                                 {isWebMode() ? 'Enabled by default in AIO for security' : 'Secure read-only Docker API access (recommended)'}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }}
-                              title={isWebMode() ? 'Locked on in AIO — Docker Socket Proxy secures the Docker API' : includeDockerSocket ? 'Click to exclude' : 'Click to include'}
-                              className={`relative w-10 h-5 rounded-full transition-colors ${includeDockerSocket ? 'bg-emerald-500' : 'bg-slate-700'} ${isWebMode() ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            >
-                              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includeDockerSocket ? 'translate-x-5' : ''}`} />
-                            </button>
-                            {/* Native title tooltip avoids overflow:hidden z-index issues */}
+                            <Tooltip label={isWebMode() ? 'Locked on in AIO — Docker Socket Proxy secures the Docker API' : includeDockerSocket ? 'On: the stack gets the read-only Docker API proxy' : 'Off: no Docker Socket Proxy in the stack'}>
+                              <span className="inline-flex shrink-0">
+                                {/* locked on in web mode: it keeps its on look, dimmed, and ignores a click */}
+                                <Switch size="sm" aria-label="Include Docker Socket Proxy" aria-disabled={isWebMode() || undefined} style={isWebMode() ? { opacity: 0.6 } : undefined} checked={includeDockerSocket} onChange={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }} />
+                              </span>
+                            </Tooltip>
                           </div>
 
                           {/* Cloudflare DNS (optional) */}
@@ -1947,13 +1938,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                                   <p className="text-xs font-medium text-slate-300">Dynamic DNS (DDNS)</p>
                                   <p className="text-[10px] text-slate-500 mt-0.5">Auto-update DNS when your public IP changes</p>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setEnableDDNS(!enableDDNS)}
-                                  className={`relative w-10 h-5 rounded-full transition-colors ${enableDDNS ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                                >
-                                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enableDDNS ? 'translate-x-5' : ''}`} />
-                                </button>
+                                <Switch size="sm" aria-label="Dynamic DNS (DDNS)" checked={enableDDNS} onChange={() => setEnableDDNS(!enableDDNS)} className="shrink-0" />
                               </div>
 
                               {enableDDNS && (
@@ -2021,13 +2006,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       </div>
                       <div className="flex items-center gap-2">
                         {enableAuthelia && <span className="text-[9px] text-violet-400 font-medium">Enabled</span>}
-                        <button
-                          type="button"
-                          onClick={() => setEnableAuthelia(!enableAuthelia)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
-                        >
-                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enableAuthelia ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
+                        <Switch color="violet" aria-label="Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} />
                       </div>
                     </div>
                     {enableAuthelia && (
@@ -2105,13 +2084,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       </div>
                       <div className="flex items-center gap-2">
                         {enableCrowdsec && <span className="text-[9px] text-rose-400 font-medium">Enabled</span>}
-                        <button
-                          type="button"
-                          onClick={() => setEnableCrowdsec(!enableCrowdsec)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${enableCrowdsec ? 'bg-rose-500' : 'bg-slate-700'}`}
-                        >
-                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableCrowdsec ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
+                        <Switch color="rose" aria-label="CrowdSec intrusion detection" checked={enableCrowdsec} onChange={() => setEnableCrowdsec(!enableCrowdsec)} />
                       </div>
                     </div>
                     {enableCrowdsec && (
@@ -2121,13 +2094,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <p className="text-xs font-medium text-slate-300">Block at the proxy (Traefik bouncer)</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Banned IPs are refused by Traefik before they reach any app. No root needed.</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setCrowdsecBouncer(!crowdsecBouncer)}
-                            className={`relative w-10 h-5 rounded-full transition-colors ${crowdsecBouncer ? 'bg-rose-500' : 'bg-slate-700'}`}
-                          >
-                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${crowdsecBouncer ? 'translate-x-5' : ''}`} />
-                          </button>
+                          <Switch size="sm" color="rose" aria-label="Block at the proxy (Traefik bouncer)" checked={crowdsecBouncer} onChange={() => setCrowdsecBouncer(!crowdsecBouncer)} className="shrink-0" />
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
                           {(envVars.DISCORD_WEBHOOK_URL || '').trim()

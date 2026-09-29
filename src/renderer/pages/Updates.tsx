@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { Switch, Tooltip } from '@mantine/core'
 import {
   Download,
   RefreshCw,
@@ -1307,18 +1308,11 @@ export default function Updates() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* What happens after a pull */}
           {isAdmin && (
-            <label
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium text-slate-400 bg-white/[0.03] border border-white/5 cursor-pointer select-none hover:text-slate-200 hover:border-white/10 transition-all"
-              title="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them."
-            >
-              <input
-                type="checkbox"
-                checked={recreate}
-                onChange={(e) => setRecreate(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-emerald-500"
-              />
-              Recreate containers
-            </label>
+            <Tooltip label="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them.">
+              <div className="flex items-center px-3 py-2 rounded-lg font-medium text-slate-400 bg-white/[0.03] border border-white/5 hover:text-slate-200 hover:border-white/10 transition-all">
+                <Switch size="xs" checked={recreate} onChange={(e) => setRecreate(e.currentTarget.checked)} label="Recreate containers" styles={{ label: { fontSize: 11, paddingInlineStart: 8 } }} />
+              </div>
+            </Tooltip>
           )}
 
           {/* Update All — prioritizes images with confirmed registry updates */}

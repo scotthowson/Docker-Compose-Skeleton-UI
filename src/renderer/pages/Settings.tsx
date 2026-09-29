@@ -3,6 +3,7 @@
 // =============================================================================
 
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
+import { Switch as MantineSwitch } from '@mantine/core'
 import {
   Cog, Info, HardDrive, Pencil, Check, X, Trash2,
   Keyboard, Timer, Image, Sun, Moon, Palette, Eye,
@@ -1669,26 +1670,15 @@ function AutoLockSettings() {
               <p className="text-[10px] text-slate-500 mt-0.5">Pre-fill your username on the login screen</p>
             </div>
           </div>
-          <button
-            onClick={() => {
+          <MantineSwitch
+            aria-label="Remember username"
+            checked={rememberUsername}
+            onChange={() => {
               const next = !rememberUsername
               updateSetting('rememberUsername', next)
               if (!next) updateSetting('lastUsername', '')
             }}
-            className={`
-              relative inline-flex h-6 w-11 items-center rounded-full
-              transition-colors duration-200 focus:outline-none
-              ${rememberUsername ? 'bg-emerald-500' : 'bg-slate-700'}
-            `}
-          >
-            <span
-              className={`
-                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
-                transition-transform duration-200
-                ${rememberUsername ? 'translate-x-6' : 'translate-x-1'}
-              `}
-            />
-          </button>
+          />
         </div>
       </div>
 
@@ -1709,22 +1699,11 @@ function AutoLockSettings() {
               <p className="text-[10px] text-slate-500 mt-0.5">Show in-app notifications for actions and events</p>
             </div>
           </div>
-          <button
-            onClick={() => updateSetting('notificationsEnabled', !notificationsEnabled)}
-            className={`
-              relative inline-flex h-6 w-11 items-center rounded-full
-              transition-colors duration-200 focus:outline-none
-              ${notificationsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}
-            `}
-          >
-            <span
-              className={`
-                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
-                transition-transform duration-200
-                ${notificationsEnabled ? 'translate-x-6' : 'translate-x-1'}
-              `}
-            />
-          </button>
+          <MantineSwitch
+            aria-label="Toast notifications"
+            checked={notificationsEnabled}
+            onChange={() => updateSetting('notificationsEnabled', !notificationsEnabled)}
+          />
         </div>
       </div>
     </div>
@@ -2160,10 +2139,11 @@ function NotificationPreferencesSection() {
                   <p className="text-[10px] text-slate-500 mt-0.5">{item.description}</p>
                 </div>
               </div>
-              <button
-                role="switch"
-                aria-checked={checked}
-                onClick={() => {
+              <MantineSwitch
+                size="sm"
+                aria-label={item.label}
+                checked={checked}
+                onChange={() => {
                   if (item.key === 'desktopNotifications' && !checked) {
                     if ('Notification' in window && Notification.permission === 'default') {
                       requestDesktopPermission()
@@ -2172,20 +2152,8 @@ function NotificationPreferencesSection() {
                   }
                   setPreference(item.key as keyof typeof preferences, !checked as never)
                 }}
-                className={`
-                  relative inline-flex h-5 w-9 items-center rounded-full
-                  transition-colors duration-200 shrink-0
-                  ${checked ? 'bg-emerald-500' : 'bg-slate-700'}
-                `}
-              >
-                <span
-                  className={`
-                    inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm
-                    transition-transform duration-200
-                    ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}
-                  `}
-                />
-              </button>
+                className="shrink-0"
+              />
             </div>
           )
         })}

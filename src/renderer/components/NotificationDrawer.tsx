@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { Switch as MantineSwitch } from '@mantine/core'
 import {
   Bell, BellOff, X, Info, CheckCircle, AlertTriangle, XCircle,
   Clock, Trash2, Check, Settings2, Monitor,
@@ -164,29 +165,20 @@ function NotificationCard({
 // Toggle Switch
 // ---------------------------------------------------------------------------
 
+/** a preference row: its name on the left, the dashboard's toggle (a Mantine Switch) on the right; the whole row toggles */
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex items-center justify-between py-1.5 cursor-pointer group">
-      <span className="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">{label}</span>
-      <button
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`
-          relative inline-flex h-5 w-9 items-center rounded-full
-          transition-colors duration-200
-          ${checked ? 'bg-emerald-500' : 'bg-slate-700'}
-        `}
-      >
-        <span
-          className={`
-            inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm
-            transition-transform duration-200
-            ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}
-          `}
-        />
-      </button>
-    </label>
+    <div className="py-1.5 text-slate-400 hover:text-slate-300 transition-colors">
+      <MantineSwitch
+        size="sm"
+        checked={checked}
+        onChange={() => onChange(!checked)}
+        label={label}
+        labelPosition="left"
+        classNames={{ body: 'justify-between' }}
+        styles={{ label: { fontSize: 11 } }}
+      />
+    </div>
   )
 }
 

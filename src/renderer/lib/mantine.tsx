@@ -45,6 +45,7 @@ const PALETTE = {
   amber: ['#fffbeb', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f'],
   rose: ['#fff1f2', '#ffe4e6', '#fecdd3', '#fda4af', '#fb7185', '#f43f5e', '#e11d48', '#be123c', '#9f1239', '#881337'],
   violet: ['#f5f3ff', '#ede9fe', '#ddd6fe', '#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed', '#6d28d9', '#5b21b6', '#4c1d95'],
+  orange: ['#fff7ed', '#ffedd5', '#fed7aa', '#fdba74', '#fb923c', '#f97316', '#ea580c', '#c2410c', '#9a3412', '#7c2d12'],
   slate: ['#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#475569', '#334155', '#1e293b', '#0f172a'],
 } as const
 type PaletteColor = keyof typeof PALETTE
@@ -150,12 +151,14 @@ const theme = createTheme({
         arrow: { border: '1px solid rgba(148, 163, 184, 0.25)' },
       },
     }),
-    // every field is the dashboard's input: 40 px, 14 px text, the glass fill, an emerald border on focus;
-    // variant="fleet" is the Proxmox forms' input (a slate fill, amber on focus) for a field among theirs
+    // every field is the dashboard's input: 40 px, 14 px text, the glass fill, an emerald border on focus
+    // (size="xs": the 30 px, 12 px field of a toolbar or a card's corner); variant="fleet" is the Proxmox
+    // forms' input (a slate fill, amber on focus) for a field among theirs
     Input: Input.extend({
       defaultProps: { size: 'sm' },
       vars: (_theme, props) => {
         const fleet = props.variant === 'fleet'
+        const compact = props.size === 'xs'
         return {
           wrapper: {
             '--input-bg': fleet ? 'var(--dcs-fleet-field-bg)' : 'var(--dcs-field-bg)',
@@ -163,8 +166,8 @@ const theme = createTheme({
             '--input-bd-focus': fleet ? 'var(--dcs-fleet-field-focus)' : 'var(--dcs-field-focus)',
             '--input-color': 'var(--dcs-field-color)',
             '--input-placeholder-color': 'var(--dcs-field-placeholder)',
-            '--input-height': '40px',
-            '--input-fz': '14px',
+            '--input-height': compact ? '30px' : '40px',
+            '--input-fz': compact ? '12px' : '14px',
             '--input-radius': '8px',
             ...(fleet ? { '--dcs-field-ring': 'var(--dcs-fleet-field-ring)' } : {}),
           },
@@ -212,9 +215,9 @@ const theme = createTheme({
     }),
     // on / off: the dashboard's toggle (a 46 × 24 track, the 500 of its colour when on — emerald unless told)
     Switch: Switch.extend({
-      defaultProps: { size: 'md', color: 'emerald' },
+      defaultProps: { size: 'md', color: 'emerald', withThumbIndicator: false },
       vars: (_theme, props) => ({ root: { '--switch-color': `var(--mantine-color-${paletteColor(props.color, 'emerald')}-5)` } }),
-      styles: { label: { fontSize: 12, paddingInlineStart: 10, color: 'inherit' }, description: { fontSize: 11 } },
+      styles: { label: { fontSize: 12 }, description: { fontSize: 11 } },
     }),
   },
 })
