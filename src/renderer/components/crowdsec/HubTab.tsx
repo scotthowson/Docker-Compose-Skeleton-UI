@@ -419,7 +419,7 @@ export default function HubTab() {
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1.5 flex-wrap">
                   <span>Type at least two letters. It searches names and descriptions. Try</span>
-                  {k.tries.map((t) => <button key={t} type="button" onClick={() => setSearch(t)} className="px-1.5 h-5 rounded-md bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">{t}</button>)}
+                  {k.tries.map((t) => <button key={t} type="button" onClick={() => setSearch(t)} className="px-2 h-7 sm:h-5 sm:px-1.5 rounded-md bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">{t}</button>)}
                 </p>
               </div>
 
