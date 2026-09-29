@@ -76,12 +76,11 @@ export default function CrowdSec() {
     }
   }, [navigationPayload, goTab])
 
-  const status = usePolling<CrowdSecStatusResponse>(() => crowdsecStatus(member), POLL_MS, { enabled: isConnected })
+  // the answer carries the server it is about, so the numbers of the hub are never shown under a VM (and a slow answer of the server just left is ignored)
+  const status = usePolling<{ of: string | null; status: CrowdSecStatusResponse }>(async () => ({ of: member, status: await crowdsecStatus(member) }), POLL_MS, { enabled: isConnected })
   const statusRefresh = status.refresh
   useEffect(() => { statusRefresh() }, [member, statusRefresh])
-  const s = status.data
-  // a server that has never answered for this scope: do not show the previous scope's numbers
-  const fresh = !!s && (s.generated_at === undefined || true)
+  const s = status.data && status.data.of === member ? status.data.status : null
 
   const ctx = useMemo(() => ({ member, memberName: scopeMember ? memberName : '', isAdmin, status: s, refreshStatus: statusRefresh, goTab }), [member, scopeMember, memberName, isAdmin, s, statusRefresh, goTab])
 
@@ -134,7 +133,7 @@ export default function CrowdSec() {
           </div>
         )}
         {!s && status.error && <ErrorState title="Could not ask CrowdSec for its state" error={status.error} onRetry={statusRefresh} />}
-        {s && fresh && !state && <TooOld />}
+        {s && !state && <TooOld />}
         {s && state === 'not_deployed' && <NotDeployed s={s} onRefresh={statusRefresh} />}
         {s && state && state !== 'not_deployed' && state !== 'healthy' && <ProblemView s={s} onRefresh={statusRefresh} onDeploy={() => setTab('overview')} />}
 
