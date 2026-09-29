@@ -5,8 +5,9 @@
 // way light mode works: a palette becomes an override stylesheet (<style id=
 // "dcs-theme">) of !important rules under html[data-theme] that beat both the
 // utilities and the .light block in index.css. It restyles every colour class
-// the pages use (lib/themeClasses.ts), the glass components, and the colours
-// charts and gauges hard-code as SVG attributes or inline styles.
+// the pages use (lib/themeClasses.ts), the glass components, the colours
+// charts and gauges hard-code as SVG attributes or inline styles, and
+// Mantine's colour variables.
 //
 // A colour that equals the stock look of the mode emits nothing, which is why
 // DCS Emerald's dark look renders pixel-identical to the untouched dashboard.
@@ -492,7 +493,7 @@ function emitBrand(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeMo
 }
 
 // ---------------------------------------------------------------------------
-// Variables: the palette for custom CSS and the studio
+// Variables: the palette for custom CSS, the hint bubble, and Mantine
 // ---------------------------------------------------------------------------
 
 function emitVariables(s: Sheet, theme: Theme, p: ThemePalette): void {
@@ -502,12 +503,103 @@ function emitVariables(s: Sheet, theme: Theme, p: ThemePalette): void {
     `--dcs-text: ${p.text}`, `--dcs-text-muted: ${p.textMuted}`,
     `--dcs-success: ${p.success}`, `--dcs-warning: ${p.warning}`, `--dcs-danger: ${p.danger}`, `--dcs-info: ${p.info}`,
   ].join('; '))
-  void theme
+  // Hint bubbles (common/Tooltip, Mantine's Tooltip on dark.7) are dark in both modes, as shipped:
+  // the theme's own dark look. The stock look is the component's fallback, so DCS Emerald sets nothing.
+  const d = themeLooks(theme).dark
+  if (!sameNeutrals(d, stockPalette('dark'))) {
+    s.rule(ROOT, `--dcs-hint-bg: ${rgba(d.surface, 0.96)}; --dcs-hint-border: ${rgba(d.text, 0.12)}; --dcs-hint-text: ${mixHex(d.text, d.textMuted, 0.16)}`)
+  }
 }
 
 const NEUTRALS = ['bg', 'surface', 'surfaceRaised', 'border', 'text', 'textMuted'] as const
 function sameNeutrals(a: ThemePalette, b: ThemePalette): boolean {
   return NEUTRALS.every((k) => a[k] === b[k])
+}
+
+/** ten shades of a colour, lightest first, with the colour itself at `at` (Mantine's primary shade: 4 dark, 6 light) */
+function scaleOf(hex: string, at: number): string[] {
+  const { l, c, h } = hexToOklch(hex)
+  const top = Math.max(l, 0.97)
+  const bottom = Math.min(l, 0.22)
+  return Array.from({ length: 10 }, (_, i) => {
+    if (i === at) return hex
+    const t = i < at ? (at - i) / at : (i - at) / (9 - at)
+    const li = i < at ? l + (top - l) * t : l - (l - bottom) * t
+    return oklchToHex({ l: li, c: c * (1 - 0.55 * t), h })
+  })
+}
+
+/**
+ * Mantine follows the look too: its colour variables are set over the ones its
+ * provider writes (html[data-theme][data-mantine-color-scheme] outranks
+ * :root[data-mantine-color-scheme]), so every Mantine component — Progress,
+ * RingProgress, Tooltip, Select, Badge… — takes the theme's status colours and
+ * surfaces without lib/mantine.tsx knowing about themes. As with the classes,
+ * only what differs from the stock look is set: DCS Emerald keeps Mantine's
+ * shipped look exactly. The --dcs-field/dropdown/option/seg/tint variables are
+ * the ones lib/mantine.tsx gives its fields, dropdowns and chips.
+ */
+function emitMantine(s: Sheet, theme: Theme, mode: ThemeMode, p: ThemePalette, stock: ThemePalette): void {
+  const light = mode === 'light'
+  const decls: string[] = []
+  const names = { success: 'emerald', info: 'cyan', warning: 'amber', danger: 'rose' } as const
+  for (const key of ['success', 'info', 'warning', 'danger'] as const) {
+    const c = p[key]
+    if (c === stock[key]) continue
+    const name = names[key]
+    scaleOf(c, light ? 6 : 4).forEach((v, i) => decls.push(`--mantine-color-${name}-${i}: ${v}`))
+    const s500 = shade(c, 0.15)
+    decls.push(
+      `--mantine-color-${name}-light: ${light ? rgba(c, 0.08) : rgba(s500, 0.12)}`,
+      `--mantine-color-${name}-light-hover: ${light ? rgba(c, 0.14) : rgba(s500, 0.18)}`,
+      `--mantine-color-${name}-light-color: ${light ? c : mixHex(c, p.text, 0.3)}`,
+      `--mantine-color-${name}-outline: ${c}`,
+      `--mantine-color-${name}-outline-hover: ${rgba(c, 0.06)}`,
+      `--dcs-tint-${name}-border: ${light ? rgba(c, 0.25) : rgba(s500, 0.22)}`,
+    )
+  }
+  const { dark: d, light: l } = themeLooks(theme)
+  // Mantine's dark scale (surfaces and text of its dark scheme, and the dark.7 hint bubble in both) from the dark look
+  if (!sameNeutrals(d, stockPalette('dark'))) {
+    const dark = [d.text, mixHex(d.text, d.textMuted, 0.5), d.textMuted, mixHex(d.textMuted, d.border, 0.5), d.border, mixHex(d.border, d.surfaceRaised, 0.5), d.surfaceRaised, d.surface, mixHex(d.surface, d.bg, 0.5), d.bg]
+    dark.forEach((v, i) => decls.push(`--mantine-color-dark-${i}: ${v}`))
+  }
+  // its gray scale (the light scheme's surfaces and text) from the light look
+  if (!sameNeutrals(l, stockPalette('light'))) {
+    const gray = [l.surface, l.bg, l.surfaceRaised, mixHex(l.surfaceRaised, l.border, 0.5), l.border, mixHex(l.border, l.textMuted, 0.5), l.textMuted, mixHex(l.textMuted, l.text, 0.5), mixHex(l.textMuted, l.text, 0.8), l.text]
+    gray.forEach((v, i) => decls.push(`--mantine-color-gray-${i}: ${v}`))
+  }
+  if (!sameNeutrals(p, stock)) {
+    const { bg, surface, surfaceRaised: raised, border, text, textMuted: muted } = p
+    const t500 = light ? mixHex(muted, text, 0.35) : mixHex(muted, bg, 0.3)
+    const ok = p.success
+    decls.push(
+      `--mantine-color-text: ${text}`, `--mantine-color-body: ${surface}`, `--mantine-color-dimmed: ${muted}`,
+      `--mantine-color-placeholder: ${t500}`, `--mantine-color-default-border: ${border}`,
+      `--mantine-color-default: ${light ? surface : raised}`, `--mantine-color-default-hover: ${light ? bg : mixHex(raised, text, 0.06)}`, `--mantine-color-default-color: ${text}`,
+      // lib/mantine.tsx: fields, dropdowns, options, segmented filters
+      `--dcs-field-bg: ${light ? mixHex(surface, bg, 0.5) : rgba(text, 0.05)}`,
+      `--dcs-field-border: ${border}`,
+      `--dcs-field-focus: ${light ? ok : rgba(shade(ok, 0.15), 0.5)}`,
+      `--dcs-field-ring: ${rgba(light ? ok : shade(ok, 0.15), 0.2)}`,
+      `--dcs-field-color: ${light ? text : mixHex(text, muted, 0.16)}`,
+      `--dcs-field-placeholder: ${t500}`,
+      `--dcs-dropdown-bg: ${light ? surface : rgba(surface, 0.98)}`,
+      `--dcs-dropdown-border: ${light ? border : rgba(muted, 0.2)}`,
+      `--dcs-dropdown-shadow: ${light ? `0 12px 32px ${rgba(text, 0.14)}` : '0 12px 32px rgb(0 0 0 / 0.5)'}`,
+      `--dcs-option-hover: ${light ? bg : rgba(text, 0.06)}`,
+      `--dcs-option-checked: ${light ? ok : mixHex(ok, text, 0.3)}`,
+      `--dcs-muted: ${t500}`,
+      `--dcs-seg-bg: ${light ? rgba(bg, 0.7) : rgba(text, 0.05)}`,
+      `--dcs-seg-border: ${border}`,
+      `--dcs-seg-label: ${light ? t500 : muted}`,
+      `--dcs-seg-label-hover: ${light ? text : mixHex(text, muted, 0.16)}`,
+      `--dcs-fleet-field-bg: ${light ? mixHex(surface, bg, 0.5) : rgba(raised, 0.5)}`,
+      `--dcs-fleet-field-focus: ${light ? ok : rgba(shade(p.warning, 0.15), 0.4)}`,
+      `--dcs-fleet-field-ring: ${light ? rgba(ok, 0.2) : rgba(shade(p.warning, 0.15), 0.12)}`,
+    )
+  }
+  if (decls.length) s.rule(`${ROOT}[data-mantine-color-scheme]`, decls.join('; '))
 }
 
 /** the rounded-* scale for each radius setting ('lg' is what ships) */
@@ -555,6 +647,7 @@ export function buildThemeCss(theme: Theme, mode: ThemeMode): string {
   emitClasses(s, p, stock, mode)
   emitStatus(s, p, stock, mode)
   emitBrand(s, p, stock, mode)
+  emitMantine(s, theme, mode, p, stock)
   emitRadius(s, theme.radius)
   emitFont(s, theme.font)
 

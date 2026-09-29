@@ -15,7 +15,8 @@ import type { FleetJob, FleetJobStep } from '../../../shared/types'
 import { useConfirm } from '../common/ConfirmDialog'
 import { ago, CopyChip } from './fleetShared'
 
-const C = { done: '#34d399', running: '#22d3ee', failed: '#fb7185', pending: 'rgba(148, 163, 184, 0.20)', template: '#fbbf24' }
+// the theme's status colours (lib/themeEngine sets them; the fallbacks are the stock dark look)
+const C = { done: 'var(--dcs-success, #34d399)', running: 'var(--dcs-info, #22d3ee)', failed: 'var(--dcs-danger, #fb7185)', pending: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 20%, transparent)', template: 'var(--dcs-warning, #fbbf24)' }
 
 function jobCurrent(j: FleetJob): number {
   const i = j.steps.findIndex((s) => s.state === 'running' || s.state === 'failed')
