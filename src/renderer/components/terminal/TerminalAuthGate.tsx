@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { useState, useRef, useEffect } from 'react'
+import { Switch } from '@mantine/core'
 import { Shield, User, Lock, Loader2, AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { terminalAuth } from '../../api/endpoints'
 
@@ -178,26 +179,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
           {/* Remember toggle */}
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500">Remember for this session</span>
-            <button
-              type="button"
-              onClick={() => setRememberSession(!rememberSession)}
-              className={`
-                relative w-9 h-5 rounded-full transition-colors duration-200
-                ${rememberSession
-                  ? 'bg-emerald-500/30 border-emerald-500/40'
-                  : 'bg-slate-700/50 border-white/5'
-                }
-                border
-              `}
-            >
-              <span className={`
-                absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200
-                ${rememberSession
-                  ? 'left-[18px] bg-emerald-400'
-                  : 'left-0.5 bg-slate-500'
-                }
-              `} />
-            </button>
+            <Switch size="sm" aria-label="Remember for this session" checked={rememberSession} onChange={() => setRememberSession(!rememberSession)} />
           </div>
 
           {/* Submit button */}
