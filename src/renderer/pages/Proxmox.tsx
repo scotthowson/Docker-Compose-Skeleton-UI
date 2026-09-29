@@ -41,6 +41,8 @@ import { Sheet, MATCH_LABEL, hostOf } from '../components/fleet/fleetShared'
 import { FleetJobCard, JobsSummary, orderJobs } from '../components/fleet/FleetJobsPanel'
 import NewVmSheet, { CapabilityNote, settingsFromDefaults, loadVmSettings, osLabel } from '../components/fleet/NewVmSheet'
 import VmCapsule from '../components/fleet/VmCapsule'
+import PageHeader from '../components/common/PageHeader'
+import { pageLabel } from '../constants/pageTitles'
 
 const STATUS_POLL = 15_000
 const LIST_POLL = 10_000
@@ -1107,15 +1109,14 @@ export default function Proxmox() {
   return (
     <div className="space-y-5">
       <DisconnectedBanner />
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2 flex-wrap"><Server size={20} className="text-amber-400" /> Proxmox {roleChip}</h1>
-          <p className="text-sm text-slate-400 mt-1 tabular-nums">
-            {!s ? 'Checking the link…' : !configured ? 'Not linked yet.' : !reachable ? 'Linked, but Proxmox does not answer.' : `Proxmox VE ${s.version} · ${s.nodes_online}/${s.nodes} node${s.nodes === 1 ? '' : 's'} online · ${s.vms.running} of ${s.vms.total} guests running`}
-            {overview.data && memberCount > 0 && ` · ${overview.data.totals.reachable}/${overview.data.totals.members} members answering · ${overview.data.totals.stacks} stack${overview.data.totals.stacks === 1 ? '' : 's'} · ${overview.data.totals.containers_running}/${overview.data.totals.containers_total} containers`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        page="proxmox"
+        badge={roleChip}
+        subtitle={<>
+          {!s ? 'Checking the link…' : !configured ? 'Not linked yet.' : !reachable ? 'Linked, but Proxmox does not answer.' : `Proxmox VE ${s.version} · ${s.nodes_online}/${s.nodes} node${s.nodes === 1 ? '' : 's'} online · ${s.vms.running} of ${s.vms.total} guests running`}
+          {overview.data && memberCount > 0 && ` · ${overview.data.totals.reachable}/${overview.data.totals.members} members answering · ${overview.data.totals.stacks} stack${overview.data.totals.stacks === 1 ? '' : 's'} · ${overview.data.totals.containers_running}/${overview.data.totals.containers_total} containers`}
+        </>}
+        actions={<>
           {isAdmin && configured && reachable && role !== 'member' && (
             <>
               <button onClick={() => setNewVm('')} className={`${BTN} bg-amber-500/90 hover:bg-amber-400 text-slate-900 press`}><Rocket size={14} /> New VM stack</button>
@@ -1124,10 +1125,10 @@ export default function Proxmox() {
               <button onClick={() => setAdding({})} className={BTN_QUIET} title="A DCS on another VM, reached by address"><Link2 size={14} /> <span className="hidden sm:inline">Add member</span></button>
             </>
           )}
-          {isAdmin && <button onClick={() => setCurrentPage('config')} className={BTN_QUIET} title="Server Config → Proxmox"><Settings2 size={14} /> <span className="hidden sm:inline">Settings</span></button>}
+          {isAdmin && <button onClick={() => setCurrentPage('config')} className={BTN_QUIET} title={`${pageLabel('config')} → Proxmox`}><Settings2 size={14} /> <span className="hidden sm:inline">Settings</span></button>}
           <button onClick={refreshAll} className={BTN_QUIET} title="Refresh"><RefreshCw size={14} className={vms.loading || overview.loading ? 'animate-spin' : ''} /><span className="hidden sm:inline">Refresh</span></button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* a member: the hub it belongs to */}
       {fleet.data && role === 'member' && (
@@ -1146,8 +1147,8 @@ export default function Proxmox() {
           <div className="text-center">
             <Server size={36} className="mx-auto text-amber-400/70" />
             <h2 className="mt-3 text-lg font-semibold text-slate-100">Link DCS to your Proxmox host</h2>
-            <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto">On Proxmox open <b>Datacenter → Permissions → API Tokens</b>, add a token for a user (untick <i>Privilege Separation</i>, or give the token the roles <code>VM.Audit</code>, <code>VM.PowerMgmt</code> and <code>Sys.Audit</code> on <code>/</code>). Then enter the URL, token ID and secret in Server Config → Proxmox and press <i>Test connection</i>.</p>
-            {isAdmin && <button onClick={() => setCurrentPage('config')} className="mt-4 h-11 px-5 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold">Open Server Config</button>}
+            <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto">On Proxmox open <b>Datacenter → Permissions → API Tokens</b>, add a token for a user (untick <i>Privilege Separation</i>, or give the token the roles <code>VM.Audit</code>, <code>VM.PowerMgmt</code> and <code>Sys.Audit</code> on <code>/</code>). Then enter the URL, token ID and secret in {pageLabel('config')} → Proxmox and press <i>Test connection</i>.</p>
+            {isAdmin && <button onClick={() => setCurrentPage('config')} className="mt-4 h-11 px-5 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold">Open {pageLabel('config')}</button>}
             <p className="mt-3 text-[11px] text-slate-500">Full walkthrough: docs/PROXMOX.md in the DCS repository</p>
           </div>
           {isAdmin && role !== 'member' && (

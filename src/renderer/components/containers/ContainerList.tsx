@@ -14,6 +14,8 @@ import { useConfirm } from '../common/ConfirmDialog'
 import { useToast } from '../common/Toast'
 import { EmptyState } from '../common/PageState'
 import FleetScopeChips from '../fleet/FleetScopeChips'
+import VmCapsule from '../fleet/VmCapsule'
+import PageHeader from '../common/PageHeader'
 import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 import {
   Search,
@@ -266,9 +268,10 @@ const ContainerList: React.FC<ContainerListProps> = ({
   }
 
   const favSet = new Set(favorites)
+  // the page's own line (constants/pageTitles) unless it shows one part of a fleet
   const subtitle = scope === 'all'
     ? `Every container on the hub and its ${members.length} VM${members.length === 1 ? '' : 's'}`
-    : scopeMember ? `The containers inside the VM ${memberName}` : 'Manage and monitor all Docker containers'
+    : scopeMember ? `The containers inside the VM ${memberName}` : undefined
   const emptyHint = search ? 'Try another name, image, stack or VM.' : filter !== 'all' ? `No ${filter} containers right now — pick another filter.` : scopeMember ? `Nothing runs inside the VM ${memberName} yet — deploy a template there and its containers appear here.` : 'Start a stack or deploy a template and its containers appear here.'
 
   return (
@@ -288,20 +291,18 @@ const ContainerList: React.FC<ContainerListProps> = ({
         />
       )}
       {/* ---- Header ---- */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl md:text-2xl font-bold text-white">Containers{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
-            <span className="text-xs md:text-sm text-slate-400 mt-0.5">
-              <span className="text-emerald-400 font-semibold">{runningCount} running</span>
-              <span className="mx-1.5 text-slate-500">&middot;</span>
-              <span>{containers.length} total</span>
-            </span>
-          </div>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">{subtitle}</p>
-          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={members} onChange={setScope} busy={busy} /></div>}
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="containers"
+        badge={<>
+          {scopeMember && <VmCapsule member={scopeMember} name={memberName} vmid={members.find((m) => m.id === scopeMember)?.vmid} />}
+          <span className="text-sm text-slate-400">
+            <span className="text-emerald-400 font-semibold">{runningCount} running</span>
+            <span className="mx-1.5 text-slate-500">&middot;</span>
+            <span>{containers.length} total</span>
+          </span>
+        </>}
+        subtitle={subtitle}
+        actions={<>
           {onRefresh && (
             <button
               onClick={onRefresh}
@@ -328,8 +329,10 @@ const ContainerList: React.FC<ContainerListProps> = ({
               <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={members} onChange={setScope} busy={busy} />}
+      </PageHeader>
 
       {/* ---- Could not load ---- */}
       {error && containers.length === 0 && (
