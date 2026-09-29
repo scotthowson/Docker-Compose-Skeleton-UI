@@ -921,7 +921,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
       return (
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="overflow-y-auto flex-1 scrollbar-thin">
-            <textarea
+            <textarea aria-label="Compose file"
               ref={composeTextareaRef}
               value={composeContent}
               onChange={(e) => { setComposeContent(e.target.value); if (validationResult) setValidationResult(null) }}
@@ -1018,7 +1018,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
       return (
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="overflow-y-auto flex-1 scrollbar-thin">
-            <textarea
+            <textarea aria-label=".env file"
               value={envContent}
               onChange={(e) => setEnvContent(e.target.value)}
               className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-5 resize-none focus:outline-none"
@@ -1642,7 +1642,7 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
                 </button>
               </div>
             )}
-            <button
+            <button aria-label="Close the search"
               onClick={() => { setSearchOpen(false); setSearchQuery('') }}
               className="flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
             >

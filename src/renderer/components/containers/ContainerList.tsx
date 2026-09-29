@@ -375,7 +375,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
         <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Batch Results</p>
-            <button onClick={() => setBatchResults(null)} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={14} /></button>
+            <button aria-label="Close" onClick={() => setBatchResults(null)} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={14} /></button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {batchResults.map((r) => (
@@ -507,6 +507,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     <button
                       onClick={selectedContainers.size === sorted.length ? clearSelection : selectAll}
                       className="text-slate-500 hover:text-cyan-400 transition-colors"
+                      aria-label={selectedContainers.size === sorted.length && sorted.length > 0 ? 'Clear the selection' : 'Select all'}
                     >
                       {selectedContainers.size === sorted.length && sorted.length > 0
                         ? <CheckSquare size={15} className="text-cyan-400" />
@@ -515,7 +516,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     </button>
                   </th>
                 )}
-                <th className="w-8" />
+                <th className="w-8"><span className="sr-only">Favorite</span></th>
                 {COLUMNS.map((col, idx) => (
                   <th
                     key={`${col.key}-${idx}`}

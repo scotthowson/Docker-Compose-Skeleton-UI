@@ -74,7 +74,7 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
               <p className="text-[11px] text-slate-500">Quick reference for all shortcuts</p>
             </div>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
           >

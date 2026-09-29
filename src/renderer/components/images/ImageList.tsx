@@ -231,7 +231,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
             <thead>
               <tr className="border-b border-white/5">
                 {batchMode && (
-                  <th className="px-4 py-3 w-10"></th>
+                  <th className="px-4 py-3 w-10"><span className="sr-only">Select</span></th>
                 )}
                 {COLUMNS.map((col) => (
                   <th
@@ -290,6 +290,9 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                         <td className="px-4 py-3">
                           <button
                             onClick={(e) => { e.stopPropagation(); onToggleImage?.(imageKey(image)) }}
+                            role="checkbox"
+                            aria-checked={selectedImages?.has(imageKey(image)) ?? false}
+                            aria-label={`Select ${image.repository}:${image.tag}`}
                             className={`flex items-center justify-center w-5 h-5 rounded border transition-all ${
                               selectedImages?.has(imageKey(image))
                                 ? 'bg-emerald-500 border-emerald-500'

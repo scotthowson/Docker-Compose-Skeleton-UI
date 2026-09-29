@@ -127,7 +127,7 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
               <p className="text-xs text-slate-400">Latest features and improvements</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors duration-200">
+          <button aria-label="Close" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors duration-200">
             <X size={16} />
           </button>
         </div>

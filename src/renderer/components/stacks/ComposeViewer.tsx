@@ -849,7 +849,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             })}
           </div>
           {/* Textarea — py-4 and leading-6 must match gutter exactly */}
-          <textarea
+          <textarea aria-label=".env file"
             value={envEditContent}
             onChange={(e) => setEnvEditContent(e.target.value)}
             className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none leading-6`}
@@ -1000,7 +1000,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             })}
           </div>
           {/* Textarea — py-4 and leading-6 must match gutter exactly */}
-          <textarea
+          <textarea aria-label="Compose file"
             ref={textareaRef}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}

@@ -476,7 +476,7 @@ export default function Backup() {
                 <BookOpen size={16} className="text-emerald-400" />
                 <h2 className="text-sm font-semibold text-white">Backup & Restore Guide</h2>
               </div>
-              <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
                 <X size={14} className="text-slate-400" />
               </button>
             </div>
@@ -817,7 +817,7 @@ export default function Backup() {
 
               {/* Stack selector: where each stack lives is part of the choice */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
-                <select
+                <select aria-label="Stack"
                   value={selectedStack}
                   onChange={(e) => setSelectedStack(e.target.value)}
                   disabled={!isConfigured && scope !== 'all'}
@@ -1026,7 +1026,7 @@ export default function Backup() {
                 </div>
                 <h3 className="text-base font-semibold text-slate-100">Confirm Restore</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => {
                   if (!restoreLoading) {
                     setRestoreTarget(null)

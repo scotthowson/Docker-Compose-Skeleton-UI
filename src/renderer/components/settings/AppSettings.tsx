@@ -166,7 +166,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
                   <p className="text-xs text-slate-500">{field.description}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
+                  <input aria-label={`${field.label} (seconds)`}
                     type="number"
                     min={field.min}
                     max={field.max}
@@ -184,7 +184,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
                 </div>
               </div>
               {/* Range slider */}
-              <input
+              <input aria-label={field.label}
                 type="range"
                 min={field.min}
                 max={field.max}
@@ -292,7 +292,7 @@ function PersonalSettings() {
           <p className="text-sm font-medium text-slate-300">Start on</p>
           <p className="text-xs text-slate-500">The page that opens right after you sign in</p>
         </div>
-        <select
+        <select aria-label="Start on"
           value={defaultPage ?? 'dashboard'}
           onChange={(e) => updateSetting('defaultPage', e.target.value as PageId)}
           className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"

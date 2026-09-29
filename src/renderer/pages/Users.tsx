@@ -434,7 +434,7 @@ export default function Users() {
               autoComplete="new-password"
               className="px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/30"
             />
-            <select
+            <select aria-label="Role"
               value={newUser.role}
               onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as 'user' | 'admin' | 'bot' }))}
               className="px-2 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-emerald-500/30"
@@ -470,7 +470,7 @@ export default function Users() {
             <div className="flex-1 flex items-center gap-2">
               <UserPlus className="h-4 w-4 text-cyan-400 flex-shrink-0" />
               <span className="text-xs text-slate-400">Generate new invite as:</span>
-              <select
+              <select aria-label="Generate new invite as"
                 value={newInviteRole}
                 onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin')}
                 className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-cyan-500/30"

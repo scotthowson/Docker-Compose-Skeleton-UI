@@ -1142,7 +1142,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               <p className="text-[11px] text-slate-500 truncate">{headerSub}</p>
             </div>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0 ml-2"
           >
@@ -1588,12 +1588,15 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         <div key={svc.name} className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all ${svc.enabled ? 'border-white/5 bg-white/[0.03]' : 'border-white/[0.03] opacity-50'}`}>
                           <button
                             type="button"
+                            role="checkbox"
+                            aria-checked={svc.enabled}
+                            aria-label={`Route ${svc.name} over HTTPS`}
                             onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, enabled: !s.enabled } : s))}
                             className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${svc.enabled ? 'bg-emerald-500/30 border-emerald-500/40 text-emerald-400' : 'border-white/10'}`}
                           >
                             {svc.enabled && <CheckCircle size={10} />}
                           </button>
-                          <input
+                          <input aria-label={`Subdomain for ${svc.name}`}
                             type="text"
                             value={svc.subdomain}
                             onChange={(e) => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } : s))}
@@ -1704,7 +1707,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 <span className="text-[10px] font-semibold text-slate-400">{svcName}.{traefikDomain}</span>
                               </div>
-                              <textarea
+                              <textarea aria-label={`Route for ${svcName}.${traefikDomain}`}
                                 value={routeYaml}
                                 onChange={(e) => setCustomRoutes((prev) => ({ ...prev, [svcName]: e.target.value }))}
                                 rows={Math.min(routeYaml.split('\n').length + 1, 16)}
@@ -1769,7 +1772,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Memory Limit</label>
-                        <select
+                        <select aria-label="Memory Limit"
                           value={memLimit}
                           onChange={(e) => setMemLimit(e.target.value)}
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
@@ -1787,7 +1790,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       </div>
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">CPU Limit</label>
-                        <select
+                        <select aria-label="CPU Limit"
                           value={cpuLimit}
                           onChange={(e) => setCpuLimit(e.target.value)}
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
@@ -2281,7 +2284,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <p className="text-[10px] text-slate-500">Define a reusable stack template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+          <button aria-label="Close" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -2323,7 +2326,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Category</label>
-                <select
+                <select aria-label="Category"
                   value={category}
                   onChange={(e) => {
                     const cat = e.target.value
@@ -2347,7 +2350,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Default Target Stack</label>
-              <select
+              <select aria-label="Default Target Stack"
                 value={targetStack}
                 onChange={(e) => setTargetStack(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
@@ -2634,7 +2637,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
+          <button aria-label="Close" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
             <X size={16} />
           </button>
         </div>
@@ -3676,7 +3679,7 @@ export default function Templates() {
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
               <span className="text-[10px] text-slate-500">{deduplicatedHistory.length} events</span>
             </div>
-            <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <button aria-label="Close" onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
               <X size={14} />
             </button>
           </div>
@@ -3761,7 +3764,7 @@ export default function Templates() {
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/[0.04] border border-white/5 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.06] focus:shadow-lg focus:shadow-emerald-500/5 transition-all duration-200"
               />
               {search ? (
-                <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                <button aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                   <X size={14} />
                 </button>
               ) : (

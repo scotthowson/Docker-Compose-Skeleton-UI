@@ -811,7 +811,7 @@ export default function Updates() {
             <p className="text-xs font-medium text-slate-300">Auto-check for updates</p>
             <p className="text-[10px] text-slate-500 mt-0.5">Periodically check for DCS framework and image updates</p>
           </div>
-          <select
+          <select aria-label="Auto-check for updates"
             value={autoCheckUpdates}
             onChange={(e) => updateSetting('autoCheckUpdates', Number(e.target.value))}
             className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"

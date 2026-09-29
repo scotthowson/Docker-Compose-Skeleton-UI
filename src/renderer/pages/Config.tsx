@@ -99,7 +99,7 @@ function SelectRow({
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
-      <select
+      <select aria-label={label}
         value={value}
         onChange={(e) => onChange(configKey, e.target.value)}
         disabled={disabled}
@@ -143,7 +143,7 @@ function TextRow({
       {readOnly ? (
         <span className="text-sm text-slate-400 font-mono truncate max-w-[180px] md:max-w-[260px]" title={value}>{value}</span>
       ) : (
-        <input
+        <input aria-label={label}
           type={type}
           value={value}
           onChange={(e) => onChange(configKey, e.target.value)}
@@ -182,7 +182,7 @@ function NumberRow({
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
-      <input
+      <input aria-label={label}
         type="number"
         value={value}
         onChange={(e) => onChange(configKey, parseInt(e.target.value, 10))}

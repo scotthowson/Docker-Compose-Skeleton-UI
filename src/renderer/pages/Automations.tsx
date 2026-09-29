@@ -501,7 +501,7 @@ export default function Automations() {
               <BookOpen size={16} className="text-amber-400" />
               <h2 className="text-sm font-semibold text-white">Automation Guide</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <X size={14} className="text-slate-400" />
             </button>
           </div>
@@ -743,7 +743,7 @@ export default function Automations() {
                   <p className="text-[10px] text-slate-500">{historyRuleName}</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={closeHistory}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
@@ -869,7 +869,7 @@ export default function Automations() {
                 <Zap size={16} className="text-amber-400" />
                 <h3 className="text-sm font-semibold text-slate-200">{editingId ? 'Edit Automation' : 'New Automation Rule'}</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => setShowCreateModal(false)}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
@@ -964,7 +964,7 @@ export default function Automations() {
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
                     Condition
                   </label>
-                  <select
+                  <select aria-label="Condition"
                     value={formCondition}
                     onChange={(e) => setFormCondition(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
@@ -983,7 +983,7 @@ export default function Automations() {
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
                   Action Type
                 </label>
-                <select
+                <select aria-label="Action Type"
                   value={formActionType}
                   onChange={(e) => setFormActionType(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"

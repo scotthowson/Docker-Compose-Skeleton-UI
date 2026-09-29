@@ -427,7 +427,7 @@ export default function Plugins() {
               <Code size={16} className="text-violet-400" />
               <h2 className="text-sm font-semibold text-white">Create Your Own Plugin</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <X size={14} className="text-slate-400" />
             </button>
           </div>
@@ -762,7 +762,7 @@ export default function Plugins() {
                 </div>
                 <h2 className="text-base font-semibold text-white">Install from Git</h2>
               </div>
-              <button onClick={() => setShowInstall(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+              <button aria-label="Close" onClick={() => setShowInstall(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
                 <X size={16} className="text-slate-400" />
               </button>
             </div>

@@ -629,8 +629,8 @@ export default function DiskAnalysis() {
                               placeholder={d.mount}
                               className="flex-1 min-w-0 bg-slate-900/60 border border-cyan-500/30 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none"
                             />
-                            <button onClick={() => handleRenameLabel(d.mount, renameValue.trim())} className="text-emerald-400 hover:text-emerald-300 shrink-0"><Check size={12} /></button>
-                            <button onClick={() => setRenamingMount(null)} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
+                            <button aria-label="Save" onClick={() => handleRenameLabel(d.mount, renameValue.trim())} className="text-emerald-400 hover:text-emerald-300 shrink-0"><Check size={12} /></button>
+                            <button aria-label="Cancel" onClick={() => setRenamingMount(null)} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
                           </div>
                         ) : (
                           <>

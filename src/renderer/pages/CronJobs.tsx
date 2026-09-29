@@ -313,7 +313,7 @@ export default function CronJobs() {
             <CalendarClock size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Scheduled Tasks</span></h2>
+            <h2 className="text-lg font-bold"><span className="text-gradient">Cron Jobs</span></h2>
             <p className="text-xs text-slate-500">
               {entries.length} cron {entries.length === 1 ? 'entry' : 'entries'}
               {activeTab === 'user' ? ' (user)' : ' (system)'}
@@ -366,7 +366,7 @@ export default function CronJobs() {
               <BookOpen size={16} className="text-violet-400" />
               <h2 className="text-sm font-semibold text-white">Cron Schedule Guide</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <X size={14} className="text-slate-400" />
             </button>
           </div>
@@ -547,7 +547,7 @@ export default function CronJobs() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 w-8" />
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 w-8"><span className="sr-only">Details</span></th>
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Schedule</th>
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Human Readable</th>
                 <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Command</th>
@@ -567,6 +567,8 @@ export default function CronJobs() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                      aria-label={expandedIdx === idx ? 'Hide the details' : 'Show the details'}
+                      aria-expanded={expandedIdx === idx}
                       className="text-slate-500 hover:text-slate-400 transition-colors"
                     >
                       {expandedIdx === idx ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -646,7 +648,7 @@ export default function CronJobs() {
                 <Terminal size={16} className="text-violet-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Raw Crontab Editor</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => setShowRawEditor(false)}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >

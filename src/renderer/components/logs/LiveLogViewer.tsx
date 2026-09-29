@@ -344,7 +344,7 @@ export default function LiveLogViewer({
               className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:w-56 transition-all"
             />
             {search && (
-              <button
+              <button aria-label="Clear the search"
                 onClick={() => setSearch('')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
               >

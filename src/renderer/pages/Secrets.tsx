@@ -241,7 +241,7 @@ export default function Secrets() {
               <Shield size={16} className="text-amber-400" />
               <h2 className="text-sm font-semibold text-white">Secrets Manager Guide</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <X size={14} className="text-slate-400" />
             </button>
           </div>
@@ -276,7 +276,7 @@ export default function Secrets() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search secrets..." className="w-full pl-10 pr-9 py-2.5 rounded-lg glass text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/30" />
         {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+          <button aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
             <X size={14} />
           </button>
         )}
@@ -362,7 +362,7 @@ export default function Secrets() {
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">Add Secret</h2>
-              <button onClick={closeAdd} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
+              <button aria-label="Close" onClick={closeAdd} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleAdd() }} className="space-y-4">
               <div>
@@ -388,7 +388,7 @@ export default function Secrets() {
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea
+                  <textarea aria-label="Value"
                     value={newValue}
                     onChange={(e) => setNewValue(e.target.value)}
                     rows={3}

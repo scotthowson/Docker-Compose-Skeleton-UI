@@ -154,7 +154,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
           <div className="flex items-start gap-3 flex-1 min-w-0 mr-3">
             {/* Batch mode checkbox */}
             {batchMode && (
-              <button
+              <button role="checkbox" aria-checked={isSelected} aria-label={`Select ${stack.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onToggleSelect?.(stack.name)

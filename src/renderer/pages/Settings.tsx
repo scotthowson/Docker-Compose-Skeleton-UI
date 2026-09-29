@@ -230,7 +230,7 @@ function ProfileSettings() {
               {userInitial}
             </div>
           )}
-          <button
+          <button aria-label="Upload a profile picture"
             onClick={() => fileInputRef.current?.click()}
             className="
               absolute inset-0 rounded-2xl flex items-center justify-center
@@ -350,7 +350,7 @@ function ProfileSettings() {
           Status
         </label>
         <div className="flex flex-col gap-2">
-          <select
+          <select aria-label="Status"
             value={profile.statusEmoji}
             onChange={(e) => handleChange('statusEmoji', e.target.value)}
             className="
@@ -387,7 +387,7 @@ function ProfileSettings() {
           <Clock size={12} />
           Timezone
         </label>
-        <select
+        <select aria-label="Timezone"
           value={profile.timezone}
           onChange={(e) => handleChange('timezone', e.target.value)}
           className="
@@ -611,10 +611,10 @@ function DiskLabelManager() {
                         placeholder="Custom label..."
                         className="w-32 bg-slate-900/60 border border-emerald-500/30 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
                       />
-                      <button onClick={() => handleSaveLabel(disk.mount)} className="text-emerald-400 hover:text-emerald-300 p-1">
+                      <button aria-label="Save" onClick={() => handleSaveLabel(disk.mount)} className="text-emerald-400 hover:text-emerald-300 p-1">
                         <Check size={12} />
                       </button>
-                      <button onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
+                      <button aria-label="Cancel" onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
                         <X size={12} />
                       </button>
                     </div>
@@ -709,10 +709,10 @@ function DiskLabelManager() {
                         placeholder="Label..."
                         className="w-32 bg-slate-900/60 border border-violet-500/30 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
                       />
-                      <button onClick={() => handleEditCustomLabel(custom.mount, editValue.trim())} className="text-violet-400 hover:text-violet-300 p-1">
+                      <button aria-label="Save" onClick={() => handleEditCustomLabel(custom.mount, editValue.trim())} className="text-violet-400 hover:text-violet-300 p-1">
                         <Check size={12} />
                       </button>
-                      <button onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
+                      <button aria-label="Cancel" onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
                         <X size={12} />
                       </button>
                     </div>
@@ -1952,7 +1952,7 @@ function ConnectionProfiles() {
                 <Server size={14} className={isActive ? 'text-emerald-400 shrink-0' : 'text-slate-500 shrink-0'} />
                 <div className="flex-1 min-w-0">
                   {editing ? (
-                    <input
+                    <input aria-label="Profile name"
                       autoFocus
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
@@ -2168,7 +2168,7 @@ function NotificationPreferencesSection() {
           </div>
           <span className="text-sm font-bold text-amber-400 font-mono">{preferences.diskWarningThreshold}%</span>
         </div>
-        <input
+        <input aria-label="Disk Warning Threshold"
           type="range"
           min={75}
           max={95}
@@ -2383,13 +2383,13 @@ function AlertThresholdsEditor() {
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-amber-400/50 w-10 shrink-0">Warn</span>
-            <input
+            <input aria-label={`${label} warning`}
               type="range" min={10} max={100} step={5}
               value={thresholds[warningKey]}
               onChange={(e) => updateField(warningKey, Number(e.target.value))}
               className="flex-1 h-1 rounded-full appearance-none bg-slate-700 accent-amber-500 cursor-pointer"
             />
-            <input
+            <input aria-label={`${label} warning`}
               type="number" min={10} max={100} step={5}
               value={thresholds[warningKey]}
               onChange={(e) => updateField(warningKey, Number(e.target.value))}
@@ -2398,13 +2398,13 @@ function AlertThresholdsEditor() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-rose-400/50 w-10 shrink-0">Crit</span>
-            <input
+            <input aria-label={`${label} critical`}
               type="range" min={10} max={100} step={5}
               value={thresholds[criticalKey]}
               onChange={(e) => updateField(criticalKey, Number(e.target.value))}
               className="flex-1 h-1 rounded-full appearance-none bg-slate-700 accent-rose-500 cursor-pointer"
             />
-            <input
+            <input aria-label={`${label} critical`}
               type="number" min={10} max={100} step={5}
               value={thresholds[criticalKey]}
               onChange={(e) => updateField(criticalKey, Number(e.target.value))}
@@ -2439,7 +2439,7 @@ function AlertThresholdsEditor() {
           <span className="text-xs font-medium text-slate-400">Container Restart Threshold</span>
           <p className="text-[10px] text-slate-500">Alert when a container restarts more than this many times</p>
         </div>
-        <input
+        <input aria-label="Container Restart Threshold"
           type="number" min={1} max={50} step={1}
           value={thresholds.restart_threshold}
           onChange={(e) => updateField('restart_threshold', Number(e.target.value))}

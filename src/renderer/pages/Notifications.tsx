@@ -607,7 +607,7 @@ export default function Notifications() {
               <Zap size={14} className="text-amber-400" />
               <h2 className="text-sm font-semibold text-white">Notification Guide</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <XCircle size={14} className="text-slate-400" />
             </button>
           </div>
@@ -1246,7 +1246,7 @@ export default function Notifications() {
                 <Plus size={16} className="text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">New Notification Rule</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => setShowAddModal(false)}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
@@ -1271,7 +1271,7 @@ export default function Notifications() {
               {/* Trigger type */}
               <div>
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Trigger Type</label>
-                <select
+                <select aria-label="Trigger Type"
                   value={newTrigger}
                   onChange={(e) => setNewTrigger(e.target.value as TriggerType)}
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors appearance-none cursor-pointer"

@@ -1421,7 +1421,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1.5">User ID (PUID)</label>
-                    <input
+                    <input aria-label="User ID (PUID)"
                       type="number"
                       value={envVars.PUID || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PUID: e.target.value })}
@@ -1430,7 +1430,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1.5">Group ID (PGID)</label>
-                    <input
+                    <input aria-label="Group ID (PGID)"
                       type="number"
                       value={envVars.PGID || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PGID: e.target.value })}
@@ -1609,7 +1609,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           </p>
                           <div className="col-span-2">
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Deploy into stack</label>
-                            <select
+                            <select aria-label="Deploy into stack"
                               value={notifyStack}
                               onChange={(e) => setNotifyStack(e.target.value)}
                               className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
@@ -1696,7 +1696,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       {/* Log Level */}
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Log Level</label>
-                        <select
+                        <select aria-label="Log Level"
                           value={envVars.LOG_LEVEL || 'INFO'}
                           onChange={(e) => setEnvVars({ ...envVars, LOG_LEVEL: e.target.value })}
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -1739,7 +1739,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Start Delay (seconds)</label>
-                          <input
+                          <input aria-label="Start Delay (seconds)"
                             type="number"
                             min="0"
                             max="60"
@@ -1750,7 +1750,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Docker Timeout (seconds)</label>
-                          <input
+                          <input aria-label="Docker Timeout (seconds)"
                             type="number"
                             min="30"
                             max="900"
@@ -1839,7 +1839,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Domain</label>
                             <div className="flex items-center gap-2">
-                              <input
+                              <input aria-label="Domain"
                                 type="text"
                                 value={envVars.PROXY_DOMAIN || 'example.com'}
                                 disabled
@@ -1852,7 +1852,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           {/* Where the proxy services are deployed */}
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Deploy into stack</label>
-                            <select
+                            <select aria-label="Deploy into stack"
                               value={proxyStack}
                               onChange={(e) => setProxyStack(e.target.value)}
                               className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
@@ -2125,7 +2125,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Theme</label>
-                        <select
+                        <select aria-label="Theme"
                           value={prefTheme}
                           onChange={(e) => setPrefTheme(e.target.value as 'dark' | 'light')}
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -2136,7 +2136,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Session Duration</label>
-                        <select
+                        <select aria-label="Session Duration"
                           value={prefSessionMinutes}
                           onChange={(e) => setPrefSessionMinutes(Number(e.target.value))}
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -2150,7 +2150,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-Lock</label>
-                        <select
+                        <select aria-label="Auto-Lock"
                           value={prefAutoLock}
                           onChange={(e) => setPrefAutoLock(Number(e.target.value))}
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -2235,7 +2235,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                       {/* Name (editable) */}
                       {editingIndex === index ? (
-                        <input
+                        <input aria-label="Stack name"
                           type="text"
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}

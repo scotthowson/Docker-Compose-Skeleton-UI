@@ -168,6 +168,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
           onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
           className="p-0.5 rounded transition-colors hover:bg-white/5"
           title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-pressed={isFavorite}
         >
           <Star
             size={13}
@@ -330,6 +331,8 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
           className="p-0.5 flex-shrink-0"
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-pressed={isFavorite}
         >
           <Star
             size={14}
