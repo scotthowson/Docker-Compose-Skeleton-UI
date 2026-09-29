@@ -198,10 +198,12 @@ const theme = createTheme({
     // a row of choices (filters, view switches): the dashboard's pill bar, the choice in a tint of its colour
     SegmentedControl: SegmentedControl.extend({
       defaultProps: { size: 'xs', radius: 8, withItemsBorders: false, transitionDuration: 150 },
+      // (Mantine gives a coloured control's labels a white --sc-label-color of their own; mantine-dcs.css
+      // colours the chosen label from --dcs-seg-active instead, so it reads on the tint in both schemes)
       vars: (_theme, props) => ({
         root: {
           '--sc-color': `var(--mantine-color-${paletteColor(props.color, 'emerald')}-light-hover)`,
-          '--sc-label-color': `var(--mantine-color-${paletteColor(props.color, 'emerald')}-light-color)`,
+          '--dcs-seg-active': `var(--mantine-color-${paletteColor(props.color, 'emerald')}-light-color)`,
           '--sc-font-size': '12px',
           '--sc-padding': '6px 10px',
         },

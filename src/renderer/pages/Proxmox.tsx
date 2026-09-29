@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Badge, Tooltip } from '@mantine/core'
+import { Badge, SegmentedControl, Tooltip } from '@mantine/core'
 import {
   RotateCcw, Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
@@ -216,7 +216,8 @@ function ConfirmSheet({ vm, action, onClose, onDone }: { vm: ProxmoxVm; action: 
 // -----------------------------------------------------------------------------
 
 /** one small square per guest on a node — green running, amber paused, grey off, ringed when a DCS member lives in it; a click finds it in the list */
-function GuestMap({ guests, memberVmids, onPick }: { guests: ProxmoxVm[]; memberVmids: Set<number>; onPick: (vm: ProxmoxVm) => void }) {
+function GuestMap({ guests, memberVmids, onPick, loading = false }: { guests: ProxmoxVm[]; memberVmids: Set<number>; onPick: (vm: ProxmoxVm) => void; loading?: boolean }) {
+  if (loading) return <span className="skeleton h-2.5 w-16 rounded" aria-label="Reading the guests" />
   if (guests.length === 0) return <span className="text-[10px] text-slate-600">no guests</span>
   return (
     <div className="flex flex-wrap gap-1 min-w-0">
@@ -232,7 +233,7 @@ function GuestMap({ guests, memberVmids, onPick }: { guests: ProxmoxVm[]; member
   )
 }
 
-function NodesCard({ nodes, vms, version, memberVmids, onPick }: { nodes: ProxmoxNode[]; vms: ProxmoxVm[]; version: string; memberVmids: Set<number>; onPick: (vm: ProxmoxVm) => void }) {
+function NodesCard({ nodes, vms, version, memberVmids, onPick, loading = false }: { nodes: ProxmoxNode[]; vms: ProxmoxVm[]; version: string; memberVmids: Set<number>; onPick: (vm: ProxmoxVm) => void; loading?: boolean }) {
   const online = nodes.filter((n) => n.status === 'online').length
   const up = vms.filter((v) => v.status === 'running').length
   const qemu = vms.filter((v) => v.type === 'qemu').length
@@ -261,7 +262,7 @@ function NodesCard({ nodes, vms, version, memberVmids, onPick }: { nodes: Proxmo
               </div>
               <div className="mt-3 flex items-start gap-2.5">
                 <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0 leading-[10px] pt-px">Guests</span>
-                <GuestMap guests={guests} memberVmids={memberVmids} onPick={onPick} />
+                <GuestMap guests={guests} memberVmids={memberVmids} onPick={onPick} loading={loading} />
               </div>
             </div>
           )
@@ -269,7 +270,7 @@ function NodesCard({ nodes, vms, version, memberVmids, onPick }: { nodes: Proxmo
       </div>
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-x-2 gap-y-1 flex-wrap text-[10px] text-slate-600 tabular-nums">
         <span className="truncate">Proxmox VE {version}</span>
-        <span className="truncate">{up}/{vms.length} guests up · {qemu} VM{qemu === 1 ? '' : 's'} · {vms.length - qemu} LXC</span>
+        {!loading && <span className="truncate">{up}/{vms.length} guests up · {qemu} VM{qemu === 1 ? '' : 's'} · {vms.length - qemu} LXC</span>}
       </div>
     </div>
   )
@@ -696,6 +697,20 @@ function VmCard(p: VmRowProps) {
   )
 }
 
+/** a guest card's shape while the list loads: the name line, the facts, two meters, the DCS line, the actions */
+function GuestCardSkeleton() {
+  const meter = <div className="space-y-1.5"><div className="skeleton h-3 w-full rounded" /><div className="skeleton h-1.5 w-full rounded-full" /></div>
+  return (
+    <div className={`${CARD} p-3.5 flex flex-col gap-3 min-h-[13rem]`} aria-hidden>
+      <div className="flex items-center gap-2.5"><div className="skeleton w-2.5 h-2.5 rounded-full" /><div className="skeleton h-4 w-32 rounded" /><div className="skeleton h-[18px] w-9 rounded-full" /></div>
+      <div className="skeleton h-3 w-44 rounded" />
+      <div className="grid grid-cols-2 gap-3">{meter}{meter}</div>
+      <div className="skeleton h-5 w-40 rounded-full" />
+      <div className="mt-auto flex gap-1.5"><div className="skeleton h-8 w-8" /><div className="skeleton h-8 w-8" /><div className="skeleton h-8 w-8" /><span className="flex-1" /><div className="skeleton h-8 w-8" /></div>
+    </div>
+  )
+}
+
 function MiniMeter({ pct, text, note, hostView, onHostView }: { pct: number; text: string; note?: string; hostView?: boolean; onHostView?: () => void }) {
   return (
     <div className="min-w-[7rem]">
@@ -1077,7 +1092,7 @@ export default function Proxmox() {
   const canBuild = isAdmin && role !== 'member'
   const overviewCards: { key: string; node: ReactNode }[] = []
   const findGuest = (text: string) => { setShow('all'); setQuery(text) }
-  if (nodes.data && nodes.data.nodes.length > 0) overviewCards.push({ key: 'nodes', node: <NodesCard nodes={nodes.data.nodes} vms={all} version={s?.version ?? ''} memberVmids={new Set(memberByVm.keys())} onPick={(v) => findGuest(v.name)} /> })
+  if (nodes.data && nodes.data.nodes.length > 0) overviewCards.push({ key: 'nodes', node: <NodesCard nodes={nodes.data.nodes} vms={all} loading={!vms.data} version={s?.version ?? ''} memberVmids={new Set(memberByVm.keys())} onPick={(v) => findGuest(v.name)} /> })
   if ((isHub || role === 'member') && localStacks.data) overviewCards.push({ key: 'hub', node: <HubCard fleet={fleet.data} stacks={hubOwn} isHub={isHub} memberCount={memberCount} pveSelf={pveSelf.data} isAdmin={isAdmin} tagging={tagging} onTag={tagSelf} onStacks={() => setCurrentPage('stacks')} onStack={(name) => setCurrentPage('stacks', { highlight: name })} /> })
   if (isHub && templates.data) overviewCards.push({ key: 'templates', node: <TemplatesCard templates={templates.data.templates} defaults={provDefaults.data ?? null} isAdmin={isAdmin} removing={removingTemplate} onRemove={removeTemplate} onBake={() => setNewVm('')} onFind={(vmid) => findGuest(String(vmid))} /> })
   if (canBuild && jobs.data && !hasJobs) overviewCards.push({ key: 'builds', node: <BuildsQuiet canBuild={canBuild && configured && reachable} onNew={() => setNewVm('')} /> })
@@ -1178,27 +1193,48 @@ export default function Proxmox() {
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, id, node, tag, stack" className="h-9 pl-8 pr-3 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-full sm:w-60 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the guests" placeholder="Search name, id, node, tag, stack" className="h-9 pl-8 pr-3 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-full sm:w-72 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
                 </div>
-                <div className="flex rounded-lg bg-white/5 border border-white/10 overflow-x-auto scrollbar-none max-w-full">
-                  {(['all', 'running', 'stopped', 'qemu', 'lxc', ...(isHub ? ['dcs' as const] : [])] as Show[]).map((k) => (
-                    <button key={k} onClick={() => setShow(k)} className={`h-9 px-2 sm:px-2.5 text-xs font-medium flex items-center gap-1 shrink-0 transition-colors ${show === k ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:text-slate-200'}`}>
-                      {SHOW_LABEL[k]}{vms.data && <span className={`tabular-nums text-[10px] hidden sm:inline ${show === k ? 'text-amber-200/70' : 'text-slate-600'}`}>{counts[k]}</span>}
-                    </button>
-                  ))}
+                {/* a phone swipes the filters sideways; the counts show from sm up */}
+                <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+                  <SegmentedControl
+                    color="amber"
+                    aria-label="Show"
+                    value={show}
+                    onChange={(v) => setShow(v as Show)}
+                    data={(['all', 'running', 'stopped', 'qemu', 'lxc', ...(isHub ? ['dcs' as const] : [])] as Show[]).map((k) => ({
+                      value: k,
+                      label: <span className="flex items-center gap-1">{SHOW_LABEL[k]}{vms.data && <span className="tabular-nums text-[10px] opacity-60 hidden sm:inline">{counts[k]}</span>}</span>,
+                    }))}
+                  />
                 </div>
-                <div className="flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                  <button type="button" onClick={() => changeView('cards')} title="Cards" aria-label="Cards" className={`h-8 w-8 rounded-md flex items-center justify-center transition-colors ${view === 'cards' ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:text-slate-200'}`}><LayoutGrid size={14} /></button>
-                  <button type="button" onClick={() => changeView('table')} title="Table" aria-label="Table" className={`h-8 w-8 rounded-md flex items-center justify-center transition-colors ${view === 'table' ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:text-slate-200'}`}><LayoutList size={14} /></button>
-                </div>
+                <SegmentedControl
+                  color="amber"
+                  aria-label="View"
+                  value={view}
+                  onChange={(v) => changeView(v as View)}
+                  data={[
+                    { value: 'cards', label: <Tooltip label="Cards"><span className="flex py-0.5"><LayoutGrid size={14} aria-hidden /><span className="sr-only">Cards</span></span></Tooltip> },
+                    { value: 'table', label: <Tooltip label="Table"><span className="flex py-0.5"><LayoutList size={14} aria-hidden /><span className="sr-only">Table</span></span></Tooltip> },
+                  ]}
+                />
               </div>
             </div>
             {vms.error && !vms.data ? (
               <div className={`${CARD} p-5 text-sm text-rose-300`}>{vms.error.message}</div>
             ) : !vms.data ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className={`${CARD} h-28 animate-pulse`} />)}</div>
+              <div role="status" aria-label="Reading the guests" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <GuestCardSkeleton key={i} />)}</div>
             ) : list.length === 0 ? (
-              <div className={`${CARD} p-6 text-center text-sm text-slate-400`}>Nothing matches.</div>
+              <div className={`${CARD} px-6 py-10 text-center`}>
+                <Box size={22} className="mx-auto text-slate-600" />
+                <p className="mt-2 text-sm text-slate-300">{all.length === 0 ? 'No guests on this Proxmox yet' : 'No guest matches'}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {all.length === 0
+                    ? (canBuild ? 'New VM stack builds one; the VMs and containers made in Proxmox show here too.' : 'The VMs and containers made in Proxmox show here.')
+                    : `${SHOW_LABEL[show]}${query.trim() ? ` · “${query.trim()}”` : ''} — none of the ${all.length} guest${all.length === 1 ? '' : 's'}`}
+                </p>
+                {showFilters && <button type="button" onClick={() => { setShow('all'); setQuery('') }} className={`${BTN_QUIET} mx-auto mt-4`}><X size={14} /> Clear the filters</button>}
+              </div>
             ) : view === 'table' ? (
               <VmTable rows={list} render={(vm) => <VmTableRow key={`${vm.node}/${vm.type}/${vm.vmid}`} {...rowProps(vm)} />} />
             ) : (

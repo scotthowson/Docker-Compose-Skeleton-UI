@@ -63,9 +63,12 @@ button.mantine-Badge-root:focus-visible {
   }
 }
 
-/* segmented filters: muted choices that brighten on hover; the chosen one keeps its colour (theme) */
+/* segmented filters: muted choices that brighten on hover; the chosen one in its colour on its tint */
 .mantine-SegmentedControl-label:not([data-active]) {
   color: var(--dcs-seg-label);
+}
+.mantine-SegmentedControl-label[data-active] {
+  color: var(--dcs-seg-active, inherit);
 }
 @media (hover: hover) {
   .mantine-SegmentedControl-label:not([data-active], [data-disabled]):hover {
