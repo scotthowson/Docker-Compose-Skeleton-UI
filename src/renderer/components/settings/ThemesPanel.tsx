@@ -973,7 +973,6 @@ export default function ThemesPanel() {
         {entries.map((entry) => {
           const t = entry.theme
           const isEffective = effective === t.name
-          const isPersonal = themeName === t.name
           const isServerActive = serverThemeActive === t.name
           const busy = working === t.name
           const canManage = entry.source === 'local' || (entry.source === 'server' && isAdmin && serverOk)
@@ -996,11 +995,10 @@ export default function ThemesPanel() {
                 {t.description && <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{t.description}</p>}
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-1.5">
-                {!isEffective ? (
+                {/* the worn card needs no button: the line above says how to go back */}
+                {!isEffective && (
                   <button type="button" onClick={() => use(t.name)} className={BTN_PRIMARY}><Check size={14} /> Use</button>
-                ) : isPersonal && ownChoice ? (
-                  <button type="button" onClick={followServer} className={BTN_GHOST} title={serverThemeActive ? 'Wear what the server sets for everyone' : 'Wear the default, DCS Emerald'}><Globe size={14} /> {serverThemeActive ? 'Follow server' : 'Default'}</button>
-                ) : null}
+                )}
                 {isAdmin && serverOk && !isServerActive && (
                   <button type="button" onClick={() => setForEveryone(entry)} disabled={busy} className={BTN_GHOST} title="Every dashboard on this server follows it">
                     {busy ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />} For everyone
