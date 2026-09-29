@@ -65,7 +65,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
       <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col">
         <div className="flex items-center gap-2 mb-3"><ShieldOff size={14} className="text-slate-500" />{title}</div>
         <p className="text-xs text-slate-500 flex-1">CrowdSec is not running. Deploy the <span className="text-slate-300">crowdsec</span> template to block scanners and brute-force attempts at the reverse proxy.</p>
-        <button onClick={() => setCurrentPage('templates')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Open templates →</button>
+        <button onClick={() => setCurrentPage('crowdsec')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Set up CrowdSec →</button>
       </div>
     )
   }
@@ -138,6 +138,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
           </button>
         )}
         <span className="ml-auto text-[10px] text-slate-600">{trusted.length} trusted</span>
+        <button onClick={() => setCurrentPage('crowdsec')} className="text-[11px] text-cyan-400 hover:text-cyan-300">Open CrowdSec →</button>
       </div>
     </div>
   )
