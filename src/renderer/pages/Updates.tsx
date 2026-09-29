@@ -1188,7 +1188,7 @@ export default function Updates() {
                 </p>
               </div>
               <a
-                href="https://github.com/scotthowson/Docker-Compose-Skeleton-UI/releases/latest"
+                href="https://github.com/scotthowson/dcs-orchestrator-ui/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 hover:bg-slate-800/70 transition-colors group/apk"

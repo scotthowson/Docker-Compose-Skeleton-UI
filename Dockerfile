@@ -24,7 +24,7 @@ FROM nginx:alpine
 
 LABEL org.opencontainers.image.title="DCS-UI" \
       org.opencontainers.image.description="DCS Orchestrator — the dashboard" \
-      org.opencontainers.image.source="https://github.com/scotthowson/Docker-Compose-Skeleton-UI" \
+      org.opencontainers.image.source="https://github.com/scotthowson/dcs-orchestrator-ui" \
       org.opencontainers.image.licenses="MIT"
 
 COPY --from=build /app/dist/renderer /usr/share/nginx/html

@@ -14,7 +14,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { BUILD_VERSION } from '../constants/buildInfo'
 
 const UPDATE_MS = 15000
-const REPO_URL = 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO'
+const REPO_URL = 'https://github.com/scotthowson/dcs-orchestrator'
 
 export default function DiscordPresence() {
   const startedAt = useRef(Date.now())

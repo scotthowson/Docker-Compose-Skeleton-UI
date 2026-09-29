@@ -55,7 +55,7 @@ function sizeText(j: FleetJob): string {
   return `${j.cores} ${j.cores === 1 ? 'core' : 'cores'} · ${ram} RAM · ${j.disk_gb} GB disk`
 }
 function joinLine(j: FleetJob): string {
-  return `git clone https://github.com/scotthowson/Docker-Compose-Skeleton-AIO.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO && DCS_HUB_URL=${j.hub_url ?? ''} DCS_JOIN_TOKEN=${j.join_token ?? ''} DCS_STACKS=${j.stack} ./setup.sh`
+  return `git clone https://github.com/scotthowson/dcs-orchestrator.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO && DCS_HUB_URL=${j.hub_url ?? ''} DCS_JOIN_TOKEN=${j.join_token ?? ''} DCS_STACKS=${j.stack} ./setup.sh`
 }
 
 function StepIcon({ state, size = 13 }: { state: FleetJobStep['state'] | 'skipped'; size?: number }) {

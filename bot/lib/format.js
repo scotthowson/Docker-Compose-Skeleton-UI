@@ -15,7 +15,7 @@ export const COLORS = {
   slate: 0x64748b,   // slate: neutral
 }
 
-const BRAND = 'https://raw.githubusercontent.com/scotthowson/Docker-Compose-Skeleton-UI/v2.0.0/brand/discord'
+const BRAND = 'https://raw.githubusercontent.com/scotthowson/dcs-orchestrator-ui/v2.0.0/brand/discord'
 export const ICONS = {
   app: `${BRAND}/app-icon.png`,
   bot: `${BRAND}/bot-avatar.png`,

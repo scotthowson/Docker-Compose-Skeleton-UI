@@ -665,7 +665,7 @@ views.help = async (ctx) => {
       { name: '💡 Tips', value: 'Names autocomplete while you type. Replies refresh with 🔄. The webhook notifications (deploys, health, updates, backups, CrowdSec) are set up on the dashboard under Notifications — the full guide is docs/DISCORD.md in the DCS repo.' },
     ],
   })
-  return { embeds: [e], components: [row(button('nav:status', 'Status', Style.Primary, '🧭'), dashLink(ctx), link('Setup guide', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md', '📖'))] }
+  return { embeds: [e], components: [row(button('nav:status', 'Status', Style.Primary, '🧭'), dashLink(ctx), link('Setup guide', 'https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/DISCORD.md', '📖'))] }
 }
 
 // ---------------------------------------------------------------------------

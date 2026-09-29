@@ -56,4 +56,4 @@ If this policy changes, the new version is published at the same address with an
 ## Contact
 
 Questions about this policy: open an issue at
-[github.com/scotthowson/Docker-Compose-Skeleton-UI](https://github.com/scotthowson/Docker-Compose-Skeleton-UI/issues).
+[github.com/scotthowson/dcs-orchestrator-ui](https://github.com/scotthowson/dcs-orchestrator-ui/issues).

@@ -51,4 +51,4 @@ These terms are governed by the laws of Ontario, Canada, without regard to confl
 ## 8. Contact
 
 Questions about these terms: open an issue at
-[github.com/scotthowson/Docker-Compose-Skeleton-UI](https://github.com/scotthowson/Docker-Compose-Skeleton-UI/issues).
+[github.com/scotthowson/dcs-orchestrator-ui](https://github.com/scotthowson/dcs-orchestrator-ui/issues).

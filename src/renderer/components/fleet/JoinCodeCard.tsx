@@ -9,7 +9,7 @@ import { createFleetJoinToken, fetchFleetJoinTokens, revokeFleetJoinToken } from
 import type { FleetJoinToken } from '../../../shared/types'
 import { CopyChip } from './fleetShared'
 
-const CLONE = 'git clone https://github.com/scotthowson/Docker-Compose-Skeleton-AIO.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO'
+const CLONE = 'git clone https://github.com/scotthowson/dcs-orchestrator.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO'
 
 export default function JoinCodeCard({ compact = false, autoMint = true }: { compact?: boolean; autoMint?: boolean }) {
   const [hubUrl, setHubUrl] = useState('')

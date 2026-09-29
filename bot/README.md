@@ -4,7 +4,7 @@ Slash commands for a DCS Orchestrator server, with buttons and confirmations.
 Separate from the notification webhook, which the API posts to on its own.
 
 **Setup, step by step, with every ID and permission:**
-[docs/DISCORD.md](https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md)
+[docs/DISCORD.md](https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/DISCORD.md)
 in the DCS repository. Deploy it from the **DCS Discord Bot** template in DCS Manager; the image is
 `ghcr.io/scotthowson/dcs-discord-bot`.
 

@@ -677,10 +677,10 @@ export function CommandPalette() {
         })
       }
       const docs: [string, string, string, string[]][] = [
-        ['README', 'Install, quick start, every feature', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO#readme', ['readme', 'help', 'guide', 'install']],
-        ['Proxmox guide', 'API token, the Proxmox page, the fleet (hub + members), a Traefik in another VM', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/PROXMOX.md', ['proxmox', 'guide', 'hub', 'feed', 'traefik']],
-        ['Discord & webhooks', 'Webhooks, notification rules, CrowdSec alerts, the bot', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md', ['discord', 'webhook', 'bot', 'notifications']],
-        ['API reference', 'Every endpoint with its access level', 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/API.md', ['api', 'endpoints', 'reference', 'curl']],
+        ['README', 'Install, quick start, every feature', 'https://github.com/scotthowson/dcs-orchestrator#readme', ['readme', 'help', 'guide', 'install']],
+        ['Proxmox guide', 'API token, the Proxmox page, the fleet (hub + members), a Traefik in another VM', 'https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/PROXMOX.md', ['proxmox', 'guide', 'hub', 'feed', 'traefik']],
+        ['Discord & webhooks', 'Webhooks, notification rules, CrowdSec alerts, the bot', 'https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/DISCORD.md', ['discord', 'webhook', 'bot', 'notifications']],
+        ['API reference', 'Every endpoint with its access level', 'https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/API.md', ['api', 'endpoints', 'reference', 'curl']],
       ]
       for (const [title, desc, url, kw] of docs) {
         items.push({
