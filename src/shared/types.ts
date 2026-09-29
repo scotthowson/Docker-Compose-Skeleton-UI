@@ -2925,10 +2925,66 @@ export interface CrowdSecStatusResponse {
   bouncers?: CrowdSecBouncerRow[]
   machines?: CrowdSecMachine[]
   acquisition?: { sources: CrowdSecAcquisitionSource[]; reads: number; parsed: number; unparsed: number; parse_rate: number | null }
-  enforcement?: { routes_dir: string; middleware_file: string; middleware_present: boolean; in_chain: boolean }
+  enforcement?: CrowdSecEnforcement
 }
 
-export interface CrowdSecFacet { value: string; count: number }
+/** What Traefik's own files say about the CrowdSec bouncer plugin */
+export interface CrowdSecPluginState {
+  /** the plugin is declared in Traefik's static configuration */
+  declared: boolean
+  name: string
+  version: string
+  module: string
+  traefik_running: boolean
+  /** Traefik has started since the plugin was declared (null: not known) */
+  loaded: boolean | null
+  mode: string | null
+  /** the CrowdSec page saved these settings (a marker line in the middleware file) */
+  managed: boolean
+  key_present: boolean
+  settings: Record<string, unknown>
+}
+export interface CrowdSecEnforcement {
+  routes_dir: string
+  middleware_file: string
+  middleware_present: boolean
+  middleware_mtime?: number
+  in_chain: boolean
+  chain_file?: string
+  plugin?: CrowdSecPluginState
+}
+
+/** The plugin's own settings (the safe subset the page edits) */
+export interface CrowdSecPluginSettings {
+  mode: 'live' | 'stream'
+  update_interval: number
+  default_decision_seconds: number
+  http_timeout: number
+  remediation_status_code: number
+  log_level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+  trust_home: boolean
+  client_trusted_ips: string[]
+  forwarded_headers_trusted_ips: string[]
+}
+/** GET /crowdsec/plugin (and the answer of the PUT) */
+export interface CrowdSecPluginResponse {
+  available: boolean
+  reason?: string
+  file?: string
+  managed?: boolean
+  plugin: CrowdSecPluginState
+  settings?: CrowdSecPluginSettings
+  defaults?: CrowdSecPluginSettings
+  limits?: { update_interval: [number, number]; default_decision_seconds: [number, number]; http_timeout: [number, number]; remediation_status_code: [number, number]; list_max: number; forwarded_max: number }
+  lan?: string
+  home?: string
+  backups?: { name: string; created_at: string; size: number }[]
+  help?: Record<'mode' | 'update_interval' | 'default_decision_seconds' | 'http_timeout' | 'remediation_status_code' | 'log_level' | 'client_trusted_ips' | 'forwarded_headers_trusted_ips', string>
+  success?: boolean
+  applied?: { changed: boolean; message: string; backup: string | null }
+}
+
+export interface CrowdSecFacet { value: string; count: number; label?: string }
 
 /** GET /crowdsec/decisions */
 export interface CrowdSecDecisionsResponse {
@@ -3087,7 +3143,7 @@ export interface CrowdSecBouncersResponse {
   count: number
   dcs_bouncer: CrowdSecBouncerRow | null
   name: string
-  enforcement: { routes_dir: string; middleware_file: string; middleware_present: boolean; in_chain: boolean }
+  enforcement: CrowdSecEnforcement
   traefik: CrowdSecTraefikInfo
   traefik_registerable: boolean
 }

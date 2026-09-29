@@ -162,7 +162,7 @@ import type {
   CrowdSecUnbanResponse, CrowdSecDecisionQuery, CrowdSecDecisionsResponse, CrowdSecBanBody, CrowdSecBanResponse, CrowdSecBulkDeleteResponse, CrowdSecImportResponse,
   CrowdSecExportResponse, CrowdSecAlertsResponse, CrowdSecAlertDetail, CrowdSecAllowlistResponse, CrowdSecAllowAddBody, CrowdSecAllowAddResponse,
   CrowdSecBouncersResponse, CrowdSecMachinesResponse, CrowdSecBouncerAddResponse, CrowdSecMetricsResponse, CrowdSecHubResponse, CrowdSecHubAvailableResponse,
-  CrowdSecHubChangeResponse, CrowdSecLogsResponse, CrowdSecSimulationResponse, CrowdSecSimulationSetResponse, CrowdSecCommunityResponse, CrowdSecSettingsResponse,
+  CrowdSecHubChangeResponse, CrowdSecPluginResponse, CrowdSecPluginSettings, CrowdSecLogsResponse, CrowdSecSimulationResponse, CrowdSecSimulationSetResponse, CrowdSecCommunityResponse, CrowdSecSettingsResponse,
   CrowdSecSettingsBody, CrowdSecNotifyResponse, CrowdSecNotifyBody, CrowdSecPreviewResponse, CrowdSecNotifyTestResponse, CrowdSecServiceResponse, CrowdSecFix,
   PluginInstallResponse,
   PluginDeleteResponse,
@@ -1139,6 +1139,8 @@ export interface RouteEntry {
   stack: string
   target: string
   conflict: boolean
+  /** Traefik's CrowdSec bouncer: checks this route (protected), does not (bypass), or CrowdSec is not set up on the proxy (off) */
+  crowdsec?: 'protected' | 'bypass' | 'off'
 }
 
 export interface RoutesResponse {
@@ -2011,6 +2013,18 @@ export function crowdsecTestNotify(body: { settings?: CrowdSecNotifyBody['settin
 }
 export function crowdsecResetNotify(member?: string | null): Promise<CrowdSecNotifyResponse> {
   return apiClient.post<CrowdSecNotifyResponse>(memberPath(member, '/crowdsec/notifications/reset'), undefined, 180000)
+}
+
+/** GET /crowdsec/plugin and PUT — the Traefik bouncer plugin's settings (written into Traefik's middleware file; Traefik reloads by itself) */
+export function crowdsecPlugin(member?: string | null): Promise<CrowdSecPluginResponse> {
+  return apiClient.get<CrowdSecPluginResponse>(memberPath(member, '/crowdsec/plugin'))
+}
+export function crowdsecSavePlugin(settings: Partial<CrowdSecPluginSettings>, member?: string | null): Promise<CrowdSecPluginResponse> {
+  return apiClient.put<CrowdSecPluginResponse>(memberPath(member, '/crowdsec/plugin'), { settings }, 60000)
+}
+/** POST /crowdsec/traefik/restart — Traefik loads a plugin it declares only when it starts */
+export function crowdsecRestartTraefik(member?: string | null): Promise<{ success: boolean; message: string }> {
+  return apiClient.post(memberPath(member, '/crowdsec/traefik/restart'), undefined, 120000)
 }
 
 /** POST /crowdsec/service — start, restart or reload the container */

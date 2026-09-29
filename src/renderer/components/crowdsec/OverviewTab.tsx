@@ -5,12 +5,13 @@
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Globe2, Crosshair, Radar, Network, ShieldCheck, Users, Cpu, Ban, RotateCw, RefreshCw, ArrowRight, Plug, UserCheck, Loader2, CircleAlert, CircleCheck, Info, Clock } from 'lucide-react'
+import { Activity, Globe2, Crosshair, Radar, Network, ShieldCheck, Users, Cpu, Ban, RotateCw, RefreshCw, ArrowRight, Plug, UserCheck, Loader2, CircleAlert, CircleCheck, Info, Clock, TriangleAlert, ShieldOff } from 'lucide-react'
 import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
-import { crowdsecMetrics, crowdsecAlerts, crowdsecCommunity, crowdsecService, crowdsecRegisterTraefikBouncer } from '../../api/endpoints'
+import { crowdsecMetrics, crowdsecAlerts, crowdsecCommunity, crowdsecService, crowdsecRegisterTraefikBouncer, fetchRoutes } from '../../api/endpoints'
+import { useSettingsStore } from '../../stores/settingsStore'
 import type { CrowdSecMetricsResponse } from '../../../shared/types'
 import { BTN_DANGER, BTN_PRIMARY, BTN_QUIET, CARD, Chip, Country, Dot, SectionHead, Segmented, Skel, countryName, errMsg, familyTone, fmtAgo, fmtNum, fmtTime, useCs, useNow, type Tone } from './kit'
 import { BarRow, TimelineChart } from './charts'
@@ -54,6 +55,18 @@ function StatusRow({ tone, title, children, action }: { tone: Tone; title: strin
   )
 }
 
+/** one line of the protection checklist: a tick, what was checked, what it says */
+function CheckLine({ state, label, children }: { state: 'ok' | 'warn' | 'bad' | 'mute'; label: string; children?: React.ReactNode }) {
+  const Icon = state === 'ok' ? CircleCheck : state === 'mute' ? Info : state === 'bad' ? CircleAlert : TriangleAlert
+  const cls = state === 'ok' ? 'text-emerald-400' : state === 'warn' ? 'text-amber-400' : state === 'bad' ? 'text-rose-400' : 'text-slate-500'
+  return (
+    <li className="flex items-start gap-2 py-1">
+      <Icon size={13} className={`${cls} shrink-0 mt-0.5`} aria-hidden="true" />
+      <p className="text-xs text-slate-300 min-w-0 leading-snug"><span className="sr-only">{state === 'ok' ? 'Fine: ' : state === 'mute' ? 'Note: ' : 'Needs attention: '}</span>{label}{children ? <span className="text-slate-500"> · {children}</span> : null}</p>
+    </li>
+  )
+}
+
 export default function OverviewTab() {
   const { member, isAdmin, status: s, refreshStatus, goTab } = useCs()
   const isConnected = useConnectionStore((st) => st.status === 'connected')
@@ -76,6 +89,10 @@ export default function OverviewTab() {
   const recent = usePolling(() => crowdsecAlerts({ window: '24h', limit: 16, simulated: 'any' }, member), 20000, { enabled: isConnected })
   const latest = useMemo(() => (recent.data?.alerts ?? []).filter((a) => a.kind !== 'cscli').slice(0, 6), [recent.data])
   const community = usePolling(() => crowdsecCommunity(member), 60000, { enabled: isConnected })
+  const routes = usePolling(() => fetchRoutes(), 45000, { enabled: isConnected && !member })
+  const bypass = useMemo(() => (routes.data?.routes ?? []).filter((r) => r.crowdsec === 'bypass'), [routes.data])
+  const checked = useMemo(() => (routes.data?.routes ?? []).filter((r) => r.crowdsec === 'protected').length, [routes.data])
+  const setPage = useSettingsStore((st) => st.setCurrentPage)
 
   const m = metrics.data
   // the metrics of the window that was asked for; while another window loads, show the old numbers dimmed instead of a flash of skeleton
@@ -254,11 +271,37 @@ export default function OverviewTab() {
             ) : enf && !enf.in_chain ? (
               <StatusRow tone="warn" title="The bouncer is registered but Traefik is not using it" action={isAdmin ? <button type="button" className={BTN_PRIMARY} disabled={busy === 'bouncer'} onClick={registerBouncer}>{busy === 'bouncer' ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Add it to the Traefik chain</button> : undefined}>The middleware is not part of the chain your services use.</StatusRow>
             ) : pullAge === null ? (
-              <StatusRow tone="warn" title="The bouncer has not asked for bans yet">Traefik has not pulled the ban list since it was registered. It does so every few seconds once it is running with the middleware.</StatusRow>
-            ) : pullAge > 300 ? (
-              <StatusRow tone="warn" title={`The bouncer last pulled the bans ${fmtAgo(bouncer.last_pull, now)}`}>It normally pulls every few seconds. Check that Traefik is running.</StatusRow>
+              <StatusRow tone="warn" title="Traefik has not asked CrowdSec yet">Nothing has come from Traefik since the bouncer was registered. It starts with the first request that goes through the middleware.</StatusRow>
+            ) : pullAge > 1800 ? (
+              <StatusRow tone="warn" title={`Traefik last asked CrowdSec ${fmtAgo(bouncer.last_pull, now)}`}>The plugin reports in at least every ten minutes while Traefik runs it. Check that Traefik is running and loaded the plugin.</StatusRow>
             ) : (
-              <StatusRow tone="good" title="Traefik enforces the bans">The bouncer pulled the list {fmtAgo(bouncer.last_pull, now)}. It blocks addresses and networks, before a request reaches a service.</StatusRow>
+              <StatusRow tone="good" title="Traefik enforces the bans">Traefik last asked CrowdSec {fmtAgo(bouncer.last_pull, now)}. It blocks addresses and networks before a request reaches a service.</StatusRow>
+            )}
+            {traefikPresent && enf && (
+              <div className="pt-2.5 first:pt-0">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">How the bouncer is wired</p>
+                <ul>
+                  <CheckLine state={enf.plugin?.declared ? (enf.plugin.loaded === false ? 'warn' : 'ok') : 'bad'} label={enf.plugin?.declared ? `Plugin ${enf.plugin.name} ${enf.plugin.version} is declared in Traefik` : 'The plugin is not declared in Traefik\u2019s static configuration'}>
+                    {enf.plugin?.declared ? (enf.plugin.loaded === false ? 'Traefik has not been restarted since' : enf.plugin.loaded ? 'loaded' : undefined) : 'Traefik refuses the middleware until it is'}
+                  </CheckLine>
+                  <CheckLine state={enf.middleware_present ? 'ok' : 'bad'} label={enf.middleware_present ? 'The middleware file crowdsec-bouncer.yml exists' : 'The middleware file crowdsec-bouncer.yml is missing'} />
+                  <CheckLine state={enf.in_chain ? 'ok' : 'bad'} label={enf.in_chain ? 'crowdsec-bouncer is in traefik-chain' : 'crowdsec-bouncer is not in traefik-chain'}>{enf.in_chain ? 'every route that uses the chain is checked' : 'no route is checked'}</CheckLine>
+                  <CheckLine state={!bouncer?.registered ? 'bad' : (s?.issues ?? []).some((i) => i.code === 'bouncer_key_stale') ? 'bad' : enf.plugin?.key_present ? 'ok' : 'warn'} label={!bouncer?.registered ? 'CrowdSec knows no bouncer for Traefik' : (s?.issues ?? []).some((i) => i.code === 'bouncer_key_stale') ? 'The key in the middleware file is out of date' : 'The bouncer is registered and the file holds its key'} />
+                  <CheckLine state={pullAge === null ? 'warn' : pullAge > 1800 ? 'warn' : 'ok'} label={pullAge === null ? 'Traefik has not asked CrowdSec yet' : `Traefik last asked CrowdSec ${fmtAgo(bouncer?.last_pull, now)}`} />
+                  {enf.plugin?.mode && (
+                    <CheckLine state="mute" label={`Mode: ${enf.plugin.mode}`}>
+                      {isAdmin ? <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={() => goTab('settings')}>change it in Settings</button> : (enf.plugin.mode === 'live' ? 'asks CrowdSec per visitor' : 'downloads the ban list')}
+                    </CheckLine>
+                  )}
+                </ul>
+              </div>
+            )}
+            {!member && routes.data && enf?.in_chain !== undefined && (checked > 0 || bypass.length > 0) && (
+              bypass.length > 0
+                ? <StatusRow tone="warn" title={`${bypass.length} of ${checked + bypass.length} route${checked + bypass.length === 1 ? '' : 's'} bypass${bypass.length === 1 ? 'es' : ''} the bouncer`} action={<button type="button" className={BTN_QUIET} onClick={() => setPage('dns')}><ShieldOff size={13} /> Open DNS &amp; Routes</button>}>
+                    {bypass.slice(0, 4).map((r) => r.subdomain).join(', ')}{bypass.length > 4 ? ` and ${bypass.length - 4} more` : ''}: they do not use Traefik&rsquo;s traefik-chain, so a banned address can still reach them.
+                  </StatusRow>
+                : <StatusRow tone="good" title={`All ${checked} route${checked === 1 ? '' : 's'} go through the bouncer`}>Routes of your VMs pass through this Traefik&rsquo;s chain too.</StatusRow>
             )}
             {clientIp && (
               s?.client_banned

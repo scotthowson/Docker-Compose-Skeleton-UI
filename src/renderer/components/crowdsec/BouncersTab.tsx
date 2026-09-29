@@ -265,6 +265,7 @@ function AddBouncerSheet({ existing, onClose, onDone }: { existing: string[]; on
 function Enforcement({ b, isAdmin, busy, onRegister }: { b: CrowdSecBouncersResponse; isAdmin: boolean; busy: boolean; onRegister: (again: boolean) => void }) {
   const now = useNow()
   const tr = b.traefik
+  const { goTab } = useCs()
   const enf = b.enforcement
   const dcs = b.dcs_bouncer
   const registered = !!dcs && !dcs.revoked
@@ -289,13 +290,13 @@ function Enforcement({ b, isAdmin, busy, onRegister }: { b: CrowdSecBouncersResp
     text = `Nothing is enforced while Traefik is stopped${tr.state ? ` (it is ${tr.state})` : ''}. Start it from the Containers page; the bouncer is set up and will work again as soon as it runs.`
   } else if (pullAge === null && fresh) {
     tone = 'info'; title = 'Waiting for Traefik’s first pull'
-    text = 'The bouncer is registered and in the chain. Traefik asks CrowdSec for the ban list a few seconds after it loads the new middleware.'
+    text = 'The bouncer is registered and in the chain. Traefik asks CrowdSec as soon as a request goes through the new middleware.'
   } else if (pullAge === null) {
     tone = 'warn'; title = 'Traefik has not pulled the ban list yet'
     text = 'The bouncer is registered and in the chain, but Traefik has never asked for bans. Check that Traefik is running and loaded the plugin; registering again gives it a fresh key.'
-  } else if (pullAge >= 300) {
-    tone = 'warn'; title = 'Traefik stopped asking for bans'
-    text = 'It normally pulls the ban list every few seconds. Check that Traefik is running; registering again gives it a fresh key.'
+  } else if (pullAge >= 1800) {
+    tone = 'warn'; title = 'Traefik has not asked CrowdSec for a long time'
+    text = 'The plugin reports in at least every ten minutes while Traefik runs it. Check that Traefik is running and loaded the plugin; registering again gives it a fresh key.'
   } else if (blind) {
     text = 'Traefik asks CrowdSec for the ban list, so the bans are enforced. DCS cannot look inside Traefik’s files on this server, so it cannot check the middleware file or the chain.'
   }
@@ -349,8 +350,23 @@ function Enforcement({ b, isAdmin, busy, onRegister }: { b: CrowdSecBouncersResp
           <CheckRow tone={enf.in_chain ? 'good' : blind ? 'mute' : 'warn'} label="In Traefik’s chain">
             {enf.in_chain ? <><span className="font-mono text-slate-300">crowdsec-bouncer</span> is part of <span className="font-mono text-slate-300">traefik-chain</span>, so every service that uses the chain is checked</> : blind ? 'Not known without the routes folder' : <><span className="font-mono text-slate-300">crowdsec-bouncer</span> is not part of <span className="font-mono text-slate-300">traefik-chain</span>: the services do not ask CrowdSec</>}
           </CheckRow>
-          <CheckRow tone={!dcs ? 'mute' : pullAge === null ? (fresh ? 'info' : 'warn') : pullAge >= 300 ? 'warn' : 'good'} label="Last pull">
-            {!dcs ? 'Nothing to pull without a bouncer' : pullAge === null ? (fresh ? 'Not yet: Traefik pulls a few seconds after it loads the new middleware' : 'Never: Traefik has not asked for the ban list') : <><Ago at={dcs.last_pull} />{pullAge >= 300 ? ': it normally pulls every few seconds' : ''}</>}
+          {enf.plugin && (
+            <CheckRow tone={enf.plugin.declared ? (enf.plugin.loaded === false ? 'warn' : 'good') : blind ? 'mute' : 'bad'} label="Plugin declared">
+              {enf.plugin.declared ? <><span className="font-mono text-slate-300">{enf.plugin.name}</span> {enf.plugin.version} is declared in Traefik&rsquo;s static configuration{enf.plugin.loaded === false ? ': Traefik has not been restarted since, so it is not loaded yet' : ''}</> : blind ? 'Not known without the routes folder' : 'Traefik&rsquo;s static configuration does not declare the plugin: Traefik refuses the middleware. Registering again declares it.'}
+            </CheckRow>
+          )}
+          {enf.plugin && dcs && enf.middleware_present && (
+            <CheckRow tone={Date.parse(dcs.created_at) / 1000 > (enf.middleware_mtime ?? 0) + 120 ? 'bad' : enf.plugin.key_present ? 'good' : 'warn'} label="Key in the file">
+              {Date.parse(dcs.created_at) / 1000 > (enf.middleware_mtime ?? 0) + 120 ? 'The bouncer was registered again after the file was written, so the key in the file no longer works. Register again writes a fresh one.' : enf.plugin.key_present ? 'The file holds the key of the bouncer CrowdSec knows' : 'The file has no key'}
+            </CheckRow>
+          )}
+          {enf.plugin?.mode && (
+            <CheckRow tone="mute" label="Mode">
+              <span className="font-mono text-slate-300">{enf.plugin.mode}</span>{enf.plugin.mode === 'live' ? ': Traefik asks CrowdSec about a visitor when it first sees one' : ': Traefik downloads the ban list every few seconds'}. {isAdmin ? <button type="button" className="text-cyan-400 hover:text-cyan-300" onClick={() => goTab('settings')}>Change it in Settings</button> : null}
+            </CheckRow>
+          )}
+          <CheckRow tone={!dcs ? 'mute' : pullAge === null ? (fresh ? 'info' : 'warn') : pullAge >= 1800 ? 'warn' : 'good'} label="Last pull">
+            {!dcs ? 'Nothing to pull without a bouncer' : pullAge === null ? (fresh ? 'Not yet: Traefik asks with the first request that goes through the new middleware' : 'Never: Traefik has not asked CrowdSec') : <><Ago at={dcs.last_pull} />{pullAge >= 1800 ? ': it normally pulls every few seconds' : ''}</>}
           </CheckRow>
         </ul>
       )}
