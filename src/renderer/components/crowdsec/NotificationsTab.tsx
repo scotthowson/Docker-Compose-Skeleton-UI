@@ -31,8 +31,8 @@ import { ApiError } from '../../api/client'
 import { getRun, setRun, subscribeRun, type Outcome } from './NotifyRun'
 
 const DEFAULT_LIMITS: Limits = { title: 200, description: 1500, footer: 200, fields: 8, group_threshold_max: 10 }
-/** the preview route is admin-only in the API today; when it opens for viewers this becomes true and they get the server's drawing */
-const VIEWER_SERVER_PREVIEW = false
+/** viewers get the server's drawing too (it only renders, it never sends); an older server that still refuses them falls back to the local sketch */
+const VIEWER_SERVER_PREVIEW = true
 
 const DARK_KEY = 'dcs-crowdsec-notify-dark'
 const OPEN_KEY = 'dcs-crowdsec-notify-open'
@@ -255,7 +255,8 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const setDark = (d: boolean) => { setDarkState(d); try { localStorage.setItem(DARK_KEY, d ? '1' : '0') } catch { /* private window */ } }
   const samples = useMemo(() => orderSamples(server.samples), [server.samples])
   const sampleNow = samples.includes(sample) ? sample : (samples[0] ?? 'probe')
-  const askServer = isAdmin || VIEWER_SERVER_PREVIEW
+  const [serverRefused, setServerRefused] = useState(false)
+  const askServer = (isAdmin || VIEWER_SERVER_PREVIEW) && !serverRefused
   const [pv, setPv] = useState<{ payload: DiscordWebhookPayload | null; problem: string | null; loading: boolean }>({ payload: null, problem: null, loading: askServer })
   const seq = useRef(0)
   const errorCount = Object.keys(errors).length
@@ -267,7 +268,11 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
     setPv((p) => ({ ...p, loading: true }))
     crowdsecPreviewNotify({ settings: JSON.parse(previewKey || '{}') as CrowdSecNotifyBody['settings'], sample: sampleNow }, member)
       .then((r) => { if (my === seq.current) setPv({ payload: r.valid ? r.payload : null, problem: r.valid ? null : (r.error ?? 'The server could not draw this message'), loading: false }) })
-      .catch((e) => { if (my === seq.current) setPv((p) => ({ ...p, problem: `The preview could not be drawn: ${errMsg(e)}`, loading: false })) })
+      .catch((e) => {
+        if (my !== seq.current) return
+        if (!isAdmin && e instanceof ApiError && e.status === 403) { setServerRefused(true); return }
+        setPv((p) => ({ ...p, problem: `The preview could not be drawn: ${errMsg(e)}`, loading: false }))
+      })
   }, [previewKey, sampleNow, askServer, member]) // eslint-disable-line react-hooks/exhaustive-deps
   const approx = useMemo(() => (askServer ? null : approximatePayload(settingsNow, ph)), [askServer, settingsNow, ph])
   const previewPayload = approx ?? pv.payload
