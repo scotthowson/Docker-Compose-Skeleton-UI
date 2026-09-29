@@ -203,7 +203,9 @@ import type {
   TotpVerifyResponse,
   TotpValidateResponse,
   RouteCertificatesResponse,
-  SablierToggleResponse, DockerEngineInfo, DockerEngineFleet, DockerEngineStatus, DockerEngineUpdateResponse, FleetDockerEngineUpdateResponse } from '../../shared/types'
+  SablierToggleResponse, DockerEngineInfo, DockerEngineFleet, DockerEngineStatus, DockerEngineUpdateResponse, FleetDockerEngineUpdateResponse,
+  ProxmoxSelf,
+} from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Root
@@ -1939,6 +1941,16 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
 /** GET /proxmox/capabilities — what the API token may do (creating VMs needs more than power); POST with Proxmox values before they are saved */
 export function fetchProxmoxCapabilities(pve?: { url: string; token_id: string; token_secret: string; verify_tls: boolean }): Promise<ProxmoxCapabilities> {
   return pve ? apiClient.post<ProxmoxCapabilities>('/proxmox/capabilities', pve, 60000) : apiClient.get<ProxmoxCapabilities>('/proxmox/capabilities')
+}
+
+/** GET /proxmox/self — the Proxmox guest this DCS runs in, with the tags it has and the ones it should have (dcs, and hub on a hub) */
+export function fetchProxmoxSelf(): Promise<ProxmoxSelf> {
+  return apiClient.get<ProxmoxSelf>('/proxmox/self')
+}
+
+/** POST /proxmox/self/tag — give that guest its tags now (the API token needs VM.Config.Options on it) */
+export function tagProxmoxSelf(): Promise<ProxmoxSelf> {
+  return apiClient.post<ProxmoxSelf>('/proxmox/self/tag', {}, 30000)
 }
 
 /** GET /proxmox/storage — the node's storages */

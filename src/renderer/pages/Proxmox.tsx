@@ -29,9 +29,9 @@ import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxVm, fetchProxmoxTasks, proxmoxVmAction, proxmoxVmBalloon,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
-  testFleetMember, removeFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate,
+  testFleetMember, removeFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
 } from '../api/endpoints'
-import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, FleetStatus, FleetTemplate, FleetJob, FleetProvisionDefaults, StackInfo, ContainerInfo } from '../../shared/types'
+import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, FleetStatus, FleetTemplate, FleetJob, FleetProvisionDefaults, StackInfo, ContainerInfo, ProxmoxSelf } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
@@ -263,7 +263,7 @@ function NodesCard({ nodes, vms, version, memberVmids, onPick }: { nodes: Proxmo
   )
 }
 
-function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack }: { fleet: FleetStatus | null; stacks: StackInfo[]; isHub: boolean; memberCount: number; onStacks: () => void; onStack: (name: string) => void }) {
+function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf, isAdmin, tagging, onTag }: { fleet: FleetStatus | null; stacks: StackInfo[]; isHub: boolean; memberCount: number; onStacks: () => void; onStack: (name: string) => void; pveSelf?: ProxmoxSelf | null; isAdmin: boolean; tagging: boolean; onTag: () => void }) {
   const running = stacks.filter((s) => s.status === 'running').length
   const containers = stacks.reduce((a, s) => a + (s.running_containers || 0), 0)
   const role = fleet?.role
@@ -289,6 +289,20 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack }: { fle
           <p className="text-base font-semibold text-slate-100 tabular-nums leading-tight mt-0.5">{containers}<span className="text-slate-600 font-normal text-xs"> running</span></p>
         </div>
       </div>
+      {pveSelf?.guest && (
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap min-w-0">
+          <Tag size={11} className="text-slate-500 shrink-0" />
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0" title={`${pveSelf.guest.type === 'lxc' ? 'Container' : 'VM'} ${pveSelf.guest.vmid} (${pveSelf.guest.name}) on ${pveSelf.guest.node} — the Proxmox guest this server runs in, found by its ${MATCH_LABEL[pveSelf.guest.matched_by] ?? pveSelf.guest.matched_by}`}>Proxmox tags</span>
+          {pveSelf.tags.map((t) => (
+            <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded-md border leading-none ${pveSelf.wanted.includes(t) ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-white/[0.04] text-slate-400 border-white/10'}`}>{t}</span>
+          ))}
+          {pveSelf.missing.length > 0 && (isAdmin
+            ? <button type="button" onClick={onTag} disabled={tagging} title={`Give ${pveSelf.guest.type === 'lxc' ? 'container' : 'VM'} ${pveSelf.guest.vmid} the tag${pveSelf.missing.length > 1 ? 's' : ''} ${pveSelf.missing.join(' and ')} in Proxmox (the API token needs VM.Config.Options on it)`} className={MINI}>
+                {tagging ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />} Add {pveSelf.missing.join(', ')}
+              </button>
+            : <span className="text-[10px] text-amber-300">missing: {pveSelf.missing.join(', ')}</span>)}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-1.5 flex-1 content-start">
         {stacks.map((st) => (
           <button key={st.name} type="button" onClick={() => onStack(st.name)} title={`${st.name} on the Stacks page`} className="h-7 px-2 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 max-w-full">
@@ -914,6 +928,17 @@ export default function Proxmox() {
   const overview = usePolling(fetchFleetOverview, LIST_POLL, { enabled: isConnected && memberCount > 0 })
   const scan = usePolling(fetchFleetDiscover, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
   const localStacks = usePolling(fetchStacks, LIST_POLL, { enabled: isConnected && (isHub || role === 'member') })
+  // the VM this server runs in, and the Proxmox tags it has (dcs, and hub on a hub)
+  const pveSelf = usePolling(fetchProxmoxSelf, 60_000, { enabled: isConnected && configured && reachable && role !== 'member' })
+  const [tagging, setTagging] = useState(false)
+  const tagSelf = async () => {
+    setTagging(true)
+    try {
+      const r = await tagProxmoxSelf()
+      addToast({ type: r.tagged ? 'success' : 'warning', message: r.message, duration: r.tagged ? 5000 : 9000 })
+      pveSelf.refresh(); vms.refresh()
+    } catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'The tags could not be set' }) } finally { setTagging(false) }
+  }
   // the hub's own stacks only: GET /stacks also carries the members' stacks (placement "vm")
   const hubOwn = (localStacks.data?.stacks ?? []).filter((s) => s.placement !== 'vm')
   // VMs being built by the hub, and what creating one needs
@@ -1030,7 +1055,7 @@ export default function Proxmox() {
   const overviewCards: { key: string; node: ReactNode }[] = []
   const findGuest = (text: string) => { setShow('all'); setQuery(text) }
   if (nodes.data && nodes.data.nodes.length > 0) overviewCards.push({ key: 'nodes', node: <NodesCard nodes={nodes.data.nodes} vms={all} version={s?.version ?? ''} memberVmids={new Set(memberByVm.keys())} onPick={(v) => findGuest(v.name)} /> })
-  if ((isHub || role === 'member') && localStacks.data) overviewCards.push({ key: 'hub', node: <HubCard fleet={fleet.data} stacks={hubOwn} isHub={isHub} memberCount={memberCount} onStacks={() => setCurrentPage('stacks')} onStack={(name) => setCurrentPage('stacks', { highlight: name })} /> })
+  if ((isHub || role === 'member') && localStacks.data) overviewCards.push({ key: 'hub', node: <HubCard fleet={fleet.data} stacks={hubOwn} isHub={isHub} memberCount={memberCount} pveSelf={pveSelf.data} isAdmin={isAdmin} tagging={tagging} onTag={tagSelf} onStacks={() => setCurrentPage('stacks')} onStack={(name) => setCurrentPage('stacks', { highlight: name })} /> })
   if (isHub && templates.data) overviewCards.push({ key: 'templates', node: <TemplatesCard templates={templates.data.templates} defaults={provDefaults.data ?? null} isAdmin={isAdmin} removing={removingTemplate} onRemove={removeTemplate} onBake={() => setNewVm('')} onFind={(vmid) => findGuest(String(vmid))} /> })
   if (canBuild && jobs.data && !hasJobs) overviewCards.push({ key: 'builds', node: <BuildsQuiet canBuild={canBuild && configured && reachable} onNew={() => setNewVm('')} /> })
   const n = overviewCards.length

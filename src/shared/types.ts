@@ -2184,6 +2184,22 @@ export interface SetupCompleteResponse {
   message: string
   /** A join saved by setup.sh that ran when setup completed (3.9) */
   fleet_join?: FleetJoinOutcome | null
+  /** The Proxmox tags the VM that runs this DCS was given (dcs, and hub on a hub); null without a Proxmox link */
+  proxmox_tag?: ProxmoxSelf | null
+}
+
+// GET /proxmox/self, POST /proxmox/self/tag — the VM this DCS runs in and its Proxmox tags
+export interface ProxmoxSelf {
+  linked: boolean
+  role: string
+  guest: { node: string; type: 'qemu' | 'lxc'; vmid: number; name: string; matched_by: 'uuid' | 'ip' | 'name' } | null
+  /** the tags the guest has now / should have / lacks */
+  tags: string[]
+  wanted: string[]
+  missing: string[]
+  tagged: boolean
+  changed: boolean
+  message: string
 }
 
 // POST /stacks/rename

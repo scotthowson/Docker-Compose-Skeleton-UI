@@ -803,6 +803,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         }
         setSetupResults([...results])
       }
+      // the VM that runs this DCS has its Proxmox tags now (dcs, and hub on a hub)
+      if (done?.proxmox_tag?.guest) {
+        const t = done.proxmox_tag
+        results.push(t.tagged
+          ? { label: t.changed ? `Tagged this VM in Proxmox: ${t.wanted.join(', ')}` : `This VM already carries its Proxmox tags: ${t.wanted.join(', ')}`, ok: true }
+          : { label: `This VM could not be tagged in Proxmox (${t.wanted.join(', ')})`, ok: false, detail: t.message })
+        setSetupResults([...results])
+      }
       if (done?.fleet_join) {
         results.push(done.fleet_join.joined
           ? { label: `Joined the hub ${done.fleet_join.hub?.name || done.fleet_join.hub?.url || ''} as "${done.fleet_join.member?.name ?? ''}"`, ok: true }
