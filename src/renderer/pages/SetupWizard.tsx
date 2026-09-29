@@ -17,7 +17,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import {
   fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
   authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest, fetchFleetStatus,
-  fetchFleetProvisionDefaults, fetchProxmoxCapabilities, provisionFleet, fetchFleetJobs,
+  fetchFleetProvisionDefaults, fetchProxmoxCapabilities, provisionFleet, fetchFleetJobs, fetchProxmoxStatus,
 } from '../api/endpoints'
 import { apiClient, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
@@ -26,6 +26,8 @@ import { usePolling } from '../hooks/usePolling'
 import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
 import { VmSettingsFields, CapabilityNote, settingsFromDefaults, vmSettingsToRequest, osLabel, type VmSettings } from '../components/fleet/NewVmSheet'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
+import { VmSizeControl } from '../components/fleet/VmSizeControl'
+import { HubFirewallNote } from '../components/fleet/fleetShared'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 
 // ---------------------------------------------------------------------------
@@ -223,6 +225,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [pveVerify, setPveVerify] = useState(true)
   const [pveTesting, setPveTesting] = useState(false)
   const [pveTest, setPveTest] = useState<{ ok: boolean; text: string } | null>(null)
+  // a link setup.sh (or an earlier wizard run) saved: its secret stays on the server, the fields show the rest
+  const [pveSaved, setPveSaved] = useState<{ url: string; token_id: string } | null>(null)
   // Fleet (3.9): link the other VMs from here (hub), or join a hub (member)
   const [fleetStatus, setFleetStatus] = useState<FleetStatus | null>(null)
   const [showLink, setShowLink] = useState(false)
@@ -237,29 +241,41 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [placements, setPlacements] = useState<Record<string, 'hub' | 'vm'>>({})
   const [vmSpecs, setVmSpecs] = useState<Record<string, { cores: number; memGb: number; diskGb: number }>>({})
   const [showVmSettings, setShowVmSettings] = useState(false)
+  const [sizeOpen, setSizeOpen] = useState<string | null>(null)
   const [vmQueued, setVmQueued] = useState(0)
   const vmReady = !!(pveTest?.ok && caps?.can_provision && vmSettings)
-  const placementOf = (name: string): 'hub' | 'vm' => placements[name] ?? (vmReady && name !== 'core-infrastructure' ? 'vm' : 'hub')
-  const specOf = (name: string) => vmSpecs[name] ?? { cores: provDefaults?.defaults.cores ?? 2, memGb: Math.round((provDefaults?.defaults.memory_mb ?? 4096) / 1024), diskGb: provDefaults?.defaults.disk_gb ?? 32 }
-  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
   const jobsPoll = usePolling(fetchFleetJobs, 5000, { enabled: complete && vmQueued > 0 })
   const pveGuest = !!defaults?.system?.proxmox?.guest
   const pveHost = !!defaults?.system?.proxmox?.host
-  const pveFilled = !!(pveUrl.trim() && pveTokenId.trim() && pveSecret.trim())
+  const usingSavedSecret = !!(pveSaved && !pveSecret.trim() && pveTokenId.trim() === pveSaved.token_id)
+  const pveFilled = !!(pveUrl.trim() && pveTokenId.trim() && (pveSecret.trim() || usingSavedSecret))
+  const fleetRole = defaults?.system?.fleet_role
   useEffect(() => {
     const p = defaults?.system?.proxmox
     if (!p) return
-    if (p.guest || p.host) setShowProxmox(true)
+    // a Proxmox guest or host, the hub chosen in setup.sh, or a link setup.sh saved: the section opens by itself
+    if (p.guest || p.host || p.linked || defaults?.system?.fleet_role === 'hub') setShowProxmox(true)
     if (p.hint_url && !pveUrl) setPveUrl(p.hint_url)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaults])
-  const runPveTest = async () => {
-    setPveTesting(true); setPveTest(null)
+  // Once signed in: a link saved on the server (./setup.sh asks for it on a hub) fills the fields and is tested
+  const loadSavedPve = async () => {
     try {
-      const r = await proxmoxTest({ url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify })
+      const st = await fetchProxmoxStatus()
+      if (!st.configured || !st.url || !st.token_id) return
+      setPveUrl(st.url); setPveTokenId(st.token_id); setPveVerify(st.verify_tls); setPveSecret('')
+      setPveSaved({ url: st.url, token_id: st.token_id }); setShowProxmox(true)
+      await runPveTest({ url: st.url, token_id: st.token_id, verify_tls: st.verify_tls })
+    } catch { /* not linked, or an older server: the fields stay as they are */ }
+  }
+  const runPveTest = async (given?: { url: string; token_id: string; verify_tls: boolean }) => {
+    setPveTesting(true); setPveTest(null)
+    // an empty secret asks the server to use the one it keeps (the saved link's)
+    const pve = given ? { ...given, token_secret: '' } : { url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret.trim(), verify_tls: pveVerify }
+    try {
+      const r = await proxmoxTest(pve)
       setPveTest(r.reachable ? { ok: true, text: `Connected: Proxmox VE ${r.version}, ${r.nodes} node${r.nodes === 1 ? '' : 's'}, ${r.vms.total} guests (${r.vms.running} running)` } : { ok: false, text: r.error || r.hints?.[0] || 'Not reachable' })
       if (r.reachable) {
-        const pve = { url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify }
         void Promise.allSettled([fetchProxmoxCapabilities(pve), fetchFleetProvisionDefaults(pve)]).then(([c, d]) => {
           if (c.status === 'fulfilled') setCaps(c.value)
           if (d.status === 'fulfilled') { setProvDefaults(d.value); setVmSettings((v) => (v && vmEditedRef.current) ? v : settingsFromDefaults(d.value)) }
@@ -292,6 +308,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   // CrowdSec: intrusion detection on Traefik's log, bouncer at the proxy, Discord alerts
   const [enableCrowdsec, setEnableCrowdsec] = useState(true)
   const [crowdsecBouncer, setCrowdsecBouncer] = useState(true)
+  // Stacks the wizard deploys into stay on the hub: core-infrastructure (the dashboard), the proxy stack
+  // (Traefik serves every VM's routes; Authelia and CrowdSec sit with it) and the self-hosted ntfy's stack
+  const hubOnly: Record<string, string> = { 'core-infrastructure': 'The dashboard runs here' }
+  if (enableTraefik) hubOnly[proxyStack] = 'Traefik runs here: the hub serves every VM\'s routes'
+  if (notifyMode === 'self' && notifyStack) hubOnly[notifyStack] = hubOnly[notifyStack] ?? 'ntfy runs here'
+  const placementOf = (name: string): 'hub' | 'vm' => hubOnly[name] ? 'hub' : placements[name] ?? (vmReady ? 'vm' : 'hub')
+  const specOf = (name: string) => vmSpecs[name] ?? { cores: provDefaults?.defaults.cores ?? 2, memGb: Math.round((provDefaults?.defaults.memory_mb ?? 4096) / 1024), diskGb: provDefaults?.defaults.disk_gb ?? 32 }
+  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
 
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
@@ -537,6 +561,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           }
           // A join saved by setup.sh (this VM runs under a hub) opens its section by itself
           void fetchFleetStatus().then((f) => { setFleetStatus(f); if (f.pending_join) setShowFleet(true) }).catch(() => {})
+          // …and a Proxmox link it saved fills the Proxmox fields and is tested
+          if (!pveTest?.ok) void loadSavedPve()
         } else {
           setError(needsAdmin ? 'Failed to create admin account' : 'Invalid credentials')
           setLoading(false)
@@ -632,12 +658,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         allEnvVars.PROXMOX_URL = pveUrl.trim().replace(/\/+$/, '')
         allEnvVars.PROXMOX_TOKEN_ID = pveTokenId.trim()
         allEnvVars.PROXMOX_VERIFY_TLS = pveVerify ? 'true' : 'false'
-        try {
-          await setSecret('PROXMOX_TOKEN_SECRET', pveSecret)
-          pveSecretStored = true
-        } catch (err) {
-          console.error('[SetupWizard] storing the Proxmox secret failed, writing .env:', err)
-          allEnvVars.PROXMOX_TOKEN_SECRET = pveSecret
+        if (pveSecret.trim()) {
+          try {
+            await setSecret('PROXMOX_TOKEN_SECRET', pveSecret.trim())
+            pveSecretStored = true
+          } catch (err) {
+            console.error('[SetupWizard] storing the Proxmox secret failed, writing .env:', err)
+            allEnvVars.PROXMOX_TOKEN_SECRET = pveSecret.trim()
+          }
         }
       }
       const results: { label: string; ok: boolean; detail?: string }[] = []
@@ -653,7 +681,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         stacks: stacks.filter((s) => placementOf(s.name) === 'hub').map((s) => s.name),
       })
       results.push({ label: 'Configuration saved', ok: true })
-      if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
+      if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${!pveSecret.trim() ? ' — the token secret saved before is kept' : pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
       if (linkedMembers > 0) results.push({ label: `${linkedMembers} fleet member${linkedMembers === 1 ? '' : 's'} linked — their stacks show under their VMs on the Proxmox page`, ok: true })
       if (joined) results.push({ label: `Joined the hub ${joined.hub.name || joined.hub.url} as "${joined.member.name}"`, ok: true, detail: joined.member.vmid ? `Guest ${joined.member.vmid}${joined.member.node ? ` on ${joined.member.node}` : ''}` : 'The hub could not tell which guest this is — pick it on its Proxmox page' })
 
@@ -1385,14 +1413,24 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="flex items-center gap-2 min-w-0">
                       <Server size={14} className="text-amber-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-300">Proxmox</span>
-                      {pveGuest || pveHost
-                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">{pveHost ? 'This is the Proxmox host' : 'Proxmox guest detected'}</span>
-                        : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Optional</span>}
+                      {pveTest?.ok
+                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium truncate">{fleetRole === 'hub' ? 'Hub · linked' : 'Linked'}</span>
+                        : fleetRole === 'hub'
+                          ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">Hub — link Proxmox here</span>
+                          : pveGuest || pveHost
+                            ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">{pveHost ? 'This is the Proxmox host' : 'Proxmox guest detected'}</span>
+                            : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Optional</span>}
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showProxmox ? 'rotate-90' : ''}`} />
                   </button>
                   {showProxmox && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
+                      {fleetRole === 'hub' && (
+                        <p className="text-[11px] text-amber-100 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 flex items-start gap-2">
+                          <Server size={13} className="text-amber-300 shrink-0 mt-0.5" />
+                          <span><b>This DCS is the hub</b> — chosen in <span className="font-mono">./setup.sh</span>. {pveSaved ? <>The Proxmox link setup made is filled in below{pveTest?.ok ? ' and works' : ''}; each stack can get its own VM in the next step.</> : <>Link Proxmox here and each stack can get its own VM in the next step.</>}</span>
+                        </p>
+                      )}
                       <p className="text-[11px] text-slate-500">
                         {defaults?.system?.proxmox?.reason ? <>{defaults.system.proxmox.reason}. </> : null}
                         Link DCS to the Proxmox API and the <span className="text-slate-300">Proxmox</span> page shows every VM and container with start, shutdown, reboot and alerts.
@@ -1411,7 +1449,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Token secret</label>
-                          <input type="password" value={pveSecret} onChange={(e) => { setPveSecret(e.target.value); setPveTest(null) }} placeholder="shown once when the token is made" autoComplete="off"
+                          <input type="password" value={pveSecret} onChange={(e) => { setPveSecret(e.target.value); setPveTest(null) }} placeholder={usingSavedSecret ? 'saved already — leave empty to keep it' : 'shown once when the token is made'} autoComplete="off"
                             className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
                         </div>
                       </div>
@@ -1420,7 +1458,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <input type="checkbox" checked={pveVerify} onChange={(e) => { setPveVerify(e.target.checked); setPveTest(null) }} className="accent-amber-500" />
                           Verify the certificate (off for the self-signed one Proxmox ships with)
                         </label>
-                        <button type="button" onClick={runPveTest} disabled={!pveFilled || pveTesting}
+                        <button type="button" onClick={() => { void runPveTest() }} disabled={!pveFilled || pveTesting}
                           className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 disabled:opacity-40 flex items-center gap-1.5">
                           {pveTesting ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />} Test connection
                         </button>
@@ -1439,7 +1477,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   )}
                 </div>
 
-                {/* ── Fleet: this VM runs under a hub (opened by itself when setup.sh saved a join) ── */}
+                {/* ── Fleet: this VM runs under a hub (opened by itself when setup.sh saved a join); not on a hub ── */}
+                {(fleetRole !== 'hub' || fleetStatus?.pending_join || joined) && (
                 <div className={`border rounded-xl overflow-hidden ${fleetStatus?.pending_join || joined ? 'border-emerald-500/25' : 'border-white/5'}`}>
                   <button
                     type="button"
@@ -1467,6 +1506,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* ── Advanced: Notifications ── */}
                 <div className="border border-white/5 rounded-xl overflow-hidden">
@@ -2160,7 +2200,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3 space-y-2">
                   <p className="text-[11px] text-slate-300 flex items-start gap-2"><Server size={13} className="text-amber-400 shrink-0 mt-0.5" /><span>Proxmox is linked, so <b>a stack can be a VM</b>: the hub builds it (Debian cloud image, Docker, DCS), the VM joins this hub and runs that one stack. The dashboard here stays the only one; <span className="font-mono">core-infrastructure</span> stays on the hub. Toggle each stack, size the VMs, and check the network below.</span></p>
                   <CapabilityNote caps={caps} />
-                  {vmPlan.length > 0 && <p className="text-[11px] text-amber-200">{vmPlan.length} VM{vmPlan.length === 1 ? '' : 's'} · {vmPlan.reduce((n, v) => n + v.cores, 0)} cores · {vmPlan.reduce((n, v) => n + v.memGb, 0)} GB RAM · {vmPlan.reduce((n, v) => n + v.diskGb, 0)} GB disk</p>}
+                  {vmPlan.length > 0 && <HubFirewallNote fw={provDefaults?.hub_firewall} />}
+                  {vmPlan.length > 0 && (() => {
+                    const mem = vmPlan.reduce((n, v) => n + v.memGb, 0)
+                    const cap = provDefaults?.capacity
+                    const over = !!(cap?.memory_gb && mem > cap.memory_gb)
+                    return (
+                      <p className={`text-[11px] ${over ? 'text-rose-300' : 'text-amber-200'}`}>
+                        {vmPlan.length} VM{vmPlan.length === 1 ? '' : 's'} · {vmPlan.reduce((n, v) => n + v.cores, 0)} cores · {mem} GB RAM · {vmPlan.reduce((n, v) => n + v.diskGb, 0)} GB disk
+                        {cap?.memory_gb ? <span className="text-slate-400"> — the node{provDefaults?.node ? ` ${provDefaults.node}` : ''} has {cap.cores} cores and {cap.memory_gb} GB RAM{over ? ', so these VMs would not all fit (the hub itself uses some too): make them smaller or keep some stacks on the hub' : ''}</span> : null}
+                      </p>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -2220,18 +2271,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <div className="flex rounded-md bg-white/5 border border-white/10 overflow-hidden">
                             {(['hub', 'vm'] as const).map((p) => (
                               <button key={p} type="button" onClick={() => setPlacements((m) => ({ ...m, [stack.name]: p }))}
-                                className={`h-6 px-2 text-[10px] font-semibold ${placementOf(stack.name) === p ? (p === 'vm' ? 'bg-amber-500/25 text-amber-200' : 'bg-emerald-500/20 text-emerald-300') : 'text-slate-500 hover:text-slate-300'}`}>
+                                disabled={p === 'vm' && !!hubOnly[stack.name]} title={p === 'vm' && hubOnly[stack.name] ? `Stays on the hub — ${hubOnly[stack.name]}` : undefined}
+                                className={`h-6 px-2 text-[10px] font-semibold disabled:opacity-30 disabled:cursor-not-allowed ${placementOf(stack.name) === p ? (p === 'vm' ? 'bg-amber-500/25 text-amber-200' : 'bg-emerald-500/20 text-emerald-300') : 'text-slate-500 hover:text-slate-300'}`}>
                                 {p === 'vm' ? 'VM' : 'Hub'}
                               </button>
                             ))}
                           </div>
+                          {hubOnly[stack.name] && <span className="text-slate-500" title={`Stays on the hub — ${hubOnly[stack.name]}`}><Lock size={10} /></span>}
                           {placementOf(stack.name) === 'vm' && (
-                            <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500">
-                              <Cpu size={10} />
-                              <input type="number" min={1} max={64} value={specOf(stack.name).cores} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), cores: Number(e.target.value) || 1 } }))} className="w-9 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="cores" />
-                              <input type="number" min={1} max={512} value={specOf(stack.name).memGb} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), memGb: Number(e.target.value) || 1 } }))} className="w-9 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="GB RAM" />
-                              <input type="number" min={8} max={4096} value={specOf(stack.name).diskGb} onChange={(e) => setVmSpecs((m) => ({ ...m, [stack.name]: { ...specOf(stack.name), diskGb: Number(e.target.value) || 8 } }))} className="w-11 h-6 px-1 rounded bg-slate-700/50 border border-white/10 text-slate-200 text-center" title="GB disk" />
-                            </div>
+                            <button type="button" onClick={() => setSizeOpen((o) => (o === stack.name ? null : stack.name))} aria-expanded={sizeOpen === stack.name}
+                              title="The VM's size"
+                              className={`h-6 px-2 rounded-md border text-[10px] font-medium flex items-center gap-1.5 tabular-nums transition-colors ${sizeOpen === stack.name ? 'bg-amber-500/15 border-amber-500/35 text-amber-100' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}>
+                              <Cpu size={10} className="text-amber-300" />
+                              {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB
+                              <ChevronDown size={10} className={`transition-transform ${sizeOpen === stack.name ? 'rotate-180' : ''}`} />
+                            </button>
                           )}
                         </div>
                       )}
@@ -2283,6 +2337,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </button>
                       </div>
                     </div>
+
+                    {/* The VM's size */}
+                    {vmReady && placementOf(stack.name) === 'vm' && sizeOpen === stack.name && (
+                      <div className="mt-2.5 ml-8 animate-fade-in">
+                        <VmSizeControl value={specOf(stack.name)}
+                          limits={{ maxCores: provDefaults?.capacity?.cores, maxMemGb: provDefaults?.capacity?.memory_gb, minDiskGb: 10 }}
+                          onChange={(v) => setVmSpecs((m) => ({ ...m, [stack.name]: v }))} />
+                      </div>
+                    )}
 
                     {/* Inline label editor */}
                     {labelEditIndex === index && (

@@ -10,7 +10,8 @@ import { useEffect, useState } from 'react'
 import { Loader2, Rocket, Server } from 'lucide-react'
 import { fetchFleetProvisionDefaults, provisionFleet } from '../../api/endpoints'
 import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
-import { Sheet, inputCls, labelCls } from './fleetShared'
+import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
+import { VmSizeControl } from './VmSizeControl'
 
 export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string; /** what the VMs are built from: cat:<id> (catalogue), url, pve:<file> (imported already), iso:<volid> (installer, by hand) */ os: string; image_url: string; /** bake a DCS template first when the chosen image has none, then clone it for every VM */ bake: boolean }
 
@@ -171,14 +172,16 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
   return (
     <Sheet title="A stack in its own VM" subtitle="The hub creates the VM on Proxmox, installs Docker and DCS in it and joins it; the stack then lives there" icon={<Server size={18} />} onClose={busy ? () => {} : onClose} wide>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="col-span-2 sm:col-span-1">
-            <label className={labelCls}>Stack = VM name</label>
-            <input value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono`} disabled={busy} />
-          </div>
-          <div><label className={labelCls}>Cores</label><input type="number" min={1} max={64} value={cores} onChange={(e) => setCores(Number(e.target.value) || 1)} className={inputCls} disabled={busy} /></div>
-          <div><label className={labelCls}>RAM (GB)</label><input type="number" min={1} max={512} value={memGb} onChange={(e) => setMemGb(Number(e.target.value) || 1)} className={inputCls} disabled={busy} /></div>
-          <div><label className={labelCls}>Disk (GB)</label><input type="number" min={8} max={4096} value={diskGb} onChange={(e) => setDiskGb(Number(e.target.value) || 8)} className={inputCls} disabled={busy} /></div>
+        <HubFirewallNote fw={defaults?.hub_firewall} />
+        <div>
+          <label className={labelCls}>Stack = VM name</label>
+          <input value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono sm:max-w-xs`} disabled={busy} />
+        </div>
+        <div>
+          <p className={labelCls}>Size</p>
+          <VmSizeControl value={{ cores, memGb, diskGb }} disabled={busy}
+            limits={{ maxCores: defaults?.capacity?.cores, maxMemGb: defaults?.capacity?.memory_gb, minDiskGb: 10 }}
+            onChange={(v) => { setCores(v.cores); setMemGb(v.memGb); setDiskGb(v.diskGb) }} />
         </div>
         <div>
           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">VM settings <span className="normal-case tracking-normal font-normal text-slate-500">— remembered for the next VM</span></p>

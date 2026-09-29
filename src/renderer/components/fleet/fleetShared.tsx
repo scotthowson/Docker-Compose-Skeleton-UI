@@ -5,7 +5,8 @@
 
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Copy, Check, X } from 'lucide-react'
+import { Copy, Check, X, ShieldAlert } from 'lucide-react'
+import type { HubFirewall } from '../../../shared/types'
 
 export function ago(epoch: number): string {
   if (!epoch) return 'never'
@@ -28,6 +29,27 @@ export function CopyChip({ text, label, className = '' }: { text: string; label:
       className={`h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 shrink-0 ${className}`}>
       {done ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />} {done ? 'Copied' : label}
     </button>
+  )
+}
+
+/** firewalld on the hub blocks (or, as its zone ships, would block) the port the VMs fetch DCS from and join on */
+export function HubFirewallNote({ fw }: { fw?: HubFirewall | null }) {
+  if (!fw?.active || fw.open !== false) return null
+  const cmd = `sudo firewall-cmd --permanent${fw.zone ? ` --zone=${fw.zone}` : ''} --add-port=${fw.port}/tcp && sudo firewall-cmd --reload`
+  return (
+    <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.06] p-3 space-y-2">
+      <p className="text-[11px] text-rose-100 flex items-start gap-2">
+        <ShieldAlert size={13} className="text-rose-300 shrink-0 mt-0.5" />
+        <span>
+          {fw.certain ? <>firewalld on this hub <b>blocks port {fw.port}/tcp</b></> : <>firewalld on this hub keeps <b>port {fw.port}/tcp</b> closed{fw.zone ? <> in its <span className="font-mono">{fw.zone}</span> zone</> : null} unless it was opened by hand</>}
+          {' '}— every new VM fetches DCS from that port and joins on it, so a build stops at <i>Install</i>. Open it on the hub (once):
+        </span>
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 min-w-0 truncate rounded bg-black/30 px-2 py-1.5 text-[11px] text-slate-200 font-mono" title={cmd}>{cmd}</code>
+        <CopyChip text={cmd} label="Copy" />
+      </div>
+    </div>
   )
 }
 

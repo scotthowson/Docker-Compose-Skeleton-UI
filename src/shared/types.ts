@@ -2139,8 +2139,10 @@ export interface SetupDefaultsResponse {
     docker_version: string
     compose_version: string
     docker_available: boolean
-    /** where DCS runs (3.8): a Proxmox guest gets a link offer in the wizard */
-    proxmox?: { virtualization: string; host: boolean; guest: boolean; reason: string; hint_url: string; vendor: string; product: string; guest_agent: boolean }
+    /** where DCS runs (3.8): a Proxmox guest gets a link offer in the wizard; linked (3.9.7): a Proxmox link is saved already (setup.sh) */
+    proxmox?: { virtualization: string; host: boolean; guest: boolean; reason: string; hint_url: string; vendor: string; product: string; guest_agent: boolean; linked?: boolean }
+    /** 3.9.7: the role chosen in setup.sh (FLEET_ROLE), else what the fleet state says */
+    fleet_role?: 'hub' | 'member' | 'standalone'
   }
 }
 
@@ -3261,8 +3263,15 @@ export interface FleetDockerEngineUpdateResponse { success: boolean; results: { 
 
 export interface FleetVersions { hub: { version: string }; members: FleetMemberVersion[]; behind: number; unreachable: number; /** a round is queued for after the hub's own restart */ pending: boolean; last_round: FleetUpdateRound | null; /** when the members were asked (epoch seconds) */ checked_at: number }
 export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean }
+/** firewalld on the hub and the API port the VMs fetch DCS from and join on (certain: firewalld itself said; else read from the zone as shipped) */
+export interface HubFirewall { active: boolean; port: number; zone: string; open: boolean | null; certain: boolean }
+
 export interface FleetProvisionDefaults {
   proxmox_linked: boolean
+  /** 3.9.7 */
+  hub_firewall?: HubFirewall
+  /** 3.9.7: the Proxmox node's size (0 when unknown) — the VM size choices stop there */
+  capacity?: { cores: number; memory_gb: number }
   node: string
   storages: ProxmoxStorage[]
   /** what a VM can be built from: the catalogue (cloud images by URL), and what Proxmox already holds */
