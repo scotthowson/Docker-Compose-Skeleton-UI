@@ -25,7 +25,7 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useApiLink } from '../../hooks/useApiLink'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useAuthStore } from '../../stores/authStore'
-import { isMobile } from '../../hooks/useMobile'
+import { useNarrowWindow } from '../../hooks/useMobile'
 import { ServerSwitcher } from '../common/ServerSwitcher'
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
@@ -105,17 +105,13 @@ export function Sidebar() {
   const link = useApiLink()
   const unreadNotifications = useNotificationStore((s) => s.getServerUnreadCount())
 
-  const updateSetting = useSettingsStore((s) => s.updateSetting)
+  // A narrow window shows the icon rail whatever the person chose, and gives the choice back when it widens
+  // (nothing is written to the settings: the old code saved the collapse and the wide window inherited it)
+  const narrow = useNarrowWindow()
+  const collapsed = sidebarCollapsed || narrow
   const userRole = useAuthStore((s) => s.userRole)
   // Strict: only 'admin' gets full access (principle of least privilege)
   const isAdmin = userRole === 'admin'
-
-  // Auto-collapse sidebar on mobile
-  useEffect(() => {
-    if (isMobile && !sidebarCollapsed) {
-      updateSetting('sidebarCollapsed', true)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter out admin-only pages for non-admin users
   const visibleItems = navItems.filter((i) => !ADMIN_ONLY_PAGES.has(i.id) || isAdmin)
@@ -218,7 +214,7 @@ export function Sidebar() {
         bg-slate-900/60 backdrop-blur-2xl
         border-r border-white/5
         transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
-        ${sidebarCollapsed ? 'w-[52px] md:w-[68px]' : 'w-[220px]'}
+        ${collapsed ? 'w-[52px] md:w-[68px]' : 'w-[220px]'}
       `}
     >
       {/* Brand area */}
@@ -231,7 +227,7 @@ export function Sidebar() {
             ${connectionStatus === 'connected' ? 'bg-emerald-400' : connectionStatus === 'connecting' ? 'bg-amber-400 animate-pulse' : connectionStatus === 'error' ? 'bg-rose-400' : 'bg-slate-500'}
           `} />
         </div>
-        {!sidebarCollapsed && (
+        {!collapsed && (
           <div className="overflow-hidden">
             <span className="text-sm font-bold tracking-wide text-gradient neon-emerald whitespace-nowrap">
               {projectName}
@@ -242,7 +238,7 @@ export function Sidebar() {
       </div>
 
       {/* Server Switcher */}
-      {!sidebarCollapsed && (
+      {!collapsed && (
         <div className="px-2 py-2 border-b border-white/5">
           <ServerSwitcher />
         </div>
@@ -257,7 +253,7 @@ export function Sidebar() {
               key={item.id}
               item={item}
               isActive={currentPage === item.id}
-              collapsed={sidebarCollapsed}
+              collapsed={collapsed}
               badge={badges[item.id]}
               statusIcon={statusIcons[item.id]}
               onClick={() => currentPage === item.id
@@ -269,10 +265,10 @@ export function Sidebar() {
         </div>
 
         {/* Divider */}
-        <div className={`my-3 mx-3 border-t border-white/[0.03] ${sidebarCollapsed ? 'mx-1' : ''}`} />
+        <div className={`my-3 mx-3 border-t border-white/[0.03] ${collapsed ? 'mx-1' : ''}`} />
 
         {/* System section */}
-        {!sidebarCollapsed && (
+        {!collapsed && (
           <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             System
           </p>
@@ -283,7 +279,7 @@ export function Sidebar() {
               key={item.id}
               item={item}
               isActive={currentPage === item.id}
-              collapsed={sidebarCollapsed}
+              collapsed={collapsed}
               statusIcon={statusIcons[item.id]}
               onClick={() => currentPage === item.id
                 ? setCurrentPage(item.id, { resetView: true })
@@ -294,8 +290,8 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="shrink-0 border-t border-white/5 p-2">
+      {/* Collapse toggle (a narrow window has the rail whatever this says, so it is not offered there) */}
+      {!narrow && <div className="shrink-0 border-t border-white/5 p-2">
         <button
           onClick={toggleSidebar}
           className="
@@ -315,7 +311,7 @@ export function Sidebar() {
             <ChevronsLeft size={16} strokeWidth={2} />
           )}
         </button>
-      </div>
+      </div>}
     </aside>
   )
 }
