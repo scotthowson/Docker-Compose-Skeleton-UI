@@ -789,7 +789,13 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
     if (d.qmpstatus && d.qmpstatus !== d.status) facts.push(['QEMU state', d.qmpstatus])
     if (d.config.cores) facts.push(['Cores', `${d.config.cores}${d.config.sockets && d.config.sockets > 1 ? ` × ${d.config.sockets} sockets` : ''}`])
     if (d.config.memory) facts.push(['Memory', `${d.config.memory} MB`])
-    if (d.config.ostype) facts.push(['OS type', d.config.ostype])
+    // what runs in it: the guest's own answer first, then the DCS in it, then Proxmox's OS type
+    const osName = d.os?.name || member?.identity?.os || ''
+    if (osName) facts.push(['Operating system', <span>{osName}{d.os?.kernel ? <span className="text-slate-500"> · kernel {d.os.kernel.replace(/[+-].*$/, '')}</span> : null}</span>])
+    else if (d.config.ostype) facts.push(['OS type', vm.type === 'lxc' ? d.config.ostype : `${d.config.ostype} (start the VM with its guest agent to see the system)`])
+    if (d.image) facts.push(['Built from', <span>{d.image.label}{d.image.template_vmid ? <span className="text-slate-500"> · cloned from the DCS template VM {d.image.template_vmid}</span> : null}</span>])
+    if (vm.type === 'qemu' && d.config.bios !== undefined) facts.push(['Firmware', `${d.config.bios === 'ovmf' ? 'UEFI (OVMF)' : 'BIOS (SeaBIOS)'}${d.config.machine ? ` · ${d.config.machine.replace(/^pc-(i440fx|q35)-.*/, (_m, t: string) => (t === 'q35' ? 'q35' : 'i440fx'))}` : ''}`])
+    if (d.config.created) facts.push(['Created', new Date(d.config.created * 1000).toLocaleDateString()])
     if (vm.type === 'qemu') facts.push(['Guest agent', agentOn ? 'enabled' : 'off'])
     facts.push(['Starts with the host', d.config.onboot === '1' ? 'yes' : 'no'])
     if (d.config.bootdisk) facts.push(['Boot disk', d.config.bootdisk])

@@ -3020,7 +3020,11 @@ export interface ProxmoxVmDetail {
   diskwrite: number
   agent: string
   lock: string
-  config: { cores: number | null; sockets: number | null; memory: number | null; ostype: string; onboot: string; description: string; tags: string; net0: string; bootdisk: string; hostname: string }
+  /** the operating system the guest reports through the guest agent (null: no agent, or the VM is off) */
+  os: { name: string; id: string; version: string; kernel: string; arch: string } | null
+  /** the image the hub built the VM from (null: not built by DCS, or before DCS recorded it) */
+  image: { id: string; label: string; kind: string; template_vmid: number | null } | null
+  config: { bios?: string; machine?: string; created?: number | null; cores: number | null; sockets: number | null; memory: number | null; ostype: string; onboot: string; description: string; tags: string; net0: string; bootdisk: string; hostname: string }
 }
 
 export interface ProxmoxTask {
