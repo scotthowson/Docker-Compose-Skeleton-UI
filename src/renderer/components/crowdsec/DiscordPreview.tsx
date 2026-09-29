@@ -144,8 +144,8 @@ function EmbedView({ e, p, cols }: { e: DiscordEmbed; p: Palette; cols: number }
       <div style={{ width: 4, flexShrink: 0, background: bar }} />
       <div style={{ padding: '8px 16px 16px 12px', minWidth: 0, flex: 1, fontSize: 14, lineHeight: '1.375rem', color: p.text }}>
         {e.title && (
-          <div style={{ marginTop: 8, fontSize: 16, fontWeight: 600, lineHeight: '1.375rem', color: e.url ? p.link : p.title, overflowWrap: 'anywhere' }}>
-            {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{inline(e.title, p, 'et', 0, 'noLinks')}</a> : inline(e.title, p, 'et', 0, 'noLinks')}
+          <div style={{ marginTop: 8, fontSize: 16, fontWeight: 600, lineHeight: '1.375rem', color: e.url && /^https?:\/\//i.test(e.url) ? p.link : p.title, overflowWrap: 'anywhere' }}>
+            {e.url && /^https?:\/\//i.test(e.url) ? <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{inline(e.title, p, 'et', 0, 'noLinks')}</a> : inline(e.title, p, 'et', 0, 'noLinks')}
           </div>
         )}
         {e.description && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inline(e.description, p, 'ed')}</div>}
@@ -175,7 +175,7 @@ export function DiscordMessage({ payload, dark = true, dim = false, label = 'Pre
   useEffect(() => {
     const el = root.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(([entry]) => { const w = entry.contentRect.width; setCols(w < 300 ? 1 : w < 420 ? 2 : 3) })
+    const ro = new ResizeObserver(([entry]) => { const w = entry.contentRect.width; setCols(w < 300 ? 1 : w < 390 ? 2 : 3) })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])

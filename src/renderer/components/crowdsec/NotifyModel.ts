@@ -360,6 +360,65 @@ export function approximatePayload(s: Settings, placeholders: CrowdSecPlaceholde
 }
 
 // ---------------------------------------------------------------------------
+// The changes, one line each, before and after (the review before saving)
+// ---------------------------------------------------------------------------
+
+export interface ChangeRow { label: string; before: string; after: string }
+
+const oneLine = (s: string): string => {
+  const t = s.replace(/\s*\n\s*/g, ' ⏎ ')
+  return t === '' ? '(empty)' : t.length > 140 ? `${t.slice(0, 140)}…` : t
+}
+const onOff = (b: boolean): string => (b ? 'on' : 'off')
+const WEBHOOK_WORD: Record<WebhookMode, string> = { global: 'Global webhook', custom: 'Custom webhook', keep: 'Keep the current one' }
+const MENTION_WORD: Record<MentionMode, string> = { none: 'Nobody', role: 'A role', user: 'A user', here: '@here', everyone: '@everyone' }
+const listWord = (l: string[]): string => (l.length ? l.join(', ') : 'none')
+
+/** what saving would change, in the words of the page (the same differences the request carries) */
+export function changeRows(a: Settings, b: Settings, newAddress: boolean): ChangeRow[] {
+  const rows: ChangeRow[] = []
+  const put = (label: string, before: string, after: string) => { if (before !== after) rows.push({ label, before, after }) }
+  put('Alerts', onOff(a.enabled), onOff(b.enabled))
+  put('Webhook source', WEBHOOK_WORD[a.webhook.mode], WEBHOOK_WORD[b.webhook.mode])
+  if (newAddress) rows.push({ label: 'Custom webhook address', before: 'as stored', after: 'a new address (never shown again)' })
+  put('Sender name', oneLine(a.identity.name), oneLine(b.identity.name))
+  put('Avatar', a.identity.avatar_url || 'the webhook’s own picture', b.identity.avatar_url || 'the webhook’s own picture')
+  put('Colour', a.embed.color_mode === 'auto' ? 'automatic' : a.embed.color, b.embed.color_mode === 'auto' ? 'automatic' : b.embed.color)
+  put('Mention', MENTION_WORD[a.mention.mode], MENTION_WORD[b.mention.mode])
+  put('Mention id', a.mention.id || 'none', b.mention.id || 'none')
+  put('Text next to the mention', oneLine(a.mention.text), oneLine(b.mention.text))
+  put('New bans', onOff(a.events.bans), onOff(b.events.bans))
+  put('Simulated bans', onOff(a.events.simulated), onOff(b.events.simulated))
+  put('Detection-only alerts', onOff(a.events.detect_only), onOff(b.events.detect_only))
+  put('Minimum events', String(a.filters.min_events), String(b.filters.min_events))
+  put('Only these scenarios', listWord(a.filters.only), listWord(b.filters.only))
+  put('Never for these scenarios', listWord(a.filters.ignore), listWord(b.filters.ignore))
+  put('Wait before sending', `${a.delivery.group_wait} s`, `${b.delivery.group_wait} s`)
+  put('Alerts per message', String(a.delivery.group_threshold), String(b.delivery.group_threshold))
+  put('Retries', String(a.delivery.max_retry), String(b.delivery.max_retry))
+  put('Give up after', `${a.delivery.timeout} s`, `${b.delivery.timeout} s`)
+  put('Title', oneLine(a.message.title), oneLine(b.message.title))
+  put('Description', oneLine(a.message.description), oneLine(b.message.description))
+  put('Footer', oneLine(a.message.footer), oneLine(b.message.footer))
+  put('Title link', oneLine(a.message.link), oneLine(b.message.link))
+  put('Show the time', onOff(a.message.timestamp), onOff(b.message.timestamp))
+  const fa = a.message.fields, fb = b.message.fields
+  if (JSON.stringify(fa) !== JSON.stringify(fb)) {
+    const label = (x: (typeof fa)[number]) => (x.name || '(no name)') + (x.inline ? '' : ' (full width)')
+    const sameNames = fa.length === fb.length && fa.every((x, i) => x.name === fb[i].name)
+    if (!sameNames) rows.push({ label: 'Fields', before: fa.length ? fa.map(label).join(' · ') : 'no fields', after: fb.length ? fb.map(label).join(' · ') : 'no fields' })
+    else {
+      fa.forEach((x, i) => {
+        const y = fb[i]
+        if (x.value !== y.value) rows.push({ label: `Field ${i + 1} (${x.name}): value`, before: oneLine(x.value), after: oneLine(y.value) })
+        if (x.inline !== y.inline) rows.push({ label: `Field ${i + 1} (${x.name}): side by side`, before: onOff(x.inline), after: onOff(y.inline) })
+      })
+    }
+  }
+  return rows
+}
+
+// ---------------------------------------------------------------------------
 // The draft that survives a switch to another tab (in memory only: a webhook address that was typed never touches a storage)
 // ---------------------------------------------------------------------------
 
@@ -369,4 +428,5 @@ export const draftMemory = {
   get: (member: string | null): DraftMemo | undefined => memory.get(member ?? 'hub'),
   set: (member: string | null, d: DraftMemo): void => { memory.set(member ?? 'hub', d) },
   clear: (member: string | null): void => { memory.delete(member ?? 'hub') },
+  clearAll: (): void => { memory.clear() },
 }

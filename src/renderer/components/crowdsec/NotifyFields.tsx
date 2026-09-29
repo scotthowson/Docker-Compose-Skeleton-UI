@@ -47,7 +47,7 @@ export function Notice({ tone, icon: Icon, title, children, action, role }: { to
 /** 12/200: amber near the limit, rose beyond it */
 export function Counter({ n, max }: { n: number; max: number }) {
   const cls = n > max ? 'text-rose-300' : n >= max * 0.9 ? 'text-amber-300' : 'text-slate-500'
-  return <span className={`text-[11px] tabular-nums ${cls}`} aria-label={`${n} of ${max} characters`}>{n}/{max}</span>
+  return <span className={`text-[11px] tabular-nums ${cls}`} title={`${n} of ${max} characters`}>{n}/{max}</span>
 }
 
 const shorten = (s: string, n = 64): string => { const t = s.replace(/\s*\n\s*/g, ' ⏎ '); return t.length > n ? `${t.slice(0, n)}…` : t }
@@ -70,7 +70,7 @@ export function FieldShell({ id, label, right, counter, hint, def, onDefault, er
           {def !== undefined && (
             <span className="text-slate-600 inline-flex items-center gap-1 min-w-0">
               Default: <code className="font-mono text-slate-500 truncate max-w-[16rem]" title={def}>{def === '' ? 'empty' : shorten(def)}</code>
-              {onDefault && <button type="button" onClick={onDefault} className="ml-1 py-1.5 -my-1.5 text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"><RotateCcw size={10} /> Use the default</button>}
+              {onDefault && <button type="button" onClick={onDefault} className="ml-1 py-1.5 -my-1.5 text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 whitespace-nowrap shrink-0"><RotateCcw size={10} /> Use the default</button>}
             </span>
           )}
         </p>
@@ -501,7 +501,7 @@ export function ColorField({ mode, color, onMode, onColor, error, defColor, disa
     <div className="space-y-3">
       <Segmented<ColorMode> value={mode} onChange={onMode} ariaLabel="How the colour is chosen" options={[{ value: 'auto', label: 'Automatic', disabled }, { value: 'fixed', label: 'One colour', disabled }]} className="w-fit" />
       {mode === 'auto' ? (
-        <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5" aria-label="The colours automatic picks">
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5" aria-label="The colours automatic picks">
           {AUTO_COLORS.map((c) => (
             <li key={c.label} className="flex items-center gap-2 text-xs text-slate-400 min-w-0">
               <span aria-hidden="true" className="h-3.5 w-3.5 rounded-full shrink-0 border border-white/20" style={{ background: c.hex }} />
@@ -529,6 +529,21 @@ export function ColorField({ mode, color, onMode, onColor, error, defColor, disa
           {color.toLowerCase() !== defColor.toLowerCase() && !disabled && <button type="button" onClick={() => onColor(defColor)} className="mt-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"><RotateCcw size={10} /> Use the default colour ({defColor})</button>}
         </div>
       )}
+    </div>
+  )
+}
+
+/** a row of exclusive choices that wraps on a narrow screen (a Segmented would scroll sideways and hide the last ones) */
+export function PillChoice<T extends string>({ value, onChange, options, ariaLabel, disabled = false }: { value: T; onChange: (v: T) => void; ariaLabel: string; disabled?: boolean; options: { value: T; label: string }[] }) {
+  return (
+    <div role="group" aria-label={ariaLabel} className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <button key={o.value} type="button" aria-pressed={on} disabled={disabled} onClick={() => onChange(o.value)}
+            className={`h-8 px-3 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${on ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'}`}>{o.label}</button>
+        )
+      })}
     </div>
   )
 }
@@ -605,7 +620,7 @@ export function FieldsEditor({ fields, onChange, errors, max, placeholders, disa
               <button type="button" className={`${ICON_BTN} hover:!bg-rose-500/15 hover:!text-rose-300`} disabled={disabled} onClick={() => onChange(fields.filter((_, j) => j !== i))} aria-label={`Remove field ${i + 1}`} title="Remove this field"><Trash2 size={14} /></button>
             </div>
           </div>
-          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
             <PlaceholderInput id={`notify-field-${f.key}-name`} label="Name" target={`field ${i + 1} name`} value={f.name} onChange={(v) => set(i, { name: v })} max={LIM.fieldName} placeholders={placeholders} error={errors[`field.${i}.name`]} disabled={disabled} mono={false} />
             <PlaceholderInput id={`notify-field-${f.key}-value`} label="Value" target={`field ${i + 1} value`} value={f.value} onChange={(v) => set(i, { value: v })} max={LIM.fieldValue} placeholders={placeholders} error={errors[`field.${i}.value`]} disabled={disabled} multiline rows={2} />
           </div>

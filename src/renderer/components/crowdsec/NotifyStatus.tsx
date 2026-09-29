@@ -6,9 +6,9 @@
 // =============================================================================
 
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck, FileCheck2, Info, Loader2, MessageSquare, Radio, Send, ShieldCheck, TriangleAlert, Webhook } from 'lucide-react'
+import { CircleAlert, CircleCheck, FileCheck2, Info, Loader2, MessageSquare, Radio, RefreshCw, Send, ShieldCheck, TriangleAlert, Webhook } from 'lucide-react'
 import type { CrowdSecNotifyResponse } from '../../../shared/types'
-import { CARD, Chip, Dot, Switch, fmtAgo, fmtTime, useNow, type Tone } from './kit'
+import { CARD, Chip, Dot, ICON_BTN, Switch, fmtAgo, fmtTime, useNow, type Tone } from './kit'
 import { redact, sampleLabel } from './NotifyModel'
 import { Notice } from './NotifyFields'
 
@@ -53,7 +53,7 @@ function Outcome({ icon: Icon, tone, title, children }: { icon: React.ElementTyp
   )
 }
 
-export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFailed, onOpenNotifications, lastTest }: {
+export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFailed, onRefresh, onOpenNotifications, lastTest }: {
   data: CrowdSecNotifyResponse
   isAdmin: boolean
   /** the switch shows the draft */
@@ -61,6 +61,7 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
   onToggle: (v: boolean) => void
   busy: boolean
   refreshFailed: boolean
+  onRefresh: () => void
   onOpenNotifications: () => void
   lastTest: TestOutcomeData | null
 }) {
@@ -81,7 +82,7 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-sm font-semibold text-slate-100">{h.title}</h2>
-            <Chip tone={h.tone}>{h.tone === 'good' ? 'working' : h.tone === 'warn' ? 'needs attention' : 'off'}</Chip>
+            <Chip tone={h.tone} className="hidden sm:inline-flex">{h.tone === 'good' ? 'working' : h.tone === 'warn' ? 'needs attention' : 'off'}</Chip>
             {refreshFailed && <Chip tone="warn" title="The last refresh failed. What you see is the last answer.">could not refresh</Chip>}
           </div>
           <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{h.detail}</p>
@@ -89,6 +90,7 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">To start: choose where the messages go (Webhook), turn the switch below on, press Save and apply, then send a test message.</p>
           )}
         </div>
+        <button type="button" className={ICON_BTN} onClick={onRefresh} aria-label="Refresh the status" title="Ask CrowdSec again"><RefreshCw size={14} /></button>
       </div>
 
       {isAdmin && (
@@ -130,7 +132,7 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
                 ))}
               </ul>
             </Outcome>
-          : <Outcome icon={Radio} tone="mute" title="No delivery problems reported">{data.status.note}</Outcome>}
+          : <Outcome icon={Radio} tone="mute" title="No delivery problems reported">{null}</Outcome>}
       </ul>
 
       <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">

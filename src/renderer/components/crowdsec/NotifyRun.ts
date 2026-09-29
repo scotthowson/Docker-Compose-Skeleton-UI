@@ -5,7 +5,9 @@
 // tab that comes back picks them up.
 // =============================================================================
 
+import { useAuthStore } from '../../stores/authStore'
 import type { CrowdSecNotifyResponse } from '../../../shared/types'
+import { draftMemory } from './NotifyModel'
 
 export interface Outcome { kind: 'ok' | 'error' | 'info'; title: string; detail?: string; rolledBack?: boolean; stage?: string; status?: number; at: number }
 export interface RunState {
@@ -36,3 +38,5 @@ export function subscribeRun(f: () => void): () => void {
   subs.add(f)
   return () => { subs.delete(f) }
 }
+// what a person typed (a webhook address included) and what a change said belong to that person: they go when somebody signs out
+useAuthStore.subscribe((s, prev) => { if (prev.isAuthenticated && !s.isAuthenticated) { runs.clear(); draftMemory.clearAll(); subs.forEach((f) => f()) } })

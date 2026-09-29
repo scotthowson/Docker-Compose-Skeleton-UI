@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { AlertTriangle, Braces, ChevronRight, Clock, Eye, EyeOff, Filter, Info, KeyRound, Loader2, Palette, RefreshCw, RotateCcw, Save, ShieldCheck, Trash2, Undo2, Webhook } from 'lucide-react'
+import { AlertTriangle, Braces, ChevronRight, Clock, Eye, EyeOff, Filter, Info, KeyRound, ListChecks, Loader2, Palette, RefreshCw, RotateCcw, Save, ShieldCheck, Trash2, Undo2, Webhook } from 'lucide-react'
 import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -16,13 +16,13 @@ import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
 import { crowdsecNotify, crowdsecPreviewNotify, crowdsecResetNotify, crowdsecSaveNotify, crowdsecSimulation, crowdsecTestNotify } from '../../api/endpoints'
 import type { CrowdSecNotifyBody, CrowdSecNotifyResponse, DiscordWebhookPayload } from '../../../shared/types'
-import { BTN_DANGER, BTN_PRIMARY, BTN_QUIET, BTN_WARN, CARD, Chip, CsSheet, Dot, HINT, INPUT, LABEL, Segmented, Skel, TEXTAREA, errData, errMsg, useCs } from './kit'
+import { BTN_DANGER, BTN_PRIMARY, BTN_QUIET, BTN_WARN, CARD, Chip, CsSheet, Dot, HINT, INPUT, LABEL, Skel, TEXTAREA, errData, errMsg, useCs } from './kit'
 import {
-  LIM, NUM, cpLen, deepEqual, describeChanges, diffPatch, draftMemory, mentionTag, orderSamples, approximatePayload, redact, sectionOfError, settingsOf, toForm, validateForm, webhookProblem,
+  LIM, NUM, changeRows, cpLen, deepEqual, describeChanges, diffPatch, draftMemory, mentionTag, orderSamples, approximatePayload, redact, sectionOfError, settingsOf, toForm, validateForm, webhookProblem,
   type Errors, type Limits, type MentionMode, type NotifyForm, type Settings, type WebhookMode,
 } from './NotifyModel'
 import {
-  ChoiceCards, ColorField, Counter, FieldShell, FieldsEditor, Notice, NumberField, PhProvider, PlaceholderInput, PlaceholderPicker, Section, ToggleRow, TokenInput, useMedia, usePhRegistry,
+  ChoiceCards, ColorField, Counter, FieldShell, FieldsEditor, Notice, NumberField, PhProvider, PillChoice, PlaceholderInput, PlaceholderPicker, Section, ToggleRow, TokenInput, useMedia, usePhRegistry,
   type TokenSuggestion,
 } from './NotifyFields'
 import { ApplyProgress, StatusCard, type TestOutcomeData } from './NotifyStatus'
@@ -74,9 +74,16 @@ function scenarioSuggestions(list: { name: string; description: string }[]): Tok
   return [...prefixes, ...list.map((s) => ({ value: s.name, hint: s.description }))]
 }
 
+/** the API appends CrowdSec's own log lines to a failure after "Log:": the sentence stays up front, the lines fold away */
+function splitLog(detail?: string): { text: string; log: string } {
+  const d = detail ?? ''
+  const i = d.search(/\sLog:\s/)
+  return i < 0 ? { text: d, log: '' } : { text: d.slice(0, i).trim(), log: d.slice(i).replace(/^\s*Log:\s*/, '').replace(/\s(?=time=")/g, '\n') }
+}
+
 function KV({ k, children }: { k: string; children: React.ReactNode }) {
   return (
-    <div className="grid sm:grid-cols-[11rem_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-2 first:pt-0 last:pb-0">
+    <div className="grid grid-cols-1 sm:grid-cols-[11rem_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-2 first:pt-0 last:pb-0">
       <dt className="text-xs text-slate-500">{k}</dt>
       <dd className="text-sm text-slate-200 break-words min-w-0">{children}</dd>
     </div>
@@ -123,7 +130,7 @@ export default function NotificationsTab() {
     return (
       <div className="space-y-3" aria-busy="true" aria-label="Loading the Discord settings">
         <Skel className="h-64" />
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_28rem] gap-4"><div className="space-y-3"><Skel className="h-16" /><Skel className="h-16" /><Skel className="h-16" /><Skel className="h-16" /></div><Skel className="h-96 hidden xl:block" /></div>
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] gap-4"><div className="space-y-3"><Skel className="h-16" /><Skel className="h-16" /><Skel className="h-16" /><Skel className="h-16" /></div><Skel className="h-96 hidden xl:block" /></div>
       </div>
     )
   }
@@ -271,6 +278,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const [includeMention, setIncludeMention] = useState(false)
   const [test, setTest] = useState<{ t: TestOutcomeData; webhook?: string } | null>(null)
   const [sheet, setSheet] = useState(false)
+  const [review, setReview] = useState(false)
   // a change being applied is kept outside this component: CrowdSec restarts, the page shows "starting" instead of this tab, and the tab that comes back finds it here
   const run = useSyncExternalStore(subscribeRun, () => getRun(member))
   const applying = run.busy
@@ -285,6 +293,13 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
     refresh()
   }, [run.seq]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (dirty && outcome?.kind === 'ok') setRun(member, { outcome: null }) }, [dirty]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the button that was pressed disappears when the change is done: keep the keyboard where the answer is
+  const outcomeBox = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!outcome) return
+    const a = document.activeElement
+    if (!a || a === document.body) outcomeBox.current?.focus({ preventScroll: true })
+  }, [outcome?.at]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const serverTest: TestOutcomeData | null = server.status.last_test ? { at: server.status.last_test.at, ok: server.status.last_test.ok, http: server.status.last_test.http, message: server.status.last_test.message, sample: server.status.last_test.sample } : null
   const lastTest = test && (!serverTest || test.t.at >= serverTest.at) ? test.t : serverTest
@@ -302,7 +317,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
     } catch (e) {
       const bad = o.fail(e)
       setRun(member, { busy: null, outcome: bad, res: null, doneAt: Date.now() })
-      addToast({ type: 'error', message: `${bad.title}${bad.detail ? `. ${bad.detail}` : ''}`, duration: 9000 })
+      addToast({ type: 'error', message: `${bad.title}${bad.detail ? `. ${splitLog(bad.detail).text}` : ''}`, duration: 9000 })
     }
     refreshStatus()
   }
@@ -391,6 +406,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   }
   const suggestions = useScenarios(member)
   const changes = describeChanges(patch, form.mode === 'custom' && urlTyped !== '' ? ['Webhook address'] : [])
+  const rows = useMemo(() => (dirty && review ? changeRows(base, settingsNow, urlSend) : []), [dirty, review, base, settingsNow, urlSend])
   const previewPanel = (bare = false) => (
     <PreviewPanel bare={bare} payload={previewPayload} loading={askServer && pv.loading && !clientProblem} problem={previewProblem} approximate={!askServer} samples={samples} sample={sampleNow} onSample={setSample}
       dark={dark} onDark={setDark} isAdmin={isAdmin} testBlocked={testBlocked} testing={testing} onTest={sendTest} includeMention={includeMention} onIncludeMention={setIncludeMention}
@@ -399,7 +415,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   )
   const openNotifications = () => setCurrentPage('notifications')
   const statusCard = (
-    <StatusCard data={server} isAdmin={isAdmin} enabled={form.enabled} onToggle={(v) => patchForm({ enabled: v })} busy={!!applying} refreshFailed={refreshFailed} onOpenNotifications={openNotifications} lastTest={lastTest} />
+    <StatusCard data={server} isAdmin={isAdmin} enabled={form.enabled} onToggle={(v) => patchForm({ enabled: v })} busy={!!applying} refreshFailed={refreshFailed} onRefresh={refresh} onOpenNotifications={openNotifications} lastTest={lastTest} />
   )
 
   // =========================================================================
@@ -410,7 +426,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
     return (
       <div className="space-y-4">
         {statusCard}
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_28rem] gap-4 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] gap-4 items-start">
           <div className="space-y-3 min-w-0">
             <Notice tone="info" icon={Eye}>You can read these settings. Only an administrator can change them or send a test message.</Notice>
             <Section id="notify-webhook" icon={Webhook} title="Webhook" summary={`${MODE_TITLE[s.webhook.mode]} · ${server.webhook.configured ? 'configured' : 'not configured'}`} open={open.webhook} onToggle={() => toggle('webhook')}>
@@ -482,7 +498,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
       <div className="space-y-4">
         {statusCard}
 
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_28rem] 2xl:grid-cols-[minmax(0,1fr)_32rem] gap-4 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] 2xl:grid-cols-[minmax(0,1fr)_32rem] gap-4 items-start">
           <div className="space-y-3 min-w-0">
             {restored && <Notice tone="info" icon={Info} title="You have unsaved changes from earlier" action={<button type="button" className="text-cyan-400 hover:text-cyan-300 text-xs inline-flex items-center gap-1" onClick={discard}><Undo2 size={12} /> Discard them</button>}>They were kept while you looked at another tab. Nothing has been sent to CrowdSec yet.</Notice>}
             {changedElsewhere && <Notice tone="warn" icon={AlertTriangle} title="The saved settings changed since you started editing" action={<button type="button" className="text-cyan-400 hover:text-cyan-300 text-xs inline-flex items-center gap-1" onClick={discard}><Undo2 size={12} /> Discard my changes and load them</button>}>Someone else saved, or CrowdSec was changed by hand. When you save, only the things you edited are applied on top.</Notice>}
@@ -494,7 +510,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
               </Notice>
             )}
 
-            <nav aria-label="Sections" className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
+            <nav aria-label="Sections" className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[11px] text-slate-500 mr-1 shrink-0">Jump to</span>
               {SECTION_ORDER.map((id) => (
                 <button key={id} type="button" onClick={() => reveal(id)} className="h-8 px-3 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 shrink-0 inline-flex items-center gap-1.5 transition-colors">
@@ -504,7 +520,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
               ))}
             </nav>
 
-            <fieldset disabled={busy} className="min-w-0 border-0 p-0 m-0 space-y-3">
+            <fieldset disabled={busy} aria-busy={busy} className="min-w-0 border-0 p-0 m-0 space-y-3">
               {/* ---------------- webhook ---------------- */}
               <Section id="notify-webhook" icon={Webhook} title="Webhook" summary={summaries.webhook} open={open.webhook} onToggle={() => toggle('webhook')} problems={problemCount.webhook} edited={edited.webhook}>
                 <p className="text-xs text-slate-500 leading-relaxed">Where the messages are posted. A webhook address works like a password, so it is stored as a secret on the server and never shown again.</p>
@@ -562,7 +578,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
 
               {/* ---------------- appearance ---------------- */}
               <Section id="notify-appearance" icon={Palette} title="Appearance" summary={summaries.appearance} open={open.appearance} onToggle={() => toggle('appearance')} problems={problemCount.appearance} edited={edited.appearance}>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FieldShell id="notify-name" label="Sender name" counter={<Counter n={cpLen(form.name)} max={LIM.name} />} error={errors.name} hint="The name Discord shows above each message." def={def.identity.name} onDefault={form.name !== def.identity.name ? () => patchForm({ name: def.identity.name }) : undefined}>
                     <input id="notify-name" className={`${INPUT} ${errors.name ? '!border-rose-500/40' : ''}`} value={form.name} onChange={(e) => patchForm({ name: e.target.value })} autoComplete="off" aria-invalid={!!errors.name} aria-describedby="notify-name-err notify-name-hint" />
                   </FieldShell>
@@ -577,7 +593,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                 </div>
                 <div>
                   <p className={LABEL}>Mention</p>
-                  <Segmented<MentionMode> value={form.mention} onChange={setMention} ariaLabel="Who is mentioned" className="w-fit"
+                  <PillChoice<MentionMode> value={form.mention} onChange={setMention} ariaLabel="Who is mentioned" disabled={busy}
                     options={[{ value: 'none', label: 'Nobody' }, { value: 'role', label: 'A role' }, { value: 'user', label: 'A user' }, { value: 'here', label: '@here' }, { value: 'everyone', label: '@everyone' }]} />
                   <p className={HINT}>Who Discord notifies with each message. Default: nobody.</p>
                   {(form.mention === 'role' || form.mention === 'user') && (
@@ -609,7 +625,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                     help="Also for alerts that end without any ban. This can be chatty." />
                   {!form.bans && !form.simulated && !form.detectOnly && <p className="text-[11px] text-amber-300">Every event is off, so no message will ever be sent.</p>}
                 </div>
-                <div className="grid md:grid-cols-2 gap-4 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                   <NumberField id="notify-min-events" label="Minimum events" value={form.minEvents} onChange={(v) => patchForm({ minEvents: v })} min={NUM.minEvents.min} max={NUM.minEvents.max} unit="log lines" def={String(def.filters.min_events)} error={errors.minEvents} disabled={busy}
                     hint="Only alerts built from at least this many log lines. 0 or 1 sends every alert." />
                 </div>
@@ -623,14 +639,17 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
               <Section id="notify-message" icon={Braces} title="Message" summary={summaries.message} open={open.message} onToggle={() => toggle('message')} problems={problemCount.message} edited={edited.message}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <p className="text-xs text-slate-500 leading-relaxed flex-1 min-w-[14rem]">Write the message with placeholders such as <span className="font-mono text-slate-300">{'{ip}'}</span> or <span className="font-mono text-slate-300">{'{country_tag}'}</span>. Type <span className="font-mono text-slate-300">{'{'}</span> in a box to get suggestions. In the description and in field values Discord draws **bold**, `code` and [text](link); the footer is plain text.</p>
-                  <PlaceholderPicker items={ph} label="All placeholders" target={() => reg.last()?.label ?? 'description'} onPick={(n) => (reg.last() ?? { insert: () => {} }).insert(`{${n}}`)} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" className={BTN_QUIET} onClick={resetShipped} disabled={busy} title="Put the message, the look, the filters and the delivery back to what CrowdSec ships with. The webhook and the switch stay."><RotateCcw size={13} /> Shipped message</button>
+                    <PlaceholderPicker items={ph} label="All placeholders" target={() => reg.last()?.label ?? 'description'} onPick={(n) => (reg.last() ?? { insert: () => {} }).insert(`{${n}}`)} />
+                  </div>
                 </div>
                 {errors.message && <p role="alert" className="text-[11px] text-rose-300">{errors.message}</p>}
                 <PlaceholderInput id="notify-title" label="Title" value={form.title} onChange={(v) => patchForm({ title: v })} max={limits.title} placeholders={ph} error={errors.title} disabled={busy}
                   hint="The bold line at the top." def={def.message.title} onDefault={form.title !== def.message.title ? () => patchForm({ title: def.message.title }) : undefined} />
                 <PlaceholderInput id="notify-description" label="Description" value={form.description} onChange={(v) => patchForm({ description: v })} max={limits.description} placeholders={ph} error={errors.description} disabled={busy} multiline rows={4}
                   hint="The text under the title. Line breaks are kept." def={def.message.description} onDefault={form.description !== def.message.description ? () => patchForm({ description: def.message.description }) : undefined} />
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <PlaceholderInput id="notify-footer" label="Footer" value={form.footer} onChange={(v) => patchForm({ footer: v })} max={limits.footer} placeholders={ph} error={errors.footer} disabled={busy}
                     hint="Small text at the bottom. Leave it empty for none." def={def.message.footer} onDefault={form.footer !== def.message.footer ? () => patchForm({ footer: def.message.footer }) : undefined} />
                   <PlaceholderInput id="notify-link" label="Title link" value={form.link} onChange={(v) => patchForm({ link: v })} max={LIM.link} placeholders={ph} error={errors.link} disabled={busy}
@@ -647,7 +666,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
               {/* ---------------- delivery ---------------- */}
               <Section id="notify-delivery" icon={Clock} title="Delivery" summary={summaries.delivery} open={open.delivery} onToggle={() => toggle('delivery')} problems={problemCount.delivery} edited={edited.delivery}>
                 <p className="text-xs text-slate-500 leading-relaxed">How CrowdSec hands the messages to Discord. The defaults suit most servers.</p>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <NumberField id="notify-group-wait" label="Wait before sending" value={form.groupWait} onChange={(v) => patchForm({ groupWait: v })} min={NUM.groupWait.min} max={NUM.groupWait.max} unit="seconds" def={String(def.delivery.group_wait)} error={errors.groupWait} disabled={busy}
                     hint="Alerts that arrive within this time are sent together in one message." />
                   <NumberField id="notify-group-threshold" label="Alerts per message" value={form.groupThreshold} onChange={(v) => patchForm({ groupThreshold: v })} min={NUM.groupThreshold.min} max={limits.group_threshold_max} unit="alerts" def={String(def.delivery.group_threshold)} error={errors.groupThreshold} disabled={busy}
@@ -677,19 +696,27 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
             <div className="rounded-xl bg-slate-900 border border-emerald-500/25 px-3 py-2.5 shadow-xl shadow-black/40 animate-scale-in space-y-2.5">
               {applying && <ApplyProgress startedAt={applying.at} what={applying.what} />}
               {!applying && outcome && (
-                <Notice role={outcome.kind === 'error' ? 'alert' : 'status'} tone={outcome.kind === 'ok' ? 'good' : outcome.kind === 'error' ? 'bad' : 'info'} icon={outcome.kind === 'ok' ? ShieldCheck : AlertTriangle} title={outcome.title}
-                  action={<button type="button" onClick={() => setRun(member, { outcome: null })} className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100">Dismiss</button>}>
-                  {outcome.detail}
-                  {outcome.kind === 'error' && <span className="block mt-1 opacity-90">{
-                    outcome.rolledBack ? 'CrowdSec was restarted with the previous files and is healthy again. Nothing of this change is live.'
-                      : outcome.stage === 'validation' ? 'CrowdSec checked the new files and refused them, so nothing was changed.'
-                      : outcome.stage === 'busy' ? 'Another change is still being applied. Try again in a minute.'
-                      : outcome.stage === 'apply' ? 'The change may be only partly applied. Look at the CrowdSec log on the Logs tab.'
-                      : (outcome.status ?? 0) >= 400 && (outcome.status ?? 0) < 500 ? 'The server refused the settings before it wrote anything, so nothing was changed.'
-                      : (outcome.status ?? 0) >= 500 ? 'The server failed while applying. Reload this page to see what CrowdSec has now, and look at the log.'
-                      : 'The request did not finish, so this page cannot tell whether CrowdSec took the change. Reload it to see what CrowdSec has now.'
-                  }</span>}
-                </Notice>
+                <div ref={outcomeBox} tabIndex={-1} className="outline-none">
+                  <Notice role={outcome.kind === 'error' ? 'alert' : 'status'} tone={outcome.kind === 'ok' ? 'good' : outcome.kind === 'error' ? 'bad' : 'info'} icon={outcome.kind === 'ok' ? ShieldCheck : AlertTriangle} title={outcome.title}
+                    action={<button type="button" onClick={() => setRun(member, { outcome: null })} className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100">Dismiss</button>}>
+                    {splitLog(outcome.detail).text}
+                    {splitLog(outcome.detail).log && (
+                      <details className="mt-1.5 text-[11px]">
+                        <summary className="cursor-pointer opacity-80 hover:opacity-100 select-none">CrowdSec’s log around it</summary>
+                        <pre className="mt-1 font-mono whitespace-pre-wrap break-words max-h-40 overflow-auto scrollbar-thin bg-white/[0.04] border border-white/5 rounded-md p-2">{splitLog(outcome.detail).log}</pre>
+                      </details>
+                    )}
+                    {outcome.kind === 'error' && <span className="block mt-1 opacity-90">{
+                      outcome.rolledBack ? 'CrowdSec was restarted with the previous files and is healthy again. Nothing of this change is live.'
+                        : outcome.stage === 'validation' ? 'CrowdSec checked the new files and refused them, so nothing was changed.'
+                        : outcome.stage === 'busy' ? 'Another change is still being applied. Try again in a minute.'
+                        : outcome.stage === 'apply' ? 'The change may be only partly applied. Look at the CrowdSec log on the Logs tab.'
+                        : (outcome.status ?? 0) >= 400 && (outcome.status ?? 0) < 500 ? 'The server refused the settings before it wrote anything, so nothing was changed.'
+                        : (outcome.status ?? 0) >= 500 ? 'The server failed while applying. Reload this page to see what CrowdSec has now, and look at the log.'
+                        : 'The request did not finish, so this page cannot tell whether CrowdSec took the change. Reload it to see what CrowdSec has now.'
+                    }</span>}
+                  </Notice>
+                </div>
               )}
               {!applying && (
                 <div className="flex items-center gap-2 flex-wrap">
@@ -697,7 +724,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                     ? (
                       <div className="min-w-0 flex-1 basis-40">
                         <p className="text-sm text-slate-100 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" /> You have unsaved changes</p>
-                        <p className="text-[11px] text-slate-500 truncate" title={changes.join(', ')}>{changes.length ? changes.slice(0, 4).join(', ') + (changes.length > 4 ? ` and ${changes.length - 4} more` : '') : 'Edited'}</p>
+                        <p className="text-[11px] text-slate-500 flex items-center gap-2 min-w-0"><span className="truncate" title={changes.join(', ')}>{changes.length ? changes.slice(0, 4).join(', ') + (changes.length > 4 ? ` and ${changes.length - 4} more` : '') : 'Edited'}</span><button type="button" onClick={() => setReview(true)} className="shrink-0 text-cyan-400 hover:text-cyan-300 py-2 -my-2 px-1">Review</button></p>
                         {totalProblems > 0 && <button type="button" onClick={focusFirstProblem} className="text-[11px] text-rose-300 hover:text-rose-200 underline underline-offset-2">{totalProblems} thing{totalProblems === 1 ? '' : 's'} to fix first</button>}
                       </div>
                     )
@@ -717,8 +744,29 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
 
         {!wide && !showBar && (
           <div className="sticky bottom-2 z-30 flex justify-start pointer-events-none">
-            <button type="button" onClick={() => setSheet(true)} className="pointer-events-auto h-10 px-4 rounded-full inline-flex items-center gap-2 text-xs font-medium text-slate-200 bg-slate-900 border border-white/15 shadow-xl shadow-black/40 hover:bg-slate-800"><Eye size={14} /> Preview and test</button>
+            <button type="button" onClick={() => setSheet(true)} className="pointer-events-auto h-10 px-4 rounded-full inline-flex items-center gap-2 text-xs font-medium text-slate-200 bg-slate-900 border border-white/10 shadow-xl shadow-black/40 hover:bg-slate-800"><Eye size={14} /> Preview and test</button>
           </div>
+        )}
+
+        {review && dirty && (
+          <CsSheet title="What Save and apply will change" subtitle="Nothing is sent to CrowdSec until you press Save and apply." icon={<ListChecks size={18} />} tone="info" wide onClose={() => setReview(false)}
+            footer={
+              <div className="flex gap-2 justify-end flex-wrap">
+                <button type="button" className={BTN_QUIET} onClick={() => setReview(false)}>Close</button>
+                <button type="button" className={BTN_PRIMARY} disabled={!canSave} onClick={() => { setReview(false); void save() }}><Save size={13} /> Save and apply</button>
+              </div>
+            }>
+            <ul className="divide-y divide-white/5" aria-label="Changes">
+              {rows.map((r) => (
+                <li key={r.label} className="py-2.5 first:pt-0 min-w-0">
+                  <p className="text-xs font-medium text-slate-300">{r.label}</p>
+                  <p className="text-xs text-slate-500 line-through break-words mt-0.5">{r.before}</p>
+                  <p className="text-sm text-emerald-300 break-words">{r.after}</p>
+                </li>
+              ))}
+              {rows.length === 0 && <li className="text-xs text-slate-500 py-2">Nothing differs from what is saved.</li>}
+            </ul>
+          </CsSheet>
         )}
 
         {sheet && !wide && (
