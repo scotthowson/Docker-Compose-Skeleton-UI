@@ -626,7 +626,7 @@ export function CommandPalette() {
       }
       for (const container of containers) {
         items.push({
-          id: `open-container-${container.name}`,
+          id: `open-container-${container.member ?? 'local'}-${container.name}`,
           label: container.name,
           description: `Container · ${container.state}${container.stack ? ` · ${container.stack}` : ''} · ${container.image}`,
           icon: <Box size={16} className={container.state === 'running' ? 'text-emerald-400' : 'text-slate-400'} />,
@@ -769,7 +769,7 @@ export function CommandPalette() {
 
         if (isRunning) {
           items.push({
-            id: `container-stop-${container.name}`,
+            id: `container-stop-${container.member ?? 'local'}-${container.name}`,
             label: `Stop Container: ${container.name}`,
             description: `Image: ${container.image}`,
             icon: <Square size={16} className="text-rose-400" />,
@@ -784,7 +784,7 @@ export function CommandPalette() {
             },
           })
           items.push({
-            id: `container-restart-${container.name}`,
+            id: `container-restart-${container.member ?? 'local'}-${container.name}`,
             label: `Restart Container: ${container.name}`,
             description: `Image: ${container.image}`,
             icon: <RotateCw size={16} className="text-amber-400" />,
@@ -818,7 +818,7 @@ export function CommandPalette() {
 
         // View logs for every container
         items.push({
-          id: `container-logs-${container.name}`,
+          id: `container-logs-${container.member ?? 'local'}-${container.name}`,
           label: `View Logs: ${container.name}`,
           description: `Open log viewer for ${container.name}`,
           icon: <ScrollText size={16} className="text-cyan-400" />,
