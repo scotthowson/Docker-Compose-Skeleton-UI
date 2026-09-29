@@ -1729,6 +1729,10 @@ export interface ImageUpdateInfo {
   old_id?: string
   new_id?: string
   update_available?: boolean
+  /** Running containers created from this tag that still run an older copy of it (a pull moved the tag; they were never recreated): "name1,name2" */
+  containers_outdated?: string
+  /** …of those, the ones Compose does not manage (started by hand): DCS cannot recreate them, only their owner can */
+  containers_outdated_manual?: string
 }
 
 export interface ImageCheckResponse {

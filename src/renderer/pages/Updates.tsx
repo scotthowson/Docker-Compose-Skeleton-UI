@@ -27,6 +27,7 @@ import { useFleetRole } from '../hooks/useFleetRole'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import DockerEngineCard from '../components/updates/DockerEngineCard'
+import AutoImageUpdates from '../components/updates/AutoImageUpdates'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -171,7 +172,14 @@ function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
 // ---------------------------------------------------------------------------
 
 /** A row's identity in the fleet view: the image on its DCS (the hub's rows have no member) */
+/** Shown when the API is not back after a restart: what to look at on the server (systemd's reason is in its journal; on Fedora/RHEL
+ *  the usual one is the SELinux label of a script an update replaced) */
+const RESTART_FAILED = 'The API did not answer after the restart. On the server, "journalctl -u dcs-api -n 30" says why. On Fedora/RHEL (SELinux) the usual cause is the label of the updated script: "sudo restorecon -v <install dir>/.scripts/api-server.sh" and "sudo systemctl restart dcs-api" bring it back.'
 const rowKey = (img: ImageUpdateInfo) => `${img.member ?? ''}|${img.image}`
+/** the Compose containers of a row that still run an older copy of its image (pulled earlier, never recreated): what Update recreates */
+const outdatedOf = (img: ImageUpdateInfo) => (img.containers_outdated ?? '').split(',').map((c) => c.trim()).filter(Boolean)
+/** …and those started by hand, which DCS cannot recreate */
+const manualOf = (img: ImageUpdateInfo) => (img.containers_outdated_manual ?? '').split(',').map((c) => c.trim()).filter(Boolean)
 
 function formatRelativeTime(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000)
@@ -264,7 +272,8 @@ function UpdateStatusBadge({ res }: { res: SystemUpdateCheckResponse }) {
 }
 
 export default function Updates() {
-  const isConnected = useConnectionStore((s) => s.status) === 'connected'
+  const connStatus = useConnectionStore((s) => s.status)
+  const isConnected = connStatus === 'connected'
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
@@ -425,7 +434,7 @@ export default function Updates() {
           setRestartingApi(null)
           addToast(back
             ? { type: 'success', message: 'The API is back on the new version' }
-            : { type: 'error', message: 'The API did not answer after the restart — check the dcs-api service' })
+            : { type: 'error', message: RESTART_FAILED, duration: 30000 })
         } else {
           if (result.restart?.hint) setRestartHint(result.restart.hint)
           const fresh = await checkSystemUpdate()
@@ -489,7 +498,7 @@ export default function Updates() {
       setRestartingApi(res.method === 'systemd' ? 'Restarting the API through systemd (about 10 s)…' : 'Restarting the API…')
       const back = await waitForApi(res.eta_seconds)
       setRestartingApi(null)
-      addToast(back ? { type: 'success', message: 'API restarted' } : { type: 'error', message: 'The API did not answer after the restart' })
+      addToast(back ? { type: 'success', message: 'API restarted' } : { type: 'error', message: RESTART_FAILED, duration: 30000 })
     } catch (err) {
       setRestartingApi(null)
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Restart failed' })
@@ -582,16 +591,21 @@ export default function Updates() {
     [images],
   )
 
+  // Rows whose containers still run an older copy of the image (pulled earlier, never recreated)
+  const outdatedImages = useMemo(() => images.filter((img) => outdatedOf(img).length > 0), [images])
+
   // Everything "Update All" touches: confirmed registry updates first, then
-  // images that are stale by age (deduplicated)
+  // images that are stale by age, then those with containers left on an old copy
+  // (deduplicated per server: the same image on the hub and on a VM is two rows)
   const bulkTargets = useMemo(() => {
     const seen = new Set<string>()
     const out: ImageUpdateInfo[] = []
-    for (const img of [...updatableImages, ...staleImages]) {
-      if (!seen.has(img.image)) { seen.add(img.image); out.push(img) }
+    for (const img of [...updatableImages, ...staleImages, ...(recreate ? outdatedImages : [])]) {
+      const k = rowKey(img)
+      if (!seen.has(k)) { seen.add(k); out.push(img) }
     }
     return out
-  }, [updatableImages, staleImages])
+  }, [updatableImages, staleImages, outdatedImages, recreate])
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null)
 
   // ---- Check registry for updates (slow POST): everywhere at once, or one DCS ----
@@ -644,7 +658,7 @@ export default function Updates() {
           if (result.containers_skipped?.length) parts.push(`${result.containers_skipped.join(', ')} skipped (not Compose-managed)`)
           const tail = parts.length
             ? ` — ${parts.join('; ')}`
-            : recreate ? ' — no running container uses it' : ' — containers keep running on the old image until they are recreated'
+            : recreate ? ' — no running container was on an older copy' : ' — containers keep running on the old image until they are recreated'
           addToast({
             type: result.containers_failed?.length ? 'warning' : 'success',
             message: `Pulled ${img.image}${where}${tail}`,
@@ -711,6 +725,7 @@ export default function Updates() {
       if (failedContainers.length) parts.push(`${failedContainers.join(', ')} did not come back up`)
       if (skipped.length) parts.push(`${skipped.length} not Compose-managed, left running`)
       if (!recreate) parts.push('containers keep running on the old image until they are recreated')
+      else if (restarted.length === 0 && failedContainers.length === 0) parts.push('no running container was on an older copy')
       addToast({
         type: failedContainers.length ? 'warning' : 'success',
         message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${imgScope === 'all' ? ' across the fleet' : scopeName ? ` on ${scopeName}` : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
@@ -731,11 +746,22 @@ export default function Updates() {
   // ---- Disconnected ----
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
+      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in text-center px-6">
         <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <ArrowUpCircle size={24} className="text-slate-500" />
+          {connStatus === 'connecting' ? <Loader2 size={24} className="text-slate-500 animate-spin" /> : <ArrowUpCircle size={24} className="text-slate-500" />}
         </div>
-        <p className="text-sm text-slate-500">Connect to a server to check for image updates</p>
+        <p className="text-sm text-slate-400">
+          {connStatus === 'connecting'
+            ? 'Connecting to the DCS API…'
+            : connStatus === 'error'
+              ? 'The DCS API is not answering'
+              : 'Connect to a server to see its updates'}
+        </p>
+        <p className="text-xs text-slate-500 max-w-sm">
+          {connStatus === 'error'
+            ? 'This page (system updates, Docker Engine, VMs and image updates) returns on its own as soon as the API answers again. If it stays away, check the dcs-api service on the server.'
+            : 'System, Docker Engine and image updates are shown for the server you are connected to.'}
+        </p>
       </div>
     )
   }
@@ -1319,7 +1345,9 @@ export default function Updates() {
                 ? `Updating ${bulkProgress.done + 1}/${bulkProgress.total}…`
                 : updatableImages.length > 0
                   ? `Update All (${bulkTargets.length})`
-                  : `Update All Stale (${bulkTargets.length})`}
+                  : staleImages.length > 0
+                    ? `Update All Stale (${bulkTargets.length})`
+                    : `Recreate Outdated (${bulkTargets.length})`}
             </button>
           )}
 
@@ -1364,6 +1392,25 @@ export default function Updates() {
             updatedLabel="Last pulled"
           />
         )}
+        {outdatedImages.length > 0 && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 text-[11px] text-amber-100/90">
+            <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
+            <span className="flex-1 leading-relaxed">
+              {outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0)} container{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? '' : 's'} still run{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? 's' : ''} an older copy of {outdatedImages.length === 1 ? 'an image' : `${outdatedImages.length} images`} that was pulled since (an update that only pulled, or one from an earlier version that did not recreate them). Update recreates them on the current copy.
+            </span>
+            {isAdmin && (
+              <button
+                onClick={handleUpdateAllStale}
+                disabled={bulkUpdating || !recreate}
+                title={recreate ? 'Recreate the Compose services on the current copy of their image' : 'Turn on "Recreate containers" first'}
+                className="shrink-0 px-3 py-1 rounded-lg text-[11px] font-medium bg-amber-500/15 border border-amber-500/25 text-amber-200 hover:bg-amber-500/25 disabled:opacity-50 disabled:cursor-not-allowed press"
+              >
+                Recreate now
+              </button>
+            )}
+          </div>
+        )}
+        {isAdmin && <AutoImageUpdates scope={imgScope} members={scopeMembers} recreateDefault={recreate} />}
       </div>
 
       {/* ---- Summary stat cards ---- */}
@@ -1503,6 +1550,10 @@ export default function Updates() {
                   const isUpdating = updatingImages.has(key) || bulkProgress?.current === key
                   const bulkState = bulkResults[key]
                   const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => rowKey(t) === key)
+                  const oldCopy = outdatedOf(img)
+                  const byHand = manualOf(img)
+                  // the image is current but some containers were never moved onto it
+                  const needsRecreate = oldCopy.length > 0 && img.update_available !== true && img.staleness === 'current'
                   return (
                     <tr
                       key={key}
@@ -1520,11 +1571,21 @@ export default function Updates() {
 
                       {/* Container(s) — one chip per container */}
                       <td className="px-4 py-3">
-                        {img.containers && img.containers !== '-' ? (
+                        {(img.containers && img.containers !== '-') || oldCopy.length > 0 || byHand.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-[380px]">
-                            {img.containers.split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
+                            {(img.containers && img.containers !== '-' ? img.containers : '').split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
                               <span key={c} className="inline-flex rounded-md bg-white/[0.05] border border-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-slate-300 whitespace-nowrap">
                                 {c}
+                              </span>
+                            ))}
+                            {oldCopy.map((c) => (
+                              <span key={`old-${c}`} title={`${c} was started from an older copy of this image and was not recreated since`} className="inline-flex rounded-md bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 text-[10px] font-mono text-amber-200 whitespace-nowrap">
+                                {c} · old copy
+                              </span>
+                            ))}
+                            {byHand.map((c) => (
+                              <span key={`hand-${c}`} title={`${c} runs an older copy of this image but was not started by Compose, so DCS cannot recreate it — recreate it yourself`} className="inline-flex rounded-md bg-white/[0.04] border border-amber-500/15 px-1.5 py-0.5 text-[10px] font-mono text-amber-200/70 whitespace-nowrap">
+                                {c} · old copy, by hand
                               </span>
                             ))}
                           </div>
@@ -1616,8 +1677,8 @@ export default function Updates() {
                         {isAdmin ? (
                           <button
                             onClick={() => handleUpdateImage(img)}
-                            disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true)}
-                            title={img.update_available === true ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated') : img.staleness === 'stale' ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated') : 'Nothing newer is known for this tag'}
+                            disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true && !needsRecreate)}
+                            title={needsRecreate ? (recreate ? `${oldCopy.join(', ')} still run${oldCopy.length === 1 ? 's' : ''} an older copy of this image — recreate ${oldCopy.length === 1 ? 'it' : 'them'} on the current one` : 'Turn on "Recreate containers" to move the containers onto the current copy') : img.update_available === true ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated') : img.staleness === 'stale' ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated') : 'Nothing newer is known for this tag'}
                             className={`
                               inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap
                               transition-all duration-200
@@ -1625,6 +1686,8 @@ export default function Updates() {
                                 ? isUpdating
                                   ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
                                   : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 hover:border-emerald-500/35 press shadow-sm shadow-emerald-500/10'
+                                : needsRecreate
+                                  ? (isUpdating ? 'bg-amber-500/5 text-amber-300/50 border border-amber-500/10 cursor-not-allowed' : 'bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/35 press')
                                 : img.staleness === 'current'
                                   ? 'bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default'
                                   : isUpdating
@@ -1635,8 +1698,10 @@ export default function Updates() {
                           >
                             {isUpdating ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : img.staleness === 'current' ? (
+                            ) : img.staleness === 'current' && !needsRecreate ? (
                               <CheckCircle className="h-3 w-3" />
+                            ) : needsRecreate ? (
+                              <RotateCcw className="h-3 w-3" />
                             ) : (
                               <Download className="h-3 w-3" />
                             )}
@@ -1644,9 +1709,11 @@ export default function Updates() {
                               ? 'Updating...'
                               : queued
                                 ? 'Queued'
-                                : img.staleness === 'current'
-                                ? 'Up to date'
-                                : 'Update'}
+                                : needsRecreate
+                                  ? 'Recreate'
+                                  : img.staleness === 'current'
+                                    ? 'Up to date'
+                                    : 'Update'}
                           </button>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-500">
