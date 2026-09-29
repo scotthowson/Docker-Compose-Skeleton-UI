@@ -1,0 +1,48 @@
+/* =============================================================================
+   The dashboard's skin for the Mantine components it uses: the states a theme
+   cannot express. Colours come from the --dcs-* variables lib/mantine.tsx sets
+   for each scheme, so the light theme needs no rules of its own here.
+   ============================================================================= */
+
+/* a field in focus: the emerald border (theme) and the dashboard's soft ring */
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  box-shadow: 0 0 0 1px var(--dcs-field-ring);
+}
+
+/* dropdown options: one quiet highlight for the pointer and the keyboard, the chosen one in emerald */
+.mantine-Select-option[data-combobox-selected],
+.mantine-Combobox-option[data-combobox-selected] {
+  background-color: var(--dcs-option-hover);
+  color: inherit;
+}
+@media (hover: hover) {
+  .mantine-Select-option:hover:not([data-combobox-disabled]),
+  .mantine-Combobox-option:hover:not([data-combobox-disabled]) {
+    background-color: var(--dcs-option-hover);
+  }
+}
+.mantine-Select-option[data-checked],
+.mantine-Combobox-option[data-checked] {
+  color: var(--dcs-option-checked);
+}
+/* a group's heading draws a hairline after its text; on a phone the text needs the whole width */
+@media (max-width: 480px) {
+  .mantine-Select-groupLabel::after,
+  .mantine-Combobox-groupLabel::after {
+    display: none;
+  }
+}
+
+/* segmented filters: muted choices that brighten on hover; the chosen one keeps its colour (theme) */
+.mantine-SegmentedControl-label:not([data-active]) {
+  color: var(--dcs-seg-label);
+}
+@media (hover: hover) {
+  .mantine-SegmentedControl-label:not([data-active], [data-disabled]):hover {
+    color: var(--dcs-seg-label-hover);
+  }
+}
+.mantine-SegmentedControl-label {
+  font-weight: 500;
+}
