@@ -23,7 +23,8 @@ export const HUES = ['emerald', 'teal', 'lime', 'green', 'amber', 'orange', 'yel
 /** the state variants the engine can restyle (responsive ones like sm: would need their media query) */
 const VARIANT = '(?:hover:|focus:|focus-visible:|focus-within:|active:|group-hover:|placeholder:|file:)?'
 const PROP = '(?:bg|text|border(?:-[tblrxy])?|ring-offset|ring|from|to|via|fill|stroke|shadow|divide|accent|placeholder)'
-const CLASS_RE = new RegExp(`(?<![\\w:-])(${VARIANT}${PROP}-(?:${HUES.join('|')})(?:-\\d{2,3})?(?:\\/(?:\\d{1,3}|\\[[\\d.]+\\]))?)(?![\\w\\-/\\[.])`, 'g')
+// a class may carry Tailwind's important modifier after its variant (!bg-amber-500/10, hover:!bg-amber-500/20)
+const CLASS_RE = new RegExp(`(?<![\\w:!-])(${VARIANT}!?${PROP}-(?:${HUES.join('|')})(?:-\\d{2,3})?(?:\\/(?:\\d{1,3}|\\[[\\d.]+\\]))?)(?![\\w\\-/\\[.])`, 'g')
 
 function walk(dir, acc = []) {
   for (const name of fs.readdirSync(dir)) {

@@ -22,6 +22,7 @@ import {
   type ThemeMode,
   type ThemePalette,
   type ThemeRadius,
+  contrastRatio,
   hexToRgb,
   hexToTriplet,
   hexToOklch,
@@ -85,7 +86,7 @@ function selectorFor(cls: string): string {
 
 /** the declaration a utility class sets, with the colour swapped */
 function declarationFor(cls: string, value: string): string {
-  const base = cls.replace(/^(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):/, '')
+  const base = cls.replace(/^(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):/, '').replace(/^!/, '')
   if (base.startsWith('placeholder')) return `color: ${value} !important`
   if (base.startsWith('bg-')) return `background-color: ${value} !important`
   if (base.startsWith('text-')) return `color: ${value} !important`
@@ -270,7 +271,7 @@ function slateSurface(p: ThemePalette, r: Ramp, shadeNo: number): string {
   return p.text
 }
 
-const CLASS_RE = /^(?:(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):)?(bg|text|border(?:-[tblrxy])?|ring-offset|ring|from|to|via|fill|stroke|shadow|divide|accent|placeholder)-(emerald|teal|lime|green|amber|orange|yellow|rose|red|cyan|sky|blue|slate|white|black|violet|purple|fuchsia|pink|indigo)(?:-(\d{2,3}))?(?:\/(\d{1,3}|\[[\d.]+\]))?$/
+const CLASS_RE = /^(?:(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):)?!?(bg|text|border(?:-[tblrxy])?|ring-offset|ring|from|to|via|fill|stroke|shadow|divide|accent|placeholder)-(emerald|teal|lime|green|amber|orange|yellow|rose|red|cyan|sky|blue|slate|white|black|violet|purple|fuchsia|pink|indigo)(?:-(\d{2,3}))?(?:\/(\d{1,3}|\[[\d.]+\]))?$/
 /** the decorative hues' 700 (Tailwind): their pale text steps, made for dark glass, read as this on a light look */
 const DECORATIVE_INK: Record<string, string> = { violet: '#6d28d9', purple: '#7e22ce', fuchsia: '#a21caf', pink: '#be185d', indigo: '#4338ca' }
 interface ColourClass { cls: string; prop: string; family: string; shadeNo: number | null; alpha: number | null }
@@ -327,6 +328,25 @@ function emitClasses(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: Theme
       continue
     }
     if (value) s.cls(cls, alpha === null ? value : rgba(value, alpha))
+  }
+
+  // Text written onto a solid status colour: the dark design pairs bright chips with dark text
+  // (bg-amber-500/90 text-slate-900) and buttons with white text (bg-emerald-500 text-white). A look
+  // moves those colours (a light one darkens status colours for AA; a pastel one lightens them), so
+  // such a pair keeps whichever ink of the look reads best on the colour it has now.
+  const all = colourClasses()
+  const inks = all.filter((c) => c.prop === 'text' && !c.cls.includes(':') && c.alpha === null
+    && (c.family === 'white' || c.family === 'black' || (c.family === 'slate' && c.shadeNo !== null && (c.shadeNo <= 200 || c.shadeNo >= 800))))
+  for (const b of all) {
+    const role = HUE_ROLE[b.family]
+    if (b.prop !== 'bg' || !role || b.shadeNo === null || b.shadeNo < 400 || (b.alpha !== null && b.alpha < 0.6) || b.cls.includes(':')) continue
+    if (p[role] === stock[role]) continue
+    const colour = statusShade(p[role], p.text, b.shadeNo)
+    const shown = b.alpha === null ? colour : mixHex(p.surface, colour, b.alpha)
+    const lightInk = light ? p.surface : p.text
+    const darkInk = light ? p.text : p.bg
+    const best = contrastRatio(lightInk, shown) >= contrastRatio(darkInk, shown) ? lightInk : darkInk
+    for (const t of inks) s.sel(`${ROOT} .${esc(b.cls)}.${esc(t.cls)}, ${ROOT} .${esc(b.cls)} .${esc(t.cls)}`, `color: ${best} !important`)
   }
 }
 
