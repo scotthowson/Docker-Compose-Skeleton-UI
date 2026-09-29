@@ -82,6 +82,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
   const [importing, setImporting] = useState(false)
   const [alertId, setAlertId] = useState<number | null>(null)
   const [busy, setBusy] = useState('')
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [menu, setMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   useOutside(menuRef, () => setMenu(false), menu)
@@ -127,10 +128,17 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
     setBusy('bulk')
     try {
       const ids = picked.map((p) => p.id).filter((x): x is number => typeof x === 'number')
-      const r = await crowdsecBulkUnban({ ids }, member)
-      addToast({ type: r.failed ? 'warning' : 'success', message: `Lifted ${r.deleted} ban${r.deleted === 1 ? '' : 's'}${r.failed ? `, ${r.failed} could not be lifted` : ''}`, duration: 6000 })
+      // the server lifts at most 200 per request
+      let deleted = 0, failed = 0
+      setProgress({ done: 0, total: ids.length })
+      for (let i = 0; i < ids.length; i += 200) {
+        const r = await crowdsecBulkUnban({ ids: ids.slice(i, i + 200) }, member)
+        deleted += r.deleted; failed += r.failed
+        setProgress({ done: Math.min(ids.length, i + 200), total: ids.length })
+      }
+      addToast({ type: failed ? 'warning' : 'success', message: `Lifted ${deleted} ban${deleted === 1 ? '' : 's'}${failed ? `, ${failed} could not be lifted` : ''}`, duration: 6000 })
       setSelected(new Set()); after()
-    } catch (e) { addToast({ type: 'error', message: errMsg(e, 'Could not lift the bans'), duration: 7000 }) } finally { setBusy('') }
+    } catch (e) { addToast({ type: 'error', message: errMsg(e, 'Could not lift the bans'), duration: 7000 }) } finally { setBusy(''); setProgress(null) }
   }
   const doExport = async (fmt: 'csv' | 'json') => {
     setMenu(false); setBusy('export')
@@ -195,7 +203,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
       {isAdmin && selected.size > 0 && (
         <div className="sticky top-2 z-20 rounded-xl glass border border-emerald-500/20 px-3 py-2 flex items-center gap-3 flex-wrap animate-scale-in" role="region" aria-label="Selected bans">
           <span className="text-sm text-slate-100 tabular-nums">{selected.size} selected</span>
-          <button type="button" onClick={unbanSelected} disabled={busy === 'bulk'} className={BTN_DANGER}>{busy === 'bulk' ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />} Lift {selected.size === 1 ? 'this ban' : `these ${selected.size} bans`}</button>
+          <button type="button" onClick={unbanSelected} disabled={busy === 'bulk'} className={BTN_DANGER}>{busy === 'bulk' ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />} {busy === 'bulk' && progress ? `Lifting ${progress.done} of ${progress.total}…` : <>Lift {selected.size === 1 ? 'this ban' : `these ${selected.size} bans`}</>}</button>
           <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-200 ml-auto">Clear selection</button>
         </div>
       )}
@@ -299,6 +307,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
           <div className="flex items-center justify-between gap-3 flex-wrap text-[11px] text-slate-500 px-1">
             <span className="tabular-nums">{filtered ? `${fmtNum(data.count)} of ${fmtNum(data.total)} bans match` : `${fmtNum(data.total)} active ban${data.total === 1 ? '' : 's'}`}{rows.length < data.count ? ` · showing ${rows.length}` : ''}</span>
             {rows.length < data.count && limit < 2000 && <button type="button" onClick={() => setLimit((l) => Math.min(2000, l + PAGE))} className="text-cyan-400 hover:text-cyan-300">Show more</button>}
+            {data.truncated && <span className="text-amber-400">CrowdSec has more bans than the page loads (2000): filter the list to find the rest.</span>}
             {data.community > 0 && <span title="CrowdSec also holds the community blocklist. Those addresses are enforced by the bouncer but are not listed here.">plus {fmtNum(data.community)} on the community blocklist</span>}
           </div>
         </>
