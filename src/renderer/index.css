@@ -785,6 +785,34 @@
   .light [class*="hover:text-slate-400"]:hover, .light .group:hover [class*="group-hover:text-slate-400"] { color: #334155 !important; }
   .light [class*="hover:text-slate-500"]:hover { color: #475569 !important; }
 
+  /* ── Dark surfaces the remaps above miss ──────────────────────────
+     A translucent slate panel (bg-slate-800/50 on some 60 elements, 900/90 on the dashboard's
+     edit chips, 900/85 under the phone's tab bar …) stayed dark on white: it is the white panel
+     the /60 · /80 · /97 variants above already are. A 700 shade (a range track, an idle icon tile)
+     is a light grey, a slate-950 well the light well of .bg-slate-950/60, a slate-950 veil (the
+     lock screen, the background-image overlay) the page colour. Form fields keep their own rule.
+     Attribute selectors, not classes: Tailwind's @apply (the scrollbar thumb applies
+     bg-slate-700/60) would otherwise copy these rules into the rules that apply the class. */
+  .light :is([class~="bg-slate-800/20"], [class~="bg-slate-800/50"], [class~="bg-slate-800/80"], [class~="bg-slate-800/90"],
+             [class~="bg-slate-800/95"], [class~="bg-slate-900/40"], [class~="bg-slate-900/50"], [class~="bg-slate-900/85"],
+             [class~="bg-slate-900/90"]):not(input, select, textarea) {
+    background-color: rgba(255,255,255,0.80) !important;
+  }
+  .light :is([class~="bg-slate-700"], [class~="bg-slate-700/30"], [class~="bg-slate-700/40"], [class~="bg-slate-700/50"],
+             [class~="bg-slate-700/60"], [class~="bg-slate-700/80"]):not(select, textarea) {
+    background-color: #e2e8f0 !important;
+  }
+  .light :is([class~="bg-slate-950/30"], [class~="bg-slate-950/40"], [class~="bg-slate-950/50"], [class~="bg-slate-950/70"]) {
+    background-color: #f1f5f9 !important;
+  }
+  .light :is([class~="bg-slate-950/85"], [class~="bg-slate-950/95"]) {
+    background-color: rgba(248,250,252,0.92) !important;
+  }
+  .light :is([class~="hover:bg-slate-800"], [class~="hover:bg-slate-800/50"], [class~="hover:bg-slate-800/60"],
+             [class~="hover:bg-slate-800/70"], [class~="hover:bg-slate-900/80"], [class~="hover:bg-slate-700/90"]):hover {
+    background-color: rgba(0,0,0,0.05) !important;
+  }
+
   /* ══════════════════════════════════════════════════════════════
      END LIGHT MODE
      ══════════════════════════════════════════════════════════════ */
