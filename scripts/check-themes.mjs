@@ -218,6 +218,21 @@ const stock = E.buildThemeCss(T.BUILT_IN_BY_NAME['dcs-emerald'], 'dark')
 ok(!/\{[^}]*!important/.test(stock.replace(/html\[data-theme\] \{[^}]*\}/g, '')), 'DCS Emerald dark overrides no class (renders exactly as shipped)')
 // (only Mantine's gray scale, which is its light scheme's, may come from DCS Emerald's light look)
 ok(!/--mantine-color-(?!gray-)/.test(stock), 'DCS Emerald dark leaves Mantine\'s dark scheme exactly as shipped')
+// the accent as small text (the page you are on in the sidebar and the tab bar, on its pill) reads at 4.5:1 in every look
+const inked = []
+for (const t of T.BUILT_IN_THEMES) {
+  for (const mode of T.THEME_MODES) {
+    const look = T.themeLook(t, mode)
+    const ink = E.accentInk(look)
+    const pill = T.mixHex(look.surface, look.accent, 0.12)
+    const worst = Math.min(...[look.surface, look.bg, pill].map((b) => T.contrastRatio(ink, b)))
+    ok(worst >= 4.5, `${t.name} ${mode}: the accent as text reads (${worst.toFixed(2)}:1)`)
+    if (ink !== look.accent) inked.push(`${t.title} ${mode} ${look.accent}→${ink}`)
+  }
+}
+console.log(`  the accent as text is a deeper (or, on a dark look, lighter) shade of its hue in: ${inked.join(', ') || 'none'}`)
+ok(!E.buildThemeCss(T.BUILT_IN_BY_NAME['dcs-emerald'], 'dark').includes('.accent-text'), 'DCS Emerald dark keeps its accent text as shipped')
+
 // every Mantine colour name the pages pass (lib/mantine.tsx) follows a look that changes everything; violet stays decorative
 for (const mode of T.THEME_MODES) {
   const css = E.buildThemeCss(T.BUILT_IN_BY_NAME['gruvbox-dark'], mode)

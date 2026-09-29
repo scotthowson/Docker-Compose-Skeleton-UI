@@ -27,6 +27,7 @@ import {
   hexToTriplet,
   hexToOklch,
   oklchToHex,
+  luminance,
   mixHex,
   stockPalette,
   themeLook,
@@ -498,17 +499,39 @@ function emitStatus(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeM
   }
 }
 
+/**
+ * The accent as small text — the page you are on in the sidebar and the tab bar, on its accent-bg-subtle
+ * pill: the accent itself where it reads at 4.5:1 on the surface, the page and the pill, else the same hue
+ * made darker (a light look) or lighter (a dark one) until it does. A look's accent only has to reach 3:1
+ * as a colour; fills, rings and gradients keep it.
+ */
+export function accentInk(p: ThemePalette): string {
+  const against = [p.surface, p.bg, mixHex(p.surface, p.accent, 0.12)]
+  const reads = (c: string) => against.every((bg) => contrastRatio(c, bg) >= 4.5)
+  if (reads(p.accent)) return p.accent
+  const { l, c, h } = hexToOklch(p.accent)
+  const step = luminance(p.text) < luminance(p.surface) ? -0.005 : 0.005
+  for (let li = l + step; li > 0 && li < 1; li += step) {
+    const next = oklchToHex({ l: li, c, h })
+    if (reads(next)) return next
+  }
+  return p.text
+}
+
 /** the brand: --color-accent, the emerald→cyan gradients, selection, the logo's glow */
 function emitBrand(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeMode): void {
   const a = p.accent
   const b = p.accentSecondary
+  // a personal accent (Settings → Profile, anything but the default emerald) beats the theme's
+  const themeAccent = [`${ROOT}:not([data-accent])`, `${ROOT}[data-accent="emerald"]`]
+  const ink = accentInk(p)
+  if (ink !== a) s.rule(themeAccent.map((r) => `${r} .accent-text`).join(', '), `color: ${ink} !important`)
   const changed = a !== stock.accent || b !== stock.accentSecondary
   if (!changed) return
   const vars: string[] = []
   if (a !== stock.accent) vars.push(`--color-accent: ${hexToTriplet(a)}`)
   if (b !== stock.accentSecondary) vars.push(`--color-accent-secondary: ${hexToTriplet(b)}`)
-  // a personal accent (Settings → Profile, anything but the default emerald) beats the theme's
-  s.rule(`${ROOT}:not([data-accent]), ${ROOT}[data-accent="emerald"]`, vars.join('; '))
+  s.rule(themeAccent.join(', '), vars.join('; '))
   // the emerald → cyan pairs are the brand gradient (avatar, logo box, primary CTA), not status colours
   const pairs: Array<[string, string, number]> = [
     ['from-emerald-500', 'to-cyan-500', 1],
