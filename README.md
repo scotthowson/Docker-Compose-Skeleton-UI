@@ -1,9 +1,19 @@
 <p align="center">
+  <a href="https://github.com/scotthowson/dcs-orchestrator-ui/releases"><img src="https://img.shields.io/github/v/release/scotthowson/dcs-orchestrator-ui?include_prereleases&sort=semver&style=flat-square&label=release&color=34d399" alt="Latest release" /></a>
+  <a href="https://github.com/scotthowson/dcs-orchestrator-ui/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/scotthowson/dcs-orchestrator-ui/ci.yml?style=flat-square&label=CI&logo=githubactions&logoColor=white" alt="CI status" /></a>
+  <a href="https://github.com/scotthowson/dcs-orchestrator-ui/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/scotthowson/dcs-orchestrator-ui/build.yml?style=flat-square&label=apps&logo=githubactions&logoColor=white" alt="Desktop and Android build status" /></a>
+  <a href="https://github.com/scotthowson/dcs-orchestrator-ui/actions/workflows/docker-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/scotthowson/dcs-orchestrator-ui/docker-publish.yml?style=flat-square&label=image&logo=githubactions&logoColor=white" alt="Docker image build status" /></a>
+  <a href="https://github.com/users/scotthowson/packages/container/package/docker-compose-skeleton-ui"><img src="https://img.shields.io/badge/ghcr.io-docker--compose--skeleton--ui-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker image on GHCR" /></a>
+  <a href="https://github.com/scotthowson/dcs-orchestrator-ui/commits/v2.0.0"><img src="https://img.shields.io/github/last-commit/scotthowson/dcs-orchestrator-ui/v2.0.0?style=flat-square&color=64748b" alt="Last commit" /></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 33" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 18" />
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS 3" />
   <img src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite 6" />
+  <img src="https://img.shields.io/badge/Mantine-8-339AF0?style=flat-square&logo=mantine&logoColor=white" alt="Mantine 8" />
   <img src="https://img.shields.io/badge/Android-APK-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android APK" />
 </p>
 
