@@ -23,6 +23,9 @@ import time
 
 NOW = time.time()
 PROFILE = os.environ.get('DCS_FAKE_DOCKER_PROFILE', 'hub')
+# a follower (logs -f, events) ends with the process that reads it: orphans go to a subreaper (systemd --user),
+# not always to PID 1, so a parent that is not the one we started with means the reader is gone
+PARENT = os.getppid()
 HOST = f'lab-{PROFILE}'
 VERSION = '29.1.3'
 COMPOSE_VERSION = 'v2.40.3'
@@ -884,7 +887,7 @@ def cmd_logs(argv):
         try:
             for _ in range(720):
                 time.sleep(5)
-                if os.getppid() == 1:
+                if os.getppid() != PARENT:
                     break
                 print(f'{rfc3339(time.time())} [info] 200 GET /api/health 1ms' if stamps else '[info] 200 GET /api/health 1ms', flush=True)
         except (BrokenPipeError, KeyboardInterrupt):
@@ -908,7 +911,7 @@ def cmd_events(argv):
     try:
         for _ in range(720):
             time.sleep(5)
-            if os.getppid() == 1:
+            if os.getppid() != PARENT:
                 break
     except KeyboardInterrupt:
         pass

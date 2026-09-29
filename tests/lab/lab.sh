@@ -160,14 +160,16 @@ stop_pidfile() {
 
 stop() {
     local d
-    for d in hub member fresh; do
-        [[ -x "$LAB/$d/.scripts/api-server.sh" ]] && (cd "$LAB/$d" && .scripts/api-server.sh --stop > /dev/null 2>&1 || true)
-    done
+    # the process groups first, while their leaders still run: `api-server.sh --stop` ends the leader, and a
+    # group whose leader is gone is not stopped by stop_pidfile (its docker followers would outlive the lab)
     stop_pidfile "$LAB/ui.pid"
     stop_pidfile "$LAB/hub.pid"
     stop_pidfile "$LAB/member.pid"
     stop_pidfile "$LAB/fresh.pid"
     stop_pidfile "$LAB/pve.pid"
+    for d in hub member fresh; do
+        [[ -x "$LAB/$d/.scripts/api-server.sh" ]] && (cd "$LAB/$d" && .scripts/api-server.sh --stop > /dev/null 2>&1 || true)
+    done
     log "stopped"
 }
 
