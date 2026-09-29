@@ -216,6 +216,15 @@ for (const t of T.BUILT_IN_THEMES) {
 }
 const stock = E.buildThemeCss(T.BUILT_IN_BY_NAME['dcs-emerald'], 'dark')
 ok(!/\{[^}]*!important/.test(stock.replace(/html\[data-theme\] \{[^}]*\}/g, '')), 'DCS Emerald dark overrides no class (renders exactly as shipped)')
+// (only Mantine's gray scale, which is its light scheme's, may come from DCS Emerald's light look)
+ok(!/--mantine-color-(?!gray-)/.test(stock), 'DCS Emerald dark leaves Mantine\'s dark scheme exactly as shipped')
+// every Mantine colour name the pages pass (lib/mantine.tsx) follows a look that changes everything; violet stays decorative
+for (const mode of T.THEME_MODES) {
+  const css = E.buildThemeCss(T.BUILT_IN_BY_NAME['gruvbox-dark'], mode)
+  const missing = ['emerald', 'cyan', 'amber', 'orange', 'rose', 'slate'].flatMap((n) =>
+    ['light', 'light-hover', 'light-color', 'outline', '6'].map((v) => `--mantine-color-${n}-${v}`).concat(`--dcs-tint-${n}-border`)).filter((v) => !css.includes(`${v}:`))
+  ok(missing.length === 0, `gruvbox-dark ${mode}: Mantine's emerald, cyan, amber, orange, rose and slate follow the look${missing.length ? ` — not: ${missing.slice(0, 6).join(' ')}` : ''}`)
+}
 
 // every colour class the pages use is restyled by a look that changes everything (no leftover emerald or slate)
 const current = fs.readFileSync(INVENTORY, 'utf8')

@@ -581,20 +581,40 @@ function scaleOf(hex: string, at: number): string[] {
 function emitMantine(s: Sheet, theme: Theme, mode: ThemeMode, p: ThemePalette, stock: ThemePalette): void {
   const light = mode === 'light'
   const decls: string[] = []
-  const names = { success: 'emerald', info: 'cyan', warning: 'amber', danger: 'rose' } as const
+  // the Mantine colours named like the Tailwind hues, mapped the way the classes are (HUE_ROLE: orange is the warning colour)
+  const names = { success: ['emerald'], info: ['cyan'], warning: ['amber', 'orange'], danger: ['rose'] } as const
   for (const key of ['success', 'info', 'warning', 'danger'] as const) {
     const c = p[key]
     if (c === stock[key]) continue
-    const name = names[key]
-    scaleOf(c, light ? 6 : 4).forEach((v, i) => decls.push(`--mantine-color-${name}-${i}: ${v}`))
     const s500 = shade(c, 0.15)
+    for (const name of names[key]) {
+      scaleOf(c, light ? 6 : 4).forEach((v, i) => decls.push(`--mantine-color-${name}-${i}: ${v}`))
+      decls.push(
+        `--mantine-color-${name}-light: ${light ? rgba(c, 0.08) : rgba(s500, 0.12)}`,
+        `--mantine-color-${name}-light-hover: ${light ? rgba(c, 0.14) : rgba(s500, 0.18)}`,
+        `--mantine-color-${name}-light-color: ${light ? c : mixHex(c, p.text, 0.3)}`,
+        `--mantine-color-${name}-outline: ${c}`,
+        `--mantine-color-${name}-outline-hover: ${rgba(c, 0.06)}`,
+        `--dcs-tint-${name}-border: ${light ? rgba(c, 0.25) : rgba(s500, 0.22)}`,
+      )
+    }
+  }
+  // color="slate" (neutral chips and filters) takes the look's neutrals, as the slate classes do; each value sits where
+  // the stock slate step sits in DCS Emerald (tint of slate-500 / 600, text of slate-300 / 700, outline = muted text)
+  if (!sameNeutrals(p, stock)) {
+    const { bg, surface, surfaceRaised: raised, border, text, textMuted: muted } = p
+    const tint = light ? muted : rampOf(p, mode).n500
+    const scale = light
+      ? [surface, bg, raised, mixHex(raised, border, 0.5), border, mixHex(border, muted, 0.5), muted, mixHex(muted, text, 0.5), mixHex(muted, text, 0.8), text]
+      : [text, mixHex(text, muted, 0.5), muted, mixHex(muted, border, 0.5), border, mixHex(border, raised, 0.5), raised, surface, mixHex(surface, bg, 0.5), bg]
+    scale.forEach((v, i) => decls.push(`--mantine-color-slate-${i}: ${v}`))
     decls.push(
-      `--mantine-color-${name}-light: ${light ? rgba(c, 0.08) : rgba(s500, 0.12)}`,
-      `--mantine-color-${name}-light-hover: ${light ? rgba(c, 0.14) : rgba(s500, 0.18)}`,
-      `--mantine-color-${name}-light-color: ${light ? c : mixHex(c, p.text, 0.3)}`,
-      `--mantine-color-${name}-outline: ${c}`,
-      `--mantine-color-${name}-outline-hover: ${rgba(c, 0.06)}`,
-      `--dcs-tint-${name}-border: ${light ? rgba(c, 0.25) : rgba(s500, 0.22)}`,
+      `--mantine-color-slate-light: ${rgba(tint, light ? 0.08 : 0.1)}`,
+      `--mantine-color-slate-light-hover: ${rgba(tint, light ? 0.14 : 0.18)}`,
+      `--mantine-color-slate-light-color: ${light ? mixHex(text, muted, 0.6) : rampOf(p, mode).t300}`,
+      `--mantine-color-slate-outline: ${muted}`,
+      `--mantine-color-slate-outline-hover: ${rgba(muted, 0.06)}`,
+      `--dcs-tint-slate-border: ${rgba(tint, light ? 0.25 : 0.22)}`,
     )
   }
   const { dark: d, light: l } = themeLooks(theme)
