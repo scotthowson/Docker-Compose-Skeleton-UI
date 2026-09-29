@@ -105,8 +105,10 @@
     color: #334155 !important;
   }
 
+  /* the dark theme's order, mirrored: 400 (secondary text) stays darker than 500, 600 and 700
+     (the dimmest notes, separators) lighter — 400 was #94a3b8 here, fainter than 500 and 600 */
   .light .text-slate-400 {
-    color: #94a3b8 !important;
+    color: #475569 !important;
   }
 
   .light .text-slate-500 {
@@ -114,7 +116,11 @@
   }
 
   .light .text-slate-600 {
-    color: #475569 !important;
+    color: #64748b !important;
+  }
+
+  .light .text-slate-700 {
+    color: #cbd5e1 !important;
   }
 
   /* Don't override colored text (emerald, cyan, rose, amber, violet) */
@@ -717,6 +723,67 @@
   .light .focus\:border-emerald-500\/50:focus {
     border-color: rgba(5,150,105,0.5) !important;
   }
+
+  /* ── Text the remaps above miss ──────────────────────────────────
+     Pale shades (100 and 200: text on a tint in the dark theme) turn the family's 700, the
+     translucent 300–500 (text-amber-400/80 …) its 600, like .text-amber-300 above; a hover or
+     group-hover colour turns darker, never paler, so text no longer fades out under the pointer. */
+  .light :is([class^="text-emerald-50"], [class*=" text-emerald-50"], [class^="text-emerald-100"], [class*=" text-emerald-100"], [class^="text-emerald-200"], [class*=" text-emerald-200"]) { color: #047857 !important; }
+  .light :is([class^="text-emerald-300/"], [class*=" text-emerald-300/"], [class^="text-emerald-400/"], [class*=" text-emerald-400/"], [class^="text-emerald-500/"], [class*=" text-emerald-500/"], [class^="text-emerald-500"], [class*=" text-emerald-500"]) { color: #059669 !important; }
+  .light :is([class*="hover:text-emerald-"]):hover, .light .group:hover :is([class*="group-hover:text-emerald-"]) { color: #047857 !important; }
+  .light :is([class^="text-cyan-50"], [class*=" text-cyan-50"], [class^="text-cyan-100"], [class*=" text-cyan-100"], [class^="text-cyan-200"], [class*=" text-cyan-200"]) { color: #0e7490 !important; }
+  .light :is([class^="text-cyan-300/"], [class*=" text-cyan-300/"], [class^="text-cyan-400/"], [class*=" text-cyan-400/"], [class^="text-cyan-500/"], [class*=" text-cyan-500/"], [class^="text-cyan-500"], [class*=" text-cyan-500"]) { color: #0891b2 !important; }
+  .light :is([class*="hover:text-cyan-"]):hover, .light .group:hover :is([class*="group-hover:text-cyan-"]) { color: #0e7490 !important; }
+  .light :is([class^="text-amber-50"], [class*=" text-amber-50"], [class^="text-amber-100"], [class*=" text-amber-100"], [class^="text-amber-200"], [class*=" text-amber-200"]) { color: #b45309 !important; }
+  .light :is([class^="text-amber-300/"], [class*=" text-amber-300/"], [class^="text-amber-400/"], [class*=" text-amber-400/"], [class^="text-amber-500/"], [class*=" text-amber-500/"], [class^="text-amber-500"], [class*=" text-amber-500"]) { color: #d97706 !important; }
+  .light :is([class*="hover:text-amber-"]):hover, .light .group:hover :is([class*="group-hover:text-amber-"]) { color: #b45309 !important; }
+  .light :is([class^="text-rose-50"], [class*=" text-rose-50"], [class^="text-rose-100"], [class*=" text-rose-100"], [class^="text-rose-200"], [class*=" text-rose-200"]) { color: #be123c !important; }
+  .light :is([class^="text-rose-300/"], [class*=" text-rose-300/"], [class^="text-rose-400/"], [class*=" text-rose-400/"], [class^="text-rose-500/"], [class*=" text-rose-500/"], [class^="text-rose-500"], [class*=" text-rose-500"]) { color: #e11d48 !important; }
+  .light :is([class*="hover:text-rose-"]):hover, .light .group:hover :is([class*="group-hover:text-rose-"]) { color: #be123c !important; }
+  .light :is([class^="text-violet-50"], [class*=" text-violet-50"], [class^="text-violet-100"], [class*=" text-violet-100"], [class^="text-violet-200"], [class*=" text-violet-200"]) { color: #6d28d9 !important; }
+  .light :is([class^="text-violet-300/"], [class*=" text-violet-300/"], [class^="text-violet-400/"], [class*=" text-violet-400/"], [class^="text-violet-500/"], [class*=" text-violet-500/"], [class^="text-violet-500"], [class*=" text-violet-500"]) { color: #7c3aed !important; }
+  .light :is([class*="hover:text-violet-"]):hover, .light .group:hover :is([class*="group-hover:text-violet-"]) { color: #6d28d9 !important; }
+  .light :is([class^="text-indigo-50"], [class*=" text-indigo-50"], [class^="text-indigo-100"], [class*=" text-indigo-100"], [class^="text-indigo-200"], [class*=" text-indigo-200"]) { color: #4338ca !important; }
+  .light :is([class^="text-indigo-300/"], [class*=" text-indigo-300/"], [class^="text-indigo-400/"], [class*=" text-indigo-400/"], [class^="text-indigo-500/"], [class*=" text-indigo-500/"], [class^="text-indigo-300"], [class*=" text-indigo-300"], [class^="text-indigo-400"], [class*=" text-indigo-400"], [class^="text-indigo-500"], [class*=" text-indigo-500"]) { color: #4f46e5 !important; }
+  .light :is([class*="hover:text-indigo-"]):hover, .light .group:hover :is([class*="group-hover:text-indigo-"]) { color: #4338ca !important; }
+  .light :is([class^="text-sky-50"], [class*=" text-sky-50"], [class^="text-sky-100"], [class*=" text-sky-100"], [class^="text-sky-200"], [class*=" text-sky-200"]) { color: #0369a1 !important; }
+  .light :is([class^="text-sky-300/"], [class*=" text-sky-300/"], [class^="text-sky-400/"], [class*=" text-sky-400/"], [class^="text-sky-500/"], [class*=" text-sky-500/"], [class^="text-sky-300"], [class*=" text-sky-300"], [class^="text-sky-400"], [class*=" text-sky-400"], [class^="text-sky-500"], [class*=" text-sky-500"]) { color: #0284c7 !important; }
+  .light :is([class*="hover:text-sky-"]):hover, .light .group:hover :is([class*="group-hover:text-sky-"]) { color: #0369a1 !important; }
+  .light :is([class^="text-orange-50"], [class*=" text-orange-50"], [class^="text-orange-100"], [class*=" text-orange-100"], [class^="text-orange-200"], [class*=" text-orange-200"]) { color: #c2410c !important; }
+  .light :is([class^="text-orange-300/"], [class*=" text-orange-300/"], [class^="text-orange-400/"], [class*=" text-orange-400/"], [class^="text-orange-500/"], [class*=" text-orange-500/"], [class^="text-orange-300"], [class*=" text-orange-300"], [class^="text-orange-400"], [class*=" text-orange-400"], [class^="text-orange-500"], [class*=" text-orange-500"]) { color: #ea580c !important; }
+  .light :is([class*="hover:text-orange-"]):hover, .light .group:hover :is([class*="group-hover:text-orange-"]) { color: #c2410c !important; }
+  .light :is([class^="text-fuchsia-50"], [class*=" text-fuchsia-50"], [class^="text-fuchsia-100"], [class*=" text-fuchsia-100"], [class^="text-fuchsia-200"], [class*=" text-fuchsia-200"]) { color: #a21caf !important; }
+  .light :is([class^="text-fuchsia-300/"], [class*=" text-fuchsia-300/"], [class^="text-fuchsia-400/"], [class*=" text-fuchsia-400/"], [class^="text-fuchsia-500/"], [class*=" text-fuchsia-500/"], [class^="text-fuchsia-300"], [class*=" text-fuchsia-300"], [class^="text-fuchsia-400"], [class*=" text-fuchsia-400"], [class^="text-fuchsia-500"], [class*=" text-fuchsia-500"]) { color: #c026d3 !important; }
+  .light :is([class*="hover:text-fuchsia-"]):hover, .light .group:hover :is([class*="group-hover:text-fuchsia-"]) { color: #a21caf !important; }
+  .light :is([class^="text-pink-50"], [class*=" text-pink-50"], [class^="text-pink-100"], [class*=" text-pink-100"], [class^="text-pink-200"], [class*=" text-pink-200"]) { color: #be185d !important; }
+  .light :is([class^="text-pink-300/"], [class*=" text-pink-300/"], [class^="text-pink-400/"], [class*=" text-pink-400/"], [class^="text-pink-500/"], [class*=" text-pink-500/"], [class^="text-pink-300"], [class*=" text-pink-300"], [class^="text-pink-400"], [class*=" text-pink-400"], [class^="text-pink-500"], [class*=" text-pink-500"]) { color: #db2777 !important; }
+  .light :is([class*="hover:text-pink-"]):hover, .light .group:hover :is([class*="group-hover:text-pink-"]) { color: #be185d !important; }
+  .light :is([class^="text-purple-50"], [class*=" text-purple-50"], [class^="text-purple-100"], [class*=" text-purple-100"], [class^="text-purple-200"], [class*=" text-purple-200"]) { color: #7e22ce !important; }
+  .light :is([class^="text-purple-300/"], [class*=" text-purple-300/"], [class^="text-purple-400/"], [class*=" text-purple-400/"], [class^="text-purple-500/"], [class*=" text-purple-500/"], [class^="text-purple-300"], [class*=" text-purple-300"], [class^="text-purple-400"], [class*=" text-purple-400"], [class^="text-purple-500"], [class*=" text-purple-500"]) { color: #9333ea !important; }
+  .light :is([class*="hover:text-purple-"]):hover, .light .group:hover :is([class*="group-hover:text-purple-"]) { color: #7e22ce !important; }
+  .light :is([class^="text-teal-50"], [class*=" text-teal-50"], [class^="text-teal-100"], [class*=" text-teal-100"], [class^="text-teal-200"], [class*=" text-teal-200"]) { color: #0f766e !important; }
+  .light :is([class^="text-teal-300/"], [class*=" text-teal-300/"], [class^="text-teal-400/"], [class*=" text-teal-400/"], [class^="text-teal-500/"], [class*=" text-teal-500/"], [class^="text-teal-300"], [class*=" text-teal-300"], [class^="text-teal-400"], [class*=" text-teal-400"], [class^="text-teal-500"], [class*=" text-teal-500"]) { color: #0d9488 !important; }
+  .light :is([class*="hover:text-teal-"]):hover, .light .group:hover :is([class*="group-hover:text-teal-"]) { color: #0f766e !important; }
+  .light :is([class^="text-lime-50"], [class*=" text-lime-50"], [class^="text-lime-100"], [class*=" text-lime-100"], [class^="text-lime-200"], [class*=" text-lime-200"]) { color: #4d7c0f !important; }
+  .light :is([class^="text-lime-300/"], [class*=" text-lime-300/"], [class^="text-lime-400/"], [class*=" text-lime-400/"], [class^="text-lime-500/"], [class*=" text-lime-500/"], [class^="text-lime-300"], [class*=" text-lime-300"], [class^="text-lime-400"], [class*=" text-lime-400"], [class^="text-lime-500"], [class*=" text-lime-500"]) { color: #65a30d !important; }
+  .light :is([class*="hover:text-lime-"]):hover, .light .group:hover :is([class*="group-hover:text-lime-"]) { color: #4d7c0f !important; }
+  .light :is([class^="text-blue-50"], [class*=" text-blue-50"], [class^="text-blue-100"], [class*=" text-blue-100"], [class^="text-blue-200"], [class*=" text-blue-200"]) { color: #1d4ed8 !important; }
+  .light :is([class^="text-blue-300/"], [class*=" text-blue-300/"], [class^="text-blue-400/"], [class*=" text-blue-400/"], [class^="text-blue-500/"], [class*=" text-blue-500/"], [class^="text-blue-500"], [class*=" text-blue-500"]) { color: #2563eb !important; }
+  .light :is([class*="hover:text-blue-"]):hover, .light .group:hover :is([class*="group-hover:text-blue-"]) { color: #1d4ed8 !important; }
+  .light :is([class^="text-red-50"], [class*=" text-red-50"], [class^="text-red-100"], [class*=" text-red-100"], [class^="text-red-200"], [class*=" text-red-200"]) { color: #b91c1c !important; }
+  .light :is([class^="text-red-300/"], [class*=" text-red-300/"], [class^="text-red-400/"], [class*=" text-red-400/"], [class^="text-red-500/"], [class*=" text-red-500/"], [class^="text-red-300"], [class*=" text-red-300"], [class^="text-red-400"], [class*=" text-red-400"], [class^="text-red-500"], [class*=" text-red-500"]) { color: #dc2626 !important; }
+  .light :is([class*="hover:text-red-"]):hover, .light .group:hover :is([class*="group-hover:text-red-"]) { color: #b91c1c !important; }
+  .light :is([class^="text-green-50"], [class*=" text-green-50"], [class^="text-green-100"], [class*=" text-green-100"], [class^="text-green-200"], [class*=" text-green-200"]) { color: #15803d !important; }
+  .light :is([class^="text-green-300/"], [class*=" text-green-300/"], [class^="text-green-400/"], [class*=" text-green-400/"], [class^="text-green-500/"], [class*=" text-green-500/"], [class^="text-green-300"], [class*=" text-green-300"], [class^="text-green-400"], [class*=" text-green-400"], [class^="text-green-500"], [class*=" text-green-500"]) { color: #16a34a !important; }
+  .light :is([class*="hover:text-green-"]):hover, .light .group:hover :is([class*="group-hover:text-green-"]) { color: #15803d !important; }
+  .light :is([class^="text-yellow-50"], [class*=" text-yellow-50"], [class^="text-yellow-100"], [class*=" text-yellow-100"], [class^="text-yellow-200"], [class*=" text-yellow-200"]) { color: #a16207 !important; }
+  .light :is([class^="text-yellow-300/"], [class*=" text-yellow-300/"], [class^="text-yellow-400/"], [class*=" text-yellow-400/"], [class^="text-yellow-500/"], [class*=" text-yellow-500/"], [class^="text-yellow-300"], [class*=" text-yellow-300"], [class^="text-yellow-400"], [class*=" text-yellow-400"], [class^="text-yellow-500"], [class*=" text-yellow-500"]) { color: #ca8a04 !important; }
+  .light :is([class*="hover:text-yellow-"]):hover, .light .group:hover :is([class*="group-hover:text-yellow-"]) { color: #a16207 !important; }
+  .light :is([class*="hover:text-slate-100"], [class*="hover:text-slate-200"], [class*="hover:text-white"]):hover,
+  .light .group:hover :is([class*="group-hover:text-slate-100"], [class*="group-hover:text-slate-200"], [class*="group-hover:text-white"]) { color: #0f172a !important; }
+  .light [class*="hover:text-slate-300"]:hover, .light .group:hover [class*="group-hover:text-slate-300"] { color: #1e293b !important; }
+  .light [class*="hover:text-slate-400"]:hover, .light .group:hover [class*="group-hover:text-slate-400"] { color: #334155 !important; }
+  .light [class*="hover:text-slate-500"]:hover { color: #475569 !important; }
 
   /* ══════════════════════════════════════════════════════════════
      END LIGHT MODE
