@@ -35,6 +35,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { CronEntry, CrontabResponse } from '../../shared/types'
 import { LoadingState, EmptyState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -640,7 +641,7 @@ export default function CronJobs() {
 
       {/* Raw Editor Overlay */}
       {showRawEditor && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+        <ModalOverlay onClose={() => setShowRawEditor(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
@@ -698,7 +699,7 @@ export default function CronJobs() {
               </div>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body
       )}
     </div>

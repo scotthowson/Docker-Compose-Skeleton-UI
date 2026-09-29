@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { createStack, saveStackCompose, saveStackEnv } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
+import { useModalA11y } from '../../hooks/useModalA11y'
 
 interface Props {
   onClose: () => void
@@ -72,17 +73,8 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
     setTimeout(() => nameInputRef.current?.focus(), 100)
   }, [])
 
-  // Escape to close
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  // Escape closes, focus stays inside and returns to what opened it
+  useModalA11y(overlayRef, onClose, { initialFocus: nameInputRef })
 
   // Backdrop click to close
   const handleOverlayClick = useCallback(

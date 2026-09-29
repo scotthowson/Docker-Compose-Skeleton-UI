@@ -23,7 +23,8 @@ import Breadcrumbs from '../common/Breadcrumbs'
 import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
-import { pageTitles } from '../../constants/pageTitles'
+import { pageLabel } from '../../constants/pageTitles'
+import ModalOverlay from '../common/ModalOverlay'
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {
   connected: {
@@ -114,7 +115,7 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 glass rounded-2xl border border-white/10 shadow-2xl shadow-black/40 animate-scale-in max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
@@ -173,7 +174,7 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -386,7 +387,7 @@ export function Header() {
     return () => window.removeEventListener('profile-updated', handler)
   }, [])
 
-  const title = pageTitles[currentPage] ?? 'Dashboard'
+  const title = pageLabel(currentPage)
   // what the pill says is what is going on: an API that stalls, one that is being reconnected, one that is gone
   const link = useApiLink()
   const { color, ringColor, pulse, label } = link.state === 'trouble'
@@ -423,15 +424,13 @@ export function Header() {
         shrink-0
       "
     >
-      {/* Left: Page title + breadcrumbs */}
-      <div className="no-drag flex items-center gap-3">
-        <div className="flex flex-col">
-          <h1 className="text-base md:text-sm font-semibold text-slate-200 select-none tracking-wide">
-            {title}
-          </h1>
-          <div className="hidden md:block">
-            <Breadcrumbs />
-          </div>
+      {/* Left: a phone names the page here; from md up the page's own heading does, and this is the breadcrumb (where you are) */}
+      <div className="no-drag flex items-center gap-3 min-w-0">
+        <p className="md:hidden text-base font-semibold text-slate-200 select-none tracking-wide truncate">
+          {title}
+        </p>
+        <div className="hidden md:block">
+          <Breadcrumbs />
         </div>
         {hostname && (
           <span className="hidden md:contents">

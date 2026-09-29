@@ -12,6 +12,7 @@ import { Palette, Loader2, X, AlertTriangle, ExternalLink, Trash2 } from 'lucide
 import { setContainerTheme } from '../../api/fleetScoped'
 import type { RowMember } from '../../../shared/fleetScoped'
 import type { ContainerThemeState, ContainerThemeResponse } from '../../../shared/types'
+import ModalOverlay from '../common/ModalOverlay'
 
 interface Props {
   containerName: string
@@ -75,7 +76,7 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
   const appName = label(state.app)
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { if (!busy) onClose() }}>
+    <ModalOverlay onClose={() => { if (!busy) onClose() }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { if (!busy) onClose() }}>
       <div className="relative w-full max-w-lg glass p-5 sm:p-6 animate-scale-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/15 shrink-0">
@@ -188,7 +189,7 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

@@ -5,6 +5,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Keyboard } from 'lucide-react'
+import ModalOverlay from './ModalOverlay'
 
 interface Props {
   open: boolean
@@ -55,7 +56,7 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
   if (!open) return null
 
   return createPortal(
-    <div
+    <ModalOverlay onClose={onClose}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
@@ -120,7 +121,7 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
           </p>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

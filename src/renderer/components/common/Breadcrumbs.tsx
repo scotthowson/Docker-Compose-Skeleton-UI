@@ -1,6 +1,6 @@
 import { ChevronRight, Home } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { pageTitles } from '../../constants/pageTitles'
+import { pageLabel } from '../../constants/pageTitles'
 import type { PageId } from '../../../shared/types'
 
 export interface BreadcrumbSegment {
@@ -16,12 +16,13 @@ export default function Breadcrumbs({ segments }: BreadcrumbsProps) {
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
+  // the first crumb is the dashboard under its own name (with the house icon); the page you are on is the last
   const crumbs: BreadcrumbSegment[] = [
-    { label: 'Home', page: 'dashboard' },
+    { label: pageLabel('dashboard'), page: 'dashboard' },
   ]
 
   if (currentPage !== 'dashboard') {
-    crumbs.push({ label: pageTitles[currentPage] || currentPage })
+    crumbs.push({ label: pageLabel(currentPage) })
   }
 
   if (segments) {
@@ -29,14 +30,14 @@ export default function Breadcrumbs({ segments }: BreadcrumbsProps) {
   }
 
   return (
-    <nav className="flex items-center gap-1 text-xs text-slate-500 animate-fade-in">
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-[13px] text-slate-500 animate-fade-in">
       {crumbs.map((crumb, i) => {
         const isLast = i === crumbs.length - 1
         const isClickable = !!crumb.page && !isLast
 
         return (
           <span key={`${crumb.label}-${i}`} className="flex items-center gap-1">
-            {i === 0 && <Home size={11} className="text-slate-500 mr-0.5" />}
+            {i === 0 && <Home size={12} className="text-slate-500 mr-0.5" />}
             {isClickable ? (
               <button
                 onClick={() => setCurrentPage(crumb.page!)}
@@ -45,11 +46,11 @@ export default function Breadcrumbs({ segments }: BreadcrumbsProps) {
                 {crumb.label}
               </button>
             ) : (
-              <span className={isLast ? 'text-slate-300 font-medium' : ''}>
+              <span className={isLast ? 'text-slate-300 font-medium' : ''} aria-current={isLast ? 'page' : undefined}>
                 {crumb.label}
               </span>
             )}
-            {!isLast && <ChevronRight size={10} className="text-slate-700" />}
+            {!isLast && <ChevronRight size={11} className="text-slate-700" />}
           </span>
         )
       })}

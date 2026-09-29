@@ -39,6 +39,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -713,7 +714,7 @@ export default function Trends() {
       {/* Alert Threshold Configuration Modal                                  */}
       {/* ------------------------------------------------------------------- */}
       {showAlertConfig && editThresholds && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+        <ModalOverlay onClose={() => setShowAlertConfig(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
@@ -868,7 +869,7 @@ export default function Trends() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

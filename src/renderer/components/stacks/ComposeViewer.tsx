@@ -29,6 +29,7 @@ import { usePluginStore } from '../../stores/pluginStore'
 import type { LintDiagnostic, EnvDiagnostic } from '../../hooks/useComposeLinter'
 import { useToast } from '../common/Toast'
 import type { ComposeValidateResponse, StackEnvResponse } from '../../../shared/types'
+import { useModalA11y } from '../../hooks/useModalA11y'
 
 interface ComposeViewerProps {
   stackName: string
@@ -257,6 +258,8 @@ function computeDiff(original: string, edited: string): DiffResult {
 
 export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  // focus stays inside and returns to what opened it (Escape steps back through search and edit mode first: handled below)
+  useModalA11y(overlayRef, () => {}, { closeOnEscape: false })
   const searchInputRef = useRef<HTMLInputElement>(null)
   const codeContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)

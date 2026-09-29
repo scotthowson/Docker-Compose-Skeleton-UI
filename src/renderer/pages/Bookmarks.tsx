@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
+import { pageLabel } from '../constants/pageTitles'
 import type { PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -82,18 +83,8 @@ function getColorClass(color: string): string {
   return colorOptions.find((c) => c.value === color)?.class ?? colorOptions[0].class
 }
 
-const pageTargets: { id: PageId; label: string }[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'stacks', label: 'Stacks' },
-  { id: 'containers', label: 'Containers' },
-  { id: 'images', label: 'Images' },
-  { id: 'health', label: 'Health Monitor' },
-  { id: 'networks', label: 'Networks' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'system', label: 'System' },
-  { id: 'config', label: 'Config' },
-  { id: 'settings', label: 'Settings' },
-]
+const pageTargets: { id: PageId; label: string }[] = (['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'logs', 'system', 'config', 'settings'] as const)
+  .map((id) => ({ id, label: pageLabel(id) }))
 
 // ---------------------------------------------------------------------------
 // Add Bookmark Form

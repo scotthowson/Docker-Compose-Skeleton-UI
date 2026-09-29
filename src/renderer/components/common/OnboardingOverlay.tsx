@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { isWebMode } from '../../lib/env'
+import ModalOverlay from './ModalOverlay'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -137,7 +138,7 @@ export default function OnboardingOverlay() {
   const isLast = step === steps.length - 1
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    <ModalOverlay onClose={close} initialFocus="[data-autofocus]" className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -145,7 +146,8 @@ export default function OnboardingOverlay() {
       />
 
       {/* Card */}
-      <div className="relative w-full max-w-lg bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/60 animate-scale-in overflow-hidden">
+      {/* (the card takes the focus itself: Enter is "next" here, which a focused button would answer as well) */}
+      <div data-autofocus tabIndex={-1} className="relative w-full max-w-lg bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/60 animate-scale-in overflow-hidden focus:outline-none">
         {/* Decorative gradient bar */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
 
@@ -259,7 +261,7 @@ export default function OnboardingOverlay() {
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

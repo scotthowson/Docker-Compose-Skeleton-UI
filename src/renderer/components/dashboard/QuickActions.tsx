@@ -28,8 +28,9 @@ import {
 } from '../../api/endpoints'
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
-import { pageTitles } from '../../constants/pageTitles'
+import { pageLabel, pageTitles } from '../../constants/pageTitles'
 import { ACCENTS, ACCENT_NAMES, CardEmpty, type CardCommonProps } from './cardShared'
+import ModalOverlay from '../common/ModalOverlay'
 
 export type ActionKind = 'page' | 'url' | 'stack' | 'container' | 'maintenance' | 'schedule' | 'automation'
 export interface ActionDef {
@@ -60,14 +61,14 @@ const CONTAINER_OPS = ['start', 'stop', 'restart', 'recreate']
 
 export const DEFAULT_ACTIONS: ActionDef[] = [
   { id: 'stacks', kind: 'page', label: 'Manage Stacks', icon: 'Layers', color: 'emerald', target: 'stacks' },
-  { id: 'health', kind: 'page', label: 'Health Monitor', icon: 'HeartPulse', color: 'rose', target: 'health' },
+  { id: 'health', kind: 'page', label: pageLabel('health'), icon: 'HeartPulse', color: 'rose', target: 'health' },
   { id: 'logs', kind: 'page', label: 'View Logs', icon: 'ScrollText', color: 'amber', target: 'logs' },
-  { id: 'system', kind: 'page', label: 'System Info', icon: 'Monitor', color: 'cyan', target: 'system' },
-  { id: 'config', kind: 'page', label: 'Server Config', icon: 'Settings2', color: 'violet', target: 'config' },
-  { id: 'containers', kind: 'page', label: 'Containers', icon: 'Box', color: 'blue', target: 'containers' },
-  { id: 'terminal', kind: 'page', label: 'Terminal', icon: 'TerminalSquare', color: 'slate', target: 'terminal' },
-  { id: 'maintenance', kind: 'page', label: 'Maintenance', icon: 'Wrench', color: 'amber', target: 'maintenance' },
-  { id: 'backup', kind: 'page', label: 'Backup', icon: 'Archive', color: 'teal', target: 'backup' },
+  { id: 'system', kind: 'page', label: pageLabel('system'), icon: 'Monitor', color: 'cyan', target: 'system' },
+  { id: 'config', kind: 'page', label: pageLabel('config'), icon: 'Settings2', color: 'violet', target: 'config' },
+  { id: 'containers', kind: 'page', label: pageLabel('containers'), icon: 'Box', color: 'blue', target: 'containers' },
+  { id: 'terminal', kind: 'page', label: pageLabel('terminal'), icon: 'TerminalSquare', color: 'slate', target: 'terminal' },
+  { id: 'maintenance', kind: 'page', label: pageLabel('maintenance'), icon: 'Wrench', color: 'amber', target: 'maintenance' },
+  { id: 'backup', kind: 'page', label: pageLabel('backup'), icon: 'Archive', color: 'teal', target: 'backup' },
   { id: 'prune-images', kind: 'maintenance', label: 'Prune Images', icon: 'Trash2', color: 'orange', target: 'prune-images' },
   { id: 'rotate-logs', kind: 'maintenance', label: 'Rotate Logs', icon: 'Archive', color: 'pink', target: 'rotate-logs' },
   { id: 'check-health', kind: 'maintenance', label: 'Check Health', icon: 'HeartPulse', color: 'emerald', target: 'check-health' },
@@ -265,7 +266,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
   const field = 'px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40'
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-2xl mx-4 max-h-[88vh] flex flex-col bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
@@ -368,7 +369,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

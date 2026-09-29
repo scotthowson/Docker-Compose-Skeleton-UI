@@ -13,6 +13,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 const actionIcons: Record<string, React.ElementType> = {
   backup: Archive, update: RefreshCw, prune: Wrench, 'health-check': HeartPulse,
@@ -260,7 +261,7 @@ export default function Schedules() {
 
       {/* Create Modal */}
       {showCreate && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreate(false)}>
+        <ModalOverlay onClose={() => setShowCreate(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreate(false)}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
@@ -304,13 +305,13 @@ export default function Schedules() {
               </div>
             </form>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
       {/* Edit Modal */}
       {editingId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditingId(null)}>
+        <ModalOverlay onClose={() => setEditingId(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditingId(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
@@ -351,13 +352,13 @@ export default function Schedules() {
               </div>
             </form>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
       {/* Delete Confirmation */}
       {deleteTarget && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
+        <ModalOverlay onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-rose-400" /></div>
@@ -372,7 +373,7 @@ export default function Schedules() {
               <button onClick={async () => { await deleteSchedule(deleteTarget, schedules.find((x) => x.id === deleteTarget)?.member ?? scopeMember); setDeleteTarget(null); addToast({ type: 'success', message: 'Schedule deleted' }) }} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-rose-500 text-white hover:bg-rose-400 text-sm font-medium disabled:opacity-50 shadow-lg shadow-rose-500/20 transition-all">Delete</button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

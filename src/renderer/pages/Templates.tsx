@@ -292,6 +292,7 @@ function lintCompose(compose: string): LintWarning[] {
 
 import { SABLIER_DEFAULTS, SABLIER_SESSIONS, SABLIER_THEMES, SABLIER_THEME_NOTES, describeSession } from '../lib/sablier'
 import type { SablierOptions } from '../lib/sablier'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 function generateRouteYaml(
   serviceName: string,
@@ -1116,7 +1117,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   )
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+    <ModalOverlay onClose={() => { if (!localDeploying) onClose() }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       {/* Backdrop click to close */}
       <div className="absolute inset-0" onClick={localDeploying ? undefined : onClose} />
 
@@ -2134,7 +2135,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           </>
         )}
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -2262,7 +2263,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
   }, [handleSaveInPlace, requestClose])
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+    <ModalOverlay onClose={requestClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <FloatingSaveBar
         hasChanges={mode === 'edit' && hasChanges}
         saving={saving}
@@ -2529,7 +2530,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
           document.body,
         )}
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -2621,7 +2622,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const hasFetched = compose.length > 0
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative w-full max-w-3xl mx-3 md:mx-4 max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
@@ -2822,7 +2823,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

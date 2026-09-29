@@ -50,6 +50,7 @@ import {
   fetchTraefikStatus, createDnsRecord, updateDnsRecord, deleteDnsRecord, syncDnsRecords,
   type RouteEntry, type DnsRecord, type DnsRecordInput, type DnsZone,
 } from '../api/endpoints'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -128,7 +129,7 @@ function DeleteRouteModal({ route, onConfirm, onCancel, busy }: {
   busy: boolean
 }) {
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
+    <ModalOverlay onClose={onCancel} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
       <div className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
@@ -156,7 +157,7 @@ function DeleteRouteModal({ route, onConfirm, onCancel, busy }: {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -215,7 +216,7 @@ function RecordModal({ zone, initial, onClose, onSaved }: {
   const inputCls = 'w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 transition-all'
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="relative w-full max-w-lg mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <div className="flex items-center gap-3">
@@ -312,7 +313,7 @@ function RecordModal({ zone, initial, onClose, onSaved }: {
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -333,7 +334,7 @@ function DeleteRecordModal({ record, zone, onConfirm, onCancel, busy }: {
   const canDelete = !protectedReason || typed.trim().toLowerCase() === record.name.toLowerCase()
   const { head, tail } = displayName(record, zone)
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
+    <ModalOverlay onClose={onCancel} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
       <div className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10"><Trash2 size={18} className="text-rose-400" /></div>
@@ -364,7 +365,7 @@ function DeleteRecordModal({ record, zone, onConfirm, onCancel, busy }: {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

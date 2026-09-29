@@ -32,6 +32,7 @@ import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack,
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { ComposeViewer } from './ComposeViewer'
+import ModalOverlay from '../common/ModalOverlay'
 
 interface Props {
   stackName: string
@@ -264,7 +265,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
     <div className="space-y-6 animate-fade-in">
       {/* Confirmation modal overlay */}
       {confirmAction && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setConfirmAction(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="glass p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
@@ -307,7 +308,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
@@ -572,7 +573,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 
       {/* Clone modal */}
       {showCloneModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCloneModal(false)}>
+        <ModalOverlay onClose={() => setShowCloneModal(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCloneModal(false)}>
           <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
@@ -611,7 +612,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 

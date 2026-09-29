@@ -4,15 +4,12 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
-  Search, LayoutDashboard, Layers, Box, HardDrive, HeartPulse, Clock, Network,
-  ScrollText, Monitor, Settings2, Cog, ArrowRight, Trash2, Play, Square,
-  RotateCw, Command, Wrench, Sun, Moon, PanelLeftClose, PanelLeft,
-  LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
-  FileCode, Archive, Database, TerminalSquare, CalendarClock,
-  TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks, Globe, Server, BookOpen, ExternalLink, ShieldCheck,
+  Search, Layers, Box, HeartPulse, Network, ScrollText, ArrowRight, Trash2, Play, Square, RotateCw,
+  Command, Sun, Moon, PanelLeftClose, PanelLeft, LogOut, RefreshCw, Download, Shield, UserCircle,
+  Archive, ArrowUpCircle, LayoutTemplate, Puzzle, ListChecks, Globe, Server, BookOpen,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { pageMeta } from '../constants/pageTitles'
 import { toggleMode, useResolvedMode } from '../lib/colorMode'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
@@ -30,6 +27,7 @@ import { useStackStore } from '../stores/stackStore'
 import { useContainerStore } from '../stores/containerStore'
 import type { PageId, TemplateInfo, ProxmoxVm, FleetMember } from '../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../shared/types'
+import ModalOverlay from './common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,94 +43,6 @@ interface CommandItem {
   type: CommandType
   keywords?: string[]
   onSelect: () => void
-}
-
-// ---------------------------------------------------------------------------
-// Navigation commands
-// ---------------------------------------------------------------------------
-
-const pageIcon: Record<PageId, React.ReactNode> = {
-  dashboard: <LayoutDashboard size={16} />,
-  stacks: <Layers size={16} />,
-  containers: <Box size={16} />,
-  images: <HardDrive size={16} />,
-  health: <HeartPulse size={16} />,
-  uptime: <Clock size={16} />,
-  networks: <Network size={16} />,
-  volumes: <Database size={16} />,
-  logs: <ScrollText size={16} />,
-  system: <Monitor size={16} />,
-  config: <Settings2 size={16} />,
-  settings: <Cog size={16} />,
-  bookmarks: <Bookmark size={16} />,
-  activity: <Zap size={16} />,
-  diagnostics: <Shield size={16} />,
-  users: <Users size={16} />,
-  maintenance: <Wrench size={16} />,
-  environment: <FileCode size={16} />,
-  backup: <Archive size={16} />,
-  terminal: <TerminalSquare size={16} />,
-  cronjobs: <CalendarClock size={16} />,
-  trends: <TrendingUp size={16} />,
-  updates: <ArrowUpCircle size={16} />,
-  notifications: <BellIcon size={16} />,
-  snapshots: <Camera size={16} />,
-  templates: <LayoutTemplate size={16} />,
-  automations: <Bot size={16} />,
-  topology: <Share2 size={16} />,
-  'file-browser': <FolderOpen size={16} />,
-  'disk-analysis': <PieChart size={16} />,
-  secrets: <KeyRound size={16} />,
-  schedules: <CalendarClock size={16} />,
-  plugins: <Puzzle size={16} />,
-  'event-feed': <Radio size={16} />,
-  export: <Download size={16} />,
-  dns: <Globe size={16} />,
-  proxmox: <Server size={16} />,
-  crowdsec: <ShieldCheck size={16} />,
-  setup: <Sparkles size={16} />,
-}
-
-const pageLabels: Record<PageId, string> = {
-  dashboard: 'Dashboard',
-  stacks: 'Stacks',
-  containers: 'Containers',
-  images: 'Images',
-  health: 'Health Monitor',
-  uptime: 'Uptime Monitor',
-  networks: 'Networks',
-  volumes: 'Volumes',
-  bookmarks: 'Bookmarks',
-  activity: 'Activity',
-  maintenance: 'Maintenance',
-  environment: 'Environment Variables',
-  backup: 'Backup & Restore',
-  terminal: 'Terminal',
-  logs: 'Log Viewer',
-  system: 'System Info',
-  diagnostics: 'Diagnostics',
-  users: 'User Management',
-  config: 'Server Config',
-  settings: 'Settings',
-  cronjobs: 'Cron Jobs',
-  trends: 'Resource Trends',
-  updates: 'Image Updates',
-  notifications: 'Notifications',
-  snapshots: 'Snapshots',
-  templates: 'Templates',
-  automations: 'Automations',
-  topology: 'Network Topology',
-  'file-browser': 'File Browser',
-  'disk-analysis': 'Disk Analysis',
-  secrets: 'Secrets Manager',
-  schedules: 'Scheduled Tasks',
-  plugins: 'Plugins',
-  'event-feed': 'Live Events',
-  export: 'Export Center',
-  dns: 'DNS & Routes',
-  proxmox: 'Proxmox',
-  crowdsec: 'CrowdSec',
-  setup: 'Setup Wizard',
 }
 
 // ---------------------------------------------------------------------------
@@ -325,13 +235,15 @@ export function CommandPalette() {
     // Filter out admin-only pages for non-admin users
     const pages = allPages.filter((p) => !ADMIN_ONLY_PAGES.has(p) || isAdmin)
     for (const page of pages) {
+      const meta = pageMeta[page]
       items.push({
         id: `nav-${page}`,
-        label: `Go to ${pageLabels[page]}`,
+        label: `Go to ${meta.label}`,
         description: pageDescriptions[page] ?? 'Navigate',
-        icon: pageIcon[page],
+        icon: <meta.icon size={16} />,
         type: 'page',
-        keywords: pageKeywords[page] ?? [page, pageLabels[page].toLowerCase()],
+        // the names the page went by stay findable
+        keywords: [...(pageKeywords[page] ?? [page, meta.label.toLowerCase()]), ...(meta.aliases ?? []).map((a) => a.toLowerCase())],
         onSelect: () => {
           setCurrentPage(page)
           setOpen(false)
@@ -890,7 +802,7 @@ export function CommandPalette() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-start justify-center pt-[15vh]">
+    <ModalOverlay onClose={() => setOpen(false)} label="Search" className="fixed inset-0 z-[9998] flex items-start justify-center pt-[15vh]">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
@@ -1016,6 +928,6 @@ export function CommandPalette() {
           </span>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

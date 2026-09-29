@@ -22,6 +22,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchMaintenanceDisk, fetchDisks, triggerDeepPrune } from '../api/endpoints'
 import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize, DiskInfo } from '../../shared/types'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -109,7 +110,7 @@ interface PruneModalProps {
 
 function DeepPruneModal({ onConfirm, onCancel }: PruneModalProps) {
   return createPortal(
-    <div
+    <ModalOverlay onClose={onCancel}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onCancel}
     >
@@ -158,7 +159,7 @@ function DeepPruneModal({ onConfirm, onCancel }: PruneModalProps) {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

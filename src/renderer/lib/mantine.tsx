@@ -124,6 +124,14 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
   },
 })
 
+// the hairline round a tooltip's arrow. Mantine sets the arrow's transparent sides itself, as border-*-color
+// (which side flips with the placement): a `border` shorthand here would be removed and re-set under it and
+// make React warn on every re-render of an open tooltip, so all twelve longhands are written out
+const ARROW_EDGE = 'rgba(148, 163, 184, 0.25)'
+const ARROW_BORDER = Object.fromEntries(['Top', 'Right', 'Bottom', 'Left'].flatMap((side) => [
+  [`border${side}Width`, 1], [`border${side}Style`, 'solid'], [`border${side}Color`, ARROW_EDGE],
+]))
+
 // above every overlay the dashboard draws (its sheets and dialogs sit at z-index 100 … 10001)
 const LAYER = 10050
 // a dropdown panel (Select, Combobox, Popover): the same bubble in every one
@@ -148,7 +156,7 @@ const theme = createTheme({
       defaultProps: { color: 'dark.7', withArrow: true, multiline: true, maw: 320, openDelay: 150, zIndex: LAYER + 10, transitionProps: { duration: 120 }, events: { hover: true, focus: true, touch: false } },
       styles: {
         tooltip: { border: '1px solid rgba(148, 163, 184, 0.25)', color: '#e2e8f0', fontSize: 12, lineHeight: 1.45, padding: '6px 10px', boxShadow: '0 8px 24px rgba(2, 6, 23, 0.45)' },
-        arrow: { border: '1px solid rgba(148, 163, 184, 0.25)' },
+        arrow: ARROW_BORDER,
       },
     }),
     // every field is the dashboard's input: 40 px, 14 px text, the glass fill, an emerald border on focus

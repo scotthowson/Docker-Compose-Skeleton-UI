@@ -11,6 +11,7 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAuthStore } from '../../stores/authStore'
+import { pageLabel } from '../../constants/pageTitles'
 
 function formatUptime(seconds: number): string {
   if (seconds < 0) return '--'
@@ -185,7 +186,7 @@ export function StatusBar() {
           {memTotal > 0 && (
             <>
               <button onClick={nav('trends')} className="flex items-center gap-1 text-slate-500 hover:text-slate-400 transition-colors duration-200 cursor-pointer"><MemoryStick size={9} /> RAM</button>
-              <button aria-label="Memory in use — Resource Trends" onClick={nav('trends')} className="cursor-pointer"><MemoryBar used={memUsed} total={memTotal} /></button>
+              <button aria-label={`Memory in use — ${pageLabel('trends')}`} onClick={nav('trends')} className="cursor-pointer"><MemoryBar used={memUsed} total={memTotal} /></button>
               <span className="text-white/[0.06]">|</span>
             </>
           )}
