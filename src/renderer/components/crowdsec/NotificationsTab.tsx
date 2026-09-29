@@ -18,7 +18,7 @@ import { crowdsecNotify, crowdsecPreviewNotify, crowdsecResetNotify, crowdsecSav
 import type { CrowdSecNotifyBody, CrowdSecNotifyResponse, DiscordWebhookPayload } from '../../../shared/types'
 import { BTN_DANGER, BTN_PRIMARY, BTN_QUIET, BTN_WARN, CARD, Chip, CsSheet, Dot, HINT, INPUT, LABEL, Segmented, Skel, TEXTAREA, errData, errMsg, useCs } from './kit'
 import {
-  LIM, NUM, cpLen, deepEqual, describeChanges, diffPatch, draftMemory, mentionTag, orderSamples, approximatePayload, sectionOfError, settingsOf, toForm, validateForm, webhookProblem,
+  LIM, NUM, cpLen, deepEqual, describeChanges, diffPatch, draftMemory, mentionTag, orderSamples, approximatePayload, redact, sectionOfError, settingsOf, toForm, validateForm, webhookProblem,
   type Errors, type Limits, type MentionMode, type NotifyForm, type Settings, type WebhookMode,
 } from './NotifyModel'
 import {
@@ -94,8 +94,19 @@ export default function NotificationsTab() {
   const { member } = useCs()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const lastRef = useRef<CrowdSecNotifyResponse | null>(null)
-  // a refresh while a change is being applied would only ask a CrowdSec that is restarting
-  const poll = usePolling<CrowdSecNotifyResponse>(() => (getRun(member).busy && lastRef.current ? Promise.resolve(lastRef.current) : crowdsecNotify(member).then((d) => { lastRef.current = d; return d })), 30000, { enabled: isConnected })
+  const fetchNow = async (): Promise<CrowdSecNotifyResponse> => {
+    // while a change is being applied CrowdSec is restarting: asking it would only fail, and the answer would be older than the change
+    if (getRun(member).busy && lastRef.current) return lastRef.current
+    const startedAt = Date.now()
+    const d = await crowdsecNotify(member)
+    const run = getRun(member)
+    if (run.busy && lastRef.current) return lastRef.current
+    // a change ended while this request was on its way: what that change answered with is newer than this answer
+    if (run.res && run.doneAt > startedAt) { lastRef.current = run.res; return run.res }
+    lastRef.current = d
+    return d
+  }
+  const poll = usePolling<CrowdSecNotifyResponse>(fetchNow, 30000, { enabled: isConnected })
   const data = poll.data
 
   if (!data && poll.error) {
@@ -145,7 +156,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
 
   const limits = server.limits ?? DEFAULT_LIMITS
   const ph = server.placeholders
-  const known = useMemo(() => new Set(ph.map((p) => p.name)), [ph])
+  const known = useMemo(() => (ph.length ? new Set(ph.map((p) => p.name)) : null), [ph])
   const def = server.defaults
   const settingsNow = useMemo(() => settingsOf(form, base.v), [form, base.v])
   const errors: Errors = useMemo(() => validateForm(form, known, limits), [form, known, limits])
@@ -164,7 +175,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
 
   // the draft outlives a visit to another tab
   useEffect(() => {
-    if (dirty) draftMemory.set(member, { form, base, url, clearCustom: false, sample })
+    if (dirty) draftMemory.set(member, { form, base, url, sample })
     else draftMemory.clear(member)
   }, [dirty, form, base, url, sample, member])
 
@@ -188,7 +199,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const needsTakeOver = fileTakeover || profileTakeover
   const confirmTakeOver = async (what: string): Promise<boolean> => {
     const parts: string[] = []
-    if (fileTakeover) parts.push('CrowdSec’s notification file is not one DCS wrote (it is CrowdSec’s own sample or a hand-written file). It is replaced by the file built from these settings; a copy of the old one is kept.')
+    if (fileTakeover) parts.push('CrowdSec’s notification file was not written by this page (it is CrowdSec’s own sample, comes from a stack template or was edited by hand). It is replaced by the file built from these settings; a copy of the old one is kept.')
     if (profileTakeover) parts.push('profiles.yaml in CrowdSec has profiles DCS did not write. It is replaced by the ban profile DCS manages, with these notification settings; a copy of the old file is kept.')
     return confirm({ title: fileTakeover && profileTakeover ? 'Replace CrowdSec’s files?' : fileTakeover ? 'Replace the notification file?' : 'Replace profiles.yaml?', message: `${parts.join('\n')}\n${what}`, confirmLabel: 'Replace and continue', danger: true })
   }
@@ -240,7 +251,8 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const askServer = isAdmin || VIEWER_SERVER_PREVIEW
   const [pv, setPv] = useState<{ payload: DiscordWebhookPayload | null; problem: string | null; loading: boolean }>({ payload: null, problem: null, loading: askServer })
   const seq = useRef(0)
-  const clientProblem = totalProblems > 0 && Object.keys(errors).length > 0 ? `${Object.keys(errors).length === 1 ? 'One field needs' : `${Object.keys(errors).length} fields need`} attention: ${Object.values(errors)[0]}` : null
+  const errorCount = Object.keys(errors).length
+  const clientProblem = errorCount > 0 ? `${errorCount === 1 ? 'One field needs' : `${errorCount} fields need`} attention: ${Object.values(errors)[0]}` : null
   const previewKey = useSettled(clientProblem ? '' : JSON.stringify(patch), 400)
   useEffect(() => {
     if (!askServer || clientProblem) return
@@ -285,11 +297,11 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
       const res = await o.call()
       if (o.clearDraft) draftMemory.clear(member)
       const done = o.ok(res)
-      setRun(member, { busy: null, outcome: done, res, seq: getRun(member).seq + 1, keepDraft: !o.clearDraft })
+      setRun(member, { busy: null, outcome: done, res, seq: getRun(member).seq + 1, keepDraft: !o.clearDraft, doneAt: Date.now() })
       addToast({ type: 'success', message: done.detail ?? done.title, duration: 6000 })
     } catch (e) {
       const bad = o.fail(e)
-      setRun(member, { busy: null, outcome: bad })
+      setRun(member, { busy: null, outcome: bad, res: null, doneAt: Date.now() })
       addToast({ type: 'error', message: `${bad.title}${bad.detail ? `. ${bad.detail}` : ''}`, duration: 9000 })
     }
     refreshStatus()
@@ -297,12 +309,12 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const failure = (e: unknown, title: string): Outcome => {
     const d = errData(e)
     // the API's own words for a file it will not replace without being told to are about a request field; here the person is asked instead
-    const detail = d.reason === 'custom_profile' ? 'profiles.yaml has profiles DCS did not write. Saving replaces the whole file (a copy is kept). Press Save and apply and confirm to do that.' : errMsg(e)
+    const detail = d.reason === 'custom_profile' ? 'profiles.yaml has profiles DCS did not write. Saving replaces the whole file (a copy is kept). Press Save and apply and confirm to do that.' : redact(errMsg(e))
     return { kind: 'error', title, detail, rolledBack: d.rolled_back === true, stage: typeof d.stage === 'string' ? d.stage : undefined, status: e instanceof ApiError ? e.status : 0, at: Date.now() }
   }
 
   const testBlocked: string | null = applying ? 'Wait until the change is applied.'
-    : totalProblems > 0 && Object.keys(errors).length > 0 ? 'Fix the highlighted fields first.'
+    : errorCount > 0 ? 'Fix the highlighted fields first.'
     : !modeReady(form.mode) ? (form.mode === 'custom' ? 'Add the address of the custom webhook first.' : form.mode === 'global' ? 'There is no global webhook to post to.' : 'There is no webhook to keep.')
     : urlProblem ? urlProblem : null
 
@@ -312,6 +324,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
     try {
       const r = await crowdsecTestNotify({ settings: patch, sample: sampleNow, include_mention: includeMention, ...(urlSend ? { webhook_url: urlTyped } : {}) }, member)
       setTest({ t: { at: r.at, ok: r.delivered, http: r.http, message: r.message, sample: r.sample }, webhook: r.webhook })
+      setIncludeMention(false)   // a test pings nobody unless it is asked to, every time
       addToast(r.delivered ? { type: 'success', message: 'The test message was delivered to Discord' } : { type: 'error', message: r.message, duration: 8000 })
       refresh()
     } catch (e) {
@@ -381,7 +394,8 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const previewPanel = (bare = false) => (
     <PreviewPanel bare={bare} payload={previewPayload} loading={askServer && pv.loading && !clientProblem} problem={previewProblem} approximate={!askServer} samples={samples} sample={sampleNow} onSample={setSample}
       dark={dark} onDark={setDark} isAdmin={isAdmin} testBlocked={testBlocked} testing={testing} onTest={sendTest} includeMention={includeMention} onIncludeMention={setIncludeMention}
-      hasMention={mentionTag(settingsNow.mention) !== ''} test={lastTest ? { ...lastTest } : null} testWebhook={test?.webhook} unsaved={dirty} />
+      hasMention={mentionTag(settingsNow.mention) !== ''} test={lastTest ? { ...lastTest } : null} testWebhook={test?.webhook} unsaved={dirty}
+      lastApply={server.status.last_apply} deliveryErrors={server.status.delivery_errors} />
   )
   const openNotifications = () => setCurrentPage('notifications')
   const statusCard = (
@@ -473,8 +487,8 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
             {restored && <Notice tone="info" icon={Info} title="You have unsaved changes from earlier" action={<button type="button" className="text-cyan-400 hover:text-cyan-300 text-xs inline-flex items-center gap-1" onClick={discard}><Undo2 size={12} /> Discard them</button>}>They were kept while you looked at another tab. Nothing has been sent to CrowdSec yet.</Notice>}
             {changedElsewhere && <Notice tone="warn" icon={AlertTriangle} title="The saved settings changed since you started editing" action={<button type="button" className="text-cyan-400 hover:text-cyan-300 text-xs inline-flex items-center gap-1" onClick={discard}><Undo2 size={12} /> Discard my changes and load them</button>}>Someone else saved, or CrowdSec was changed by hand. When you save, only the things you edited are applied on top.</Notice>}
             {needsTakeOver && (form.enabled || dirty) && (
-              <Notice tone="warn" icon={AlertTriangle} title={profileTakeover && !fileTakeover ? 'profiles.yaml has profiles DCS did not write' : 'CrowdSec’s notification file was not written by DCS'}>
-                {fileTakeover && <>It is CrowdSec’s own sample or a hand-written file. When you save, DCS replaces it with the file built from this page and keeps a copy of the old one. </>}
+              <Notice tone="warn" icon={AlertTriangle} title={profileTakeover && !fileTakeover ? 'profiles.yaml has profiles DCS did not write' : 'CrowdSec’s notification file was not written by this page'}>
+                {fileTakeover && <>It is CrowdSec’s own sample, comes from a stack template or was edited by hand. When you save, DCS replaces it with the file built from this page and keeps a copy of the old one. </>}
                 {profileTakeover && <>profiles.yaml has profiles DCS did not write; saving replaces the whole file with the one DCS manages (a copy is kept). </>}
                 You are asked to confirm before anything is replaced.
               </Notice>
@@ -483,7 +497,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
             <nav aria-label="Sections" className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
               <span className="text-[11px] text-slate-500 mr-1 shrink-0">Jump to</span>
               {SECTION_ORDER.map((id) => (
-                <button key={id} type="button" onClick={() => reveal(id)} className="h-7 px-2.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 shrink-0 inline-flex items-center gap-1.5 transition-colors">
+                <button key={id} type="button" onClick={() => reveal(id)} className="h-8 px-3 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 shrink-0 inline-flex items-center gap-1.5 transition-colors">
                   {({ webhook: 'Webhook', appearance: 'Appearance', triggers: 'Triggers', message: 'Message', delivery: 'Delivery' } as Record<SectionId, string>)[id]}
                   {problemCount[id] > 0 && <Dot tone="bad" />}
                 </button>
@@ -510,7 +524,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
                 {form.mode === 'global' && (
                   src.global.configured
                     ? <p className="text-xs text-slate-400">DCS posts its own alerts to <span className="font-mono text-slate-300 break-all">{src.global.masked}</span>. CrowdSec’s alerts go there too. Change it under Server Config → Notifications.</p>
-                    : <Notice tone="warn" icon={AlertTriangle} title="No global webhook is set">DCS has no webhook of its own to share. Set <span className="font-mono">DISCORD_WEBHOOK_URL</span> under Server Config → Notifications, or choose Custom and add an address for CrowdSec alone.</Notice>
+                    : <Notice tone="warn" icon={AlertTriangle} title="No global webhook is set" action={<button type="button" onClick={() => setCurrentPage('config')} className="text-xs text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1">Open Server Config <ChevronRight size={12} /></button>}>DCS has no webhook of its own to share. Set <span className="font-mono">DISCORD_WEBHOOK_URL</span> under Server Config → Notifications, or choose Custom and add an address for CrowdSec alone.</Notice>
                 )}
                 {form.mode === 'keep' && (
                   src.keep.configured
@@ -608,7 +622,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
               {/* ---------------- message ---------------- */}
               <Section id="notify-message" icon={Braces} title="Message" summary={summaries.message} open={open.message} onToggle={() => toggle('message')} problems={problemCount.message} edited={edited.message}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <p className="text-xs text-slate-500 leading-relaxed flex-1 min-w-[14rem]">Write the message with placeholders such as <span className="font-mono text-slate-300">{'{ip}'}</span> or <span className="font-mono text-slate-300">{'{country_tag}'}</span>. Type <span className="font-mono text-slate-300">{'{'}</span> in a box to get suggestions. Markdown works: **bold**, `code`, [text](link).</p>
+                  <p className="text-xs text-slate-500 leading-relaxed flex-1 min-w-[14rem]">Write the message with placeholders such as <span className="font-mono text-slate-300">{'{ip}'}</span> or <span className="font-mono text-slate-300">{'{country_tag}'}</span>. Type <span className="font-mono text-slate-300">{'{'}</span> in a box to get suggestions. In the description and in field values Discord draws **bold**, `code` and [text](link); the footer is plain text.</p>
                   <PlaceholderPicker items={ph} label="All placeholders" target={() => reg.last()?.label ?? 'description'} onPick={(n) => (reg.last() ?? { insert: () => {} }).insert(`{${n}}`)} />
                 </div>
                 {errors.message && <p role="alert" className="text-[11px] text-rose-300">{errors.message}</p>}

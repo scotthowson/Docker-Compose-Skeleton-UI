@@ -6,10 +6,10 @@
 // =============================================================================
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, CircleAlert, CircleCheck, FileCheck2, Info, Loader2, MessageSquare, Radio, Send, ShieldCheck, TriangleAlert, Webhook } from 'lucide-react'
+import { CircleAlert, CircleCheck, FileCheck2, Info, Loader2, MessageSquare, Radio, Send, ShieldCheck, TriangleAlert, Webhook } from 'lucide-react'
 import type { CrowdSecNotifyResponse } from '../../../shared/types'
 import { CARD, Chip, Dot, Switch, fmtAgo, fmtTime, useNow, type Tone } from './kit'
-import { sampleLabel } from './NotifyModel'
+import { redact, sampleLabel } from './NotifyModel'
 import { Notice } from './NotifyFields'
 
 export interface TestOutcomeData { at: number; ok: boolean; http: number; message: string; sample: string }
@@ -38,10 +38,10 @@ function Check({ label, value, tone, title }: { label: string; value: string; to
   )
 }
 
-function Outcome({ icon: Icon, tone, title, children, more }: { icon: React.ElementType; tone: Tone; title: string; children: React.ReactNode; more: boolean }) {
+function Outcome({ icon: Icon, tone, title, children }: { icon: React.ElementType; tone: Tone; title: string; children: React.ReactNode }) {
   const cls = tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-rose-400' : tone === 'warn' ? 'text-amber-400' : 'text-slate-500'
-  // a quiet line shows its title; a problem always shows what it says
-  const show = more || tone === 'bad' || tone === 'warn'
+  // a quiet line is just its title; a problem always says what it is
+  const show = tone === 'bad' || tone === 'warn'
   return (
     <li className="flex items-start gap-2.5 py-1.5 first:pt-0 last:pb-0 min-w-0">
       <Icon size={15} className={`shrink-0 mt-0.5 ${cls}`} aria-hidden="true" />
@@ -65,12 +65,11 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
   lastTest: TestOutcomeData | null
 }) {
   const now = useNow()
-  const [more, setMore] = useState(false)
   const st = data.state
   const wh = data.webhook
   const h = healthOf(data)
   const file = st.file === 'dcs' ? { v: 'Written by DCS', tone: 'good' as Tone, t: 'The notification file was written by this page' }
-    : st.file === 'other' ? { v: 'Not from DCS', tone: 'warn' as Tone, t: 'The notification file is CrowdSec’s own sample or a hand-written one. Saving replaces it (a copy is kept).' }
+    : st.file === 'other' ? { v: 'Set up elsewhere', tone: 'warn' as Tone, t: 'The notification file was not written by this page: it is CrowdSec’s own sample, comes from a stack template or was edited by hand. Saving here replaces it (a copy is kept).' }
     : { v: 'Not created', tone: (st.enabled ? 'warn' : 'mute') as Tone, t: 'There is no notification file yet' }
   const t = lastTest
   const la = data.status.last_apply
@@ -86,6 +85,9 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
             {refreshFailed && <Chip tone="warn" title="The last refresh failed. What you see is the last answer.">could not refresh</Chip>}
           </div>
           <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{h.detail}</p>
+          {isAdmin && !st.enabled && !st.wired && !data.status.last_apply && (
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">To start: choose where the messages go (Webhook), turn the switch below on, press Save and apply, then send a test message.</p>
+          )}
         </div>
       </div>
 
@@ -105,7 +107,7 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
         <Check label="In the profile" value={st.wired ? 'Yes' : 'No'} tone={st.wired ? 'good' : st.enabled ? 'warn' : 'mute'} title="Whether CrowdSec’s profile hands alerts to the Discord plugin" />
         <Check label="Plugin" value={st.plugin_active ? 'Active' : 'Not active'} tone={st.plugin_active ? 'good' : st.enabled ? 'warn' : 'mute'} title="Whether CrowdSec loaded the http_default notification" />
         <Check label="Notification file" value={file.v} tone={file.tone} title={file.t} />
-        <Check label="Delivering" value={st.working ? 'Yes' : 'Not yet'} tone={st.working ? 'good' : 'mute'} title="On, wired, plugin active and a webhook set" />
+        <Check label="Delivering" value={st.working ? (errs.length > 0 ? 'With problems' : 'Yes') : 'Not yet'} tone={st.working ? (errs.length > 0 ? 'warn' : 'good') : 'mute'} title="On, wired, plugin active and a webhook set" />
       </div>
       {st.drift && (
         <div className="mt-3"><Notice tone="warn" icon={TriangleAlert} title="The notification file was changed by hand after DCS wrote it">Saving here writes it again from the settings on this page.</Notice></div>
@@ -113,34 +115,27 @@ export function StatusCard({ data, isAdmin, enabled, onToggle, busy, refreshFail
 
       <ul className="mt-4 divide-y divide-white/5 border-t border-white/5 pt-3" aria-label="Recent outcomes">
         {la
-          ? <Outcome more={more} icon={la.ok ? ShieldCheck : CircleAlert} tone={la.ok ? 'good' : 'bad'} title={la.ok ? `Last change applied ${fmtAgo(la.at, now)}` : `The last change failed ${fmtAgo(la.at, now)}`}>{la.message}</Outcome>
-          : <Outcome more={more} icon={ShieldCheck} tone="mute" title="No change has been applied from this page yet">Settings you save here are written to CrowdSec, which restarts to load them.</Outcome>}
+          ? <Outcome icon={la.ok ? ShieldCheck : CircleAlert} tone={la.ok ? 'good' : 'bad'} title={la.ok ? `Last change applied ${fmtAgo(la.at, now)}` : `The last change failed ${fmtAgo(la.at, now)}`}>{redact(la.message)}</Outcome>
+          : <Outcome icon={ShieldCheck} tone="mute" title="No change has been applied from this page yet">Settings you save here are written to CrowdSec, which restarts to load them.</Outcome>}
         {t
-          ? <Outcome more={more} icon={t.ok ? Send : CircleAlert} tone={t.ok ? 'good' : 'bad'} title={t.ok ? `Last test message delivered ${fmtAgo(t.at, now)}` : `The last test message failed ${fmtAgo(t.at, now)}`}>
-              {t.message} <span className="text-slate-600">· {sampleLabel(t.sample)}{t.http ? ` · HTTP ${t.http}` : ''}</span>
+          ? <Outcome icon={t.ok ? Send : CircleAlert} tone={t.ok ? 'good' : 'bad'} title={t.ok ? `Last test message delivered ${fmtAgo(t.at, now)}` : `The last test message failed ${fmtAgo(t.at, now)}`}>
+              {redact(t.message)} <span className="text-slate-600">· {sampleLabel(t.sample)}{t.http ? ` · HTTP ${t.http}` : ''}</span>
             </Outcome>
-          : <Outcome more={more} icon={Send} tone="mute" title="No test message has been sent yet">{isAdmin ? 'Use “Send test message” next to the preview to see one arrive in your channel.' : 'An administrator can send a test message.'}</Outcome>}
+          : <Outcome icon={Send} tone="mute" title="No test message has been sent yet">{isAdmin ? 'Use “Send test message” next to the preview to see one arrive in your channel.' : 'An administrator can send a test message.'}</Outcome>}
         {errs.length > 0
-          ? <Outcome more={more} icon={Radio} tone="warn" title={`${errs.length} delivery problem${errs.length === 1 ? '' : 's'} reported by CrowdSec in the last 24 hours`}>
+          ? <Outcome icon={Radio} tone="warn" title={`${errs.length} delivery problem${errs.length === 1 ? '' : 's'} reported by CrowdSec in the last 24 hours`}>
               <ul className="space-y-1 mt-1">
                 {errs.map((e) => (
-                  <li key={`${e.time}-${e.message}`} className="min-w-0"><span className="text-slate-400 tabular-nums" title={fmtTime(e.time)}>{fmtAgo(e.time, now)}</span> <span className="font-mono text-[11px] text-amber-300 break-words">{e.message}</span></li>
+                  <li key={`${e.time}-${e.message}`} className="min-w-0"><span className="text-slate-400 tabular-nums" title={fmtTime(e.time)}>{fmtAgo(e.time, now)}</span> <span className="font-mono text-[11px] text-amber-300 break-words">{redact(e.message)}</span></li>
                 ))}
               </ul>
             </Outcome>
-          : <Outcome more={more} icon={Radio} tone="mute" title="No delivery problems reported">{data.status.note}</Outcome>}
+          : <Outcome icon={Radio} tone="mute" title="No delivery problems reported">{data.status.note}</Outcome>}
       </ul>
 
-      <div className="mt-3 pt-2 border-t border-white/5">
-        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} className="text-[11px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1">
-          <ChevronDown size={12} className={`transition-transform ${more ? 'rotate-180' : ''}`} /> {more ? 'Fewer details' : 'Details and what these mean'}
-        </button>
-        {more && (
-          <div className="mt-2 space-y-1.5">
-            {errs.length > 0 && <p className="text-[11px] text-slate-500 flex items-start gap-1.5"><Info size={12} className="shrink-0 mt-0.5" />{data.status.note}</p>}
-            <p className="text-[11px] text-slate-500 flex items-start gap-1.5"><Info size={12} className="shrink-0 mt-0.5" /><span>{data.info.unban} <button type="button" onClick={onOpenNotifications} className="text-cyan-400 hover:text-cyan-300 whitespace-nowrap">Open the Notifications page</button></span></p>
-          </div>
-        )}
+      <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+        <p className="text-[11px] text-slate-500 flex items-start gap-1.5"><Info size={12} className="shrink-0 mt-0.5" />{data.status.note}</p>
+        <p className="text-[11px] text-slate-500 flex items-start gap-1.5"><Info size={12} className="shrink-0 mt-0.5" /><span>{data.info.unban} <button type="button" onClick={onOpenNotifications} className="text-cyan-400 hover:text-cyan-300 whitespace-nowrap">Open the Notifications page</button></span></p>
       </div>
     </section>
   )
@@ -195,7 +190,7 @@ export function TestOutcome({ t, webhook }: { t: TestOutcomeData; webhook?: stri
       {t.ok ? <CircleCheck size={15} className="shrink-0 mt-0.5" /> : <CircleAlert size={15} className="shrink-0 mt-0.5" />}
       <div className="min-w-0 flex-1 leading-relaxed">
         <p className="text-sm font-medium leading-snug">{t.ok ? 'Delivered' : 'Not delivered'} <span className="font-normal opacity-80">· {fmtAgo(t.at, now)}</span></p>
-        <p className="mt-0.5 break-words">{t.message}</p>
+        <p className="mt-0.5 break-words">{redact(t.message)}</p>
         <p className="mt-1 text-[11px] opacity-75 break-all">{sampleLabel(t.sample)}{t.http ? ` · HTTP ${t.http}` : ' · no answer'}{webhook ? ` · ${webhook}` : ''}</p>
       </div>
     </div>

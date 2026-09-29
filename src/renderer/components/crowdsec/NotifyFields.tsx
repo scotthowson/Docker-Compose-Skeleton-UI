@@ -70,7 +70,7 @@ export function FieldShell({ id, label, right, counter, hint, def, onDefault, er
           {def !== undefined && (
             <span className="text-slate-600 inline-flex items-center gap-1 min-w-0">
               Default: <code className="font-mono text-slate-500 truncate max-w-[16rem]" title={def}>{def === '' ? 'empty' : shorten(def)}</code>
-              {onDefault && <button type="button" onClick={onDefault} className="ml-1 text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"><RotateCcw size={10} /> Use the default</button>}
+              {onDefault && <button type="button" onClick={onDefault} className="ml-1 py-1.5 -my-1.5 text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"><RotateCcw size={10} /> Use the default</button>}
             </span>
           )}
         </p>
@@ -156,7 +156,7 @@ function matchPlaceholders(list: CrowdSecPlaceholder[], q: string, strict = fals
 }
 
 /** the searchable list, grouped, with the label, the example and the meaning of each placeholder */
-function PlaceholderList({ items, onPick, target }: { items: CrowdSecPlaceholder[]; onPick: (name: string) => void; target: string }) {
+function PlaceholderList({ items, onPick, target, onClose }: { items: CrowdSecPlaceholder[]; onPick: (name: string) => void; target: string; onClose?: () => void }) {
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const found = useMemo(() => matchPlaceholders(items, q), [items, q])
@@ -173,6 +173,7 @@ function PlaceholderList({ items, onPick, target }: { items: CrowdSecPlaceholder
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(found.length - 1, a + 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(0, a - 1)) }
     else if (e.key === 'Enter') { e.preventDefault(); if (found[active]) onPick(found[active].name) }
+    else if (e.key === 'Escape' && onClose) { e.preventDefault(); e.stopPropagation(); onClose() }
   }
   return (
     <div>
@@ -211,8 +212,10 @@ export function PlaceholderPicker({ items, onPick, target, label = 'Placeholders
   const [up, setUp] = useState(false)
   const wide = useMedia('(min-width: 640px)')
   const ref = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   useOutside(ref, () => setOpen(false), open && wide)
   const pick = (name: string) => { setOpen(false); onPick(name) }
+  const closeAndReturn = () => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()) }
   // near the bottom of the window the list opens upwards
   const toggle = () => {
     if (!open && ref.current) {
@@ -224,15 +227,15 @@ export function PlaceholderPicker({ items, onPick, target, label = 'Placeholders
   }
   return (
     <div className="relative" ref={ref}>
-      <button type="button" disabled={disabled || items.length === 0} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
+      <button ref={trigger} type="button" disabled={disabled || items.length === 0} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
         aria-label={compact ? `Insert a placeholder: ${label}` : undefined} title="Insert a placeholder such as {ip} or {country_tag}"
         onMouseDown={(e) => e.preventDefault()}
-        className={compact ? 'h-6 px-1.5 rounded-md text-[11px] text-slate-400 hover:text-slate-100 hover:bg-white/10 inline-flex items-center gap-1 transition-colors disabled:opacity-40' : `${BTN_QUIET} !h-8`}>
+        className={compact ? 'h-8 sm:h-7 px-2 rounded-md text-[11px] text-slate-400 hover:text-slate-100 hover:bg-white/10 inline-flex items-center gap-1 transition-colors disabled:opacity-40' : `${BTN_QUIET} !h-8`}>
         <Braces size={compact ? 12 : 13} /> {compact ? 'Insert' : label}
       </button>
       {open && wide && (
         <div role="dialog" aria-label="Insert a placeholder" className={`absolute right-0 ${up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} z-40 w-[min(30rem,88vw)] rounded-xl bg-slate-900 border border-white/10 shadow-black/40 p-3 shadow-xl animate-scale-in`}>
-          <PlaceholderList items={items} onPick={pick} target={target()} />
+          <PlaceholderList items={items} onPick={pick} target={target()} onClose={closeAndReturn} />
         </div>
       )}
       {open && !wide && (
@@ -402,7 +405,9 @@ export function TokenInput({ id, label, values, onChange, suggestions, error, hi
     const q = draft.trim().toLowerCase()
     const pool = suggestions.filter((s) => !values.includes(s.value))
     const hits = q ? pool.filter((s) => s.value.toLowerCase().includes(q) || (s.hint ?? '').toLowerCase().includes(q)) : pool
-    return hits.sort((a, b) => Number(b.value.toLowerCase().startsWith(q)) - Number(a.value.toLowerCase().startsWith(q)) || a.value.localeCompare(b.value)).slice(0, 8)
+    // a prefix that covers several scenarios comes first, then the names that start with what was typed
+    const rank = (s: TokenSuggestion) => (s.value.endsWith('*') ? 0 : 2) + (s.value.toLowerCase().includes(`/${q}`) || s.value.toLowerCase().startsWith(q) ? 0 : 1)
+    return hits.sort((a, b) => rank(a) - rank(b) || a.value.localeCompare(b.value)).slice(0, 8)
   }, [draft, suggestions, values])
   const full = values.length >= max
 
@@ -434,9 +439,9 @@ export function TokenInput({ id, label, values, onChange, suggestions, error, hi
       {values.length > 0 && (
         <ul className="flex flex-wrap gap-1.5 mb-2" aria-label={`${label}: chosen`}>
           {values.map((v) => (
-            <li key={v} className={`inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-md border text-xs font-mono ${patternProblem(v) ? 'bg-rose-500/10 border-rose-500/25 text-rose-300' : 'bg-white/[0.06] border-white/10 text-slate-200'}`}>
+            <li key={v} className={`inline-flex items-center gap-1 h-8 pl-2.5 pr-1 rounded-md border text-xs font-mono ${patternProblem(v) ? 'bg-rose-500/10 border-rose-500/25 text-rose-300' : 'bg-white/[0.06] border-white/10 text-slate-200'}`}>
               <span className="truncate max-w-[16rem]" title={v}>{v}</span>
-              {!disabled && <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`} title={`Remove ${v}`} className="h-5 w-5 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-100 hover:bg-white/10"><X size={11} /></button>}
+              {!disabled && <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`} title={`Remove ${v}`} className="h-7 w-7 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-100 hover:bg-white/10"><X size={12} /></button>}
             </li>
           ))}
         </ul>
@@ -587,7 +592,7 @@ export function FieldsEditor({ fields, onChange, errors, max, placeholders, disa
     <div className="space-y-3">
       {fields.length === 0 && <p className="text-xs text-slate-500 rounded-lg border border-dashed border-white/10 px-3 py-4 text-center">No fields. The message is the title and the description{defFields > 0 ? ` (the shipped message has ${defFields} fields)` : ''}.</p>}
       {fields.map((f, i) => (
-        <div key={f.key} className="rounded-xl bg-white/[0.03] border border-white/10 p-3 space-y-3" role="group" aria-label={`Field ${i + 1}`}>
+        <div key={f.key} className="rounded-xl bg-white/[0.03] border border-white/10 p-3 space-y-2" role="group" aria-label={`Field ${i + 1}`}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-slate-300 mr-auto">Field {i + 1}</span>
             <div className="flex items-center gap-2">
@@ -600,8 +605,10 @@ export function FieldsEditor({ fields, onChange, errors, max, placeholders, disa
               <button type="button" className={`${ICON_BTN} hover:!bg-rose-500/15 hover:!text-rose-300`} disabled={disabled} onClick={() => onChange(fields.filter((_, j) => j !== i))} aria-label={`Remove field ${i + 1}`} title="Remove this field"><Trash2 size={14} /></button>
             </div>
           </div>
-          <PlaceholderInput id={`notify-field-${f.key}-name`} label="Name" target={`field ${i + 1} name`} value={f.name} onChange={(v) => set(i, { name: v })} max={LIM.fieldName} placeholders={placeholders} error={errors[`field.${i}.name`]} disabled={disabled} mono={false} />
-          <PlaceholderInput id={`notify-field-${f.key}-value`} label="Value" target={`field ${i + 1} value`} value={f.value} onChange={(v) => set(i, { value: v })} max={LIM.fieldValue} placeholders={placeholders} error={errors[`field.${i}.value`]} disabled={disabled} multiline rows={2} />
+          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
+            <PlaceholderInput id={`notify-field-${f.key}-name`} label="Name" target={`field ${i + 1} name`} value={f.name} onChange={(v) => set(i, { name: v })} max={LIM.fieldName} placeholders={placeholders} error={errors[`field.${i}.name`]} disabled={disabled} mono={false} />
+            <PlaceholderInput id={`notify-field-${f.key}-value`} label="Value" target={`field ${i + 1} value`} value={f.value} onChange={(v) => set(i, { value: v })} max={LIM.fieldValue} placeholders={placeholders} error={errors[`field.${i}.value`]} disabled={disabled} multiline rows={2} />
+          </div>
         </div>
       ))}
       {errors.fields && <p role="alert" className="text-[11px] text-rose-300">{errors.fields}</p>}

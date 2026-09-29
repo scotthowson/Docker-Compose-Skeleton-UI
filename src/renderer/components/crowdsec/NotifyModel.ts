@@ -280,6 +280,11 @@ export function webhookProblem(raw: string): string | null {
   return null
 }
 
+/** a webhook address that slipped into a message (CrowdSec's own errors quote the address they posted to) loses its token */
+export function redact(text: string): string {
+  return text.replace(/(\/api\/webhooks\/\d+\/)[A-Za-z0-9_-]+/g, '$1••••')
+}
+
 // ---------------------------------------------------------------------------
 // Words: the samples and the colours
 // ---------------------------------------------------------------------------
@@ -358,7 +363,7 @@ export function approximatePayload(s: Settings, placeholders: CrowdSecPlaceholde
 // The draft that survives a switch to another tab (in memory only: a webhook address that was typed never touches a storage)
 // ---------------------------------------------------------------------------
 
-export interface DraftMemo { form: NotifyForm; base: Settings; url: string; clearCustom: boolean; sample: string }
+export interface DraftMemo { form: NotifyForm; base: Settings; url: string; sample: string }
 const memory = new Map<string, DraftMemo>()
 export const draftMemory = {
   get: (member: string | null): DraftMemo | undefined => memory.get(member ?? 'hub'),

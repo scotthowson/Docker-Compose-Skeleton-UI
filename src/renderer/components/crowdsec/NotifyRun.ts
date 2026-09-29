@@ -18,9 +18,11 @@ export interface RunState {
   seq: number
   /** the answer belongs to an action that left the unsaved edits alone (removing the custom webhook) */
   keepDraft: boolean
+  /** when the last change ended (ms), so an older refresh that answers late can be told from a newer answer */
+  doneAt: number
 }
 
-const EMPTY: RunState = { busy: null, outcome: null, res: null, seq: 0, keepDraft: false }
+const EMPTY: RunState = { busy: null, outcome: null, res: null, seq: 0, keepDraft: false, doneAt: 0 }
 const runs = new Map<string, RunState>()
 const subs = new Set<() => void>()
 const key = (member: string | null): string => member ?? 'hub'

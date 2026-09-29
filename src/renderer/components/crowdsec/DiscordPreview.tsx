@@ -65,9 +65,12 @@ function Pill({ children, p }: { children: ReactNode; p: Palette }) {
   return <span style={{ background: p.pill, color: p.pillText, borderRadius: 3, padding: '0 2px', fontWeight: 500 }}>{children}</span>
 }
 
-export function inline(text: string, p: Palette, k = 'i', depth = 0): ReactNode[] {
+/** `full` is a message's text and an embed's description and field values; `noLinks` is a title or a field name (Discord draws no links there); `plain` is the footer (Discord draws it as it is) */
+type InlineMode = 'full' | 'noLinks' | 'plain'
+export function inline(text: string, p: Palette, k = 'i', depth = 0, mode: InlineMode = 'full'): ReactNode[] {
   const out: ReactNode[] = []
   if (!text) return out
+  if (mode === 'plain') return [<span key={`${k}-plain`}>{text}</span>]
   const re = new RegExp(INLINE.source, 'g')
   let last = 0
   let m: RegExpExecArray | null
@@ -77,18 +80,18 @@ export function inline(text: string, p: Palette, k = 'i', depth = 0): ReactNode[
     if (m[15] !== undefined && (isWord(text[m.index - 1]) || isWord(text[m.index + m[0].length]))) { re.lastIndex = m.index + 1; continue }
     if (m.index > last) push(text.slice(last, m.index))
     last = m.index + m[0].length
-    const sub = (s: string) => (depth < 4 ? inline(s, p, `${k}-${n}`, depth + 1) : s)
+    const sub = (s: string) => (depth < 4 ? inline(s, p, `${k}-${n}`, depth + 1, mode) : s)
     if (m[1] !== undefined) push(<strong style={{ fontWeight: 700, color: p.strong }}>{sub(m[1])}</strong>)
     else if (m[2] !== undefined) push(<span style={{ textDecoration: 'underline' }}>{sub(m[2])}</span>)
     else if (m[3] !== undefined) push(<span style={{ textDecoration: 'line-through' }}>{sub(m[3])}</span>)
     else if (m[4] !== undefined) push(<span style={{ background: p.code, borderRadius: 3, padding: '0 4px', fontFamily: MONO, fontSize: '0.85em', color: p.text }}>{m[4]}</span>)
-    else if (m[5] !== undefined) push(<a href={m[6]} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{sub(m[5])}</a>)
+    else if (m[5] !== undefined) push(mode === 'noLinks' ? m[0] : <a href={m[6]} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{sub(m[5])}</a>)
     else if (m[7] !== undefined) push(<Flag cc={m[7]} p={p} />)
     else if (m[8] !== undefined) push(<span title={stamp(Number(m[8]), 'F')} style={{ background: p.stamp, borderRadius: 3, padding: '0 2px' }}>{stamp(Number(m[8]), m[9] || 'f')}</span>)
     else if (m[10] !== undefined) push(<Pill p={p}>@role</Pill>)
     else if (m[11] !== undefined) push(<Pill p={p}>@user</Pill>)
     else if (m[12] !== undefined) push(<Pill p={p}>{m[12]}</Pill>)
-    else if (m[13] !== undefined) push(<a href={m[13]} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{m[13]}</a>)
+    else if (m[13] !== undefined) push(mode === 'noLinks' ? m[13] : <a href={m[13]} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{m[13]}</a>)
     else if (m[14] !== undefined) push(<em>{sub(m[14])}</em>)
     else if (m[15] !== undefined) push(<em>{sub(m[15])}</em>)
     if (m[0].length === 0) re.lastIndex++
@@ -142,7 +145,7 @@ function EmbedView({ e, p, cols }: { e: DiscordEmbed; p: Palette; cols: number }
       <div style={{ padding: '8px 16px 16px 12px', minWidth: 0, flex: 1, fontSize: 14, lineHeight: '1.375rem', color: p.text }}>
         {e.title && (
           <div style={{ marginTop: 8, fontSize: 16, fontWeight: 600, lineHeight: '1.375rem', color: e.url ? p.link : p.title, overflowWrap: 'anywhere' }}>
-            {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{inline(e.title, p, 'et')}</a> : inline(e.title, p, 'et')}
+            {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ color: p.link, textDecoration: 'none' }}>{inline(e.title, p, 'et', 0, 'noLinks')}</a> : inline(e.title, p, 'et', 0, 'noLinks')}
           </div>
         )}
         {e.description && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inline(e.description, p, 'ed')}</div>}
@@ -150,13 +153,13 @@ function EmbedView({ e, p, cols }: { e: DiscordEmbed; p: Palette; cols: number }
           <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gap: 8 }}>
             {fields.map((f, i) => (
               <div key={i} style={{ gridColumn: `span ${f.span}`, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: p.strong, overflowWrap: 'anywhere' }}>{inline(f.name, p, `fn${i}`)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: p.strong, overflowWrap: 'anywhere' }}>{inline(f.name, p, `fn${i}`, 0, 'noLinks')}</div>
                 <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inline(f.value, p, `fv${i}`)}</div>
               </div>
             ))}
           </div>
         )}
-        {footer && <div style={{ marginTop: 8, fontSize: 12, lineHeight: '1rem', fontWeight: 500, color: p.foot, overflowWrap: 'anywhere' }}>{inline(footer, p, 'ef')}</div>}
+        {footer && <div style={{ marginTop: 8, fontSize: 12, lineHeight: '1rem', fontWeight: 500, color: p.foot, overflowWrap: 'anywhere' }}>{inline(footer, p, 'ef', 0, 'plain')}</div>}
       </div>
     </div>
   )
