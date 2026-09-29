@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, User, Wifi, WifiOff } from 'lucide-react'
 import { useApiLink } from '../../hooks/useApiLink'
+import { useFleetTotals } from '../../hooks/useFleetTotals'
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useHealthStore } from '../../stores/healthStore'
@@ -100,8 +101,9 @@ export function StatusBar() {
 
   const uptime = status?.uptime_seconds != null ? formatUptime(status.uptime_seconds) : '--'
   const apiVersion = version?.api_version ?? '--'
-  const containersRunning = status?.docker.containers.running ?? 0
-  const containersTotal = status?.docker.containers.total ?? 0
+  const { totals: fleet } = useFleetTotals()   // a hub adds its VMs' containers
+  const containersRunning = (status?.docker.containers.running ?? 0) + fleet.containersRunning
+  const containersTotal = (status?.docker.containers.total ?? 0) + fleet.containersTotal
   const isConnected = connectionStatus === 'connected'
   const memUsed = status?.system?.memory_mb?.available ?? 0
   const memTotal = status?.system?.memory_mb?.total ?? 0

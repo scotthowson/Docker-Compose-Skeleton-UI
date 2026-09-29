@@ -3181,6 +3181,10 @@ export interface FleetMemberLive extends FleetMemberBase {
   stacks_total: number
   containers_running: number
   containers_total: number
+  /** the VM's own Docker counts (from its /status; older hubs do not send them) */
+  images?: number
+  networks?: number
+  volumes?: number
   /** the member's containers as of the last snapshot (the VM card lists them) */
   containers?: ContainerInfo[]
 }
@@ -3188,7 +3192,8 @@ export interface FleetMemberLive extends FleetMemberBase {
 export interface FleetOverview {
   hub: { version: string; name: string; hostname: string }
   members: FleetMemberLive[]
-  totals: { members: number; reachable: number; stacks: number; containers_running: number; containers_total: number }
+  /** images, networks and volumes are the VMs' Docker counts added up (hubs before 3.9.10 do not send them) */
+  totals: { members: number; reachable: number; stacks: number; containers_running: number; containers_total: number; images?: number; networks?: number; volumes?: number }
 }
 
 /** One guest as the scan saw it */

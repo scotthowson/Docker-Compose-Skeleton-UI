@@ -3,8 +3,9 @@
 // =============================================================================
 
 import { usePolling } from '../../hooks/usePolling'
-import { fetchStacks, fetchFleetOverview } from '../../api/endpoints'
+import { fetchStacks } from '../../api/endpoints'
 import { useFleetRole } from '../../hooks/useFleetRole'
+import { useFleetTotals } from '../../hooks/useFleetTotals'
 import React, { useEffect } from 'react'
 import {
   LayoutDashboard,
@@ -123,8 +124,8 @@ export function Sidebar() {
   const { isHub } = useFleetRole()
   const isConnectedForVms = useConnectionStore((st) => st.status === 'connected')
   const vmList = usePolling(fetchStacks, 30000, { enabled: isConnectedForVms && isHub })
-  const fleetOverview = usePolling(fetchFleetOverview, 30000, { enabled: isConnectedForVms && isHub })
-  const fleetTotals = fleetOverview.data?.totals ?? null
+  // a hub counts its VMs in every badge: containers, images, networks and volumes are its own plus theirs
+  const { totals: fleet } = useFleetTotals()
   const vmStacks = vmList.data ? { total: vmList.data.stacks.filter((x) => x.placement === 'vm').length, up: vmList.data.stacks.filter((x) => x.placement === 'vm' && x.status === 'running').length } : null
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
@@ -159,8 +160,7 @@ export function Sidebar() {
   const badges: Partial<Record<PageId, { value: string; color: string }>> = {}
 
   if (systemStatus) {
-    // a hub counts the whole fleet's running containers: its own plus every VM's
-    const runningContainers = systemStatus.docker.containers.running + (isHub ? (fleetTotals?.containers_running ?? 0) : 0)
+    const runningContainers = systemStatus.docker.containers.running + fleet.containersRunning
     badges.containers = {
       value: `${runningContainers}`,
       color: runningContainers > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
@@ -169,11 +169,11 @@ export function Sidebar() {
       ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs
       : { value: `${systemStatus.stacks.running}`, color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400' }
     badges.images = {
-      value: `${systemStatus.docker.images}`,
+      value: `${systemStatus.docker.images + fleet.images}`,
       color: 'bg-cyan-500/20 text-cyan-400',
     }
     badges.networks = {
-      value: `${systemStatus.docker.networks}`,
+      value: `${systemStatus.docker.networks + fleet.networks}`,
       color: 'bg-cyan-500/20 text-cyan-400',
     }
   }
@@ -190,7 +190,7 @@ export function Sidebar() {
 
   if (systemStatus) {
     badges.volumes = {
-      value: `${systemStatus.docker.volumes}`,
+      value: `${systemStatus.docker.volumes + fleet.volumes}`,
       color: 'bg-cyan-500/20 text-cyan-400',
     }
   }

@@ -3,8 +3,9 @@
 // =============================================================================
 
 import { useFleetRole } from '../../hooks/useFleetRole'
+import { useFleetTotals } from '../../hooks/useFleetTotals'
 import { usePolling } from '../../hooks/usePolling'
-import { fetchStacks, fetchFleetOverview } from '../../api/endpoints'
+import { fetchStacks } from '../../api/endpoints'
 import React, { useEffect, useRef, useState } from 'react'
 import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
@@ -262,7 +263,7 @@ export default function OverviewCards() {
   const { isHub } = useFleetRole()
   const isConnectedFleet = useConnectionStore((s) => s.status === 'connected')
   const fleetStacks = usePolling(fetchStacks, 30000, { enabled: isConnectedFleet && isHub })
-  const fleetOverview = usePolling(fetchFleetOverview, 30000, { enabled: isConnectedFleet && isHub })
+  const { totals: fleet } = useFleetTotals()
   const vmStacks = isHub ? (fleetStacks.data?.stacks ?? []).filter((s) => s.placement === 'vm') : []
   const runningStacks = (status?.stacks.running ?? 0) + vmStacks.filter((s) => s.status === 'running').length
   const totalStacks = (status?.stacks.total ?? 0) + vmStacks.length
@@ -270,8 +271,8 @@ export default function OverviewCards() {
     totalStacks === 0 ? 'stable' : runningStacks === totalStacks ? 'up' : 'down'
 
   // --- Containers ---
-  const fleetRunning = isHub ? (fleetOverview.data?.totals.containers_running ?? 0) : 0
-  const fleetTotal = isHub ? (fleetOverview.data?.totals.containers_total ?? 0) : 0
+  const fleetRunning = fleet.containersRunning
+  const fleetTotal = fleet.containersTotal
   const runningContainers = (status?.docker.containers.running ?? 0) + fleetRunning
   const totalContainers = (status?.docker.containers.total ?? 0) + fleetTotal
   const stoppedContainers = (status?.docker.containers.stopped ?? 0) + Math.max(0, fleetTotal - fleetRunning)
@@ -279,7 +280,7 @@ export default function OverviewCards() {
     stoppedContainers > 0 ? 'down' : runningContainers > 0 ? 'up' : 'stable'
 
   // --- Images ---
-  const imageCount = status?.docker.images ?? 0
+  const imageCount = (status?.docker.images ?? 0) + fleet.images   // a hub adds its VMs' images
 
   // --- Health ---
   // When no report AND not connected, show "Unknown"
