@@ -325,7 +325,7 @@ export default function HubTab() {
                 <div key={sg.name} className={`${CARD} p-3.5 flex flex-col gap-2 min-w-0 shrink-0 w-[16rem] sm:w-auto snap-start`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-600">{sg.group}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500">{sg.group}</p>
                       <p className="text-sm font-medium text-slate-100 leading-snug">{sg.title}</p>
                     </div>
                     {sg.installed
@@ -337,7 +337,7 @@ export default function HubTab() {
                         : <Chip tone="mute">not installed</Chip>}
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">{sg.description}</p>
-                  <p className="text-[10px] font-mono text-slate-600 truncate mt-auto" title={sg.name}>{sg.name}</p>
+                  <p className="text-[10px] font-mono text-slate-500 truncate mt-auto" title={sg.name}>{sg.name}</p>
                 </div>
               ))}
             </div>
@@ -375,7 +375,7 @@ export default function HubTab() {
             />
             {installed.length === 0 ? (
               <div className={`${CARD} px-6 py-10 text-center`}>
-                <Package size={26} className="mx-auto text-slate-600" />
+                <Package size={26} className="mx-auto text-slate-500" />
                 <p className="mt-3 text-sm text-slate-300">No {k.label.toLowerCase()} installed.</p>
                 <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">{kind === 'collections' ? 'Without a collection CrowdSec has nothing to detect with. Install one of the recommended ones above.' : `Search below to add ${k.one === 'parser' ? 'a parser' : 'a scenario'} on its own.`}</p>
               </div>
@@ -461,7 +461,7 @@ export default function HubTab() {
                   </p>
                 </div>
               )}
-              <p className="text-[11px] text-slate-600 flex items-start gap-1.5"><Info size={11} className="shrink-0 mt-0.5" /> The list comes from the hub index CrowdSec last downloaded. “Check for updates” fetches a newer one.</p>
+              <p className="text-[11px] text-slate-500 flex items-start gap-1.5"><Info size={11} className="shrink-0 mt-0.5" /> The list comes from the hub index CrowdSec last downloaded. “Check for updates” fetches a newer one.</p>
             </div>
           </section>
         </>

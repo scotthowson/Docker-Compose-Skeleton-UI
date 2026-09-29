@@ -228,7 +228,7 @@ function AllowSheet({ data, seed, onClose, onDone }: { data: CrowdSecAllowlistRe
           <p className={HINT}>The server refuses a network wider than a /8 (IPv4) and ::/0 (IPv6). Anything wider than a /16 (IPv4) or a /48 (IPv6) asks you to confirm first.</p>
         </div>
         <div>
-          <label className={LABEL} htmlFor="allow-comment">Note <span className="text-slate-600 font-normal">(optional, shown in the list)</span></label>
+          <label className={LABEL} htmlFor="allow-comment">Note <span className="text-slate-500 font-normal">(optional, shown in the list)</span></label>
           <input id="allow-comment" className={INPUT} value={comment} maxLength={200} onChange={(e) => setComment(e.target.value)} placeholder="e.g. office, uptime monitor" />
         </div>
         <div>
@@ -354,7 +354,7 @@ export default function AllowlistTab() {
       ? <button type="button" className={`${ICON_BTN} !w-auto px-2.5 gap-1.5 text-[11px]`} aria-label={`Remove ${e.value} from the allowlist`} disabled={busy === k} onClick={() => removeOne(e)}>{busy === k ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove</button>
       : <button type="button" className={`${ICON_BTN} hover:!bg-rose-500/15 hover:!text-rose-300`} aria-label={`Remove ${e.value} from the allowlist`} title="Remove from the allowlist" disabled={busy === k} onClick={() => removeOne(e)}>{busy === k ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}</button>
   }
-  const lockIcon = (e: CrowdSecAllowEntry) => <span className="h-8 w-8 inline-flex items-center justify-center text-slate-600" title={lockReason(e)} role="img" aria-label={`Cannot be removed here. ${lockReason(e)}`}><Lock size={13} /></span>
+  const lockIcon = (e: CrowdSecAllowEntry) => <span className="h-8 w-8 inline-flex items-center justify-center text-slate-500" title={lockReason(e)} role="img" aria-label={`Cannot be removed here. ${lockReason(e)}`}><Lock size={13} /></span>
 
   return (
     <div className="space-y-4" data-cs-tab="allowlist">
@@ -478,7 +478,7 @@ export default function AllowlistTab() {
 
             {entries.length === 0 && (
               <div className={`${CARD} px-6 py-14 text-center`}>
-                <ShieldCheck size={30} className="mx-auto text-slate-600" />
+                <ShieldCheck size={30} className="mx-auto text-slate-500" />
                 <p className="mt-3 text-sm text-slate-300">Nothing is on the allowlist yet.</p>
                 <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">Add the addresses CrowdSec must never ban: your office, a monitoring service, a friend’s server. Your home address is added by itself once DCS has looked it up.</p>
                 {canAdd && <div className="mt-4"><button type="button" onClick={() => setSheet({})} className={BTN_PRIMARY}><Plus size={14} /> Allow an address</button></div>}
@@ -487,7 +487,7 @@ export default function AllowlistTab() {
 
             {entries.length > 0 && shown.length === 0 && (
               <div className={`${CARD} px-6 py-10 text-center`}>
-                <Search size={26} className="mx-auto text-slate-600" />
+                <Search size={26} className="mx-auto text-slate-500" />
                 <p className="mt-3 text-sm text-slate-300">{qNet && !source ? `${qq} is not covered by the allowlist.` : 'No entry matches.'}</p>
                 <p className="mt-1 text-xs text-slate-500">{qNet && !source ? 'CrowdSec can ban it like any other address.' : 'Loosen the search, or clear the filters.'}</p>
                 <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
@@ -545,13 +545,13 @@ export default function AllowlistTab() {
                           </div>
                           {e.comment && <p className="text-xs text-slate-300 mt-1 break-words">{e.comment}</p>}
                         </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0"><Countdown at={e.expires_at} /><span className="text-[10px] text-slate-600">expires</span></div>
+                        <div className="flex flex-col items-end gap-1 shrink-0"><Countdown at={e.expires_at} /><span className="text-[10px] text-slate-500">expires</span></div>
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-white/5">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <SourceChip e={e} />
                           {coversYou.has(keyOf(e)) && <Chip tone="good">covers you</Chip>}
-                          {e.created_at && <span className="text-[10px] text-slate-600">{addedText(e, true)}</span>}
+                          {e.created_at && <span className="text-[10px] text-slate-500">{addedText(e, true)}</span>}
                         </div>
                         {isAdmin && e.removable && removeBtn(e, true)}
                       </div>

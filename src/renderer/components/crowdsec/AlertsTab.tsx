@@ -206,7 +206,7 @@ export default function AlertsTab({ seedSearch }: { seedSearch?: string }) {
           {countries.map((c) => <option key={c.value} value={c.value}>{countryName(c.value) || c.value} ({c.count})</option>)}
           {facets && facets.unknown_country > 0 && <option value="unknown">Country not known ({facets.unknown_country})</option>}
         </Select>
-        <label className="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none h-9 px-1 col-span-2 sm:col-span-1" title="Simulated detections only raise an alert: nothing is banned">
+        <label className="inline-flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none h-9 px-1 col-span-2 sm:col-span-1" title="Simulated detections only raise an alert: nothing is banned">
           <input type="checkbox" checked={f.hideSim} onChange={(e) => patch({ hideSim: e.target.checked })} className="accent-emerald-500" /> Hide simulated
         </label>
         {filtered && <button type="button" onClick={clearFilters} className="text-xs text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 h-9"><X size={12} /> Clear filters</button>}
@@ -244,7 +244,7 @@ export default function AlertsTab({ seedSearch }: { seedSearch?: string }) {
 
       {data && rows.length === 0 && (
         <div className={`${CARD} px-6 py-14 text-center ${stale ? 'opacity-60' : ''}`}>
-          <BellOff size={30} className="mx-auto text-slate-600" />
+          <BellOff size={30} className="mx-auto text-slate-500" />
           <p className="mt-3 text-sm text-slate-300">{filtered ? 'No alert matches these filters.' : `Quiet. CrowdSec detected nothing in ${WIN_LABEL[win]}.`}</p>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
             {filtered
@@ -292,7 +292,7 @@ export default function AlertsTab({ seedSearch }: { seedSearch?: string }) {
                       <td className="px-3 py-2.5 min-w-0"><SourceCell a={a} /></td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-300" title={`${fmtNum(a.events_count)} suspicious request${a.events_count === 1 ? '' : 's'} added up to this alert`}>{fmtNum(a.events_count)}</td>
                       <td className="px-3 py-2.5"><OutcomeChip a={a} /></td>
-                      <td className="pr-3 text-slate-600"><ChevronRight size={14} aria-hidden="true" /></td>
+                      <td className="pr-3 text-slate-500"><ChevronRight size={14} aria-hidden="true" /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -323,7 +323,7 @@ export default function AlertsTab({ seedSearch }: { seedSearch?: string }) {
             <span className="tabular-nums">
               {filtered ? `${fmtNum(data.count)} of ${fmtNum(data.total)} in ${WIN_LABEL[win]} match` : `${plural(data.total, 'alert')} in ${WIN_LABEL[win]}`}
               {rows.length < data.count ? ` · showing the newest ${fmtNum(rows.length)}` : ''}
-              <span className="text-slate-600" title={fmtTime(data.as_of)}> · updated {fmtAgo(data.as_of, now)}</span>
+              <span className="text-slate-500" title={fmtTime(data.as_of)}> · updated {fmtAgo(data.as_of, now)}</span>
             </span>
             {rows.length < data.count && limit < MAX_ROWS && (
               <button type="button" onClick={() => setPage({ key: filterKey, limit: Math.min(MAX_ROWS, limit + PAGE) })} className="text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1">

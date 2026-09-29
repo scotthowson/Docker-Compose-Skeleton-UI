@@ -338,10 +338,10 @@ function Enforcement({ b, isAdmin, busy, onRegister }: { b: CrowdSecBouncersResp
       {tr.present && (
         <ul className="mt-4 pt-4 border-t border-white/5 divide-y divide-white/5" aria-label="What is checked">
           <CheckRow tone={tr.running ? 'good' : 'warn'} label="Traefik">
-            {tr.running ? <>Running{tr.container ? <span className="text-slate-600"> · container {tr.container}</span> : null}</> : `Not running${tr.container ? `: the container ${tr.container}` : ''} is ${tr.state || 'stopped'}`}
+            {tr.running ? <>Running{tr.container ? <span className="text-slate-500"> · container {tr.container}</span> : null}</> : `Not running${tr.container ? `: the container ${tr.container}` : ''} is ${tr.state || 'stopped'}`}
           </CheckRow>
           <CheckRow tone={!dcs ? 'warn' : dcs.revoked ? 'bad' : 'good'} label="Bouncer registered">
-            {!dcs ? <>No bouncer called <span className="font-mono text-slate-300">{b.name}</span> in CrowdSec</> : dcs.revoked ? <>The key of <span className="font-mono text-slate-300">{dcs.name}</span> was revoked</> : <><span className="font-mono text-slate-300">{dcs.name}</span>{dcs.type || dcs.version ? <span className="text-slate-600"> · {[dcs.type, dcs.version].filter(Boolean).join(' ')}</span> : null}</>}
+            {!dcs ? <>No bouncer called <span className="font-mono text-slate-300">{b.name}</span> in CrowdSec</> : dcs.revoked ? <>The key of <span className="font-mono text-slate-300">{dcs.name}</span> was revoked</> : <><span className="font-mono text-slate-300">{dcs.name}</span>{dcs.type || dcs.version ? <span className="text-slate-500"> · {[dcs.type, dcs.version].filter(Boolean).join(' ')}</span> : null}</>}
           </CheckRow>
           <CheckRow tone={enf.middleware_present ? 'good' : blind ? 'mute' : 'warn'} label="Middleware file">
             {enf.middleware_present ? <><span className="font-mono text-slate-300" title={enf.middleware_file}>{mwName}</span> is in Traefik’s routes folder</> : blind ? 'Not known: DCS did not find Traefik’s routes folder' : <><span className="font-mono text-slate-300">crowdsec-bouncer.yml</span> is missing from Traefik’s routes folder</>}
@@ -378,7 +378,7 @@ function BouncerSection({ poll, isAdmin, busy, onAdd, onDelete }: { poll: UsePol
 
   const delBtn = (row: CrowdSecBouncerRow, phone: boolean) => {
     if (!isAdmin) return null
-    if (!NAME_RE.test(row.name)) return <span className="text-[11px] text-slate-600" title="This name cannot be removed from the page: use cscli bouncers delete">use cscli</span>
+    if (!NAME_RE.test(row.name)) return <span className="text-[11px] text-slate-500" title="This name cannot be removed from the page: use cscli bouncers delete">use cscli</span>
     const k = `del:${row.name}`
     return phone
       ? <button type="button" className={`${ICON_BTN} !w-auto px-2.5 gap-1.5 text-[11px]`} aria-label={`Delete the bouncer ${row.name}`} disabled={busy === k} onClick={() => onDelete(row)}>{busy === k ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete</button>
@@ -392,7 +392,7 @@ function BouncerSection({ poll, isAdmin, busy, onAdd, onDelete }: { poll: UsePol
       {!b && <div className="space-y-2" aria-busy="true">{[0, 1].map((i) => <Skel key={i} className="h-14" />)}</div>}
       {b && rows.length === 0 && (
         <div className={`${CARD} px-6 py-12 text-center`}>
-          <Plug size={30} className="mx-auto text-slate-600" />
+          <Plug size={30} className="mx-auto text-slate-500" />
           <p className="mt-3 text-sm text-slate-300">No bouncer is registered.</p>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">CrowdSec can detect attackers, but nothing asks it for the ban list, so nothing blocks them. {b.traefik.present ? 'Register the Traefik bouncer above to have Traefik enforce the bans' : 'Add a bouncer for your proxy or firewall'}{isAdmin ? '.' : ': an administrator can do it.'}</p>
           {isAdmin && <div className="mt-4"><button type="button" onClick={onAdd} className={BTN_PRIMARY}><Plus size={14} /> Add a bouncer</button></div>}
@@ -440,7 +440,7 @@ function BouncerSection({ poll, isAdmin, busy, onAdd, onDelete }: { poll: UsePol
                   </div>
                   {delBtn(r, true)}
                 </div>
-                {r.created_at && <p className="text-[10px] text-slate-600 mt-2">registered {fmtTime(r.created_at)}</p>}
+                {r.created_at && <p className="text-[10px] text-slate-500 mt-2">registered {fmtTime(r.created_at)}</p>}
               </div>
             ))}
           </div>
@@ -475,7 +475,7 @@ function Seen({ m, now }: { m: CrowdSecMachine; now: number }) {
 
 function Sources({ m }: { m: CrowdSecMachine }) {
   const ds = Object.entries(m.datasources ?? {})
-  if (ds.length === 0) return <span className="text-xs text-slate-600" title="This machine reported no data sources">none reported</span>
+  if (ds.length === 0) return <span className="text-xs text-slate-500" title="This machine reported no data sources">none reported</span>
   return (
     <span className="inline-flex items-center gap-1 flex-wrap">
       {ds.map(([k, n]) => <Chip key={k} tone="mute" title={`${plural(n, 'data source', 'data sources')} of type ${k}`}>{k} {n}</Chip>)}
@@ -495,7 +495,7 @@ function MachineSection({ poll }: { poll: UsePollingResult<CrowdSecMachinesRespo
       {poll.data && poll.error && <Notice>The last refresh failed ({poll.error.message}). Showing what was loaded before.</Notice>}
       {poll.data && machines.length === 0 && (
         <div className={`${CARD} px-6 py-10 text-center`}>
-          <Server size={28} className="mx-auto text-slate-600" />
+          <Server size={28} className="mx-auto text-slate-500" />
           <p className="mt-3 text-sm text-slate-300">No machine has reported yet.</p>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">CrowdSec’s own engine registers itself when the container starts. If this stays empty, look at the CrowdSec log.</p>
         </div>
@@ -619,7 +619,7 @@ function CommunitySection({ poll }: { poll: UsePollingResult<CrowdSecCommunityRe
               )}
             </StatusRow>
           </div>
-          <p className="text-[11px] text-slate-600 mt-3 pt-3 border-t border-white/5 leading-relaxed">These are settings of CrowdSec itself. This page only shows them; they are changed with cscli on the server.</p>
+          <p className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-white/5 leading-relaxed">These are settings of CrowdSec itself. This page only shows them; they are changed with cscli on the server.</p>
         </>
       )}
     </section>

@@ -20,8 +20,8 @@ const LINE_CHOICES = [100, 300, 500]
 const REFRESH_MS = 5000
 const NEAR_BOTTOM = 48
 
-const LEVEL_TEXT: Record<string, string> = { info: 'text-slate-300', warn: 'text-amber-300', error: 'text-rose-300', debug: 'text-slate-600' }
-const LEVEL_TAG: Record<string, string> = { info: 'text-slate-500', warn: 'text-amber-300', error: 'text-rose-300', debug: 'text-slate-600' }
+const LEVEL_TEXT: Record<string, string> = { info: 'text-slate-300', warn: 'text-amber-300', error: 'text-rose-300', debug: 'text-slate-500' }
+const LEVEL_TAG: Record<string, string> = { info: 'text-slate-500', warn: 'text-amber-300', error: 'text-rose-300', debug: 'text-slate-500' }
 const LEVEL_ROW: Record<string, string> = { warn: 'bg-amber-500/10', error: 'bg-rose-500/10' }
 const LEVEL_NAME: Record<string, string> = { info: 'INFO', warn: 'WARN', error: 'ERROR', debug: 'DEBUG' }
 
@@ -256,7 +256,7 @@ export default function LogsTab() {
 
       {res && lines.length === 0 && (
         <div className={`${CARD} px-6 py-12 text-center`}>
-          <ScrollText size={30} className="mx-auto text-slate-600" />
+          <ScrollText size={30} className="mx-auto text-slate-500" />
           <p className="mt-3 text-sm text-slate-300">{emptyTitle}</p>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
             {dq
@@ -296,11 +296,11 @@ export default function LogsTab() {
                 const rest = tail === -1 ? '' : l.message.slice(tail)
                 return (
                   <div key={key}>
-                    {newDay && <div className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wider text-slate-600 font-sans">{day}</div>}
+                    {newDay && <div className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wider text-slate-500 font-sans">{day}</div>}
                     <div className={`flex items-baseline gap-x-2 px-3 py-px ${LEVEL_ROW[l.level] ?? ''} ${wrap ? 'flex-wrap sm:flex-nowrap' : 'w-max min-w-full'}`}>
                       <span className="text-slate-500 tabular-nums shrink-0" title={l.time ? new Date(l.time).toLocaleString() : undefined}>{clockOf(l.time) || '        '}</span>
                       <span className={`w-[3.2rem] shrink-0 text-[10px] font-semibold tracking-wide ${LEVEL_TAG[l.level] ?? 'text-slate-500'}`}>{LEVEL_NAME[l.level] ?? l.level.toUpperCase()}</span>
-                      {l.module && <span className="shrink-0 text-[10px] leading-none px-1 py-[3px] rounded bg-white/5 border border-white/10 text-slate-400 font-sans">{l.module}</span>}
+                      {l.module && <span className="shrink-0 text-[10px] leading-none px-1 py-[3px] rounded bg-white/5 border border-white/10 text-slate-500 font-sans">{l.module}</span>}
                       <span className={`${LEVEL_TEXT[l.level] ?? 'text-slate-300'} select-text min-w-0 ${wrap ? 'whitespace-pre-wrap break-words basis-full sm:basis-0 sm:flex-1' : 'whitespace-pre'}`}>
                         <Marked text={head} q={dq} />
                         {rest && <span className="text-slate-500"><Marked text={rest} q={dq} /></span>}

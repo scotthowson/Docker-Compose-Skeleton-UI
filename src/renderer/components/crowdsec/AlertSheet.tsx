@@ -359,7 +359,7 @@ export function AlertSheet({ id, onClose }: { id: number; onClose: () => void })
             </Section>
           </div>
 
-          <Section title="What CrowdSec did" right={a.decisions.length > 0 ? <span className="text-[11px] text-slate-600 tabular-nums">{plural(a.decisions.length, 'decision')}</span> : undefined}>
+          <Section title="What CrowdSec did" right={a.decisions.length > 0 ? <span className="text-[11px] text-slate-500 tabular-nums">{plural(a.decisions.length, 'decision')}</span> : undefined}>
             {a.decisions.length === 0 ? (
               <p className={`${CARD} px-3.5 py-3 text-xs text-slate-300 leading-relaxed`}>
                 {a.simulated
@@ -390,7 +390,7 @@ export function AlertSheet({ id, onClose }: { id: number; onClose: () => void })
           </Section>
 
           {events.length > 0 && (
-            <Section title="The requests that raised it" right={<span className="text-[11px] text-slate-600 tabular-nums">{events.length < a.events_count ? `first ${fmtNum(events.length)} of ${fmtNum(a.events_count)}` : plural(events.length, 'request')}</span>}>
+            <Section title="The requests that raised it" right={<span className="text-[11px] text-slate-500 tabular-nums">{events.length < a.events_count ? `first ${fmtNum(events.length)} of ${fmtNum(a.events_count)}` : plural(events.length, 'request')}</span>}>
               <ul className={`${CARD} px-3.5 py-3 divide-y divide-white/5`}>
                 {shownEvents.map((ev, i) => <EventRow key={i} ev={ev} n={i + 1} />)}
               </ul>
