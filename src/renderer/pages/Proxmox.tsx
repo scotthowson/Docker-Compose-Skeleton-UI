@@ -534,6 +534,8 @@ interface VmRowProps {
   member?: FleetMemberBase
   live?: FleetMemberLive
   scan?: FleetGuestScan
+  /** this guest is the machine the dashboard runs on (the hub's own VM or container): it has no member of its own */
+  isSelf?: boolean
   busyKey: string
   /** the card shows its containers block open (the page remembers this per guest for the visit) */
   expanded: boolean
@@ -561,7 +563,8 @@ function DcsChip({ vm, member, live, offline = false }: { vm: ProxmoxVm; member:
 }
 
 /** what the scan found in a guest that has no member yet, with the link button */
-function ScanLine({ vm, scan, onLink, small = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; small?: boolean }) {
+function ScanLine({ vm, scan, onLink, small = false, isSelf = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; small?: boolean; isSelf?: boolean }) {
+  if (isSelf) return <span className="text-amber-200 flex items-center gap-1.5 min-w-0 truncate"><Satellite size={11} className="shrink-0" /> This hub — the dashboard you are looking at runs here</span>
   const found = scan?.dcs && !scan.member ? scan.dcs : null
   const btn = small ? 'h-7 px-2 rounded-lg text-[11px]' : 'h-8 px-2.5 rounded-lg text-[11px]'
   return found ? (
@@ -663,7 +666,7 @@ function VmCard(p: VmRowProps) {
             <span className="text-slate-600 font-mono truncate min-w-0">{hostOf(member.url)}</span>
           </>
         ) : isHub && running && isAdmin ? (
-          <div className="flex-1 flex items-center justify-between gap-2 min-w-0"><ScanLine vm={vm} scan={scan} onLink={onLink} /></div>
+          <div className="flex-1 flex items-center justify-between gap-2 min-w-0"><ScanLine vm={vm} scan={scan} onLink={onLink} isSelf={p.isSelf} /></div>
         ) : (
           <span className="text-slate-600">no DCS</span>
         )}
@@ -719,7 +722,7 @@ function VmTableRow(p: VmRowProps) {
             {live?.reachable ? <span className="text-slate-400 tabular-nums whitespace-nowrap">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span> : live ? <span className="text-rose-300/90">no answer</span> : <Loader2 size={11} className="animate-spin text-slate-500" />}
           </div>
         ) : isHub && running && isAdmin ? (
-          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} small /></div>
+          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} small isSelf={p.isSelf} /></div>
         ) : <span className="text-slate-600">—</span>}
       </td>
       <td className={th}><div className="flex flex-wrap gap-1">{vm.tags.map((t) => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/5 text-slate-400 leading-none">{t}</span>)}</div></td>
@@ -1045,7 +1048,7 @@ export default function Proxmox() {
   const rowProps = (vm: ProxmoxVm): VmRowProps => {
     const m = memberByVm.get(vm.vmid)
     return {
-      vm, isAdmin, isHub: isHub || role === 'standalone', member: m, live: m ? liveById.get(m.id) : undefined, scan: scanByVm.get(vm.vmid), busyKey, pveUrl,
+      vm, isAdmin, isHub: isHub || role === 'standalone', member: m, live: m ? liveById.get(m.id) : undefined, scan: scanByVm.get(vm.vmid), isSelf: !!pveSelf.data?.guest && pveSelf.data.guest.vmid === vm.vmid && pveSelf.data.guest.node === vm.node, busyKey, pveUrl,
       expanded: !!openCards[vm.vmid], onToggleExpand: () => toggleCard(vm.vmid),
       onAction: (v, a) => setPending({ vm: v, action: a }), onStackAction: stackAction, onDeploy: deployTo, onLink: (p) => setAdding(p), onMemberMenu: (mm) => setMenu(mm),
       onDetails: (v) => setDetails({ node: v.node, type: v.type, vmid: v.vmid }), onOpen: openStack,
