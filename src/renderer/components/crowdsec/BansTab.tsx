@@ -226,15 +226,24 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
       {data && rows.length > 0 && (
         <>
           {/* the table (a desktop) */}
-          <div className={`${CARD} overflow-hidden hidden md:block`}>
-            <table className="w-full text-sm">
+          <div className={`${CARD} overflow-hidden hidden lg:block`}>
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                {isAdmin && <col className="w-10" />}
+                <col className="w-[9.5rem] xl:w-[12rem]" />
+                <col className="w-[5rem] xl:w-[11rem]" />
+                <col />
+                <col className="hidden xl:table-column w-[7rem]" />
+                <col className="w-[6rem]" />
+                <col className="w-[5.5rem]" />
+              </colgroup>
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/5">
                   {isAdmin && <th className="w-10 pl-4 py-2.5"><input type="checkbox" aria-label="Select every ban shown" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map(idOf)) : new Set())} className="accent-emerald-500" /></th>}
                   <th className="text-left font-semibold px-3 py-2.5">Address</th>
                   <th className="text-left font-semibold px-3 py-2.5">Country</th>
                   <th className="text-left font-semibold px-3 py-2.5">Reason</th>
-                  <th className="text-left font-semibold px-3 py-2.5">Origin</th>
+                  <th className="text-left font-semibold px-3 py-2.5 hidden xl:table-cell">Origin</th>
                   <th className="text-left font-semibold px-3 py-2.5">Ends in</th>
                   <th className="w-24 pr-4" />
                 </tr>
@@ -253,12 +262,13 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
                         </div>
                         {d.as_name && <p className="text-[11px] text-slate-500 truncate max-w-[16rem]" title={`AS${d.as_number} ${d.as_name}`}>AS{d.as_number} · {d.as_name}</p>}
                       </td>
-                      <td className="px-3 py-2.5"><Country code={d.country} name /></td>
-                      <td className="px-3 py-2.5 min-w-0 max-w-[18rem]">
+                      <td className="px-3 py-2.5 min-w-0"><span className="hidden xl:inline-flex max-w-full"><Country code={d.country} name /></span><span className="xl:hidden"><Country code={d.country} /></span></td>
+                      <td className="px-3 py-2.5 min-w-0">
                         <p className="text-slate-200 truncate" title={reasonOf(d).title}>{reasonOf(d).title}</p>
-                        {reasonOf(d).sub && <p className="text-[11px] text-slate-500 truncate" title={reasonOf(d).sub}>{reasonOf(d).sub}</p>}
+                        {reasonOf(d).sub && <p className="text-[11px] text-slate-500 truncate" title={reasonOf(d).sub}>{reasonOf(d).sub}<span className="xl:hidden"> · {originLabel(d.origin ?? '')}</span></p>}
+                        {!reasonOf(d).sub && <p className="text-[11px] text-slate-500 truncate xl:hidden">{originLabel(d.origin ?? '')}</p>}
                       </td>
-                      <td className="px-3 py-2.5"><Chip tone={originTone(d.origin ?? '')}>{originLabel(d.origin ?? '')}</Chip></td>
+                      <td className="px-3 py-2.5 hidden xl:table-cell"><Chip tone={originTone(d.origin ?? '')}>{originLabel(d.origin ?? '')}</Chip></td>
                       <td className="px-3 py-2.5 whitespace-nowrap"><Expires d={d} /></td>
                       <td className="pr-4 py-2.5">
                         <div className="flex items-center justify-end gap-1.5">
@@ -274,7 +284,7 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
           </div>
 
           {/* cards (a phone) */}
-          <div className="md:hidden space-y-2">
+          <div className="lg:hidden space-y-2">
             {rows.map((d) => {
               const id = idOf(d)
               return (

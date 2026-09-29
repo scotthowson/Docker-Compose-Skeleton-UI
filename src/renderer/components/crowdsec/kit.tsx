@@ -110,7 +110,7 @@ export function Segmented<T extends string>({ value, options, onChange, ariaLabe
             disabled={o.disabled}
             aria-pressed={on}
             onClick={() => onChange(o.value)}
-            className={`h-7 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors border disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
+            className={`h-8 sm:h-7 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors border disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
           >
             {Icon && <Icon size={12} />}
             {o.label}
@@ -160,14 +160,23 @@ export function CopyIcon({ text, label = 'Copy' }: { text: string; label?: strin
 // The sheet that hosts forms: centred on a desktop, a bottom sheet on a phone
 // ---------------------------------------------------------------------------
 
+// the sheets that are open, the newest last: Escape closes only that one (a ban form opened from an alert closes alone)
+const sheetStack: symbol[] = []
 export function CsSheet({ title, subtitle, icon, tone = 'good', onClose, children, wide = false, footer }: {
   title: string; subtitle?: string; icon?: ReactNode; tone?: Tone; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode
 }) {
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+    const me = Symbol('sheet')
+    sheetStack.push(me)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || sheetStack[sheetStack.length - 1] !== me) return
+      e.stopPropagation(); closeRef.current()
+    }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+    return () => { document.removeEventListener('keydown', onKey); const i = sheetStack.indexOf(me); if (i >= 0) sheetStack.splice(i, 1) }
+  }, [])
   const tile = tone === 'bad' ? 'bg-rose-500/15 text-rose-400' : tone === 'warn' ? 'bg-amber-500/15 text-amber-400' : tone === 'info' ? 'bg-cyan-500/15 text-cyan-400' : 'bg-emerald-500/15 text-emerald-400'
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>

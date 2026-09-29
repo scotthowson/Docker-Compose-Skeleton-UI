@@ -58,10 +58,10 @@ export default function CrowdSec() {
 
   const [tab, setTabState] = useState<TabId>(loadTab)
   // a tab can be opened with a search already typed (a country in the overview opens the bans of that country)
-  const [seed, setSeed] = useState<{ tab?: string; search?: string } | null>(null)
+  const [seed, setSeed] = useState<{ tab?: string; search?: string; n: number } | null>(null)
   const goTab = useCallback((t: string, search?: string) => {
     if (!(TAB_IDS as string[]).includes(t)) return
-    setSeed(search !== undefined ? { tab: t, search } : null)
+    setSeed((prev) => (search !== undefined ? { tab: t, search, n: (prev?.n ?? 0) + 1 } : null))
     setTabState(t as TabId)
     try { localStorage.setItem(TAB_KEY, t) } catch { /* private window */ }
   }, [])
@@ -71,7 +71,7 @@ export default function CrowdSec() {
     const p = useSettingsStore.getState().navigationPayload
     if (p && (typeof p.tab === 'string' || typeof p.search === 'string')) {
       if (typeof p.tab === 'string') goTab(p.tab, typeof p.search === 'string' ? p.search : undefined)
-      else setSeed({ tab: undefined, search: p.search as string })
+      else setSeed((prev) => ({ tab: undefined, search: p.search as string, n: (prev?.n ?? 0) + 1 }))
       useSettingsStore.getState().consumeNavigationPayload()
     }
   }, [navigationPayload, goTab])
@@ -144,7 +144,7 @@ export default function CrowdSec() {
             <div className="-mx-1 px-1 overflow-x-auto scrollbar-none">
               <Segmented value={tab} onChange={(v) => setTab(v)} ariaLabel="CrowdSec sections" className="w-max" options={tabs.map((t) => ({ value: t.value, label: t.label, icon: t.icon, count: t.count }))} />
             </div>
-            <div key={`${member ?? 'hub'}-${tab}`} className="animate-fade-in">
+            <div key={`${member ?? 'hub'}-${tab}-${seed && seed.tab === tab ? seed.n : 0}`} className="animate-fade-in">
               {tab === 'overview' && <OverviewTab />}
               {tab === 'bans' && <BansTab seedSearch={seed?.tab === 'bans' ? seed.search : undefined} />}
               {tab === 'alerts' && <AlertsTab seedSearch={seed?.tab === 'alerts' ? seed.search : undefined} />}
