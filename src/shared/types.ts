@@ -2158,6 +2158,8 @@ export interface FactoryResetResponse {
 export interface SetupConfigureRequest {
   env_vars: Record<string, string>
   stacks: string[]
+  /** 3.9.7: stacks the person removed on the wizard's stack page — their folders go too, unless containers run from them or App-Data holds data */
+  remove_stacks?: string[]
 }
 
 export interface SetupConfigureResponse {
@@ -3272,6 +3274,10 @@ export interface FleetProvisionDefaults {
   hub_firewall?: HubFirewall
   /** 3.9.7: the Proxmox node's size (0 when unknown) — the VM size choices stop there */
   capacity?: { cores: number; memory_gb: number }
+  /** 3.9.7: the guests Proxmox already has (templates apart) — a stack cannot get a VM named like one of them */
+  guests?: { name: string; vmid: number; type: string; node: string; status: string; /** what the guest is given: memory in GB, virtual CPUs */ maxmem_gb?: number; maxcpu?: number }[]
+  /** 3.9.8: stacks with containers up on the hub — they stay on it (a build refuses them) */
+  running_stacks?: string[]
   node: string
   storages: ProxmoxStorage[]
   /** what a VM can be built from: the catalogue (cloud images by URL), and what Proxmox already holds */
@@ -3315,7 +3321,7 @@ export interface FleetProvisionRequest {
   /** clone the DCS template when one exists (the default) */
   from_template?: boolean
 }
-export interface FleetProvisionResponse { success: boolean; jobs: { id: string; stack: string; ip: string }[] }
+export interface FleetProvisionResponse { success: boolean; jobs: { id: string; stack: string; ip: string; /** the DCS template bake that runs ahead of the VMs */ bake?: boolean }[] }
 
 export type FleetJobStepState = 'pending' | 'running' | 'done' | 'failed'
 export interface FleetJobStep { id: string; label: string; hint: string; state: FleetJobStepState; detail: string }

@@ -16,7 +16,7 @@ export function CopyButton({ text, className = '', size = 12 }: CopyButtonProps)
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    })
+    }).catch(() => { /* refused by the browser: the button simply does not turn green */ })
   }, [text])
 
   return (

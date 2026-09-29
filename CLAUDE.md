@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Docker Compose Skeleton UI is a premium Electron desktop application for managing [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) servers. It connects to the DCS REST API (default `http://127.0.0.1:9876`) and provides live monitoring, stack management, container control, and full server administration through a dark glassmorphism design system.
 
-**Stack:** Electron 33 + React 18 + Vite 6 + Tailwind CSS 3 + Zustand 5 + TypeScript 5
+**Stack:** Electron 33 + React 18 + Vite 6 + Tailwind CSS 3 + Zustand 5 + TypeScript 5 (+ [Mantine](https://mantine.dev) 8 for a few components, see below)
 
 ## Build & Dev Commands
 
@@ -98,6 +98,7 @@ Sessions persist in `localStorage['auth-session']`. Auto-lock via configurable i
 - **Glass component classes** — `.glass`, `.glass-subtle`, `.glass-card`, `.glass-hover`, `.glass-1/2/3` (depth levels)
 - **Accent colors** — emerald (primary/success), cyan (info), amber (warning), rose (error/danger), violet (secondary)
 - **Icons** — exclusively `lucide-react`, imported per-component
+- **Mantine** (`@mantine/core` 8, React 18 compatible) is used where its components beat what is here — progress bars/rings, tooltips (the VM build cards). Rules: import a component's styles one by one in `src/renderer/lib/mantine.tsx` (`@mantine/core/styles/Progress.css`, …), never `styles.css` or `baseline.css` (they restyle the page); `DcsMantineProvider` (wrapped around `<App />` in `main.tsx`) carries the dashboard's emerald/cyan/amber/rose palette and follows the `light` class on `<html>`; colours are passed as CSS values or Tailwind classes the light theme already remaps (`text-cyan-400`, `text-amber-300`, …), not Mantine's pale dark-scheme tints
 
 ### CSS Patterns
 

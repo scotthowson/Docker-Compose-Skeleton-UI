@@ -178,7 +178,12 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               <div>
                 <h3 className="text-sm font-semibold text-slate-100">Delete Stack</h3>
                 <p className="text-xs text-slate-400">
-                  This will permanently remove the stack directory and all its files.
+                  {(() => {
+                    const vmStack = stacks.find((st) => st.name === showDeleteModal && st.placement === 'vm')
+                    return vmStack
+                      ? `This removes the stack's files from its VM${vmStack.member_name ? ` (${vmStack.member_name})` : ''}. The VM itself stays — remove it on the Proxmox page when you no longer need it.`
+                      : 'This will permanently remove the stack directory and all its files.'
+                  })()}
                 </p>
               </div>
             </div>

@@ -1,6 +1,6 @@
 {
   "name": "docker-compose-skeleton-ui",
-  "version": "3.9.8",
+  "version": "3.9.9",
   "description": "Premium Electron desktop application for Docker Compose Skeleton management",
   "type": "module",
   "main": "dist/main/index.cjs",
@@ -26,6 +26,8 @@
     "@capacitor/cli": "^8.1.0",
     "@capacitor/core": "^8.1.0",
     "@capacitor/status-bar": "^8.0.1",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
     "@xhayper/discord-rpc": "^1.5.1",
     "electron-store": "^8.2.0",
     "lucide-react": "^0.462.0",

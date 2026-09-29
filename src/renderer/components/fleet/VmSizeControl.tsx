@@ -90,7 +90,7 @@ export function VmSizeControl({ value, onChange, limits = {}, disabled }: {
             <button key={p.id} type="button" disabled={disabled || !ok}
               title={ok ? undefined : `More than the Proxmox node has (${maxCores} cores, ${maxMemGb} GB)`}
               onClick={() => onChange({ ...p.size, diskGb: Math.max(p.size.diskGb, minDiskGb) })}
-              className={`px-2 py-1.5 rounded-lg border text-left transition-colors disabled:opacity-35 ${active === p.id ? 'bg-amber-500/15 border-amber-500/40 text-amber-100' : 'bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.06]'}`}>
+              className={`px-2 py-1.5 rounded-lg border text-left transition-colors disabled:opacity-35 ${active === p.id ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.06]'}`}>
               <span className="block text-xs font-semibold">{p.label}</span>
               <span className="block text-[10px] text-slate-500 tabular-nums">{p.size.cores} CPU · {p.size.memGb} GB · {Math.max(p.size.diskGb, minDiskGb)} GB</span>
             </button>

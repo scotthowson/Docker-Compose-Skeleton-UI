@@ -37,7 +37,7 @@ import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
 import MemberSheet, { type MemberSheetPrefill } from '../components/fleet/MemberSheet'
 import { Sheet, MATCH_LABEL, hostOf } from '../components/fleet/fleetShared'
-import { FleetJobCard } from '../components/fleet/FleetJobsPanel'
+import { FleetJobCard, JobsSummary, orderJobs } from '../components/fleet/FleetJobsPanel'
 import NewVmSheet, { CapabilityNote, settingsFromDefaults, loadVmSettings, osLabel } from '../components/fleet/NewVmSheet'
 import VmCapsule from '../components/fleet/VmCapsule'
 
@@ -357,45 +357,15 @@ function TemplatesCard({ templates, defaults, isAdmin, removing, onRemove, onBak
   )
 }
 
-/** the VMs the hub is building, built, or failed to build: one card per job, a summary while any is active, Clear finished afterwards */
+/** the VMs the hub is building, built, or failed to build: a summary while any is active, then one wide card per job */
 function BuildsPanel({ jobs, onChanged }: { jobs: FleetJob[]; onChanged: () => void }) {
-  const [clearing, setClearing] = useState(false)
-  const done = jobs.filter((j) => j.status === 'done'), failed = jobs.filter((j) => j.status === 'failed')
-  const running = jobs.filter((j) => j.status === 'running'), queued = jobs.filter((j) => j.status === 'queued')
-  const active = running.length + queued.length
-  // a build takes about as long as the ones that finished (or a minute and a half until one has)
-  const durations = done.filter((j) => j.started_at && j.finished_at).map((j) => (j.finished_at as number) - (j.started_at as number))
-  const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 90
-  const now = Date.now() / 1000
-  const runningLeft = running.reduce((a, j) => a + Math.max(10, avg - (j.started_at ? now - j.started_at : 0)), 0)
-  const eta = Math.round((runningLeft + queued.length * avg) / 60)
-  const pct = Math.round(((done.length + failed.length + running.reduce((a, j) => a + (j.steps.filter((s) => s.state === 'done').length / Math.max(1, j.steps.length)), 0)) / jobs.length) * 100)
-  // finished builds are cleared together; a failed one and a by-hand install still waiting for its join stay
-  const clearable = done.filter((j) => !(j.manual && !j.member_id))
-  const clearFinished = async () => { setClearing(true); try { for (const j of clearable) await deleteFleetJob(j.id); onChanged() } finally { setClearing(false) } }
-  const cols = jobs.length === 1 ? 'grid-cols-1' : jobs.length === 2 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3'
   return (
-    <div className={`${CARD} p-4 space-y-3`}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><Hammer size={11} /> VM builds <span className="text-slate-600 tabular-nums">{active} active · {jobs.length} on the board</span></p>
-        <div className="flex items-center gap-3 flex-wrap">
-          {active > 0 && (
-            <div className="flex items-center gap-2 text-[11px] text-slate-300 flex-wrap">
-              <Loader2 size={12} className="animate-spin text-cyan-400 shrink-0" />
-              <span className="tabular-nums">{done.length} done{failed.length ? `, ${failed.length} failed` : ''}, {running.length} building, {queued.length} waiting{eta > 0 ? ` · about ${eta} min left` : ''}</span>
-              <div className="w-32 h-1.5 rounded-full bg-white/5 overflow-hidden"><div className="h-full bg-cyan-400/80 transition-all duration-700" style={{ width: `${pct}%` }} /></div>
-              <span className="text-[11px] text-slate-500 tabular-nums">{pct}%</span>
-            </div>
-          )}
-          {clearable.length > 0 && active === 0 && (
-            <button type="button" onClick={clearFinished} disabled={clearing} className={MINI}>{clearing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Clear finished</button>
-          )}
-        </div>
+    <section className="space-y-3">
+      <JobsSummary jobs={jobs} onChanged={onChanged} compact title="Built one at a time — each joins this hub by itself" />
+      <div className="space-y-2.5">
+        {orderJobs(jobs).map((j) => <FleetJobCard key={j.id} job={j} onChanged={onChanged} compact />)}
       </div>
-      <div className={`grid ${cols} gap-3`}>
-        {jobs.map((j) => <FleetJobCard key={j.id} job={j} onChanged={onChanged} compact />)}
-      </div>
-    </div>
+    </section>
   )
 }
 

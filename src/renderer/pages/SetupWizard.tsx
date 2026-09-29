@@ -27,6 +27,7 @@ import FleetJobsPanel from '../components/fleet/FleetJobsPanel'
 import { VmSettingsFields, CapabilityNote, settingsFromDefaults, vmSettingsToRequest, osLabel, type VmSettings } from '../components/fleet/NewVmSheet'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import { VmSizeControl } from '../components/fleet/VmSizeControl'
+import PlanCapacity from '../components/fleet/PlanCapacity'
 import { HubFirewallNote } from '../components/fleet/fleetShared'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 
@@ -238,6 +239,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [caps, setCaps] = useState<ProxmoxCapabilities | null>(null)
   const [vmSettings, setVmSettings] = useState<VmSettings | null>(null)
   const vmEditedRef = useRef(false) // a re-test refreshes the VM settings from the hub's defaults unless they were edited
+  // default stacks the person removed on the stack page: the server deletes their folders when setup is applied
+  const [removedStacks, setRemovedStacks] = useState<string[]>([])
   const [placements, setPlacements] = useState<Record<string, 'hub' | 'vm'>>({})
   const [vmSpecs, setVmSpecs] = useState<Record<string, { cores: number; memGb: number; diskGb: number }>>({})
   const [showVmSettings, setShowVmSettings] = useState(false)
@@ -313,9 +316,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const hubOnly: Record<string, string> = { 'core-infrastructure': 'The dashboard runs here' }
   if (enableTraefik) hubOnly[proxyStack] = 'Traefik runs here: the hub serves every VM\'s routes'
   if (notifyMode === 'self' && notifyStack) hubOnly[notifyStack] = hubOnly[notifyStack] ?? 'ntfy runs here'
+  for (const n of provDefaults?.running_stacks ?? []) hubOnly[n] = hubOnly[n] ?? 'Its containers are running on this server already'
   const placementOf = (name: string): 'hub' | 'vm' => hubOnly[name] ? 'hub' : placements[name] ?? (vmReady ? 'vm' : 'hub')
   const specOf = (name: string) => vmSpecs[name] ?? { cores: provDefaults?.defaults.cores ?? 2, memGb: Math.round((provDefaults?.defaults.memory_mb ?? 4096) / 1024), diskGb: provDefaults?.defaults.disk_gb ?? 32 }
-  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm').map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
+  // a guest on Proxmox already carries the stack's name (a leftover of an earlier attempt, or someone's VM): the hub
+  // refuses to build a twin, so that stack is left out of the build — the rest still gets its VMs
+  const clashOf = (name: string) => provDefaults?.guests?.find((g) => g.name === name)
+  const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm' && !clashOf(st.name)).map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
 
   // Client-side dashboard preferences
   const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
@@ -676,11 +683,15 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       }
 
       // Single setupConfigure call with everything — MUST be before setupComplete
-      await setupConfigure({
+      const configured = await setupConfigure({
         env_vars: allEnvVars,
         stacks: stacks.filter((s) => placementOf(s.name) === 'hub').map((s) => s.name),
+        remove_stacks: removedStacks.filter((n) => !stacks.some((s) => s.name === n || s.source === n)),
       })
       results.push({ label: 'Configuration saved', ok: true })
+      if (configured.stacks_removed?.length) results.push({ label: `Removed stack${configured.stacks_removed.length === 1 ? '' : 's'}: ${configured.stacks_removed.join(', ')}`, ok: true })
+      const kept = (configured.stacks_warned ?? []).filter((n) => removedStacks.includes(n))
+      if (kept.length) results.push({ label: `Kept ${kept.join(', ')}`, ok: false, detail: 'Containers run from it, or its App-Data folder holds data — remove it from the Stacks page when you are sure' })
       if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${!pveSecret.trim() ? ' — the token secret saved before is kept' : pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
       if (linkedMembers > 0) results.push({ label: `${linkedMembers} fleet member${linkedMembers === 1 ? '' : 's'} linked — their stacks show under their VMs on the Proxmox page`, ok: true })
       if (joined) results.push({ label: `Joined the hub ${joined.hub.name || joined.hub.url} as "${joined.member.name}"`, ok: true, detail: joined.member.vmid ? `Guest ${joined.member.vmid}${joined.member.node ? ` on ${joined.member.node}` : ''}` : 'The hub could not tell which guest this is — pick it on its Proxmox page' })
@@ -773,11 +784,20 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       //    a join setup.sh saved that was not run above happens here
       const done = await setupComplete()
       // 3c. The VMs: one per stack placed in a VM, built by the hub in the background
+      const leftOut = stacks.filter((st) => placementOf(st.name) === 'vm' && clashOf(st.name)).map((st) => `${st.name} (VM ${clashOf(st.name)?.vmid})`)
+      if (leftOut.length > 0) {
+        results.push({ label: `Left out of the build: ${leftOut.join(', ')}`, ok: false, detail: 'A guest with the stack\'s name already exists on Proxmox — delete or rename it there, or link it from the Proxmox page, then add the stack as a VM (New VM)' })
+      }
       if (vmPlan.length > 0 && vmSettings) {
         try {
           const r = await provisionFleet({ ...vmSettingsToRequest(vmSettings), vms: vmPlan.map((v) => ({ stack: v.stack, source: v.source, cores: v.cores, memory_mb: v.memGb * 1024, disk_gb: v.diskGb })) })
           setVmQueued(r.jobs.length)
-          results.push({ label: `${r.jobs.length} VM${r.jobs.length === 1 ? '' : 's'} being built by the hub: ${r.jobs.map((j) => `${j.stack} at ${j.ip}`).join(', ')}`, ok: true, detail: 'Each VM gets Docker and DCS, joins this hub and runs its stack — follow them below or on the Proxmox page' })
+          const built = r.jobs.filter((j) => !j.bake), templates = r.jobs.filter((j) => j.bake)
+          results.push({
+            label: `${built.length} VM${built.length === 1 ? '' : 's'} being built by the hub${templates.length ? `, after a DCS template of the operating system` : ''}: ${built.map((j) => `${j.stack} (${j.ip})`).join(', ')}`,
+            ok: true,
+            detail: templates.length ? `The template is baked once (${templates.map((j) => j.ip).join(', ')}); every VM is then cloned from it in about 40 s and joins this hub` : 'Each VM gets Docker and DCS, joins this hub and runs its stack',
+          })
         } catch (err) {
           results.push({ label: 'Building the VMs', ok: false, detail: `${err instanceof Error ? err.message : 'failed'} — the Proxmox page can build them one by one` })
         }
@@ -846,6 +866,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
   const deleteStack = (index: number) => {
     if (stacks.length <= 1) return
+    const gone = stacks[index]
+    // a stack the server already has a folder for (not one added here): remembered, so removing it here really removes it
+    if (!gone.isNew) setRemovedStacks((r) => { const n = gone.source ?? gone.name; return r.includes(n) ? r : [...r, n] })
     setStacks(stacks.filter((_, i) => i !== index))
   }
 
@@ -853,6 +876,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     const name = newStackName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
     if (!name || !/^[a-z0-9][a-z0-9_-]*$/.test(name)) return
     if (stacks.some((s) => s.name === name)) return
+    // adding back a stack that was removed keeps it (and its folder)
+    setRemovedStacks((r) => r.filter((n) => n !== name))
     setStacks([...stacks, { name, label: '', isDefault: false, isNew: true, editing: false }])
     setNewStackName('')
   }
@@ -901,50 +926,54 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
   // ── Render ──
 
-  // Success screen
+  // Success screen — a page that scrolls: the content is centred while it fits (margin auto) and starts at the top
+  // when it does not, so the heading is never cut off above the screen
   if (complete) {
+    const wide = vmQueued > 0
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-950 px-4 overflow-y-auto">
-        <div className={`text-center animate-scale-in w-full ${vmQueued > 0 ? 'max-w-2xl py-8' : 'max-w-sm'}`}>
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/30 mb-6 shadow-lg shadow-emerald-500/10">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
+      <div className="h-screen overflow-y-auto bg-slate-950 px-4 scrollbar-thin">
+        <div className="min-h-full flex">
+          <div className={`m-auto text-center animate-scale-in w-full ${wide ? 'max-w-4xl py-10' : 'max-w-sm py-8'}`}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/15 ring-2 ring-emerald-500/30 mb-4 shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-100 mb-1.5">Setup complete</h2>
+            <p className="text-sm text-slate-400 mb-5">
+              <span className="font-semibold text-slate-200">{envVars.SERVER_NAME || 'Your server'}</span> is configured and ready to manage
+            </p>
+            {setupResults.length > 0 && (
+              <ul className="text-left text-xs mb-5 bg-slate-900/60 border border-white/5 rounded-2xl divide-y divide-white/[0.04] overflow-hidden">
+                {setupResults.map((r) => (
+                  <li key={r.label} className="flex items-start gap-2.5 px-4 py-2.5">
+                    {r.ok ? <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-px" /> : <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-px" />}
+                    <span className={`min-w-0 break-words ${r.ok ? 'text-slate-300' : 'text-amber-300'}`}>
+                      {r.label}
+                      {r.detail && <span className="block text-[11px] text-slate-500 mt-0.5">{r.detail}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {vmPlan.length > 0 ? (
+              <div className="text-left space-y-4">
+                {vmQueued > 0 && (jobsPoll.data && jobsPoll.data.jobs.length > 0
+                  ? <FleetJobsPanel jobs={jobsPoll.data.jobs} onChanged={jobsPoll.refresh} compact title="Each VM gets Docker and DCS, joins this hub and runs its stack" />
+                  : <p className="text-xs text-slate-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin text-emerald-400" /> Waiting for the first VM job…</p>)}
+                {/* no automatic redirect while VMs are involved: the builds are followed here, or a refused build stays readable */}
+                <button type="button" onClick={onComplete} className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+                  {vmQueued > 0 ? 'Open the dashboard — the builds carry on in the background' : 'Open the dashboard'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                <Loader2 size={12} className="animate-spin text-emerald-400" />
+                <span>Entering Dashboard...</span>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-500 mt-6">
+              Tip: Export your settings from Settings to back up this configuration
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-slate-100 mb-2">Setup Complete!</h2>
-          <p className="text-sm text-slate-400 mb-4">
-            <span className="font-semibold text-slate-200">{envVars.SERVER_NAME || 'Your server'}</span> is configured and ready to manage
-          </p>
-          {setupResults.length > 0 && (
-            <ul className="text-left text-xs space-y-1.5 mb-5 bg-slate-900/60 border border-white/5 rounded-xl p-3">
-              {setupResults.map((r) => (
-                <li key={r.label} className="flex items-start gap-2">
-                  {r.ok ? <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-px" /> : <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-px" />}
-                  <span className={r.ok ? 'text-slate-300' : 'text-amber-300'}>
-                    {r.label}
-                    {r.detail && <span className="block text-[10px] text-slate-500">{r.detail}</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {vmPlan.length > 0 ? (
-            <div className="text-left space-y-3 mb-4">
-              {vmQueued > 0 && (jobsPoll.data && jobsPoll.data.jobs.length > 0
-                ? <FleetJobsPanel jobs={jobsPoll.data.jobs} onChanged={jobsPoll.refresh} compact title="VMs being built" />
-                : <p className="text-xs text-slate-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin text-emerald-400" /> Waiting for the first VM job…</p>)}
-              {/* no automatic redirect while VMs are involved: the builds are followed here, or a refused build stays readable */}
-              <button type="button" onClick={onComplete} className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
-                {vmQueued > 0 ? 'Open the dashboard — the builds carry on in the background' : 'Open the dashboard'}
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-              <Loader2 size={12} className="animate-spin text-emerald-400" />
-              <span>Entering Dashboard...</span>
-            </div>
-          )}
-          <p className="text-[10px] text-slate-500 mt-6">
-            Tip: Export your settings from Settings to back up this configuration
-          </p>
         </div>
       </div>
     )
@@ -1426,7 +1455,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showProxmox && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       {fleetRole === 'hub' && (
-                        <p className="text-[11px] text-amber-100 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 flex items-start gap-2">
+                        <p className="text-[11px] text-amber-300 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 flex items-start gap-2">
                           <Server size={13} className="text-amber-300 shrink-0 mt-0.5" />
                           <span><b>This DCS is the hub</b> — chosen in <span className="font-mono">./setup.sh</span>. {pveSaved ? <>The Proxmox link setup made is filled in below{pveTest?.ok ? ' and works' : ''}; each stack can get its own VM in the next step.</> : <>Link Proxmox here and each stack can get its own VM in the next step.</>}</span>
                         </p>
@@ -2201,28 +2230,29 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <p className="text-[11px] text-slate-300 flex items-start gap-2"><Server size={13} className="text-amber-400 shrink-0 mt-0.5" /><span>Proxmox is linked, so <b>a stack can be a VM</b>: the hub builds it (Debian cloud image, Docker, DCS), the VM joins this hub and runs that one stack. The dashboard here stays the only one; <span className="font-mono">core-infrastructure</span> stays on the hub. Toggle each stack, size the VMs, and check the network below.</span></p>
                   <CapabilityNote caps={caps} />
                   {vmPlan.length > 0 && <HubFirewallNote fw={provDefaults?.hub_firewall} />}
-                  {vmPlan.length > 0 && (() => {
-                    const mem = vmPlan.reduce((n, v) => n + v.memGb, 0)
-                    const cap = provDefaults?.capacity
-                    const over = !!(cap?.memory_gb && mem > cap.memory_gb)
+                  {(() => {
+                    const clashes = stacks.filter((st) => placementOf(st.name) === 'vm' && clashOf(st.name))
+                    if (clashes.length === 0) return null
                     return (
-                      <p className={`text-[11px] ${over ? 'text-rose-300' : 'text-amber-200'}`}>
-                        {vmPlan.length} VM{vmPlan.length === 1 ? '' : 's'} · {vmPlan.reduce((n, v) => n + v.cores, 0)} cores · {mem} GB RAM · {vmPlan.reduce((n, v) => n + v.diskGb, 0)} GB disk
-                        {cap?.memory_gb ? <span className="text-slate-400"> — the node{provDefaults?.node ? ` ${provDefaults.node}` : ''} has {cap.cores} cores and {cap.memory_gb} GB RAM{over ? ', so these VMs would not all fit (the hub itself uses some too): make them smaller or keep some stacks on the hub' : ''}</span> : null}
-                      </p>
+                      <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.06] p-3 text-[11px] text-rose-300 flex items-start gap-2">
+                        <AlertTriangle size={13} className="text-rose-300 shrink-0 mt-0.5" />
+                        <span>Proxmox already has a guest named like {clashes.length === 1 ? 'this stack' : 'these stacks'}: {clashes.map((st) => <span key={st.name} className="font-mono">{st.name} <span className="text-rose-300">(VM {clashOf(st.name)?.vmid})</span>{' '}</span>)}
+                          — {clashes.length === 1 ? 'it is' : 'they are'} left out of the build, the others get their VMs. Delete or rename the old guest{clashes.length === 1 ? '' : 's'} on Proxmox to build {clashes.length === 1 ? 'it' : 'them'}, or link {clashes.length === 1 ? 'it' : 'them'} from the Proxmox page.</span>
+                      </div>
                     )
                   })()}
+                  {vmPlan.length > 0 && <PlanCapacity plan={vmPlan} defaults={provDefaults} storage={vmSettings?.storage ?? ''} />}
                 </div>
               )}
 
               {/* Stack list */}
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin mb-4">
+              <div className="space-y-2 max-h-[46rem] overflow-y-auto pr-1 scrollbar-thin mb-4">
                 {stacks.map((stack, index) => (
                   <div
                     key={`${stack.name}-${index}`}
                     className="bg-slate-800/40 border border-white/5 rounded-lg px-3 py-2 group"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                       {/* Order number */}
                       <span className="flex items-center justify-center w-6 h-6 rounded-md bg-white/5 text-[10px] font-bold text-slate-500 shrink-0">
                         {index + 1}
@@ -2240,10 +2270,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           }}
                           onBlur={() => commitEdit(index)}
                           autoFocus
-                          className="flex-1 px-2 py-1 bg-slate-700/50 border border-emerald-500/30 rounded text-xs font-mono text-slate-200 focus:outline-none"
+                          className="flex-1 min-w-[8rem] px-2 py-1 bg-slate-700/50 border border-emerald-500/30 rounded text-xs font-mono text-slate-200 focus:outline-none"
                         />
                       ) : (
-                        <span className="flex-1 text-xs font-mono text-slate-300 truncate">
+                        <span className="flex-1 min-w-[8rem] text-xs font-mono text-slate-300 truncate" title={stack.name}>
                           {stack.name}
                         </span>
                       )}
@@ -2259,7 +2289,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           Custom
                         </span>
                       )}
-                      {stack.isDefault && !stack.isNew && !stack.label && (
+                      {stack.isDefault && !stack.isNew && !stack.label && !vmReady && (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-500/15 text-slate-500 shrink-0">
                           Default
                         </span>
@@ -2278,7 +2308,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             ))}
                           </div>
                           {hubOnly[stack.name] && <span className="text-slate-500" title={`Stays on the hub — ${hubOnly[stack.name]}`}><Lock size={10} /></span>}
-                          {placementOf(stack.name) === 'vm' && (
+                          {placementOf(stack.name) === 'vm' && clashOf(stack.name) && (
+                            <span className="h-6 px-2 rounded-md border border-rose-500/30 bg-rose-500/10 text-[10px] font-medium text-rose-300 flex items-center gap-1"
+                              title={`A guest named ${stack.name} already exists on Proxmox (VM ${clashOf(stack.name)?.vmid}, ${clashOf(stack.name)?.status || 'stopped'}). This stack is left out of the build: delete or rename that guest on Proxmox, or link it from the Proxmox page.`}>
+                              <AlertTriangle size={10} /> VM {clashOf(stack.name)?.vmid} exists
+                            </span>
+                          )}
+                          {placementOf(stack.name) === 'vm' && !clashOf(stack.name) && (
                             <button type="button" onClick={() => setSizeOpen((o) => (o === stack.name ? null : stack.name))} aria-expanded={sizeOpen === stack.name}
                               title="The VM's size"
                               className={`h-6 px-2 rounded-md border text-[10px] font-medium flex items-center gap-1.5 tabular-nums transition-colors ${sizeOpen === stack.name ? 'bg-amber-500/15 border-amber-500/35 text-amber-100' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}>
@@ -2339,7 +2375,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     </div>
 
                     {/* The VM's size */}
-                    {vmReady && placementOf(stack.name) === 'vm' && sizeOpen === stack.name && (
+                    {vmReady && placementOf(stack.name) === 'vm' && !clashOf(stack.name) && sizeOpen === stack.name && (
                       <div className="mt-2.5 ml-8 animate-fade-in">
                         <VmSizeControl value={specOf(stack.name)}
                           limits={{ maxCores: provDefaults?.capacity?.cores, maxMemGb: provDefaults?.capacity?.memory_gb, minDiskGb: 10 }}
@@ -2721,7 +2757,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </span>
                         <span className="text-xs font-mono text-slate-300">{stack.name}</span>
                         {vmReady && (placementOf(stack.name) === 'vm'
-                          ? <span className="text-[8px] px-1 rounded bg-amber-500/15 text-amber-300">VM · {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB</span>
+                          ? (clashOf(stack.name)
+                            ? <span className="text-[8px] px-1 rounded bg-rose-500/15 text-rose-300" title="A guest with this name already exists on Proxmox">left out — VM {clashOf(stack.name)?.vmid} exists</span>
+                            : <span className="text-[8px] px-1 rounded bg-amber-500/15 text-amber-300">VM · {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB</span>)
                           : <span className="text-[8px] px-1 rounded bg-emerald-500/10 text-emerald-300">hub</span>)}
                         {stack.label && (
                           <span className="text-[8px] px-1 rounded bg-violet-500/15 text-violet-400">{stack.label}</span>

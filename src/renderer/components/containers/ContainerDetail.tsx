@@ -1906,19 +1906,29 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 Port Mappings
               </h2>
               <span className="text-xs text-slate-600 ml-1">({portMappings.length})</span>
+              {member && (
+                <span className="ml-auto text-[11px] text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5 truncate" title="A container in a VM publishes its ports on the VM's address">
+                  on {memberName || containerInfo.member_name || 'its VM'}{containerInfo.member_host ? ` · ${containerInfo.member_host}` : ''}
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {portMappings.map((port, idx) => {
-                // Build a clickable URL from the host port
-                const portUrl = port.hostPort ? (() => {
-                  const addr = port.bindAddress || ''
-                  const host = addr === '127.0.0.1' ? 'localhost'
-                    : (addr === '0.0.0.0' || addr === '[::]' || addr === '::' || !addr) ? serverHostname()
-                    : addr
+                // Build a clickable URL from the host port. A container in a VM publishes its ports on the VM's
+                // address (not on this server's): the link follows it, and a port bound to the VM's own loopback
+                // cannot be reached from here at all
+                const bind = port.bindAddress || ''
+                const wildcard = bind === '0.0.0.0' || bind === '[::]' || bind === '::' || !bind
+                const vmHost = member ? (containerInfo.member_host || '') : ''
+                const portHost = member
+                  ? (wildcard ? vmHost : bind === '127.0.0.1' ? '' : bind)
+                  : (bind === '127.0.0.1' ? 'localhost' : wildcard ? serverHostname() : bind)
+                const portUrl = port.hostPort && portHost ? (() => {
                   const proto = ['443', '8443', '9443'].includes(String(port.hostPort)) ? 'https' : 'http'
-                  return `${proto}://${host}:${port.hostPort}`
+                  return `${proto}://${portHost}:${port.hostPort}`
                 })() : null
+                const shownBind = member && wildcard && vmHost ? vmHost : bind
                 // A real link: the browser opens a tab, Electron hands it to the
                 // system browser, the Android WebView launches the browser app
                 const Tile: React.ElementType = portUrl ? 'a' : 'div'
@@ -1934,14 +1944,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   `}
                   style={{ animationDelay: `${idx * 0.05}s` }}
                   {...(portUrl ? { href: portUrl, target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  title={portUrl ? `Open ${portUrl}` : undefined}
+                  title={portUrl ? `Open ${portUrl}` : (member && port.hostPort ? (bind === '127.0.0.1' ? "Bound to the VM's own loopback address: it cannot be opened from here" : "The VM's address is not known yet") : undefined)}
                 >
                   {/* Host port (or "exposed" label if no host binding) */}
                   {port.hostPort ? (
                     <div className="flex flex-col items-center min-w-0">
-                      {port.bindAddress && (
-                        <span className="text-[10px] text-slate-600 font-mono truncate max-w-[80px]" title={port.bindAddress}>
-                          {port.bindAddress}
+                      {shownBind && (
+                        <span className="text-[10px] text-slate-600 font-mono truncate max-w-[110px]" title={shownBind}>
+                          {shownBind}
                         </span>
                       )}
                       <span className="text-lg font-bold text-white leading-tight">
