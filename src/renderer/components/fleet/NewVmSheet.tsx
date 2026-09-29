@@ -19,7 +19,8 @@ export interface VmSettings { node: string; storage: string; image_storage: stri
 export function osChoices(d: FleetProvisionDefaults | null): { value: string; label: string; group: string; byHand?: boolean }[] {
   const out: { value: string; label: string; group: string; byHand?: boolean }[] = []
   for (const tp of d?.images?.templates ?? []) out.push({ value: `tpl:${tp.image_id}`, label: `${d?.images?.catalogue.find((c) => c.id === tp.image_id)?.label.replace(/ — .*$/, '') ?? tp.image_id} — DCS template VM ${tp.vmid}, baked ${new Date(tp.baked_at * 1000).toLocaleDateString()}`, group: 'Baked DCS templates — cloned in about 40 s' })
-  for (const c of d?.images?.catalogue ?? []) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — built and joined by the hub' })
+  for (const c of (d?.images?.catalogue ?? []).filter((c) => c.prebuilt)) out.push({ value: `cat:${c.id}`, label: c.label, group: 'DCS images — purpose-built for the fleet (recommended)' })
+  for (const c of (d?.images?.catalogue ?? []).filter((c) => !c.prebuilt)) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — tools and Docker installed by the hub' })
   for (const i of d?.images?.on_proxmox?.imports ?? []) out.push({ value: `pve:${i.file}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB, on ${i.storage})`, group: 'On Proxmox already — cloud images' })
   for (const i of d?.images?.on_proxmox?.isos ?? []) out.push({ value: `iso:${i.volid}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB) — install by hand, then join`, group: 'On Proxmox already — installer ISOs', byHand: true })
   out.push({ value: 'url', label: 'A cloud image from a URL…', group: 'Anything else' })
@@ -35,7 +36,7 @@ export function osLabel(s: VmSettings | null, d: FleetProvisionDefaults | null):
 /** The request fields the settings stand for (the hub takes image | image_url | image_file | iso) */
 export function vmSettingsToRequest(s: VmSettings): Omit<FleetProvisionRequest, 'vms'> {
   const { os, image_url, bake, ...rest } = s
-  const pick: Partial<FleetProvisionRequest> = os.startsWith('cat:') ? { image: os.slice(4), bake } : os.startsWith('tpl:') ? { image: os.slice(4), from_template: true } : os === 'url' ? { image_url, bake } : os.startsWith('pve:') ? { image_file: os.slice(4), bake } : os.startsWith('iso:') ? { iso: os.slice(4) } : {}
+  const pick: Partial<FleetProvisionRequest> = os.startsWith('cat:') ? { image: os.slice(4), bake: bake && !os.startsWith('cat:dcs-') } : os.startsWith('tpl:') ? { image: os.slice(4), from_template: true } : os === 'url' ? { image_url, bake } : os.startsWith('pve:') ? { image_file: os.slice(4), bake } : os.startsWith('iso:') ? { iso: os.slice(4) } : {}
   return { ...rest, ...pick }
 }
 // remembered per hub (another hub has other storages and another network)
@@ -80,14 +81,14 @@ export function VmSettingsFields({ value, onChange, defaults, disabled = false }
           </select>
           {value.os === 'url' && <input value={value.image_url} onChange={(e) => set('image_url', e.target.value)} className={`${inputCls} flex-[2] min-w-[16rem]`} disabled={disabled} placeholder="https://…/image.qcow2 (cloud-init, apt or dnf)" />}
         </div>
-        {!value.os.startsWith('iso:') && !value.os.startsWith('tpl:') && (
+        {!value.os.startsWith('iso:') && !value.os.startsWith('tpl:') && !value.os.startsWith('cat:dcs-') && (
           <label className="mt-2 flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
             <input type="checkbox" checked={value.bake} onChange={(e) => set('bake', e.target.checked ? 1 : 0)} disabled={disabled} className="mt-0.5 accent-amber-400" />
             <span>Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about 40 s instead of about 85 s, and the template stays for the next builds.</span>
           </label>
         )}
         <p className="text-[10px] text-slate-500 mt-1">
-          {value.os.startsWith('tpl:') ? 'A baked DCS template: the VM is a clone with the tools, Docker and the guest agent already in place; only cloud-init, the fresh DCS code and the join run.' : value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
+          {value.os.startsWith('cat:dcs-') ? 'A purpose-built DCS image: a Docker host and nothing else, with the tools, Docker and the guest agent already in place — nothing to install or bake. The VM boots in seconds; only the fresh DCS code and the join run.' : value.os.startsWith('tpl:') ? 'A baked DCS template: the VM is a clone with the tools, Docker and the guest agent already in place; only cloud-init, the fresh DCS code and the join run.' : value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
         </p>
       </div>
       <div>
@@ -194,7 +195,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
           </div>
         </div>
         <CapabilityNote caps={caps} />
-        <p className="text-[11px] text-slate-500">Debian cloud image, imported once · user {defaults?.vm_user || 'dcs'} with the hub's ssh key · the VM's admin is {defaults?.admin_user || 'your account'} with a generated password kept in the hub's secret store · takes a few minutes; watch it on the card.</p>
+        <p className="text-[11px] text-slate-500">{osLabel(settings, defaults) || 'The image'}, imported once · user {defaults?.vm_user || 'dcs'} with the hub's ssh key · the VM's admin is {defaults?.admin_user || 'your account'} with a generated password kept in the hub's secret store · takes a few minutes; watch it on the card.</p>
         {err && <p className="text-xs text-rose-300">{err}</p>}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} disabled={busy} className="flex-1 h-11 rounded-xl bg-white/5 text-slate-300 hover:bg-white/10 text-sm font-medium disabled:opacity-50">Cancel</button>
