@@ -1,5 +1,5 @@
 // =============================================================================
-// API Client — fetch wrapper for Docker Compose Skeleton REST API
+// API Client — fetch wrapper for the DCS Orchestrator REST API
 // =============================================================================
 
 import { getDefaultServerUrl } from '../lib/env'

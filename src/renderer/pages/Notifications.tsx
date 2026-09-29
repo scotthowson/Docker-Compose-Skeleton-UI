@@ -382,7 +382,7 @@ export default function Notifications() {
   const handleSendTest = useCallback(async () => {
     setSendingTest(true)
     try {
-      const res = await sendTestNotification({ title: 'DCS Test', message: 'Test notification from Docker Compose Skeleton UI', priority: 'default' })
+      const res = await sendTestNotification({ title: 'DCS Test', message: 'Test notification from DCS Manager', priority: 'default' })
       if (res.success) {
         addToast({ type: 'success', message: 'Test notification sent successfully' })
       } else {

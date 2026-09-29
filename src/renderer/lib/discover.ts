@@ -66,7 +66,7 @@ async function probe(url: string): Promise<DiscoveredServer | null> {
       return null // HTML — the dashboard page itself, not the API
     }
     const name = typeof data.name === 'string' ? data.name : ''
-    if (!/docker compose skeleton/i.test(name) && !Array.isArray(data.endpoints)) return null
+    if (!/dcs orchestrator|docker compose skeleton/i.test(name) && !Array.isArray(data.endpoints)) return null
     const found: DiscoveredServer = {
       url,
       via: /\/api$/i.test(url) ? 'proxy' : 'direct',

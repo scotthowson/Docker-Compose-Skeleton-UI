@@ -834,12 +834,15 @@ function DiskLabelManager() {
 // Appearance Settings
 // ---------------------------------------------------------------------------
 
+/** the subtitle a server or a dashboard shows until someone writes their own (servers older than 4.0 send the first) */
+const DEFAULT_SUBTITLES = ['Docker Compose Skeleton', 'DCS Orchestrator']
+
 function AppearanceSettings() {
   // the mode: dark, light, or the device's preference (the header switch always sets dark or light)
   const theme = useSettingsStore((s) => s.theme)
   const systemMode = useSystemMode()
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
-  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Docker Compose Skeleton'
+  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'DCS Orchestrator'
   const updateSetting = useSettingsStore((s) => s.updateSetting)
 
   // Background image is per-user (stored in profile, not settingsStore)
@@ -862,7 +865,7 @@ function AppearanceSettings() {
         updateSetting('projectName', sn)
         setNameInput(sn)
       }
-      if (ss && ss !== 'Docker Compose Skeleton' && projectSubtitle === 'Docker Compose Skeleton') {
+      if (ss && !DEFAULT_SUBTITLES.includes(ss) && DEFAULT_SUBTITLES.includes(projectSubtitle)) {
         updateSetting('projectSubtitle', ss)
         setSubtitleInput(ss)
       }
@@ -875,7 +878,7 @@ function AppearanceSettings() {
 
   const handleSaveAppearance = useCallback(async () => {
     const name = nameInput.trim() || 'DCS Manager'
-    const subtitle = subtitleInput.trim() || 'Docker Compose Skeleton'
+    const subtitle = subtitleInput.trim() || 'DCS Orchestrator'
     // Save branding locally
     updateSetting('projectName', name)
     updateSetting('projectSubtitle', subtitle)
@@ -954,7 +957,7 @@ function AppearanceSettings() {
               type="text"
               value={subtitleInput}
               onChange={(e) => setSubtitleInput(e.target.value)}
-              placeholder="Docker Compose Skeleton"
+              placeholder="DCS Orchestrator"
               className="
                 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
                 text-xs text-slate-200 placeholder-slate-600

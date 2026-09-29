@@ -1,6 +1,6 @@
 # DCS Plugin: Deploy Guard
 
-Deployment lifecycle protection for Docker Compose Skeleton.
+Deployment lifecycle protection for DCS Orchestrator.
 
 ## What It Does
 

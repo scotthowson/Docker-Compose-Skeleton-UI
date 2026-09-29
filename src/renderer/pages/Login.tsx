@@ -36,7 +36,7 @@ export default function Login() {
     hasAccount, loading, error,
     register, login, clearError, setApiToken, setUserRole,
   } = useAuthStore()
-  const projectName = useSettingsStore((s) => s.projectName) || 'Docker Compose Skeleton'
+  const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Server Management Dashboard'
   const lastUsername = useSettingsStore((s) => s.lastUsername)
   const sessionDurationMinutes = useSettingsStore((s) => s.sessionDurationMinutes)

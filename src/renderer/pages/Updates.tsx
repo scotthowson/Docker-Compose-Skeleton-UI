@@ -836,7 +836,7 @@ export default function Updates() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-200">DCS Framework</p>
-                <p className="text-[10px] text-slate-500">Docker Compose Skeleton backend</p>
+                <p className="text-[10px] text-slate-500">DCS Orchestrator server</p>
               </div>
             </div>
 

@@ -424,7 +424,7 @@ export default function Backup() {
   // ---- Not connected ----
   if (!isConnected) {
     return (
-      <LoadingState label="Waiting for the server connection…" hint="Make sure the Docker Compose Skeleton API is running" />
+      <LoadingState label="Waiting for the server connection…" hint="Make sure the DCS Orchestrator API is running" />
     )
   }
 

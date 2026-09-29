@@ -14,11 +14,11 @@ linux:
     - deb
     - rpm
   category: Development
-  synopsis: Docker Compose Skeleton management dashboard
-  description: Premium desktop application for managing Docker Compose Skeleton servers with live monitoring, stack management, health checks, and more.
+  synopsis: DCS Orchestrator dashboard
+  description: Desktop dashboard for DCS Orchestrator servers, with live monitoring, stack management, health checks, and more.
   desktop:
     Name: DCS Manager
-    Comment: Docker Compose Skeleton UI
+    Comment: DCS Orchestrator dashboard
     Categories: Development;System;
 deb:
   depends:

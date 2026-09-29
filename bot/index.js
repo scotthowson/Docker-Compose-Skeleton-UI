@@ -1,5 +1,5 @@
 // =============================================================================
-// DCS Discord bot — slash commands for a Docker Compose Skeleton server
+// DCS Discord bot — slash commands for a DCS Orchestrator server
 // =============================================================================
 // Separate from notifications (those go out through the webhook the API posts
 // to). This bot signs in to the DCS API with its own user and answers slash

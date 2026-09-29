@@ -33,8 +33,8 @@ const steps: StepDef[] = [
     icon: <Container size={40} strokeWidth={1.5} />,
     title: 'Welcome to DCS Manager',
     description: webMode
-      ? 'Your web-based control center for Docker Compose Skeleton. Monitor, deploy, and control your entire container infrastructure from one elegant interface.'
-      : 'Your premium desktop companion for managing Docker Compose Skeleton servers. Monitor, deploy, and control your entire container infrastructure from one elegant interface.',
+      ? 'Your web-based control center for DCS Orchestrator. Monitor, deploy, and control your entire container infrastructure from one elegant interface.'
+      : 'Your premium desktop companion for managing DCS Orchestrator servers. Monitor, deploy, and control your entire container infrastructure from one elegant interface.',
     details: [
       'Real-time container monitoring and health checks',
       'Manage multiple stacks with dependency ordering',

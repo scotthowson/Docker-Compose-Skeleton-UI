@@ -116,7 +116,7 @@ function DisconnectedHero() {
               ? serverUrl === '/api'
                 ? <>Unable to reach the API server. Run <span className="font-mono text-slate-400">./setup.sh</span> or <span className="font-mono text-slate-400">./start.sh</span> on your host.</>
                 : <>Unable to reach <span className="font-mono text-slate-400">{serverUrl}</span>. Make sure the server is running.</>
-              : <>Connect to your Docker Compose Skeleton API to see live dashboard data.</>
+              : <>Connect to your DCS Orchestrator API to see live dashboard data.</>
           }
         </p>
         <div className="flex items-center justify-center gap-3 mb-6">

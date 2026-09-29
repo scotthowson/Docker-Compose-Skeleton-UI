@@ -36,7 +36,7 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   updatesAvailable: 0, // number of available DCS framework updates
   notificationsEnabled: true,
   projectName: 'DCS Manager',
-  projectSubtitle: 'Docker Compose Skeleton',
+  projectSubtitle: 'DCS Orchestrator',
   connectionProfiles: [],
   customCSS: '',
   rememberUsername: true,
@@ -155,9 +155,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // a mode this build does not know (a hand-edited file, an old build's typo) means "follow the device"
     const mode = (stored as Record<string, unknown>).theme
     const theme = mode === 'dark' || mode === 'light' || mode === 'system' ? mode : DEFAULT_SETTINGS.theme
+    // the subtitle every install saved before the product had its name: the new default replaces it
+    const savedSubtitle = (stored as Record<string, unknown>).projectSubtitle
+    const projectSubtitle = savedSubtitle === 'Docker Compose Skeleton' ? DEFAULT_SETTINGS.projectSubtitle : savedSubtitle
     set({
       ...DEFAULT_SETTINGS,
       ...stored,
+      ...(typeof projectSubtitle === 'string' ? { projectSubtitle } : {}),
       theme,
       settingsLoaded: true,
       ...(restoredPage ? { currentPage: restoredPage } : {}),

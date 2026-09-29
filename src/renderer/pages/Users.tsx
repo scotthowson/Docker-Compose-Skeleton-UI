@@ -217,7 +217,7 @@ export default function Users() {
   // Disconnected state
   if (!isConnected) {
     return (
-      <LoadingState label="Waiting for the server connection…" hint="Make sure the Docker Compose Skeleton API is running" />
+      <LoadingState label="Waiting for the server connection…" hint="Make sure the DCS Orchestrator API is running" />
     )
   }
 

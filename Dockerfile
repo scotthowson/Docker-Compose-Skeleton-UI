@@ -23,7 +23,7 @@ RUN npx vite build --base /
 FROM nginx:alpine
 
 LABEL org.opencontainers.image.title="DCS-UI" \
-      org.opencontainers.image.description="Docker Compose Skeleton — Web Management Interface" \
+      org.opencontainers.image.description="DCS Orchestrator — the dashboard" \
       org.opencontainers.image.source="https://github.com/scotthowson/Docker-Compose-Skeleton-UI" \
       org.opencontainers.image.licenses="MIT"
 

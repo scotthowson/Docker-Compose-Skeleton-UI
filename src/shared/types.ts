@@ -1,5 +1,5 @@
 // =============================================================================
-// Docker Compose Skeleton API — TypeScript Interfaces
+// DCS Orchestrator API — TypeScript Interfaces
 // Maps to all 24 REST API endpoint response shapes
 // =============================================================================
 

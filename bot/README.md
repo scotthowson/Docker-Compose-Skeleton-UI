@@ -1,6 +1,6 @@
 # DCS Discord bot
 
-Slash commands for a Docker Compose Skeleton server, with buttons and confirmations.
+Slash commands for a DCS Orchestrator server, with buttons and confirmations.
 Separate from the notification webhook, which the API posts to on its own.
 
 **Setup, step by step, with every ID and permission:**

@@ -1,7 +1,7 @@
 {
   "name": "dcs-discord-bot",
   "version": "2.2.0",
-  "description": "Discord slash commands for Docker Compose Skeleton: status, health, containers, stacks, updates, logs, disk, backups, deploys, security and DCS itself, with buttons and confirmations",
+  "description": "Discord slash commands for DCS Orchestrator: status, health, containers, stacks, updates, logs, disk, backups, deploys, security and DCS itself, with buttons and confirmations",
   "private": true,
   "type": "module",
   "main": "index.js",
