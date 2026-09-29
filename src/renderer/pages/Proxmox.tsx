@@ -325,7 +325,7 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf
         {stacks.length === 0 && <span className="text-[11px] text-slate-500">No stacks run on this server itself{isHub ? ' — they live in the VMs' : ''}.</span>}
       </div>
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-600 truncate">{isHub ? 'The hub keeps stacks like any member' : role === 'member' ? 'Managed from the hub' : ''}</span>
+        <span className="text-[10px] text-slate-600 leading-snug min-w-0">{isHub ? 'The hub keeps stacks like any member' : role === 'member' ? 'Managed from the hub' : ''}</span>
         <button type="button" onClick={onStacks} className={MINI}><Layers size={12} /> Stacks page</button>
       </div>
     </div>
@@ -371,14 +371,14 @@ function TemplatesCard({ templates, defaults, isAdmin, removing, onRemove, onBak
       {facts.length > 0 && (
         <div className="mt-3 pt-3 border-t border-white/[0.04] flex-1">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5"><Hammer size={10} /> Next VM build <span className="normal-case tracking-normal text-slate-600">— as the New VM sheet remembers it</span></p>
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-            {facts.map(([k, v]) => <div key={k} className="flex items-baseline gap-2 min-w-0"><dt className="text-slate-500 shrink-0">{k}</dt><dd className="text-slate-300 truncate tabular-nums">{v}</dd></div>)}
+          <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-x-3 gap-y-1 text-[11px]">
+            {facts.map(([k, v]) => <div key={k} className="flex items-baseline gap-2 min-w-0"><dt className="text-slate-500 shrink-0">{k}</dt><dd className="text-slate-300 truncate tabular-nums" title={v}>{v}</dd></div>)}
           </dl>
         </div>
       )}
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-600 truncate">A clone builds in about 25 s</span>
-        {isAdmin && <button type="button" onClick={onBake} title="Open the New VM sheet — tick “Bake a DCS template first”" className={MINI}><Rocket size={12} /> Bake one</button>}
+        {isAdmin && <button type="button" onClick={onBake} title="Open the New VM sheet: pick a cloud image and turn on “Bake a DCS template first”" className={MINI}><Rocket size={12} /> Bake one</button>}
       </div>
     </div>
   )
