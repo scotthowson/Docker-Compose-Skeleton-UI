@@ -16,6 +16,7 @@ import { EmptyState } from '../common/PageState'
 import FleetScopeChips from '../fleet/FleetScopeChips'
 import VmCapsule from '../fleet/VmCapsule'
 import PageHeader from '../common/PageHeader'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_QUIET } from '../../lib/ui'
 import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 import {
   Search,
@@ -307,7 +308,8 @@ const ContainerList: React.FC<ContainerListProps> = ({
             <button
               onClick={onRefresh}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 press"
+              aria-label="Refresh"
+              className={BTN_TOOLBAR_QUIET}
             >
               <RefreshCw size={14} className={loading || busy ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Refresh</span>
@@ -316,14 +318,8 @@ const ContainerList: React.FC<ContainerListProps> = ({
           {isAdmin && (
             <button
               onClick={() => batchMode ? exitBatchMode() : setBatchMode(true)}
-              className={`
-                flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${batchMode
-                  ? 'bg-cyan-500/15 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
-                  : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
-                }
-              `}
+              aria-label={batchMode ? 'Exit Batch' : 'Batch Select'}
+              className={`${BTN_TOOLBAR} ${batchMode ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
             >
               <CheckSquare size={14} />
               <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch Select'}</span>
