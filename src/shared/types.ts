@@ -3024,7 +3024,7 @@ export interface ProxmoxVmDetail {
   os: { name: string; id: string; version: string; kernel: string; arch: string } | null
   /** the image the hub built the VM from (null: not built by DCS, or before DCS recorded it) */
   image: { id: string; label: string; kind: string; template_vmid: number | null } | null
-  config: { bios?: string; machine?: string; created?: number | null; cores: number | null; sockets: number | null; memory: number | null; ostype: string; onboot: string; description: string; tags: string; net0: string; bootdisk: string; hostname: string }
+  config: { bios?: string; machine?: string; args?: string; created?: number | null; cores: number | null; sockets: number | null; memory: number | null; ostype: string; onboot: string; description: string; tags: string; net0: string; bootdisk: string; hostname: string }
 }
 
 export interface ProxmoxTask {
@@ -3267,7 +3267,7 @@ export interface FleetUpdateRound { at: number; hub_version: string; results: Fl
 export interface DockerEngineStatus { status: 'idle' | 'running' | 'done' | 'failed'; started_at?: string; finished_at?: string; version?: string; exit_code?: number; output?: string; by?: string }
 export interface DockerEngineInfo {
   version: string
-  /** docker-ce (Docker's own packages), docker.io (Debian's), moby-engine (Fedora's) or unknown */
+  /** docker-ce (Docker's own packages), docker.io (Debian's), moby-engine (Fedora's), docker-arch (Arch Linux's) or unknown */
   source: string
   /** the newest version the package source offers ('' when unknown) */
   candidate: string

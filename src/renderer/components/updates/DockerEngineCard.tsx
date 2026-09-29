@@ -28,6 +28,7 @@ const SOURCE_LABEL: Record<string, string> = {
   'docker-ce': "Docker's packages",
   'docker.io': "Debian's packages",
   'moby-engine': "Fedora's packages",
+  'docker-arch': "Arch Linux's packages",
   unknown: 'not from a package',
 }
 

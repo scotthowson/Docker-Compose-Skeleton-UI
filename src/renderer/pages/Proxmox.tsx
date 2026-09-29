@@ -795,6 +795,8 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
     else if (d.config.ostype) facts.push(['OS type', vm.type === 'lxc' ? d.config.ostype : `${d.config.ostype} (start the VM with its guest agent to see the system)`])
     if (d.image) facts.push(['Built from', <span>{d.image.label}{d.image.template_vmid ? <span className="text-slate-500"> · cloned from the DCS template VM {d.image.template_vmid}</span> : null}</span>])
     if (vm.type === 'qemu' && d.config.bios !== undefined) facts.push(['Firmware', `${d.config.bios === 'ovmf' ? 'UEFI (OVMF)' : 'BIOS (SeaBIOS)'}${d.config.machine ? ` · ${d.config.machine.replace(/^pc-(i440fx|q35)-.*/, (_m, t: string) => (t === 'q35' ? 'q35' : 'i440fx'))}` : ''}`])
+    // Proxmox starts every VM with -boot menu=on: the firmware then waits about 2.6 s for an ESC key, at every boot. Only root can switch it off.
+    if (vm.type === 'qemu') facts.push(['Boot menu wait', /menu=off/.test(d.config.args ?? '') ? 'off' : <span>on <span className="text-slate-500">· 2.6 s at every boot; on the node: <code className="font-mono">qm set {vm.vmid} --args '-boot menu=off,strict=on,reboot-timeout=1000'</code></span></span>])
     if (d.config.created) facts.push(['Created', new Date(d.config.created * 1000).toLocaleDateString()])
     if (vm.type === 'qemu') facts.push(['Guest agent', agentOn ? 'enabled' : 'off'])
     facts.push(['Starts with the host', d.config.onboot === '1' ? 'yes' : 'no'])
