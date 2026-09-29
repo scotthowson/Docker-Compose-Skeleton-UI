@@ -8,7 +8,7 @@ import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useContainerStore } from '../stores/containerStore'
-import { fetchServerStatus, fetchHealthReport, fetchContainers, checkSystemUpdate } from '../api/endpoints'
+import { fetchServerStatus, fetchHealthReport, fetchContainers, checkSystemUpdate, fetchVersion } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 
 const STATUS_INTERVAL = 5000
@@ -40,6 +40,7 @@ export function GlobalPoller() {
   const fetchingStatus = useRef(false)
   const fetchingHealth = useRef(false)
   const fetchingUpdates = useRef(false)
+  const versionFor = useRef<string | null>(null)   // the server whose version the status bar shows
   const mountedRef = useRef(true)
 
   const pollStatus = useCallback(async () => {
@@ -48,6 +49,12 @@ export function GlobalPoller() {
     try {
       const data = await fetchServerStatus()
       if (mountedRef.current) setSystemStatus(data)
+      // the status bar reads the API version on every page, not only after the dashboard was opened: once per server
+      const url = useConnectionStore.getState().serverUrl
+      if (mountedRef.current && versionFor.current !== url) {
+        versionFor.current = url
+        fetchVersion().then((v) => { if (mountedRef.current) useSystemStore.getState().setVersion(v) }).catch(() => { versionFor.current = null })
+      }
     } catch (err) {
       // the connection store handles reconnecting; the cards say why when nothing has loaded yet
       if (mountedRef.current) setSystemError(err instanceof Error ? err.message : 'Could not load the server status')
