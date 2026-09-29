@@ -4,7 +4,8 @@ import { apiClient } from '../api/client'
 import { useNotificationStore } from './notificationStore'
 import { useAuthStore } from './authStore'
 
-const MAX_RECONNECT_ATTEMPTS = 50
+// retries run about every 10 s once backed off: this is roughly 25 minutes before the dashboard stops trying by itself
+export const MAX_RECONNECT_ATTEMPTS = 150
 const BASE_RECONNECT_DELAY_MS = 1000
 const HEARTBEAT_INTERVAL_MS = 10000
 
@@ -15,6 +16,8 @@ interface ConnectionState {
   lastConnected: number | null
   reconnectAttempts: number
   consecutiveFailures: number
+  /** heartbeats (a check every 10 s) that failed in a row, while the link still counts as connected */
+  heartbeatFailures: number
   latencyMs: number | null
   setServerUrl: (url: string) => void
   setStatus: (status: ConnectionStatus) => void
@@ -67,9 +70,10 @@ function startHeartbeat(connectFn: () => Promise<boolean>) {
       const ok = await apiClient.testConnection()
       if (ok) {
         heartbeatFailCount = 0
-        useConnectionStore.setState({ latencyMs: recordLatency(Math.round(performance.now() - t0)) })
+        useConnectionStore.setState({ latencyMs: recordLatency(Math.round(performance.now() - t0)), heartbeatFailures: 0 })
       } else {
         heartbeatFailCount++
+        useConnectionStore.setState({ heartbeatFailures: heartbeatFailCount })
         // Only declare connection lost after multiple consecutive failures.
         // The DCS API server is single-threaded bash — it can't respond to heartbeat
         // pings while serving a large request (compose file load, image pull, etc).
@@ -104,6 +108,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   lastConnected: null,
   reconnectAttempts: 0,
   consecutiveFailures: 0,
+  heartbeatFailures: 0,
   latencyMs: null,
 
   setServerUrl: (url) => {
@@ -147,6 +152,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           lastConnected: Date.now(),
           reconnectAttempts: 0,
           consecutiveFailures: 0,
+          heartbeatFailures: 0,
           lastError: null,
           latencyMs,
         })
@@ -175,7 +181,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       if (attempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(
           BASE_RECONNECT_DELAY_MS * Math.pow(2, Math.min(attempts - 1, 5)),
-          30000,
+          10000,
         )
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null
@@ -198,6 +204,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       lastError: null,
       reconnectAttempts: 0,
       consecutiveFailures: 0,
+      heartbeatFailures: 0,
     })
   },
 

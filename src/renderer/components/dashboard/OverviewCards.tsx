@@ -9,6 +9,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Layers, Box, HardDrive, HeartPulse } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
+import { useApiLink } from '../../hooks/useApiLink'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 
@@ -244,6 +245,7 @@ export default function OverviewCards() {
   const metricHistory = useSystemStore((s) => s.metricHistory)
   const report = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const link = useApiLink()
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
   // Check disk usage for pulse warning
@@ -283,8 +285,9 @@ export default function OverviewCards() {
   // When no report AND not connected, show "Unknown"
   // When no report AND connected (still loading), show "Checking..."
   // When report exists, show real status
-  const hasReport = !!report
-  const isDisconnected = connectionStatus !== 'connected'
+  // a report is a fact about the moment it was taken: while the API does not answer the card says that instead of the last verdict
+  const hasReport = !!report && link.live
+  const isDisconnected = !link.live
   const healthStatus = hasReport
     ? report.status
     : isDisconnected
@@ -295,13 +298,13 @@ export default function OverviewCards() {
     ? report.status === 'healthy' ? 'Healthy'
       : report.status === 'degraded' ? 'Degraded'
       : 'Critical'
-    : isDisconnected ? 'Unknown' : 'Checking...'
+    : isDisconnected ? link.short : 'Checking...'
 
   const healthAccent: CardProps['accentColor'] = hasReport
     ? report.status === 'healthy' ? 'emerald'
       : report.status === 'degraded' ? 'amber'
       : 'rose'
-    : isDisconnected ? 'rose' : 'amber'
+    : isDisconnected ? (link.state === 'trouble' ? 'amber' : 'rose') : 'amber'
 
   const healthTrend: CardProps['trend'] = hasReport
     ? report.status === 'healthy' ? 'up'
@@ -365,7 +368,7 @@ export default function OverviewCards() {
           hasReport
             ? `${report.summary.healthy} healthy, ${report.summary.unhealthy} unhealthy`
             : isDisconnected
-              ? 'API not reachable'
+              ? link.state === 'trouble' ? 'The API is not answering' : link.state === 'reconnecting' ? 'API reconnecting — health is unknown' : 'API not connected'
               : 'Loading health data...'
         }
         accentColor={healthAccent}

@@ -110,6 +110,10 @@ export interface HealthReport {
   fleet?: boolean
   /** the fleet view: one entry per DCS, the hub first (id null) */
   members?: FleetHealthMember[]
+  /** the fleet view: how many VMs did not answer (they make the status at least "degraded") */
+  unreachable?: number
+  /** Docker on that server: when it does not answer every container is down and the status is critical */
+  docker?: { reachable: boolean; error: string }
 }
 
 /** one DCS in a fleet-wide list (GET …?fleet=1): the hub first, id null */

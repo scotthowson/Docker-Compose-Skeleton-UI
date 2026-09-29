@@ -56,6 +56,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useApiLink } from '../../hooks/useApiLink'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isMobile } from '../../hooks/useMobile'
@@ -134,6 +135,7 @@ export function Sidebar() {
   const systemStatus = useSystemStore((s) => s.status)
   const healthReport = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const link = useApiLink()
   const unreadNotifications = useNotificationStore((s) => s.getServerUnreadCount())
 
   const updateSetting = useSettingsStore((s) => s.updateSetting)
@@ -176,7 +178,7 @@ export function Sidebar() {
     }
   }
 
-  if (healthReport) {
+  if (healthReport && link.live) {
     const { unhealthy } = healthReport.summary
     if (unhealthy > 0) {
       badges.health = {
@@ -221,11 +223,13 @@ export function Sidebar() {
   }
 
   // Connection status icon for dashboard
-  const connIcon = connectionStatus === 'connected'
+  const connIcon = link.live
     ? { icon: Wifi, color: 'text-emerald-400', title: 'Connected' }
-    : connectionStatus === 'connecting'
-      ? { icon: Wifi, color: 'text-amber-400 animate-pulse', title: 'Connecting...' }
-      : { icon: WifiOff, color: 'text-slate-500', title: 'Disconnected' }
+    : link.state === 'trouble'
+      ? { icon: Wifi, color: 'text-amber-400 animate-pulse', title: 'The API is not answering' }
+      : link.state === 'reconnecting'
+        ? { icon: WifiOff, color: 'text-rose-400 animate-pulse', title: connectionStatus === 'connecting' ? 'Connecting...' : 'API reconnecting…' }
+        : { icon: WifiOff, color: 'text-rose-400', title: 'Not connected' }
 
   // Build status icons map
   const statusIcons: Partial<Record<PageId, { icon: React.ElementType; color: string; title: string }>> = {}
@@ -234,7 +238,10 @@ export function Sidebar() {
   statusIcons.dashboard = connIcon
 
   // Health gets health status indicator
-  if (healthStatus && healthStatusIcon[healthStatus]) {
+  if (!link.live) {
+    // the last verdict is history while the API does not answer
+    statusIcons.health = { icon: HeartPulse, color: link.state === 'trouble' ? 'text-amber-400 animate-pulse' : 'text-rose-400 animate-pulse', title: link.label }
+  } else if (healthStatus && healthStatusIcon[healthStatus]) {
     statusIcons.health = healthStatusIcon[healthStatus]
   }
 

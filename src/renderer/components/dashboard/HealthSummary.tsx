@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useHealthStore } from '../../stores/healthStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useApiLink } from '../../hooks/useApiLink'
 import { fetchHealthScore } from '../../api/endpoints'
 import { useFleetScope } from '../../hooks/useFleetScope'
 import { useStackCounts } from '../../hooks/useStackCounts'
@@ -199,6 +200,7 @@ export default function HealthSummary() {
   const error = useHealthStore((s) => s.error)
   const connectionStatus = useConnectionStore((s) => s.status)
   const isConnected = connectionStatus === 'connected'
+  const link = useApiLink()
 
   const [scoreData, setScoreData] = useState<HealthScoreResponse | null>(null)
   const [scoreLoading, setScoreLoading] = useState(true)
@@ -262,6 +264,8 @@ export default function HealthSummary() {
   const summary = report?.summary ?? { total: 0, healthy: 0, unhealthy: 0, stopped: 0 }
   const effectiveStatus: 'healthy' | 'degraded' | 'critical' | 'unknown' = (() => {
     if (!report) return 'unknown'
+    // the API's own verdict first: it knows when Docker does not answer or a VM is silent, which counts alone read as "healthy"
+    if (report.status === 'critical' || report.status === 'degraded') return report.status
     if (summary.unhealthy >= 3) return 'critical'
     if (summary.unhealthy > 0) return 'degraded'
     return 'healthy'
@@ -276,17 +280,24 @@ export default function HealthSummary() {
   const runningCount = containers.filter((c) => c.state === 'running').length
 
   return (
-    <div className={`glass-card glass-hover gradient-border p-4 md:p-6 animate-fade-in flex flex-col ${config.glow}`}>
+    <div className={`glass-card glass-hover gradient-border p-4 md:p-6 animate-fade-in flex flex-col transition-all duration-500 ${link.live ? config.glow : 'saturate-50 [&>*:not(:first-child)]:opacity-50'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <HeartPulse className="w-4 h-4 text-emerald-400" />
           <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Health</h3>
         </div>
-        <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${config.badge}`}>
-          <StatusIcon className="h-3 w-3" />
-          <span className={effectiveStatus === 'healthy' ? 'neon-emerald' : ''}>{config.label}</span>
-        </div>
+        {link.live ? (
+          <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${config.badge}`}>
+            <StatusIcon className="h-3 w-3" />
+            <span className={effectiveStatus === 'healthy' ? 'neon-emerald' : ''}>{config.label}</span>
+          </div>
+        ) : (
+          <div title={`${link.label} — showing the last known state`} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${link.state === 'trouble' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'}`}>
+            <HeartPulse className="h-3 w-3 animate-pulse" />
+            <span>{link.short}</span>
+          </div>
+        )}
       </div>
 
       {/* Score gauge + factors */}

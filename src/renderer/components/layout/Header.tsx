@@ -13,6 +13,7 @@ import {
 import { BUILD_VERSION, BUILD_DATE } from '../../constants/buildInfo'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { useApiLink } from '../../hooks/useApiLink'
 import { useSystemStore } from '../../stores/systemStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -385,7 +386,13 @@ export function Header() {
   }, [])
 
   const title = pageTitles[currentPage] ?? 'Dashboard'
-  const { color, ringColor, pulse, label } = statusConfig[connectionStatus]
+  // what the pill says is what is going on: an API that stalls, one that is being reconnected, one that is gone
+  const link = useApiLink()
+  const { color, ringColor, pulse, label } = link.state === 'trouble'
+    ? { color: 'bg-amber-400', ringColor: 'ring-amber-400/30', pulse: true, label: link.short }
+    : connectionStatus === 'error'
+      ? { ...statusConfig.error, label: link.short }
+      : statusConfig[connectionStatus]
   const hostname = serverStatus?.hostname
   const isDark = theme === 'dark'
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
@@ -549,8 +556,10 @@ export function Header() {
         <div className={`
           inline-flex items-center gap-1.5 md:gap-2 rounded-full px-2 md:px-3 py-1 md:py-1.5
           border transition-all duration-300
-          ${connectionStatus === 'connected'
+          ${link.state === 'live'
             ? 'bg-emerald-500/8 border-emerald-500/15 glow-emerald'
+            : link.state === 'trouble'
+              ? 'bg-amber-500/8 border-amber-500/15'
             : connectionStatus === 'error'
               ? 'bg-rose-500/8 border-rose-500/15'
               : connectionStatus === 'connecting'
@@ -568,7 +577,7 @@ export function Header() {
             <span className={`relative inline-flex rounded-full h-2 w-2 ${color} ring-2 ${ringColor} transition-colors duration-500`} />
           </span>
           <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">{label}</span>
-          {connectionStatus === 'connected' && latencyMs != null && (
+          {link.live && latencyMs != null && (
             <>
               <span className="hidden sm:inline text-slate-500 text-[10px]">&mdash;</span>
               <span className={`hidden sm:inline text-[10px] tabular-nums font-mono ${latencyMs < 100 ? 'text-emerald-400/70' : latencyMs < 300 ? 'text-amber-400/70' : 'text-rose-400/70'}`}>{latencyMs}ms</span>

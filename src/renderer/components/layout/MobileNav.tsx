@@ -10,6 +10,7 @@ import { LayoutDashboard, Layers, Box, HeartPulse, Menu, X, Search } from 'lucid
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useHealthStore } from '../../stores/healthStore'
+import { useApiLink } from '../../hooks/useApiLink'
 import { navItems } from './Sidebar'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import type { PageId } from '../../../shared/types'
@@ -32,7 +33,10 @@ export function MobileNav() {
   const currentPage = useSettingsStore((s) => s.currentPage)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const userRole = useAuthStore((s) => s.userRole)
-  const unhealthy = useHealthStore((s) => s.report?.summary?.unhealthy ?? 0)
+  const unhealthyReported = useHealthStore((s) => s.report?.summary?.unhealthy ?? 0)
+  const link = useApiLink()
+  // an old count is not a fact while the API does not answer
+  const unhealthy = link.live ? unhealthyReported : 0
   const [moreOpen, setMoreOpen] = useState(false)
   const isAdmin = userRole === 'admin'
   const byId = new Map(navItems.map((n) => [n.id, n]))

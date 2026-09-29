@@ -3,7 +3,8 @@
 // =============================================================================
 
 import { useEffect, useState, useCallback } from 'react'
-import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, User, Wifi } from 'lucide-react'
+import { Activity, Clock, Container, Cpu, HardDrive, MemoryStick, User, Wifi, WifiOff } from 'lucide-react'
+import { useApiLink } from '../../hooks/useApiLink'
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useHealthStore } from '../../stores/healthStore'
@@ -52,6 +53,7 @@ export function StatusBar() {
   const lastConnected = useConnectionStore((s) => s.lastConnected)
   const latencyMs = useConnectionStore((s) => s.latencyMs)
   const healthReport = useHealthStore((s) => s.report)
+  const link = useApiLink()
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const currentUser = useAuthStore((s) => s.currentUser)
 
@@ -114,14 +116,15 @@ export function StatusBar() {
       <div className="hidden md:flex items-center justify-between h-7 px-4 text-[10px]">
         {/* Left */}
         <div className="flex items-center gap-2.5">
-          <span className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${isConnected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-            <span className={isConnected ? 'text-slate-400' : 'text-slate-500'}>
-              {isConnected ? 'Connected' : connectionStatus}
+          <span className="flex items-center gap-1.5" title={link.live ? undefined : link.label}>
+            <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${link.live ? 'bg-emerald-400' : link.state === 'trouble' ? 'bg-amber-400 animate-pulse' : link.state === 'reconnecting' ? 'bg-rose-400 animate-pulse' : 'bg-rose-500'}`} />
+            <span className={link.live ? 'text-slate-400' : link.state === 'trouble' ? 'text-amber-300' : 'text-rose-300'}>
+              {link.live ? 'Connected' : link.short}
             </span>
           </span>
 
-          {healthStatus && (
+          {/* no health verdict while the API does not answer: the connection chip already says why */}
+          {healthStatus && link.live && (
             <>
               <span className="text-white/[0.06]">|</span>
               <button onClick={nav('health')} className="flex items-center gap-1 hover:brightness-125 transition-all cursor-pointer">
@@ -196,8 +199,8 @@ export function StatusBar() {
             <>
               <span className="text-white/[0.06]">|</span>
               <span className="flex items-center gap-1 text-slate-500">
-                <Wifi size={9} className="text-emerald-500/60" />
-                <span className="text-slate-500">{lastRefreshAgo}</span>
+                {link.live ? <Wifi size={9} className="text-emerald-500/60" /> : <WifiOff size={9} className="text-rose-400/80" />}
+                <span className={link.live ? 'text-slate-500' : 'text-rose-300/80'}>{link.live ? lastRefreshAgo : `last answer ${lastRefreshAgo}`}</span>
                 {latencyMs != null && (
                   <span title="Round trip to the API — median of the last 5 checks" className={`text-[9px] tabular-nums ${latencyMs < 100 ? 'text-emerald-500/60' : latencyMs < 300 ? 'text-amber-500/60' : 'text-rose-500/60'}`}>
                     {latencyMs}ms

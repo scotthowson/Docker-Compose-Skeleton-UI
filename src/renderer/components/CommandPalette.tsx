@@ -15,6 +15,7 @@ import {
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
+import { useApiLink } from '../hooks/useApiLink'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from './common/Toast'
@@ -173,7 +174,10 @@ export function CommandPalette() {
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed)
   const theme = useSettingsStore((s) => s.theme)
   const status = useSystemStore((s) => s.status)
-  const health = useHealthStore((s) => s.report)
+  const healthReported = useHealthStore((s) => s.report)
+  const apiLink = useApiLink()
+  // the palette states the health only while the API answers
+  const health = apiLink.live ? healthReported : null
   const connectionStatus = useConnectionStore((s) => s.status)
   const { isAuthenticated, logout, userRole } = useAuthStore()
   const isAdmin = userRole === 'admin'

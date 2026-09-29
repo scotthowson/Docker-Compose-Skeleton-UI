@@ -33,7 +33,7 @@ import { useStackCounts } from '../hooks/useStackCounts'
 import { useHealthStore } from '../stores/healthStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
-import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { useApiLink, sinceText, type ApiLinkState } from '../hooks/useApiLink'
 import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
 import { LoadingState } from '../components/common/PageState'
 
@@ -97,6 +97,14 @@ const statusConfig: Record<
     label: 'Unable to Connect',
     Icon: WifiOff,
   },
+}
+
+// The big indicator while the API does not answer: a health report is a fact about the moment it was taken,
+// so the last "All Systems Healthy" must not stay on screen as if it were the present
+const linkConfig: Record<Exclude<ApiLinkState, 'live'>, { bg: string; ring: string; glow: string; text: string; neon: string; label: string; Icon: React.ElementType }> = {
+  trouble: { bg: 'bg-amber-500', ring: 'ring-amber-500/30', glow: 'glow-amber', text: 'text-amber-400', neon: 'neon-amber', label: 'API Not Answering', Icon: HeartPulse },
+  reconnecting: { bg: 'bg-rose-500', ring: 'ring-rose-500/30', glow: 'glow-rose', text: 'text-rose-400', neon: 'neon-rose', label: 'API Reconnecting…', Icon: HeartPulse },
+  offline: { bg: 'bg-rose-500', ring: 'ring-rose-500/30', glow: 'glow-rose', text: 'text-rose-400', neon: 'neon-rose', label: 'API Not Connected', Icon: WifiOff },
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +358,24 @@ export default function Health() {
   const report = data ?? storeReport
   // NEVER default to 'healthy' — only the API can say we're healthy
   const status: HealthStatus = report?.status ?? 'unknown'
-  const cfg = statusConfig[status]
+  // while the API does not answer the page says so, in place of the last verdict
+  const link = useApiLink()
+  const stale = !link.live
+  const reconnect = useConnectionStore((s) => s.connect)
+  const [, setTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!stale) return
+    const t = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [stale])
+  // Docker itself not answering: every container is down (the API says critical) and this is the reason worth naming
+  const dockerDown = !stale && report?.docker?.reachable === false
+  const silentVms = !stale ? (report?.unreachable ?? 0) : 0
+  const cfg = stale
+    ? linkConfig[link.state as Exclude<ApiLinkState, 'live'>]
+    : dockerDown
+      ? { ...statusConfig.critical, label: 'Docker Not Answering', Icon: XCircle }
+      : statusConfig[status]
   const StatusIcon = cfg.Icon
   const summary = report?.summary ?? { total: 0, healthy: 0, unhealthy: 0, stopped: 0 }
   // a VM's own report carries no member tag: the rows belong to the VM asked for
@@ -447,7 +472,7 @@ export default function Health() {
 
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
-      <DisconnectedBanner />
+      {/* the headline below says when the API does not answer: no banner saying it again */}
       <OnDemandMissingBanner />
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -491,7 +516,7 @@ export default function Health() {
       </div>
 
       {/* Error state */}
-      {error && (
+      {error && !stale && (
         <div className="glass rounded-xl p-4 border border-rose-500/20">
           <p className="text-sm text-rose-400">Failed to fetch health data: {error.message}</p>
         </div>
@@ -527,25 +552,48 @@ export default function Health() {
           <div className="relative flex items-center justify-center">
             <span
               className={`absolute h-16 w-16 md:h-20 md:w-20 rounded-full ${cfg.bg} opacity-20 animate-ping`}
-              style={{ animationDuration: '2s' }}
+              style={{ animationDuration: stale && link.state === 'reconnecting' ? '1s' : '2s' }}
             />
             <span
               className={`relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full ${cfg.bg}/20 ring-4 ${cfg.ring}`}
             >
-              <StatusIcon size={28} className={`${cfg.text} md:hidden`} strokeWidth={2} />
-              <StatusIcon size={36} className={`${cfg.text} hidden md:block`} strokeWidth={2} />
+              <StatusIcon size={28} className={`${cfg.text} md:hidden ${stale && link.state === 'reconnecting' ? 'animate-pulse' : ''}`} strokeWidth={2} />
+              <StatusIcon size={36} className={`${cfg.text} hidden md:block ${stale && link.state === 'reconnecting' ? 'animate-pulse' : ''}`} strokeWidth={2} />
             </span>
           </div>
           <div className="text-center">
             <p className={`text-lg md:text-xl font-bold ${cfg.text} ${cfg.neon}`}>{cfg.label}</p>
-            <p className="text-xs md:text-sm text-slate-400 mt-1">
-              {summary.total} container{summary.total !== 1 ? 's' : ''} monitored
-            </p>
+            {stale ? (
+              <>
+                <p className="text-xs md:text-sm text-slate-400 mt-1">{link.detail}</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {report ? `${link.note}${link.lastConnected ? ` · answered ${sinceText(link.lastConnected)}` : ''}` : 'No report yet'}
+                </p>
+                {link.state === 'offline' && (
+                  <button onClick={() => { void reconnect() }} className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-200 bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] transition-all press">
+                    <RefreshCw size={12} /> Retry
+                  </button>
+                )}
+              </>
+            ) : dockerDown ? (
+              <p className="text-xs md:text-sm text-slate-400 mt-1 max-w-xs">
+                {report?.docker?.error || 'Docker does not answer'} — every container on this server is down
+              </p>
+            ) : (
+              <>
+                <p className="text-xs md:text-sm text-slate-400 mt-1">
+                  {summary.total} container{summary.total !== 1 ? 's' : ''} monitored
+                </p>
+                {silentVms > 0 && (
+                  <p className="text-[11px] text-amber-300 mt-1">{silentVms} VM{silentVms === 1 ? '' : 's'} not answering</p>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Summary stats grid */}
-        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3 stagger-children">
+        <div className={`lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3 stagger-children transition-all duration-500 ${stale ? 'opacity-50 saturate-50' : ''}`}>
           {([
             { label: 'Stacks', value: `${stackCounts.running}/${stackCounts.total}`, color: stackCounts.running === stackCounts.total ? 'text-emerald-400' : 'text-amber-400', icon: Layers, iconColor: 'text-amber-400' },
             { label: 'Healthy', value: summary.healthy, color: 'text-emerald-400', icon: HeartPulse, iconColor: 'text-emerald-400' },
@@ -567,6 +615,7 @@ export default function Health() {
         </div>
       </div>
 
+      <div className={`space-y-3 md:space-y-6 transition-all duration-500 ${stale ? 'opacity-50 saturate-50' : ''}`}>
       {/* Health Score — gauge + factor breakdown */}
       <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
@@ -912,6 +961,7 @@ export default function Health() {
             )
           })}
         </div>
+      </div>
       </div>
     </div>
   )
