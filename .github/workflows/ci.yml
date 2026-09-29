@@ -23,5 +23,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # every built-in look readable (WCAG AA), derived looks stable, the theme JSON contract, the engine's class inventory
+      - name: Themes
+        run: npm run check:themes
+
       - name: Build the dashboard
         run: npm run build:renderer

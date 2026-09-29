@@ -10,7 +10,13 @@ import { Progress, Tooltip } from '@mantine/core'
 import { AlertTriangle, Cpu, HardDrive, MemoryStick } from 'lucide-react'
 import type { FleetProvisionDefaults } from '../../../shared/types'
 
-const C = { held: 'rgba(148, 163, 184, 0.45)', planned: '#fbbf24', over: '#fb7185', free: 'rgba(148, 163, 184, 0.12)' }
+// the theme's colours (lib/themeEngine sets them; the fallbacks are the stock dark look)
+const C = {
+  held: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 45%, transparent)',
+  planned: 'var(--dcs-warning, #fbbf24)',
+  over: 'var(--dcs-danger, #fb7185)',
+  free: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 12%, transparent)',
+}
 const gb = (n: number) => `${Math.round(n * 10) / 10} GB`
 
 export interface PlannedVm { cores: number; memGb: number; diskGb: number }

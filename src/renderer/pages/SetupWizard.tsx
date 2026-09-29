@@ -325,7 +325,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const vmPlan = stacks.filter((st) => placementOf(st.name) === 'vm' && !clashOf(st.name)).map((st) => ({ stack: st.name, source: st.source && st.source !== st.name ? st.source : undefined, ...specOf(st.name) }))
 
   // Client-side dashboard preferences
-  const [prefTheme, setPrefTheme] = useState<'dark' | 'light'>('dark')
+  const [prefTheme, setPrefTheme] = useState<'dark' | 'light' | 'system'>(() => useSettingsStore.getState().theme)
   const [prefSessionMinutes, setPrefSessionMinutes] = useState(240)
   const [prefAutoLock, setPrefAutoLock] = useState(0)
   const [prefAppName, setPrefAppName] = useState('DCS Manager')
@@ -2157,12 +2157,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showPreferences && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Theme</label>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Mode</label>
                         <select
                           value={prefTheme}
-                          onChange={(e) => setPrefTheme(e.target.value as 'dark' | 'light')}
+                          onChange={(e) => setPrefTheme(e.target.value as 'dark' | 'light' | 'system')}
                           className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                         >
+                          <option value="system">System (follows this device)</option>
                           <option value="dark">Dark</option>
                           <option value="light">Light</option>
                         </select>
@@ -2597,16 +2598,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 )}
 
                 {/* Dashboard Preferences (only if non-default) */}
-                {(prefTheme !== 'dark' || prefSessionMinutes !== 240 || prefAutoLock !== 0 || prefAppName !== 'DCS Manager' || prefAppSubtitle !== 'Docker Compose Skeleton') && (
+                {(prefTheme !== 'system' || prefSessionMinutes !== 240 || prefAutoLock !== 0 || prefAppName !== 'DCS Manager' || prefAppSubtitle !== 'Docker Compose Skeleton') && (
                   <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Palette size={14} className="text-cyan-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Dashboard</h3>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {prefTheme !== 'dark' && (
+                      {prefTheme !== 'system' && (
                         <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
-                          <span className="text-[10px] text-slate-500 shrink-0">Theme</span>
+                          <span className="text-[10px] text-slate-500 shrink-0">Mode</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefTheme}</span>
                         </div>
                       )}

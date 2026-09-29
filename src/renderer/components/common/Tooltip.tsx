@@ -44,7 +44,7 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
         >
           <div
             className="px-3 py-1.5 rounded-lg text-[10px] font-medium whitespace-nowrap shadow-xl backdrop-blur-xl"
-            style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0' }}
+            style={{ backgroundColor: 'var(--dcs-hint-bg, rgba(15, 23, 42, 0.95))', border: '1px solid var(--dcs-hint-border, rgba(255,255,255,0.1))', color: 'var(--dcs-hint-text, #e2e8f0)' }}
           >
             {content}
           </div>

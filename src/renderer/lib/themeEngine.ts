@@ -1,17 +1,20 @@
 // =============================================================================
-// themeEngine — turns a theme document into the dashboard's look.
+// themeEngine — dresses the document in one look of a theme.
 //
-// The app hard-codes ~5,300 Tailwind colour classes, so a theme works the way
-// light mode works: a palette becomes an override stylesheet (<style id=
-// "dcs-theme">) that restyles the classes the .light block in index.css already
-// targets, with !important and a selector (html[data-theme] .class) that beats
-// both the utilities and the .light block. Every mapping lives here, so a
-// palette change is a full re-theme.
+// The app hard-codes thousands of Tailwind colour classes, so a look works the
+// way light mode works: a palette becomes an override stylesheet (<style id=
+// "dcs-theme">) of !important rules under html[data-theme] that beat both the
+// utilities and the .light block in index.css. It restyles every colour class
+// the pages use (lib/themeClasses.ts), the glass components, the colours
+// charts and gauges hard-code as SVG attributes or inline styles, and
+// Mantine's colour variables.
 //
-// A colour that equals the stock look of the theme's mode emits nothing, which
-// is why "dcs-emerald" (the dark stock palette) renders pixel-identical to the
-// untouched dashboard and why a theme that only changes the status colours
-// leaves the neutral glass exactly as Tailwind compiled it.
+// A colour that equals the stock look of the mode emits nothing, which is why
+// DCS Emerald's dark look renders pixel-identical to the untouched dashboard.
+//
+// applyTheme() is where the look reaches the document: the light/dark class,
+// data-theme, color-scheme, the page colour, the meta theme-color and the
+// stylesheet (stores/themeStore decides which theme and mode).
 // =============================================================================
 
 import {
@@ -19,17 +22,24 @@ import {
   type ThemeMode,
   type ThemePalette,
   type ThemeRadius,
+  contrastRatio,
+  hexToRgb,
   hexToTriplet,
+  hexToOklch,
+  oklchToHex,
+  luminance,
   mixHex,
   stockPalette,
+  themeLook,
+  themeLooks,
   FONT_NAME_RE,
 } from '../../shared/themes'
 import { sanitizeCss } from './cssSanitize'
+import { THEME_CLASSES } from './themeClasses'
 
 export const THEME_STYLE_ID = 'dcs-theme'
 const ROOT = 'html[data-theme]'
 const ROOT_LIGHT = 'html[data-theme].light'
-const DEFAULT_META_COLOR = '#0f172a'
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -46,6 +56,11 @@ function rgba(hex: string, alpha: number): string {
   return `rgb(${hexToTriplet(hex)} / ${+a.toFixed(3)})`
 }
 
+/** "#10b981" → "rgb(16, 185, 129)", the way the browser writes an inline style colour */
+function cssRgb(hex: string): string {
+  return `rgb(${hexToRgb(hex).join(', ')})`
+}
+
 function shade(hex: string, t: number): string {
   return mixHex(hex, '#000000', t)
 }
@@ -56,10 +71,14 @@ function alphaOf(suffix: string): number {
   return parseInt(suffix, 10) / 100
 }
 
-/** the selector a utility class (with an optional variant prefix) needs */
+/** the selector a utility class (with an optional state variant) needs */
 function selectorFor(cls: string): string {
   if (cls.startsWith('hover:')) return `${ROOT} .${esc(cls)}:hover`
   if (cls.startsWith('focus:')) return `${ROOT} .${esc(cls)}:focus`
+  if (cls.startsWith('focus-visible:')) return `${ROOT} .${esc(cls)}:focus-visible`
+  if (cls.startsWith('focus-within:')) return `${ROOT} .${esc(cls)}:focus-within`
+  if (cls.startsWith('active:')) return `${ROOT} .${esc(cls)}:active`
+  if (cls.startsWith('file:')) return `${ROOT} .${esc(cls)}::file-selector-button`
   if (cls.startsWith('group-hover:')) return `${ROOT} .group:hover .${esc(cls)}`
   if (cls.startsWith('placeholder:') || cls.startsWith('placeholder-')) return `${ROOT} .${esc(cls)}::placeholder`
   if (cls.startsWith('divide-')) return `${ROOT} .${esc(cls)} > :not([hidden]) ~ :not([hidden])`
@@ -68,7 +87,7 @@ function selectorFor(cls: string): string {
 
 /** the declaration a utility class sets, with the colour swapped */
 function declarationFor(cls: string, value: string): string {
-  const base = cls.replace(/^(hover|focus|group-hover|placeholder):/, '')
+  const base = cls.replace(/^(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):/, '').replace(/^!/, '')
   if (base.startsWith('placeholder')) return `color: ${value} !important`
   if (base.startsWith('bg-')) return `background-color: ${value} !important`
   if (base.startsWith('text-')) return `color: ${value} !important`
@@ -102,15 +121,19 @@ class Sheet {
 
   /** a utility class → its colour */
   cls(cls: string, value: string): void {
-    const decl = declarationFor(cls, value)
-    const list = this.groups.get(decl) ?? []
-    list.push(selectorFor(cls))
-    this.groups.set(decl, list)
+    this.sel(selectorFor(cls), declarationFor(cls, value))
   }
 
   /** several classes → one colour */
   each(classes: string[], value: string): void {
     for (const c of classes) this.cls(c, value)
+  }
+
+  /** a complete selector → a declaration (grouped with the others that share it) */
+  sel(selector: string, decl: string): void {
+    const list = this.groups.get(decl) ?? []
+    list.push(selector)
+    this.groups.set(decl, list)
   }
 
   /** a hand-written rule (selectors are already complete) */
@@ -123,65 +146,238 @@ class Sheet {
     for (const [decl, selectors] of this.groups) out.push(`${selectors.join(',\n')} { ${decl} }`)
     return out.join('\n')
   }
+}
 
-  get size(): number {
-    return this.groups.size + this.raw.length
+// ---------------------------------------------------------------------------
+// Colours hard-coded outside the class names: SVG attributes (charts, gauges,
+// rings) and inline styles (legend dots, bars, floating panels)
+// ---------------------------------------------------------------------------
+
+/** an SVG presentation attribute holding this colour gets the palette's instead (CSS beats the attribute) */
+function svgColour(s: Sheet, hex: string, value: string): void {
+  for (const [attr, prop] of [['fill', 'fill'], ['stroke', 'stroke'], ['stop-color', 'stop-color']] as const) {
+    s.sel(`${ROOT} [${attr}="${hex}" i]`, `${prop}: ${value} !important`)
   }
+}
+
+/** an inline style colour (written by the browser as rgb(r, g, b)) gets the palette's instead */
+function inlineColour(s: Sheet, hex: string, value: string): void {
+  const rgb = cssRgb(hex)
+  s.sel(`${ROOT} [style*="background-color: ${rgb}"], ${ROOT} [style*="background: ${rgb}"]`, `background-color: ${value} !important`)
+  s.sel(`${ROOT} [style^="color: ${rgb}"], ${ROOT} [style*="; color: ${rgb}"]`, `color: ${value} !important`)
+  s.sel(`${ROOT} [style*="border-color: ${rgb}"]`, `border-color: ${value} !important`)
+}
+
+type Step = 'c' | 's500' | 's600' | 't300'
+
+/** the Tailwind hexes each status family hard-codes, and the step of the palette colour each one is */
+const FAMILY_HEXES: Record<'success' | 'warning' | 'danger' | 'info', Record<string, Step>> = {
+  success: { '#34d399': 'c', '#4ade80': 'c', '#10b981': 's500', '#22c55e': 's500', '#059669': 's600', '#047857': 's600', '#6ee7b7': 't300' },
+  warning: { '#fbbf24': 'c', '#f59e0b': 's500', '#d97706': 's600', '#f97316': 's600', '#fcd34d': 't300', '#fde68a': 't300' },
+  danger: { '#fb7185': 'c', '#f87171': 'c', '#f43f5e': 's500', '#ef4444': 's500', '#e11d48': 's600', '#dc2626': 's600', '#fda4af': 't300' },
+  info: { '#22d3ee': 'c', '#38bdf8': 'c', '#06b6d4': 's500', '#3b82f6': 's500', '#0891b2': 's600', '#0284c7': 's600', '#67e8f9': 't300' },
 }
 
 // ---------------------------------------------------------------------------
 // The palette → class map
 // ---------------------------------------------------------------------------
 
-/** the neutral classes: page, surfaces, glass, borders, text ramp, translucent tints */
+/** the steps of a look's neutral scale that stand in for Tailwind's slate, white and black */
+interface Ramp {
+  /**
+   * The text ramp (text-slate-100 … 700) keeps the dark design's order of emphasis in both looks: 100
+   * headings, 300 body, 400 (= muted) secondary text, 500/600 quieter notes, 700 separators and the
+   * faintest icons. Each step moves from muted toward the background; in a light look 500 and 600 stop
+   * where they would drop under AA on the background or the surface.
+   */
+  t100: string; t200: string; t300: string; t400: string; t500: string; t600: string; t700: string
+  /** neutral solids (bg/border slate-500/600/700) between the raised surface and muted text */
+  n500: string; n600: string; n700: string
+}
+
+/** a colour moved toward another by up to `most`, as far as it can go and still reach `min` against each backdrop */
+function fadeWithin(c: string, toward: string, most: number, against: string[], min: number): string {
+  let best = c
+  for (let k = 0.02; k <= most + 1e-9; k += 0.02) {
+    const next = mixHex(c, toward, k)
+    if (!against.every((b) => contrastRatio(next, b) >= min)) break
+    best = next
+  }
+  return best
+}
+
+function rampOf(p: ThemePalette, mode: ThemeMode): Ramp {
+  const light = mode === 'light'
+  const { bg, surface, surfaceRaised: raised, text, textMuted: muted } = p
+  return {
+    t100: text,
+    t200: mixHex(text, muted, light ? 0.1 : 0.16),
+    t300: mixHex(text, muted, light ? 0.3 : 0.4),
+    t400: muted,
+    t500: light ? fadeWithin(muted, bg, 0.25, [bg, surface], 4.5) : mixHex(muted, bg, 0.3),
+    t600: light ? fadeWithin(muted, bg, 0.4, [bg, surface], 4.5) : mixHex(muted, bg, 0.5),
+    t700: mixHex(muted, bg, light ? 0.62 : 0.65),
+    n500: mixHex(raised, muted, 0.6),
+    n600: mixHex(raised, muted, 0.36),
+    n700: mixHex(raised, muted, 0.2),
+  }
+}
+
+/** how strong the palette border reads for a border-white/<alpha> class (the stock glass: fainter alphas, fainter edges) */
+function borderFor(p: ThemePalette, a: number): string {
+  const { border, text } = p
+  if (a <= 0.03) return rgba(border, 0.45)
+  if (a <= 0.05) return rgba(border, 0.55)
+  if (a <= 0.06) return rgba(border, 0.65)
+  if (a <= 0.08) return rgba(border, 0.8)
+  if (a <= 0.12) return border
+  if (a <= 0.15) return mixHex(border, text, 0.2)
+  if (a <= 0.2) return mixHex(border, text, 0.3)
+  if (a <= 0.3) return mixHex(border, text, 0.45)
+  return mixHex(border, text, 0.55)
+}
+
+type StatusKey = 'success' | 'warning' | 'danger' | 'info'
+/** the Tailwind hues the dashboard uses for each status colour */
+const HUE_ROLE: Record<string, StatusKey> = {
+  emerald: 'success', teal: 'success', lime: 'success', green: 'success',
+  amber: 'warning', orange: 'warning', yellow: 'warning',
+  rose: 'danger', red: 'danger',
+  cyan: 'info', sky: 'info', blue: 'info',
+}
+
+/** a status colour at a Tailwind shade: the palette colour is the 400; lighter steps move toward the text colour, darker ones toward black */
+function statusShade(c: string, text: string, shadeNo: number): string {
+  if (shadeNo <= 50) return mixHex(c, text, 0.9)
+  if (shadeNo <= 100) return mixHex(c, text, 0.75)
+  if (shadeNo <= 200) return mixHex(c, text, 0.55)
+  if (shadeNo <= 300) return mixHex(c, text, 0.3)
+  if (shadeNo <= 400) return c
+  if (shadeNo <= 500) return shade(c, 0.15)
+  if (shadeNo <= 600) return shade(c, 0.3)
+  if (shadeNo <= 700) return shade(c, 0.45)
+  if (shadeNo <= 800) return shade(c, 0.6)
+  if (shadeNo <= 900) return shade(c, 0.72)
+  return shade(c, 0.8)
+}
+
+/** slate as a foreground (text, placeholder, fill, stroke): the text ramp; the darkest steps are the darkest neutral of the look */
+function slateForeground(p: ThemePalette, r: Ramp, light: boolean, shadeNo: number): string {
+  if (shadeNo <= 100) return r.t100
+  if (shadeNo <= 200) return r.t200
+  if (shadeNo <= 300) return r.t300
+  if (shadeNo <= 400) return r.t400
+  if (shadeNo <= 500) return r.t500
+  if (shadeNo <= 600) return r.t600
+  if (shadeNo <= 700) return r.t700
+  if (shadeNo <= 800) return light ? mixHex(p.text, p.textMuted, 0.2) : p.surface
+  return light ? p.text : p.bg
+}
+
+/** slate as a surface or line (bg, gradients, borders, rings, shadows) */
+function slateSurface(p: ThemePalette, r: Ramp, shadeNo: number): string {
+  if (shadeNo >= 950) return p.bg
+  if (shadeNo >= 900) return p.surface
+  if (shadeNo >= 800) return p.surfaceRaised
+  if (shadeNo >= 700) return r.n700
+  if (shadeNo >= 600) return r.n600
+  if (shadeNo >= 500) return r.n500
+  if (shadeNo >= 400) return p.textMuted
+  if (shadeNo >= 300) return mixHex(p.textMuted, p.text, 0.35)
+  if (shadeNo >= 200) return mixHex(p.textMuted, p.text, 0.65)
+  return p.text
+}
+
+const CLASS_RE = /^(?:(hover|focus|focus-visible|focus-within|active|file|group-hover|placeholder):)?!?(bg|text|border(?:-[tblrxy])?|ring-offset|ring|from|to|via|fill|stroke|shadow|divide|accent|placeholder)-(emerald|teal|lime|green|amber|orange|yellow|rose|red|cyan|sky|blue|slate|white|black|violet|purple|fuchsia|pink|indigo)(?:-(\d{2,3}))?(?:\/(\d{1,3}|\[[\d.]+\]))?$/
+/** the decorative hues' 700 (Tailwind): their pale text steps, made for dark glass, read as this on a light look */
+const DECORATIVE_INK: Record<string, string> = { violet: '#6d28d9', purple: '#7e22ce', fuchsia: '#a21caf', pink: '#be185d', indigo: '#4338ca' }
+interface ColourClass { cls: string; prop: string; family: string; shadeNo: number | null; alpha: number | null }
+let parsed: ColourClass[] | null = null
+function colourClasses(): ColourClass[] {
+  if (!parsed) {
+    parsed = []
+    for (const cls of THEME_CLASSES) {
+      const m = CLASS_RE.exec(cls)
+      if (m) parsed.push({ cls, prop: m[2], family: m[3], shadeNo: m[4] ? parseInt(m[4], 10) : null, alpha: m[5] ? alphaOf(m[5]) : null })
+    }
+  }
+  return parsed
+}
+
+/**
+ * Every colour class the dashboard uses (lib/themeClasses.ts, kept current by
+ * scripts/theme-classes.mjs) restyled from the palette: status hues from their
+ * status colour, slate from the neutral scale, white as the text colour (white
+ * glass on a dark look, ink on a light one), black darkening a light look
+ * gently. Only what differs from the stock look is written.
+ */
+function emitClasses(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeMode): void {
+  const light = mode === 'light'
+  const neutrals = !sameNeutrals(p, stock)
+  const r = rampOf(p, mode)
+  for (const { cls, prop, family, shadeNo, alpha } of colourClasses()) {
+    const fg = prop === 'text' || prop === 'placeholder' || prop === 'fill' || prop === 'stroke'
+    let value: string | null = null
+    const role = HUE_ROLE[family]
+    if (DECORATIVE_INK[family]) {
+      // violet & co. keep their hue in every theme; only their pale text needs ink on a light page
+      if (!light || !fg || shadeNo === null || shadeNo > 500) continue
+      value = DECORATIVE_INK[family]
+    } else if (role) {
+      if (p[role] === stock[role] || shadeNo === null) continue
+      value = statusShade(p[role], p.text, shadeNo)
+    } else if (family === 'slate') {
+      if (!neutrals || shadeNo === null) continue
+      value = fg ? slateForeground(p, r, light, shadeNo) : slateSurface(p, r, shadeNo)
+    } else if (family === 'white') {
+      if (!neutrals || shadeNo !== null) continue
+      if (prop.startsWith('border') || prop === 'divide') {
+        if (alpha === null) continue
+        s.cls(cls, prop === 'divide' && alpha <= 0.06 ? rgba(p.border, 0.5) : borderFor(p, alpha))
+        continue
+      }
+      if (prop === 'bg' && alpha === null) continue // a solid white knob stays white
+      value = fg ? r.t100 : p.text
+    } else if (family === 'black') {
+      // black darkens: on a dark look it stays black; on a light one it becomes a soft shade of ink
+      if (!light || !neutrals || alpha === null || fg) continue
+      s.cls(cls, rgba(p.text, alpha * (prop === 'shadow' ? 0.2 : 0.4)))
+      continue
+    }
+    // dimmed text (text-amber-400/80, text-slate-500/80) reads as the solid step on a light page: the
+    // dimming was meant for bright text on dark glass; faint separators (/[0.06]) stay translucent
+    const solid = light && fg && alpha !== null && alpha >= 0.5
+    if (value) s.cls(cls, alpha === null || solid ? value : rgba(value, alpha))
+  }
+
+  // Text written onto a solid status colour: the dark design pairs bright chips with dark text
+  // (bg-amber-500/90 text-slate-900) and buttons with white text (bg-emerald-500 text-white). A look
+  // moves those colours (a light one darkens status colours for AA; a pastel one lightens them), so
+  // such a pair keeps whichever ink of the look reads best on the colour it has now.
+  const all = colourClasses()
+  const inks = all.filter((c) => c.prop === 'text' && !c.cls.includes(':') && c.alpha === null
+    && (c.family === 'white' || c.family === 'black' || (c.family === 'slate' && c.shadeNo !== null && (c.shadeNo <= 200 || c.shadeNo >= 800))))
+  for (const b of all) {
+    const role = HUE_ROLE[b.family]
+    if (b.prop !== 'bg' || !role || b.shadeNo === null || b.shadeNo < 400 || (b.alpha !== null && b.alpha < 0.6) || b.cls.includes(':')) continue
+    if (p[role] === stock[role]) continue
+    const colour = statusShade(p[role], p.text, b.shadeNo)
+    const shown = b.alpha === null ? colour : mixHex(p.surface, colour, b.alpha)
+    const lightInk = light ? p.surface : p.text
+    const darkInk = light ? p.text : p.bg
+    const best = contrastRatio(lightInk, shown) >= contrastRatio(darkInk, shown) ? lightInk : darkInk
+    for (const t of inks) s.sel(`${ROOT} .${esc(b.cls)}.${esc(t.cls)}, ${ROOT} .${esc(b.cls)} .${esc(t.cls)}`, `color: ${best} !important`)
+  }
+}
+
+/** the hand-written neutral rules: page, glass components, generic borders, charts, hard-coded slate, light-mode elements */
 function emitNeutrals(s: Sheet, p: ThemePalette, mode: ThemeMode): void {
   const light = mode === 'light'
   const { bg, surface, surfaceRaised: raised, border, text, textMuted: muted } = p
-
-  // Text ramp. Dark: dimmer = toward the background. Light: the dashboard's
-  // slate-500/600 read darker than slate-400, so dimmer steps go toward text.
-  const t100 = text
-  const t200 = mixHex(text, muted, light ? 0.1 : 0.16)
-  const t300 = mixHex(text, muted, light ? 0.3 : 0.4)
-  const t400 = muted
-  const t500 = light ? mixHex(muted, text, 0.35) : mixHex(muted, bg, 0.3)
-  const t600 = light ? mixHex(muted, text, 0.55) : mixHex(muted, bg, 0.5)
-  const t700 = light ? mixHex(muted, text, 0.7) : mixHex(muted, bg, 0.65)
-  // Neutral solids (slate-500/600/700 equivalents) sit between the raised surface and muted text
-  const n500 = mixHex(raised, muted, 0.6)
-  const n600 = mixHex(raised, muted, 0.36)
-  const n700 = mixHex(raised, muted, 0.2)
+  const { t300, t500, t600, n500, n600, n700 } = rampOf(p, mode)
 
   // ── Page ──
   s.rule(`${ROOT} body, ${ROOT} .theme-bg`, `background-color: ${bg} !important; color: ${text} !important`)
-
-  // ── Surfaces ──
-  s.cls('bg-slate-950', bg)
-  for (const a of ['30', '40', '50', '60', '70', '85', '95']) s.cls(`bg-slate-950/${a}`, rgba(bg, alphaOf(a)))
-  s.cls('from-slate-950', bg)
-  s.cls('bg-slate-900', surface)
-  for (const a of ['40', '50', '60', '80', '85', '90', '95', '97', '98']) s.cls(`bg-slate-900/${a}`, rgba(surface, alphaOf(a)))
-  s.cls('hover:bg-slate-900/80', rgba(surface, 0.8))
-  s.cls('bg-slate-800', raised)
-  for (const a of ['20', '30', '40', '50', '60', '70', '80', '90', '95']) s.cls(`bg-slate-800/${a}`, rgba(raised, alphaOf(a)))
-  s.cls('hover:bg-slate-800', raised)
-  s.cls('hover:bg-slate-800/50', rgba(raised, 0.5))
-  s.cls('hover:bg-slate-800/60', rgba(raised, 0.6))
-  s.each(['from-slate-800/60', 'to-slate-800/60'], rgba(raised, 0.6))
-  s.cls('bg-slate-700', n700)
-  for (const a of ['40', '50', '60', '80', '90']) s.cls(`bg-slate-700/${a}`, rgba(n700, alphaOf(a)))
-  s.cls('via-slate-700/40', rgba(n700, 0.4))
-  s.cls('via-slate-700/30', rgba(n700, 0.3))
-  s.cls('bg-slate-600', n600)
-  s.cls('bg-slate-600/40', rgba(n600, 0.4))
-  s.cls('bg-slate-600/80', rgba(n600, 0.8))
-  s.cls('to-slate-600/20', rgba(n600, 0.2))
-  s.cls('bg-slate-500', n500)
-  for (const a of ['8', '10', '15', '20']) s.cls(`bg-slate-500/${a}`, rgba(n500, alphaOf(a)))
-  s.cls('from-slate-500/20', rgba(n500, 0.2))
-  s.cls('fill-slate-500', n500)
-  s.cls('bg-slate-400', muted)
-  s.cls('ring-offset-slate-900', surface)
 
   // ── Glass components (@apply'd in index.css, so the class map cannot reach them) ──
   s.rule(`${ROOT} .glass`, `background-color: ${rgba(surface, 0.75)} !important; border-color: ${border} !important`)
@@ -192,77 +388,31 @@ function emitNeutrals(s: Sheet, p: ThemePalette, mode: ThemeMode): void {
   s.rule(`${ROOT} .glass-3`, `background-color: ${rgba(raised, 0.8)} !important; border-color: ${border} !important`)
   s.rule(`${ROOT} .skeleton`, `background: linear-gradient(90deg, ${rgba(raised, 0.6)}, ${rgba(n700, 0.4)}, ${rgba(raised, 0.6)}) !important; background-size: 200% 100% !important`)
 
-  // ── Borders: the border-white/* family reads the palette border at a strength that follows the class ──
+  // ── Borders without a colour class read the palette border ──
   s.rule(`${ROOT} .border-t, ${ROOT} .border-b, ${ROOT} .border-l, ${ROOT} .border-r`, `border-color: ${rgba(border, 0.55)} !important`)
-  const borderFor = (suffix: string): string => {
-    const a = alphaOf(suffix)
-    if (a <= 0.03) return rgba(border, 0.45)
-    if (a <= 0.05) return rgba(border, 0.55)
-    if (a <= 0.06) return rgba(border, 0.65)
-    if (a <= 0.08) return rgba(border, 0.8)
-    if (a <= 0.12) return border
-    if (a <= 0.15) return mixHex(border, text, 0.2)
-    if (a <= 0.2) return mixHex(border, text, 0.3)
-    if (a <= 0.3) return mixHex(border, text, 0.45)
-    return mixHex(border, text, 0.55)
-  }
-  for (const a of ['[0.02]', '[0.03]', '[0.04]', '5', '[0.05]', '[0.06]', '[0.08]', '10', '[0.10]', '[0.12]', '15', '[0.15]', '20', '30', '40']) {
-    s.cls(`border-white/${a}`, borderFor(a))
-  }
-  for (const a of ['5', '10', '15', '[0.15]', '20', '30']) s.cls(`hover:border-white/${a}`, borderFor(a))
-  s.each(['divide-white/[0.03]', 'divide-white/[0.04]'], rgba(border, 0.5))
-  s.cls('border-slate-500', n500)
-  for (const a of ['10', '15', '20', '30', '50']) s.cls(`border-slate-500/${a}`, rgba(n500, alphaOf(a)))
-  s.cls('border-slate-400', muted)
-  s.cls('border-t-slate-400', muted)
-  s.cls('border-slate-600', n600)
-  s.cls('border-slate-600/50', rgba(n600, 0.5))
-  s.cls('border-slate-700', n700)
-  s.cls('border-slate-900', surface)
 
-  // ── Text ──
-  s.each(['text-white', 'text-slate-100'], t100)
-  s.cls('text-slate-200', t200)
-  s.cls('text-slate-300', t300)
-  s.cls('text-slate-400', t400)
-  s.cls('text-slate-500', t500)
-  s.cls('text-slate-500/80', rgba(t500, 0.8))
-  s.cls('text-slate-600', t600)
-  s.cls('text-slate-700', t700)
-  s.cls('hover:text-white', t100)
-  s.cls('hover:text-slate-200', t200)
-  s.cls('hover:text-slate-300', t300)
-  s.cls('hover:text-slate-400', t400)
-  s.cls('hover:text-slate-500', t500)
-  s.cls('group-hover:text-white', t100)
-  s.cls('group-hover:text-slate-300', t300)
-  s.cls('group-hover:text-slate-400', t400)
-  s.cls('placeholder-slate-500', t500)
-  s.each(['placeholder-slate-600', 'placeholder:text-slate-600'], t600)
-  s.cls('placeholder-slate-700', t700)
-  for (const a of ['[0.06]', '[0.08]', '10']) s.cls(`text-white/${a}`, rgba(text, alphaOf(a)))
-
-  // ── Translucent surfaces: a tint of the text colour (white on dark, ink on light) ──
-  for (const a of ['[0.01]', '[0.015]', '[0.02]', '[0.03]', '[0.04]', '5', '[0.05]', '[0.06]', '[0.07]', '[0.08]', '10', '[0.1]', '[0.10]', '[0.12]', '15', '20']) {
-    s.cls(`bg-white/${a}`, rgba(text, alphaOf(a)))
-  }
-  for (const a of ['[0.02]', '[0.03]', '[0.04]', '5', '[0.05]', '[0.06]', '[0.08]', '10', '[0.1]']) {
-    s.cls(`hover:bg-white/${a}`, rgba(text, alphaOf(a)))
-  }
-  s.each(['from-white/[0.06]'], rgba(text, 0.06))
-  s.each(['from-white/[0.08]', 'via-white/[0.08]'], rgba(text, 0.08))
-  for (const a of ['[0.06]', '[0.1]', '10', '15']) s.cls(`ring-white/${a}`, rgba(text, alphaOf(a)))
-
-  // ── Chrome: scrollbars, charts, selection, the phone's status bar colour ──
+  // ── Chrome: scrollbars, charts, selection ──
   s.rule(`${ROOT} ::-webkit-scrollbar-thumb`, `background-color: ${rgba(muted, 0.35)} !important`)
   s.rule(`${ROOT} ::-webkit-scrollbar-thumb:hover`, `background-color: ${rgba(muted, 0.55)} !important`)
   s.rule(`${ROOT} .scrollbar-thin`, `scrollbar-color: ${rgba(muted, 0.4)} transparent !important`)
   s.rule(`${ROOT} .recharts-cartesian-grid line`, `stroke: ${rgba(border, 0.8)} !important`)
   s.rule(`${ROOT} .recharts-text`, `fill: ${t500} !important`)
-  s.rule(`${ROOT} .recharts-tooltip-wrapper .recharts-default-tooltip`, `background-color: ${rgba(raised, 0.96)} !important; border-color: ${border} !important; color: ${text} !important`)
+  s.rule(`${ROOT} .recharts-tooltip-wrapper .recharts-default-tooltip`, `background-color: ${rgba(light ? surface : raised, 0.97)} !important; border-color: ${border} !important; color: ${text} !important`)
   s.rule(`${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-label`, `color: ${muted} !important`)
   s.rule(`${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-item, ${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-item-name, ${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-item-separator, ${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-item-value, ${ROOT} .recharts-tooltip-wrapper .recharts-tooltip-item-unit`, `color: ${text} !important`)
   s.rule(`${ROOT} .uptime-tip::before`, `border-color: ${border} !important`)
+
+  // ── Hard-coded slate in SVG (gauge tracks, axes) and in inline styles (floating panels, tooltips) ──
+  svgColour(s, '#0f172a', surface)
+  svgColour(s, '#1e293b', raised)
+  svgColour(s, '#334155', n700)
+  svgColour(s, '#475569', n600)
+  svgColour(s, '#64748b', t500)
+  svgColour(s, '#94a3b8', muted)
+  for (const a of ['0.88', '0.9', '0.92']) s.sel(`${ROOT} [fill="rgba(15, 23, 42, ${a})"]`, `fill: ${rgba(surface, parseFloat(a))} !important`)
+  s.rule(`${ROOT} [style*="background-color: rgba(15, 23, 42, 0.9"]`, `background-color: ${rgba(light ? surface : raised, 0.97)} !important; color: ${text} !important`)
+  s.rule(`${ROOT} [style*="border: 1px solid rgba(255, 255, 255, 0.1)"], ${ROOT} [style*="border-color: rgba(255, 255, 255, 0.1)"]`, `border-color: ${border} !important`)
+  s.sel(`${ROOT} [style^="color: rgb(226, 232, 240)"], ${ROOT} [style*="; color: rgb(226, 232, 240)"]`, `color: ${text} !important`)
 
   if (light) {
     // The .light block styles elements as well as classes; give those the palette
@@ -273,25 +423,29 @@ function emitNeutrals(s: Sheet, p: ThemePalette, mode: ThemeMode): void {
     s.rule(`${ROOT} aside`, `background-color: ${rgba(surface, 0.8)} !important; border-color: ${border} !important`)
     s.rule(`${ROOT} input, ${ROOT} textarea, ${ROOT} select`, `background-color: ${surface} !important; border-color: ${border} !important; color: ${text} !important`)
     s.rule(`${ROOT} input::placeholder, ${ROOT} textarea::placeholder`, `color: ${t500} !important`)
-    s.rule(`${ROOT} input:focus, ${ROOT} textarea:focus, ${ROOT} select:focus`, `border-color: ${rgba(p.success, 0.6)} !important; box-shadow: 0 0 0 3px ${rgba(p.success, 0.2)} !important`)
+    s.rule(`${ROOT} input:focus, ${ROOT} textarea:focus, ${ROOT} select:focus`, `border-color: ${rgba(p.accent, 0.7)} !important; box-shadow: 0 0 0 3px ${rgba(p.accent, 0.2)} !important`)
     s.rule(`${ROOT} table th`, `color: ${t500} !important; border-color: ${rgba(border, 0.7)} !important`)
     s.rule(`${ROOT} table td`, `color: ${t300} !important`)
     s.rule(`${ROOT} table thead`, `background-color: ${rgba(text, 0.02)} !important`)
     s.rule(`${ROOT} tr:hover, ${ROOT} table tr:hover`, `background-color: ${rgba(text, 0.03)} !important`)
     s.rule(`${ROOT} kbd`, `background-color: ${rgba(text, 0.05)} !important; border-color: ${border} !important; color: ${t600} !important`)
     s.rule(`${ROOT} pre, ${ROOT} code`, `background-color: ${raised} !important; color: ${t300} !important`)
+    s.rule(`${ROOT} .font-mono`, `color: ${t300}`)
+    s.rule(`${ROOT} aside button:hover`, `background-color: ${rgba(text, 0.05)} !important`)
     s.rule(`${ROOT_LIGHT} .bg-slate-950\\/60, ${ROOT_LIGHT} .bg-slate-900\\/80`, `border-color: ${border} !important`)
-    for (const a of ['20', '30', '40', '50', '60', '70']) s.cls(`bg-black/${a}`, rgba(text, alphaOf(a) * 0.4))
-    for (const a of ['20', '30', '40', '50', '60']) s.cls(`shadow-black/${a}`, rgba(text, alphaOf(a) * 0.2))
+    // translucent white written into SVG (tracks, axes, ticks) is invisible on a light page
+    s.sel(`${ROOT} [stroke^="rgba(255,255,255,0.0"], ${ROOT} [stroke^="rgba(255, 255, 255, 0.0"], ${ROOT} [stroke="rgba(255,255,255,0.1)"]`, `stroke: ${rgba(text, 0.1)} !important`)
+    s.sel(`${ROOT} [fill="rgba(255,255,255,0.4)"], ${ROOT} [fill="rgba(255,255,255,0.3)"]`, `fill: ${t500} !important`)
+    s.sel(`${ROOT} [fill="rgba(255,255,255,0.03)"]`, `fill: ${rgba(text, 0.04)} !important`)
   }
 }
 
-/** the status hue families the dashboard uses for each semantic colour */
-const FAMILIES: Record<'success' | 'warning' | 'danger' | 'info', { hues: string[]; primary: string; keyframe: string | null }> = {
-  success: { hues: ['emerald', 'teal', 'lime', 'green'], primary: 'emerald', keyframe: 'glowPulseEmerald' },
-  warning: { hues: ['amber', 'orange', 'yellow'], primary: 'amber', keyframe: null },
-  danger: { hues: ['rose', 'red'], primary: 'rose', keyframe: 'glowPulseRose' },
-  info: { hues: ['cyan', 'sky', 'blue'], primary: 'cyan', keyframe: 'glowPulseCyan' },
+/** each status colour's primary Tailwind hue (the one with glows and neon text) and its pulse keyframes */
+const FAMILIES: Record<StatusKey, { primary: string; keyframe: string | null }> = {
+  success: { primary: 'emerald', keyframe: 'glowPulseEmerald' },
+  warning: { primary: 'amber', keyframe: null },
+  danger: { primary: 'rose', keyframe: 'glowPulseRose' },
+  info: { primary: 'cyan', keyframe: 'glowPulseCyan' },
 }
 
 /** the arbitrary glow shadows hard-coded with a hue's rgb (sidebar dots, status pills) */
@@ -302,57 +456,8 @@ const ARBITRARY_GLOWS: Record<string, string[]> = {
   rose: ['0_0_8px_rgba(251,113,133,0.3)'],
 }
 
-/** one hue family (emerald, teal, …) painted with a semantic colour */
-function emitHue(s: Sheet, hue: string, c: string, text: string, full: boolean, light: boolean): void {
-  const s500 = shade(c, 0.15)
-  const s600 = shade(c, 0.3)
-  const t300 = mixHex(c, text, 0.3)
-  const t200 = mixHex(c, text, 0.55)
-  const t100 = mixHex(c, text, 0.75)
-
-  // text
-  s.each([`text-${hue}-400`, `hover:text-${hue}-400`, `group-hover:text-${hue}-400`, `fill-${hue}-400`, `stroke-${hue}-400`], c)
-  s.each([`text-${hue}-300`, `hover:text-${hue}-300`, `group-hover:text-${hue}-300`], t300)
-  s.each([`text-${hue}-200`, `hover:text-${hue}-200`], t200)
-  s.cls(`text-${hue}-100`, t100)
-  s.cls(`text-${hue}-500`, s500)
-  s.cls(`text-${hue}-600`, s600)
-  // solid backgrounds and borders
-  s.each([`bg-${hue}-400`, `hover:bg-${hue}-400`, `border-${hue}-400`, `border-t-${hue}-400`, `accent-${hue}-400`, `from-${hue}-400`, `to-${hue}-400`], c)
-  s.each([`bg-${hue}-500`, `hover:bg-${hue}-500`, `border-${hue}-500`, `border-t-${hue}-500`, `border-b-${hue}-500`, `border-l-${hue}-500`, `accent-${hue}-500`, `from-${hue}-500`, `to-${hue}-500`, `ring-${hue}-500`], s500)
-  s.each([`bg-${hue}-600`, `hover:bg-${hue}-600`, `border-${hue}-600`], s600)
-  // translucent backgrounds
-  const bgAlphas = full
-    ? ['5', '8', '10', '12', '15', '20', '25', '30', '40', '50', '60', '70', '80', '90', '[0.02]', '[0.03]', '[0.04]', '[0.05]', '[0.06]', '[0.08]']
-    : ['10', '15', '20', '25', '[0.02]', '[0.04]', '[0.06]']
-  for (const a of bgAlphas) s.cls(`bg-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-  for (const a of ['10', '20', '30']) s.cls(`bg-${hue}-400/${a}`, rgba(c, alphaOf(a)))
-  const hoverBg = full ? ['5', '10', '15', '20', '25', '30', '40', '50', '[0.06]'] : ['15', '25']
-  for (const a of hoverBg) s.cls(`hover:bg-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-  // translucent borders, rings, shadows
-  const borderAlphas = full ? ['10', '15', '20', '25', '30', '40', '50', '60'] : ['15', '20', '25', '40']
-  for (const a of borderAlphas) s.cls(`border-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-  if (full) {
-    for (const a of ['10', '15', '20', '25', '30', '40', '50']) s.cls(`hover:border-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['20', '30', '40', '50', '60']) s.cls(`focus:border-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['10', '20', '25', '30', '40', '50']) s.cls(`ring-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['20', '30']) s.cls(`focus:ring-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['10', '20', '25', '30', '40', '50']) s.cls(`shadow-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['20', '30']) s.cls(`hover:shadow-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['50', '60', '70', '80', '90']) s.cls(`text-${hue}-400/${a}`, rgba(c, alphaOf(a)))
-    for (const a of ['50', '60', '70']) s.cls(`text-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['80', '90']) s.cls(`text-${hue}-300/${a}`, rgba(t300, alphaOf(a)))
-    for (const a of ['80', '90']) s.cls(`text-${hue}-200/${a}`, rgba(t200, alphaOf(a)))
-    s.cls(`text-${hue}-100/90`, rgba(t100, 0.9))
-    for (const a of ['10', '15', '20', '30']) s.cls(`from-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['10', '15', '20', '30']) s.cls(`to-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-    for (const a of ['5', '10']) s.cls(`via-${hue}-500/${a}`, rgba(s500, alphaOf(a)))
-  } else {
-    s.cls(`ring-${hue}-500/20`, rgba(s500, 0.2))
-    s.cls(`from-${hue}-500/20`, rgba(s500, 0.2))
-    s.cls(`to-${hue}-500/20`, rgba(s500, 0.2))
-  }
-  // glows, neon text and the hard-coded arbitrary shadows of the primary hue
+/** the glows, neon text and hard-coded arbitrary shadows of a family's primary hue */
+function emitGlows(s: Sheet, hue: string, c: string, light: boolean): void {
   const glow = ARBITRARY_GLOWS[hue]
   if (glow) {
     for (const g of glow) {
@@ -374,29 +479,59 @@ function emitHue(s: Sheet, hue: string, c: string, text: string, full: boolean, 
   }
 }
 
+/** what a changed status colour needs besides its classes: glows, the pulse keyframes, the hexes charts hard-code */
 function emitStatus(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeMode): void {
   const light = mode === 'light'
   for (const key of ['success', 'warning', 'danger', 'info'] as const) {
     const c = p[key]
     if (c === stock[key]) continue
     const fam = FAMILIES[key]
-    for (const hue of fam.hues) emitHue(s, hue, c, p.text, hue === fam.primary, light)
+    emitGlows(s, fam.primary, c, light)
     if (fam.keyframe) {
       s.rule(`@keyframes ${fam.keyframe}`, `0%, 100% { box-shadow: 0 0 8px ${rgba(c, 0.15)}; } 50% { box-shadow: 0 0 24px ${rgba(c, 0.3)}, 0 0 48px ${rgba(c, 0.1)}; }`)
+    }
+    // the same hues hard-coded in charts (SVG) and bars and dots (inline styles)
+    const steps: Record<Step, string> = { c, s500: shade(c, 0.15), s600: shade(c, 0.3), t300: mixHex(c, p.text, 0.3) }
+    for (const [hex, role] of Object.entries(FAMILY_HEXES[key])) {
+      svgColour(s, hex, steps[role])
+      inlineColour(s, hex, steps[role])
     }
   }
 }
 
+/**
+ * The accent as small text — the page you are on in the sidebar and the tab bar, on its accent-bg-subtle
+ * pill: the accent itself where it reads at 4.5:1 on the surface, the page and the pill, else the same hue
+ * made darker (a light look) or lighter (a dark one) until it does. A look's accent only has to reach 3:1
+ * as a colour; fills, rings and gradients keep it.
+ */
+export function accentInk(p: ThemePalette): string {
+  const against = [p.surface, p.bg, mixHex(p.surface, p.accent, 0.12)]
+  const reads = (c: string) => against.every((bg) => contrastRatio(c, bg) >= 4.5)
+  if (reads(p.accent)) return p.accent
+  const { l, c, h } = hexToOklch(p.accent)
+  const step = luminance(p.text) < luminance(p.surface) ? -0.005 : 0.005
+  for (let li = l + step; li > 0 && li < 1; li += step) {
+    const next = oklchToHex({ l: li, c, h })
+    if (reads(next)) return next
+  }
+  return p.text
+}
+
 /** the brand: --color-accent, the emerald→cyan gradients, selection, the logo's glow */
-function emitBrand(s: Sheet, p: ThemePalette, stock: ThemePalette): void {
+function emitBrand(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: ThemeMode): void {
   const a = p.accent
   const b = p.accentSecondary
+  // a personal accent (Settings → Profile, anything but the default emerald) beats the theme's
+  const themeAccent = [`${ROOT}:not([data-accent])`, `${ROOT}[data-accent="emerald"]`]
+  const ink = accentInk(p)
+  if (ink !== a) s.rule(themeAccent.map((r) => `${r} .accent-text`).join(', '), `color: ${ink} !important`)
   const changed = a !== stock.accent || b !== stock.accentSecondary
   if (!changed) return
   const vars: string[] = []
   if (a !== stock.accent) vars.push(`--color-accent: ${hexToTriplet(a)}`)
   if (b !== stock.accentSecondary) vars.push(`--color-accent-secondary: ${hexToTriplet(b)}`)
-  s.rule(ROOT, vars.join('; '))
+  s.rule(themeAccent.join(', '), vars.join('; '))
   // the emerald → cyan pairs are the brand gradient (avatar, logo box, primary CTA), not status colours
   const pairs: Array<[string, string, number]> = [
     ['from-emerald-500', 'to-cyan-500', 1],
@@ -409,11 +544,144 @@ function emitBrand(s: Sheet, p: ThemePalette, stock: ThemePalette): void {
     s.rule(`${ROOT} .${esc(from)}.${esc(to)}`, `--tw-gradient-from: ${fromC} var(--tw-gradient-from-position) !important; --tw-gradient-to: ${toC} var(--tw-gradient-to-position) !important`)
     s.rule(`${ROOT} .${esc(to.replace('to-', 'from-'))}.${esc(from.replace('from-', 'to-'))}`, `--tw-gradient-from: ${toC} var(--tw-gradient-from-position) !important; --tw-gradient-to: ${fromC} var(--tw-gradient-to-position) !important`)
   }
+  // the .light block paints these two with its own emerald → cyan
+  s.rule(`${ROOT_LIGHT} .bg-gradient-to-r.from-emerald-500.to-cyan-500`, `background-image: linear-gradient(to right, ${a}, ${b}) !important`)
+  s.rule(`${ROOT_LIGHT} .bg-gradient-to-br.from-emerald-500.to-cyan-500`, `background-image: linear-gradient(to bottom right, ${a}, ${b}) !important`)
   s.rule(`${ROOT} .gradient-border::before`, `background: linear-gradient(135deg, ${rgba(a, 0.3)}, ${rgba(b, 0.1)}, ${rgba(a, 0.3)}) !important`)
   s.rule(`${ROOT} .gradient-border-animated::before`, `background: conic-gradient(from var(--gradient-angle, 0deg), ${rgba(a, 0.4)}, ${rgba(b, 0.2)}, ${rgba(a, 0.4)}, ${rgba(b, 0.2)}, ${rgba(a, 0.4)}) !important`)
-  s.rule(`${ROOT} .text-gradient.neon-emerald`, `text-shadow: 0 0 7px ${rgba(a, 0.4)}, 0 0 20px ${rgba(a, 0.15)} !important`)
+  s.rule(`${ROOT} .text-gradient.neon-emerald`, mode === 'light' ? 'text-shadow: none !important' : `text-shadow: 0 0 7px ${rgba(a, 0.4)}, 0 0 20px ${rgba(a, 0.15)} !important`)
   s.rule(`${ROOT} ::selection`, `background-color: ${rgba(a, 0.3)} !important`)
   s.rule(`@keyframes blinkCaret`, `0%, 100% { border-color: transparent; } 50% { border-color: ${rgba(a, 0.8)}; }`)
+}
+
+// ---------------------------------------------------------------------------
+// Variables: the palette for custom CSS, the hint bubble, and Mantine
+// ---------------------------------------------------------------------------
+
+function emitVariables(s: Sheet, theme: Theme, p: ThemePalette): void {
+  s.rule(ROOT, [
+    `--dcs-accent: ${p.accent}`, `--dcs-accent-secondary: ${p.accentSecondary}`,
+    `--dcs-bg: ${p.bg}`, `--dcs-surface: ${p.surface}`, `--dcs-surface-raised: ${p.surfaceRaised}`, `--dcs-border: ${p.border}`,
+    `--dcs-text: ${p.text}`, `--dcs-text-muted: ${p.textMuted}`,
+    `--dcs-success: ${p.success}`, `--dcs-warning: ${p.warning}`, `--dcs-danger: ${p.danger}`, `--dcs-info: ${p.info}`,
+  ].join('; '))
+  // Hint bubbles (common/Tooltip, Mantine's Tooltip on dark.7) are dark in both modes, as shipped:
+  // the theme's own dark look. The stock look is the component's fallback, so DCS Emerald sets nothing.
+  const d = themeLooks(theme).dark
+  if (!sameNeutrals(d, stockPalette('dark'))) {
+    s.rule(ROOT, `--dcs-hint-bg: ${rgba(d.surface, 0.96)}; --dcs-hint-border: ${rgba(d.text, 0.12)}; --dcs-hint-text: ${mixHex(d.text, d.textMuted, 0.16)}`)
+  }
+}
+
+const NEUTRALS = ['bg', 'surface', 'surfaceRaised', 'border', 'text', 'textMuted'] as const
+function sameNeutrals(a: ThemePalette, b: ThemePalette): boolean {
+  return NEUTRALS.every((k) => a[k] === b[k])
+}
+
+/** ten shades of a colour, lightest first, with the colour itself at `at` (Mantine's primary shade: 4 dark, 6 light) */
+function scaleOf(hex: string, at: number): string[] {
+  const { l, c, h } = hexToOklch(hex)
+  const top = Math.max(l, 0.97)
+  const bottom = Math.min(l, 0.22)
+  return Array.from({ length: 10 }, (_, i) => {
+    if (i === at) return hex
+    const t = i < at ? (at - i) / at : (i - at) / (9 - at)
+    const li = i < at ? l + (top - l) * t : l - (l - bottom) * t
+    return oklchToHex({ l: li, c: c * (1 - 0.55 * t), h })
+  })
+}
+
+/**
+ * Mantine follows the look too: its colour variables are set over the ones its
+ * provider writes (html[data-theme][data-mantine-color-scheme] outranks
+ * :root[data-mantine-color-scheme]), so every Mantine component — Progress,
+ * RingProgress, Tooltip, Select, Badge… — takes the theme's status colours and
+ * surfaces without lib/mantine.tsx knowing about themes. As with the classes,
+ * only what differs from the stock look is set: DCS Emerald keeps Mantine's
+ * shipped look exactly. The --dcs-field/dropdown/option/seg/tint variables are
+ * the ones lib/mantine.tsx gives its fields, dropdowns and chips.
+ */
+function emitMantine(s: Sheet, theme: Theme, mode: ThemeMode, p: ThemePalette, stock: ThemePalette): void {
+  const light = mode === 'light'
+  const decls: string[] = []
+  // the Mantine colours named like the Tailwind hues, mapped the way the classes are (HUE_ROLE: orange is the warning colour)
+  const names = { success: ['emerald'], info: ['cyan'], warning: ['amber', 'orange'], danger: ['rose'] } as const
+  for (const key of ['success', 'info', 'warning', 'danger'] as const) {
+    const c = p[key]
+    if (c === stock[key]) continue
+    const s500 = shade(c, 0.15)
+    for (const name of names[key]) {
+      scaleOf(c, light ? 6 : 4).forEach((v, i) => decls.push(`--mantine-color-${name}-${i}: ${v}`))
+      decls.push(
+        `--mantine-color-${name}-light: ${light ? rgba(c, 0.08) : rgba(s500, 0.12)}`,
+        `--mantine-color-${name}-light-hover: ${light ? rgba(c, 0.14) : rgba(s500, 0.18)}`,
+        `--mantine-color-${name}-light-color: ${light ? c : mixHex(c, p.text, 0.3)}`,
+        `--mantine-color-${name}-outline: ${c}`,
+        `--mantine-color-${name}-outline-hover: ${rgba(c, 0.06)}`,
+        `--dcs-tint-${name}-border: ${light ? rgba(c, 0.25) : rgba(s500, 0.22)}`,
+      )
+    }
+  }
+  // color="slate" (neutral chips and filters) takes the look's neutrals, as the slate classes do; each value sits where
+  // the stock slate step sits in DCS Emerald (tint of slate-500 / 600, text of slate-300 / 700, outline = muted text)
+  if (!sameNeutrals(p, stock)) {
+    const { bg, surface, surfaceRaised: raised, border, text, textMuted: muted } = p
+    const tint = light ? muted : rampOf(p, mode).n500
+    const scale = light
+      ? [surface, bg, raised, mixHex(raised, border, 0.5), border, mixHex(border, muted, 0.5), muted, mixHex(muted, text, 0.5), mixHex(muted, text, 0.8), text]
+      : [text, mixHex(text, muted, 0.5), muted, mixHex(muted, border, 0.5), border, mixHex(border, raised, 0.5), raised, surface, mixHex(surface, bg, 0.5), bg]
+    scale.forEach((v, i) => decls.push(`--mantine-color-slate-${i}: ${v}`))
+    decls.push(
+      `--mantine-color-slate-light: ${rgba(tint, light ? 0.08 : 0.1)}`,
+      `--mantine-color-slate-light-hover: ${rgba(tint, light ? 0.14 : 0.18)}`,
+      `--mantine-color-slate-light-color: ${light ? mixHex(text, muted, 0.6) : rampOf(p, mode).t300}`,
+      `--mantine-color-slate-outline: ${muted}`,
+      `--mantine-color-slate-outline-hover: ${rgba(muted, 0.06)}`,
+      `--dcs-tint-slate-border: ${rgba(tint, light ? 0.25 : 0.22)}`,
+    )
+  }
+  const { dark: d, light: l } = themeLooks(theme)
+  // Mantine's dark scale (surfaces and text of its dark scheme, and the dark.7 hint bubble in both) from the dark look
+  if (!sameNeutrals(d, stockPalette('dark'))) {
+    const dark = [d.text, mixHex(d.text, d.textMuted, 0.5), d.textMuted, mixHex(d.textMuted, d.border, 0.5), d.border, mixHex(d.border, d.surfaceRaised, 0.5), d.surfaceRaised, d.surface, mixHex(d.surface, d.bg, 0.5), d.bg]
+    dark.forEach((v, i) => decls.push(`--mantine-color-dark-${i}: ${v}`))
+  }
+  // its gray scale (the light scheme's surfaces and text) from the light look
+  if (!sameNeutrals(l, stockPalette('light'))) {
+    const gray = [l.surface, l.bg, l.surfaceRaised, mixHex(l.surfaceRaised, l.border, 0.5), l.border, mixHex(l.border, l.textMuted, 0.5), l.textMuted, mixHex(l.textMuted, l.text, 0.5), mixHex(l.textMuted, l.text, 0.8), l.text]
+    gray.forEach((v, i) => decls.push(`--mantine-color-gray-${i}: ${v}`))
+  }
+  if (!sameNeutrals(p, stock)) {
+    const { bg, surface, surfaceRaised: raised, border, text, textMuted: muted } = p
+    const t500 = light ? mixHex(muted, text, 0.35) : mixHex(muted, bg, 0.3)
+    const ok = p.success
+    decls.push(
+      `--mantine-color-text: ${text}`, `--mantine-color-body: ${surface}`, `--mantine-color-dimmed: ${muted}`,
+      `--mantine-color-placeholder: ${t500}`, `--mantine-color-default-border: ${border}`,
+      `--mantine-color-default: ${light ? surface : raised}`, `--mantine-color-default-hover: ${light ? bg : mixHex(raised, text, 0.06)}`, `--mantine-color-default-color: ${text}`,
+      // lib/mantine.tsx: fields, dropdowns, options, segmented filters
+      `--dcs-field-bg: ${light ? mixHex(surface, bg, 0.5) : rgba(text, 0.05)}`,
+      `--dcs-field-border: ${border}`,
+      `--dcs-field-focus: ${light ? ok : rgba(shade(ok, 0.15), 0.5)}`,
+      `--dcs-field-ring: ${rgba(light ? ok : shade(ok, 0.15), 0.2)}`,
+      `--dcs-field-color: ${light ? text : mixHex(text, muted, 0.16)}`,
+      `--dcs-field-placeholder: ${t500}`,
+      `--dcs-dropdown-bg: ${light ? surface : rgba(surface, 0.98)}`,
+      `--dcs-dropdown-border: ${light ? border : rgba(muted, 0.2)}`,
+      `--dcs-dropdown-shadow: ${light ? `0 12px 32px ${rgba(text, 0.14)}` : '0 12px 32px rgb(0 0 0 / 0.5)'}`,
+      `--dcs-option-hover: ${light ? bg : rgba(text, 0.06)}`,
+      `--dcs-option-checked: ${light ? ok : mixHex(ok, text, 0.3)}`,
+      `--dcs-muted: ${t500}`,
+      `--dcs-seg-bg: ${light ? rgba(bg, 0.7) : rgba(text, 0.05)}`,
+      `--dcs-seg-border: ${border}`,
+      `--dcs-seg-label: ${light ? t500 : muted}`,
+      `--dcs-seg-label-hover: ${light ? text : mixHex(text, muted, 0.16)}`,
+      `--dcs-fleet-field-bg: ${light ? mixHex(surface, bg, 0.5) : rgba(raised, 0.5)}`,
+      `--dcs-fleet-field-focus: ${light ? ok : rgba(shade(p.warning, 0.15), 0.4)}`,
+      `--dcs-fleet-field-ring: ${light ? rgba(ok, 0.2) : rgba(shade(p.warning, 0.15), 0.12)}`,
+    )
+  }
+  if (decls.length) s.rule(`${ROOT}[data-mantine-color-scheme]`, decls.join('; '))
 }
 
 /** the rounded-* scale for each radius setting ('lg' is what ships) */
@@ -445,25 +713,23 @@ function emitFont(s: Sheet, font: string): void {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** the complete override stylesheet for a theme (empty for the stock look) */
-export function buildThemeCss(theme: Theme): string {
-  const mode: ThemeMode = theme.mode === 'light' ? 'light' : 'dark'
+const cssCache = new WeakMap<Theme, Partial<Record<ThemeMode, string>>>()
+
+/** the complete override stylesheet for one look of a theme */
+export function buildThemeCss(theme: Theme, mode: ThemeMode): string {
+  const cached = cssCache.get(theme)?.[mode]
+  if (cached !== undefined) return cached
   const stock = stockPalette(mode)
-  const p = theme.palette
+  const p = themeLook(theme, mode)
   const s = new Sheet()
 
-  // the palette as variables, always: custom CSS (a theme's own or the user's) can build on them
-  s.rule(ROOT, [
-    `--dcs-accent: ${p.accent}`, `--dcs-accent-secondary: ${p.accentSecondary}`,
-    `--dcs-bg: ${p.bg}`, `--dcs-surface: ${p.surface}`, `--dcs-surface-raised: ${p.surfaceRaised}`, `--dcs-border: ${p.border}`,
-    `--dcs-text: ${p.text}`, `--dcs-text-muted: ${p.textMuted}`,
-    `--dcs-success: ${p.success}`, `--dcs-warning: ${p.warning}`, `--dcs-danger: ${p.danger}`, `--dcs-info: ${p.info}`,
-  ].join('; '))
-
-  const neutralKeys = ['bg', 'surface', 'surfaceRaised', 'border', 'text', 'textMuted'] as const
-  if (neutralKeys.some((k) => p[k] !== stock[k])) emitNeutrals(s, p, mode)
+  // the palette as variables, always: custom CSS (a theme's own or the person's) and the studio build on them
+  emitVariables(s, theme, p)
+  if (!sameNeutrals(p, stock)) emitNeutrals(s, p, mode)
+  emitClasses(s, p, stock, mode)
   emitStatus(s, p, stock, mode)
-  emitBrand(s, p, stock)
+  emitBrand(s, p, stock, mode)
+  emitMantine(s, theme, mode, p, stock)
   emitRadius(s, theme.radius)
   emitFont(s, theme.font)
 
@@ -471,7 +737,9 @@ export function buildThemeCss(theme: Theme): string {
   if (theme.css && theme.css.trim()) {
     parts.push(`/* ── ${theme.name || 'draft'}: extra css ── */`, sanitizeCss(theme.css).css)
   }
-  return parts.join('\n')
+  const css = parts.join('\n')
+  cssCache.set(theme, { ...cssCache.get(theme), [mode]: css })
+  return css
 }
 
 function ensureStyle(): HTMLStyleElement {
@@ -492,12 +760,6 @@ function setMetaThemeColor(color: string): void {
   if (meta && meta.content !== color) meta.content = color
 }
 
-/** the theme the document is currently dressed in (null = the stock look) */
-let currentTheme: Theme | null = null
-export function appliedTheme(): Theme | null {
-  return currentTheme
-}
-
 /** while the studio previews a draft, the periodic re-sync keeps its hands off the document */
 let previewing = false
 export function setThemePreviewing(on: boolean): void {
@@ -508,26 +770,22 @@ export function isThemePreviewing(): boolean {
 }
 
 /**
- * Dress the document in a theme. null removes the theme stylesheet and the
- * data-theme attribute and leaves the profile accent and the light/dark class
- * alone (the caller restores those from the dark/light setting).
+ * Dress the document in one look of a theme — the single place the mode and the
+ * palette reach the page: the light/dark class, data-theme, color-scheme (native
+ * controls and scrollbars), the page colour, the meta theme-color, the stylesheet.
  */
-export function applyTheme(theme: Theme | null): void {
+export function applyTheme(theme: Theme, mode: ThemeMode): void {
   const html = document.documentElement
   const style = ensureStyle()
-  currentTheme = theme
-  if (!theme) {
-    html.removeAttribute('data-theme')
-    if (style.textContent) style.textContent = ''
-    setMetaThemeColor(DEFAULT_META_COLOR)
-    return
-  }
-  const light = theme.mode === 'light'
+  const palette = themeLook(theme, mode)
+  const light = mode === 'light'
   html.setAttribute('data-theme', theme.name || 'draft')
   html.classList.toggle('light', light)
   html.classList.toggle('dark', !light)
-  const css = buildThemeCss(theme)
+  if (html.style.colorScheme !== mode) html.style.colorScheme = mode
+  // the canvas behind everything, so no stylesheet timing shows another colour
+  html.style.backgroundColor = palette.bg
+  const css = buildThemeCss(theme, mode)
   if (style.textContent !== css) style.textContent = css
-  setMetaThemeColor(theme.palette.surface)
+  setMetaThemeColor(palette.surface)
 }
-

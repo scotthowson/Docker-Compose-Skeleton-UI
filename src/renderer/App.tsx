@@ -63,6 +63,7 @@ import { apiClient } from './api/client'
 import { sseClient } from './lib/sse'
 import { sanitizeCss } from './lib/cssSanitize'
 import { useThemeStore, syncDocumentTheme, effectiveThemeNeedsDoc, THEME_POLL_MS } from './stores/themeStore'
+import { toggleMode, useResolvedMode } from './lib/colorMode'
 import type { PageId } from '../shared/types'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
@@ -273,19 +274,22 @@ export default function App() {
     return () => sseClient.disconnect()
   }, [connectionStatus])
 
-  // The look: the person's theme, else the server's active theme, else the
-  // dark/light setting as before. Re-dressed whenever any of those change or
-  // a server theme's document (css) arrives.
+  // The look: the person's theme, else the server's active theme, else DCS
+  // Emerald — in the mode the person chose (or the device prefers). Re-dressed
+  // whenever any of those change or a server theme's document (css) arrives.
   const themeName = useSettingsStore((s) => s.themeName)
   const serverThemeActive = useSettingsStore((s) => s.serverThemeActive)
+  const settingsLoaded = useSettingsStore((s) => s.settingsLoaded)
+  const resolvedMode = useResolvedMode()
   const themeMetas = useThemeStore((s) => s.metas)
   const themeDocs = useThemeStore((s) => s.docs)
   const localThemes = useThemeStore((s) => s.localThemes)
+  const themesSupported = useThemeStore((s) => s.supported)
   useEffect(() => {
     syncDocumentTheme()
     const pending = effectiveThemeNeedsDoc()
     if (pending) useThemeStore.getState().ensureDoc(pending)
-  }, [theme, themeName, serverThemeActive, themeMetas, themeDocs, localThemes])
+  }, [settingsLoaded, theme, resolvedMode, themeName, serverThemeActive, themeMetas, themeDocs, localThemes, themesSupported])
 
   // Follow the server: read GET /themes on connect and every five minutes
   useEffect(() => {
@@ -505,8 +509,7 @@ export default function App() {
       // Ctrl+D → Toggle dark/light theme
       if (e.key === 'd' || e.key === 'D') {
         e.preventDefault()
-        const current = useSettingsStore.getState().theme
-        updateSetting('theme', current === 'dark' ? 'light' : 'dark')
+        toggleMode()
       }
       // Ctrl+R → Refresh (dispatch custom event for pages to listen to)
       if (e.key === 'r' || e.key === 'R') {

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { BUILD_VERSION, BUILD_DATE } from '../../constants/buildInfo'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { toggleMode, useResolvedMode } from '../../lib/colorMode'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useApiLink } from '../../hooks/useApiLink'
 import { useSystemStore } from '../../stores/systemStore'
@@ -361,8 +362,8 @@ function UserProfileDropdown({ onClose, onWhatsNew, hasUnseen }: { onClose: () =
 
 export function Header() {
   const currentPage = useSettingsStore((s) => s.currentPage)
-  const theme = useSettingsStore((s) => s.theme)
-  const updateSetting = useSettingsStore((s) => s.updateSetting)
+  // the look showing now ("System" resolved); the switch always picks the other one explicitly
+  const mode = useResolvedMode()
   const connectionStatus = useConnectionStore((s) => s.status)
   const latencyMs = useConnectionStore((s) => s.latencyMs)
   const serverStatus = useSystemStore((s) => s.status)
@@ -394,7 +395,7 @@ export function Header() {
       ? { ...statusConfig.error, label: link.short }
       : statusConfig[connectionStatus]
   const hostname = serverStatus?.hostname
-  const isDark = theme === 'dark'
+  const isDark = mode === 'dark'
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
 
   // Get profile icon (re-reads on profileVersion change)
@@ -408,9 +409,7 @@ export function Header() {
     } catch { return '' }
   })()
 
-  const toggleTheme = () => {
-    updateSetting('theme', isDark ? 'light' : 'dark')
-  }
+  const toggleTheme = toggleMode
 
   return (
     <>
