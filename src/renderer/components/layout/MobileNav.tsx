@@ -15,6 +15,7 @@ import { navItems } from './Sidebar'
 import { pageMeta } from '../../constants/pageTitles'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import type { PageId } from '../../../shared/types'
+import ModalOverlay from '../common/ModalOverlay'
 
 /** the four pages the bottom bar reaches for: each with the name and icon every other place gives it */
 const PRIMARY: { id: PageId; label: string; icon: React.ElementType }[] = (['dashboard', 'stacks', 'containers', 'health'] as const)
@@ -94,7 +95,7 @@ export function MobileNav() {
       </nav>
 
       {moreOpen && createPortal(
-        <div className="fixed inset-0 z-[80] md:hidden" role="dialog" aria-modal="true" aria-label="All pages">
+        <ModalOverlay onClose={() => setMoreOpen(false)} label="All pages" className="fixed inset-0 z-[80] md:hidden">
           <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm animate-fade-in" onClick={() => setMoreOpen(false)} />
           <div
             className="absolute inset-x-0 bottom-0 max-h-[86vh] flex flex-col rounded-t-3xl bg-slate-900 border-t border-white/10 shadow-2xl shadow-black/60 animate-slide-up"
@@ -146,7 +147,7 @@ export function MobileNav() {
               })}
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </>

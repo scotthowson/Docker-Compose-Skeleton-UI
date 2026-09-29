@@ -15,6 +15,7 @@ import { fetchApiCatalogue, fetchPluginCards, fetchCardSource, saveCard, deleteC
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
 import { HtmlCardFrame } from '../dashboard/PluginFrame'
+import ModalOverlay from '../common/ModalOverlay'
 
 type Widget = 'number' | 'gauge' | 'list' | 'badge' | 'text'
 interface DataSpec {
@@ -187,7 +188,7 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
   const IconPreview = ((Icons as unknown as Record<string, React.ElementType>)[icon] ?? Icons.Activity) as React.ElementType
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-6xl mx-4 h-[92vh] flex flex-col bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -294,7 +295,7 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

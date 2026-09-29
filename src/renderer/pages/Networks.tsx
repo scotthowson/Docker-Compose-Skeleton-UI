@@ -30,6 +30,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { CopyButton } from '../components/common/CopyButton'
 import { useToast } from '../components/common/Toast'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,7 +156,7 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="relative w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
@@ -298,7 +299,7 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -403,7 +404,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
   )
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
         className="relative w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
@@ -582,7 +583,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
           </div>
         )}
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -623,7 +624,7 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
@@ -660,7 +661,7 @@ function DeleteConfirmModal({ name, onClose, onConfirm }: {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

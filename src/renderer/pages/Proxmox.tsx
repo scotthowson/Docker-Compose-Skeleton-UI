@@ -10,7 +10,7 @@
 // bottom sheets, 36 px targets).
 // =============================================================================
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Badge, SegmentedControl, Tooltip } from '@mantine/core'
 import {
@@ -45,8 +45,10 @@ import PageHeader from '../components/common/PageHeader'
 import { pageLabel } from '../constants/pageTitles'
 import {
   BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM, BTN_ICON_QUIET, BTN_ICON_SM_QUIET,
+  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, BTN_SHEET_DANGER,
   TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
 } from '../lib/ui'
+import { useModalA11y } from '../hooks/useModalA11y'
 import Hint from '../components/common/Hint'
 
 const STATUS_POLL = 15_000
@@ -176,6 +178,12 @@ function ConfirmSheet({ vm, action, onClose, onDone }: { vm: ProxmoxVm; action: 
   const { addToast } = useToast()
   const meta = ACTION_META[action]
   const Icon = meta.icon
+  const ids = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const runRef = useRef<HTMLButtonElement>(null)
+  // like every confirmation: Cancel has the focus when the action is destructive, so Enter does not run it
+  useModalA11y(panelRef, onClose, { initialFocus: meta.danger ? cancelRef : runRef })
   const run = async () => {
     if (busy) return
     setBusy(true); setError('')
@@ -190,20 +198,20 @@ function ConfirmSheet({ vm, action, onClose, onDone }: { vm: ProxmoxVm; action: 
   }
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full sm:max-w-md glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="alertdialog" aria-modal="true" aria-labelledby={`${ids}-q`} aria-describedby={`${ids}-d`} className="w-full sm:max-w-md glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-start gap-3">
           <div className={`p-2.5 rounded-xl ${meta.danger ? 'bg-rose-500/15 text-rose-400' : 'bg-emerald-500/15 text-emerald-400'}`}><Icon size={18} /></div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-100">{meta.question(vm)}</h3>
-            <p className="text-sm text-slate-400 mt-1">{vm.type === 'qemu' ? 'VM' : 'Container'} {vm.vmid} on {vm.node}{meta.note ? ` — ${meta.note}` : ''}</p>
-            {error && <p className="text-sm text-rose-400 mt-2">{error}</p>}
+            <h3 id={`${ids}-q`} className="text-base font-semibold text-slate-100">{meta.question(vm)}</h3>
+            <p id={`${ids}-d`} className="text-sm text-slate-400 mt-1">{vm.type === 'qemu' ? 'VM' : 'Container'} {vm.vmid} on {vm.node}{meta.note ? ` — ${meta.note}` : ''}</p>
+            {error && <p role="alert" className="text-sm text-rose-400 mt-2">{error}</p>}
           </div>
           <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5" aria-label="Close"><X size={16} /></button>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={onClose} className="flex-1 h-11 rounded-xl bg-white/5 text-slate-300 hover:bg-white/10 text-sm font-medium">Cancel</button>
-          <button onClick={run} disabled={busy} className={`flex-1 h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-60 ${meta.danger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>
+          <button ref={cancelRef} onClick={onClose} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+          <button ref={runRef} onClick={run} disabled={busy} className={`${meta.danger ? BTN_SHEET_DANGER : BTN_SHEET_PRIMARY} flex-1`}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />} {meta.label}
           </button>
         </div>

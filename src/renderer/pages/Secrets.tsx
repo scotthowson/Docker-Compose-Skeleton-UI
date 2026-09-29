@@ -14,6 +14,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { fetchSecretReferences } from '../api/endpoints'
 import type { SecretEntry, SecretReferencesResponse } from '../../shared/types'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // Same rule as the server (.lib/secrets.sh): a compose-safe variable name.
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
@@ -358,7 +359,7 @@ export default function Secrets() {
 
       {/* Add modal */}
       {showAddModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeAdd}>
+        <ModalOverlay onClose={closeAdd} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeAdd}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">Add Secret</h2>
@@ -416,13 +417,13 @@ export default function Secrets() {
               </div>
             </form>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
       {/* Delete confirmation */}
       {deleteEntry && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
+        <ModalOverlay onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-rose-400" /></div>
@@ -439,7 +440,7 @@ export default function Secrets() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

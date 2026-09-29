@@ -32,6 +32,7 @@ import {
 } from '../api/endpoints'
 import type { NotificationRule, NotificationHistoryEntry, Webhook as WebhookType } from '../../shared/types'
 import { LoadingState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants & Helpers
@@ -1236,7 +1237,7 @@ export default function Notifications() {
 
       {/* ── Add Rule Modal (inline overlay) ─────────────────────────────── */}
       {showAddModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-0 sm:p-4"
+        <ModalOverlay onClose={() => setShowAddModal(false)} className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-0 sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
           <div className="w-full sm:max-w-lg sm:mx-4 max-h-[92vh] bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/40 animate-slide-up sm:animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin">
@@ -1423,7 +1424,7 @@ export default function Notifications() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body
       )}
     </div>

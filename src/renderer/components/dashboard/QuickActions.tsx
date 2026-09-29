@@ -30,6 +30,7 @@ import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import { pageLabel, pageTitles } from '../../constants/pageTitles'
 import { ACCENTS, ACCENT_NAMES, CardEmpty, type CardCommonProps } from './cardShared'
+import ModalOverlay from '../common/ModalOverlay'
 
 export type ActionKind = 'page' | 'url' | 'stack' | 'container' | 'maintenance' | 'schedule' | 'automation'
 export interface ActionDef {
@@ -265,7 +266,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
   const field = 'px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40'
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-2xl mx-4 max-h-[88vh] flex flex-col bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
@@ -368,7 +369,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

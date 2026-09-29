@@ -2,12 +2,18 @@
 // ConfirmDialog — the one "are you sure?" every page asks with, in place of
 // window.confirm: useConfirm() gives a confirm(opts) that resolves true when
 // the person agrees; <ConfirmDialogHost/> (mounted once in App) draws it.
+//
+// For the keyboard it is an alert dialog: focus goes to Cancel when the action
+// is destructive (Enter must not delete) and to the confirm button otherwise,
+// Tab stays inside, Escape says no, and focus returns to what asked
+// (hooks/useModalA11y).
 // =============================================================================
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { AlertTriangle, HelpCircle } from 'lucide-react'
+import { useModalA11y } from '../../hooks/useModalA11y'
 
 export interface ConfirmOptions {
   title: string
@@ -56,31 +62,25 @@ export function useConfirm(): (opts: ConfirmOptions) => Promise<boolean> {
 export function ConfirmDialogHost() {
   const pending = useConfirmStore((s) => s.pending)
   const settle = useConfirmStore((s) => s.settle)
-  const confirmRef = useRef<HTMLButtonElement>(null)
-
-  // Escape answers "no" — captured so the overlay underneath does not also see it
-  useEffect(() => {
-    if (!pending) return
-    confirmRef.current?.focus()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      settle(false)
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [pending, settle])
-
   if (!pending) return null
-  const danger = !!pending.danger
+  // one panel per question, so each takes the focus and gives it back on its own
+  return createPortal(<ConfirmPanel key={pending.id} pending={pending} settle={settle} />, document.body)
+}
 
-  return createPortal(
+function ConfirmPanel({ pending, settle }: { pending: PendingConfirm; settle: (ok: boolean) => void }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  const danger = !!pending.danger
+  useModalA11y(panelRef, () => settle(false), { initialFocus: danger ? cancelRef : confirmRef })
+
+  return (
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={() => settle(false)}
     >
       <div
+        ref={panelRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -97,6 +97,7 @@ export function ConfirmDialogHost() {
         <p id="confirm-dialog-message" className="text-sm text-slate-300 mb-4 whitespace-pre-line break-words">{pending.message}</p>
         <div className="flex gap-3">
           <button
+            ref={cancelRef}
             type="button"
             onClick={() => settle(false)}
             className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5 transition-colors"
@@ -117,7 +118,6 @@ export function ConfirmDialogHost() {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }

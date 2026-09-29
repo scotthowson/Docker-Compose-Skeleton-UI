@@ -18,6 +18,7 @@ import { lintCompose, isComposeLinterEnabled } from '../../hooks/useComposeLinte
 import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
 import { EmptyState } from '../common/PageState'
+import ModalOverlay from '../common/ModalOverlay'
 
 interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
@@ -169,7 +170,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
     <div className="space-y-6">
       {/* Delete Confirmation Modal */}
       {showDeleteModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay onClose={() => { setShowDeleteModal(null); setDeleteError(null) }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass p-6 max-w-sm w-full mx-4 space-y-4 animate-scale-in">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
@@ -221,7 +222,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
@@ -589,7 +590,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
 
       {/* Lint All Results Modal */}
       {lintAllResults && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setLintAllResults(null)}>
+        <ModalOverlay onClose={() => setLintAllResults(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setLintAllResults(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col min-h-0 border border-white/10 animate-scale-in gradient-border" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -656,7 +657,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               })}
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body
       )}
     </div>

@@ -12,6 +12,7 @@ import { fetchContainerSablier, setContainerSablierOn } from '../../api/fleetSco
 import type { RowMember } from '../../../shared/fleetScoped'
 import type { SablierSettingsResponse, SablierToggleResponse } from '../../../shared/types'
 import { SABLIER_DEFAULTS, SABLIER_SESSIONS, SABLIER_THEMES, SABLIER_THEME_NOTES, describeSession } from '../../lib/sablier'
+import ModalOverlay from '../common/ModalOverlay'
 
 interface Props {
   containerName: string
@@ -84,7 +85,7 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
   const themeOptions = SABLIER_THEMES.includes(theme) ? SABLIER_THEMES : [...SABLIER_THEMES, theme]
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { if (!busy) onClose() }}>
+    <ModalOverlay onClose={() => { if (!busy) onClose() }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { if (!busy) onClose() }}>
       <div className="relative w-full max-w-md glass p-5 sm:p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/15 shrink-0">
@@ -179,7 +180,7 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

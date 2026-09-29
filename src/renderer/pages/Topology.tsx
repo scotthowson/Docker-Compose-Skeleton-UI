@@ -29,6 +29,7 @@ import type {
   TopologyResponse, TopologyNode, TopologyNetwork,
 } from '../../shared/types'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -278,7 +279,7 @@ function DetailPanel({
   const hostname = useSystemStore((s) => s.status?.hostname)
 
   return createPortal(
-    <div
+    <ModalOverlay onClose={onClose}
       className="fixed inset-0 z-[9999] flex items-end md:items-center md:justify-end bg-black/40 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
@@ -410,7 +411,7 @@ function DetailPanel({
           </div>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

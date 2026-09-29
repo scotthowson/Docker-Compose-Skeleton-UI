@@ -27,6 +27,7 @@ import { useStackStore } from '../stores/stackStore'
 import { useContainerStore } from '../stores/containerStore'
 import type { PageId, TemplateInfo, ProxmoxVm, FleetMember } from '../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../shared/types'
+import ModalOverlay from './common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -799,7 +800,7 @@ export function CommandPalette() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-start justify-center pt-[15vh]">
+    <ModalOverlay onClose={() => setOpen(false)} label="Search" className="fixed inset-0 z-[9998] flex items-start justify-center pt-[15vh]">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
@@ -925,6 +926,6 @@ export function CommandPalette() {
           </span>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

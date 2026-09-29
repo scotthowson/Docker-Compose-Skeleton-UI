@@ -24,6 +24,7 @@ import type { PageId } from '../../../shared/types'
 import type { ConnectionStatus } from '../../../shared/types'
 
 import { pageLabel } from '../../constants/pageTitles'
+import ModalOverlay from '../common/ModalOverlay'
 
 const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string; pulse: boolean; label: string }> = {
   connected: {
@@ -114,7 +115,7 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 glass rounded-2xl border border-white/10 shadow-2xl shadow-black/40 animate-scale-in max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
@@ -173,7 +174,7 @@ function WhatsNewModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

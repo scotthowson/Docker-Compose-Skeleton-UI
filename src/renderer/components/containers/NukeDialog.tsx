@@ -12,6 +12,7 @@ import { fetchContainerResetPreviewOn, resetContainerOn } from '../../api/fleetS
 import type { ContainerResetPreview, ContainerResetResponse } from '../../../shared/types'
 import type { RowMember } from '../../../shared/fleetScoped'
 import { useToast } from '../common/Toast'
+import ModalOverlay from '../common/ModalOverlay'
 
 interface NukeDialogProps {
   containerName: string
@@ -79,7 +80,7 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
   // A portal: the page wrapper animates with a transform, which would otherwise pin
   // this fixed overlay to the container card instead of the whole screen
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={`Nuke and reinstall ${containerName}`}>
+    <ModalOverlay onClose={() => { if (!busy) onClose() }} label={`Nuke and reinstall ${containerName}`} className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => !busy && onClose()} />
       <div className="relative w-full sm:max-w-lg max-h-[94vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-rose-500/20 bg-slate-900/95 shadow-2xl shadow-black/50 overflow-hidden animate-slide-up sm:animate-scale-in" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="sm:hidden pt-2 flex justify-center"><span className="h-1.5 w-12 rounded-full bg-white/15" /></div>
@@ -192,7 +193,7 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
           )}
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

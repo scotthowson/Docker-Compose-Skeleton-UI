@@ -65,6 +65,7 @@ import { sanitizeCss } from './lib/cssSanitize'
 import { useThemeStore, syncDocumentTheme, effectiveThemeNeedsDoc, THEME_POLL_MS } from './stores/themeStore'
 import { toggleMode, useResolvedMode } from './lib/colorMode'
 import type { PageId } from '../shared/types'
+import ModalOverlay from './components/common/ModalOverlay'
 
 const pageComponents: Record<PageId, React.ComponentType> = {
   dashboard: Dashboard,
@@ -603,7 +604,7 @@ export default function App() {
 
         {/* Lock screen overlay — preserves app state, just requires password to continue */}
         {isLocked && (
-          <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-slate-950/95 backdrop-blur-xl animate-fade-in">
+          <ModalOverlay label="Session locked" className="fixed inset-0 z-[99998] flex items-center justify-center bg-slate-950/95 backdrop-blur-xl animate-fade-in">
             <div className="w-full max-w-sm mx-4">
               <div className="text-center mb-8">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center">
@@ -642,7 +643,7 @@ export default function App() {
                 </button>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* Onboarding overlay (self-managing visibility via localStorage) */}

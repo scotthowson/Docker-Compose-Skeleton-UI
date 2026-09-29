@@ -33,6 +33,7 @@ import { useFleetRole } from '../hooks/useFleetRole'
 import { usePolling } from '../hooks/usePolling'
 import { fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities } from '../api/endpoints'
 import NewVmSheet from '../components/fleet/NewVmSheet'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // -----------------------------------------------------------------------------
 // Stacks Page
@@ -443,7 +444,7 @@ export default function Stacks() {
       {/* Batch Progress Modal                                              */}
       {/* ----------------------------------------------------------------- */}
       {showBatchProgress && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay onClose={() => { if (isComplete) { setShowBatchProgress(false); setBatchResults(null) } }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass p-6 max-w-lg w-full mx-4 space-y-5 animate-scale-in">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -553,7 +554,7 @@ export default function Stacks() {
               </div>
             )}
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

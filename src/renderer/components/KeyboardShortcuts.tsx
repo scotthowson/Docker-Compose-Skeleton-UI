@@ -8,6 +8,7 @@ import { Keyboard, X } from 'lucide-react'
 import { isNative } from '../hooks/useMobile'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import ModalOverlay from './common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,7 +130,7 @@ export function KeyboardShortcuts() {
   if (isNative || !open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[12vh]">
+    <ModalOverlay onClose={handleBackdropClick} className="fixed inset-0 z-[9999] flex items-start justify-center pt-[12vh]">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
@@ -212,7 +213,7 @@ export function KeyboardShortcuts() {
           </p>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

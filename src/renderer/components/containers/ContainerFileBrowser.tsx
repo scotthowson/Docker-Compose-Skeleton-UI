@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { fetchContainerFilesOn, fetchContainerFileContentOn } from '../../api/fleetScoped'
 import type { ContainerFileEntry } from '../../../shared/types'
 import type { RowMember } from '../../../shared/fleetScoped'
+import { useModalA11y } from '../../hooks/useModalA11y'
 import {
   Folder,
   File,
@@ -229,14 +230,8 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
     }
   }, [containerName, filePath])
 
-  // Close on Escape
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
+  // Escape closes, focus stays inside and returns to what opened it
+  useModalA11y(overlayRef, onClose)
 
   // Close on backdrop click
   const handleOverlayClick = useCallback(

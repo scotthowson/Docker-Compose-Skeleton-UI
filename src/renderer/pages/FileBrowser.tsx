@@ -28,6 +28,7 @@ import type {
   ContainerInfo,
 } from '../../shared/types'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,7 +110,7 @@ function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps
   const isTooLarge = size > 1024 * 1024 // 1 MB
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
       <div className="w-full max-w-6xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-white/5 shrink-0">
@@ -161,7 +162,7 @@ function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps
           )}
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

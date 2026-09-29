@@ -22,6 +22,7 @@ import { applyTheme, setThemePreviewing } from '../../lib/themeEngine'
 import { useResolvedMode } from '../../lib/colorMode'
 import { CSS_SANITIZE_NOTE, sanitizeCss } from '../../lib/cssSanitize'
 import { ApiError } from '../../api/client'
+import { useModalA11y } from '../../hooks/useModalA11y'
 import {
   type ContrastCheck,
   type PaletteKey,
@@ -168,14 +169,12 @@ function SourceChip({ source }: { source: ThemeSource }) {
 
 /** a sheet: a bottom sheet on the phone, a right-hand drawer on the desktop so the dashboard stays visible behind it */
 function Sheet({ title, icon, onClose, children, footer, wide, keepOnBackdrop }: { title: string; icon: React.ReactNode; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; wide?: boolean; keepOnBackdrop?: boolean }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalA11y(panelRef, onClose)
   return createPortal(
     <div className="fixed inset-0 z-[9998] flex items-end sm:items-stretch sm:justify-end bg-black/30 animate-fade-in" onClick={keepOnBackdrop ? undefined : onClose}>
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

@@ -34,6 +34,7 @@ import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { FleetTarget, MemberOutcome, FleetMaintenanceReport, FleetOrphanReport, FleetDiskAnalysis } from '../../shared/fleetScopedOps'
 import { LoadingState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -304,7 +305,7 @@ export default function Maintenance() {
       <DisconnectedBanner />
       {/* Deep Prune Confirmation Modal */}
       {showDeepPruneModal && createPortal(
-        <div
+        <ModalOverlay onClose={() => setShowDeepPruneModal(false)}
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => setShowDeepPruneModal(false)}
         >
@@ -363,7 +364,7 @@ export default function Maintenance() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 

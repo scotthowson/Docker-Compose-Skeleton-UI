@@ -49,6 +49,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import CardStudio from '../components/plugins/CardStudio'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Featured plugins catalog
@@ -753,7 +754,7 @@ export default function Plugins() {
 
       {/* Install from Git Modal */}
       {showInstall && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowInstall(false)}>
+        <ModalOverlay onClose={() => setShowInstall(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowInstall(false)}>
           <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
@@ -804,13 +805,13 @@ export default function Plugins() {
               </div>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
       {/* Delete Confirmation */}
       {deleteTarget && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
+        <ModalOverlay onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
           <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 shadow-2xl shadow-black/40 animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
@@ -840,7 +841,7 @@ export default function Plugins() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

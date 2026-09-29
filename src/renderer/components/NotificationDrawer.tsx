@@ -2,7 +2,7 @@
 // NotificationDrawer — Slide-out notification center from the right side
 // =============================================================================
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Switch as MantineSwitch } from '@mantine/core'
 import {
@@ -13,6 +13,7 @@ import { useNotificationStore } from '../stores/notificationStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Notification } from '../stores/notificationStore'
 import type { PageId } from '../../shared/types'
+import { useModalA11y } from '../hooks/useModalA11y'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -208,15 +209,10 @@ export function NotificationDrawer() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
   const [showPrefs, setShowPrefs] = useState(false)
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!drawerOpen) return
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false)
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [drawerOpen, setDrawerOpen])
+  // Closed, the drawer stays in the page (it slides out): nothing in it may take a Tab or be read
+  useLayoutEffect(() => { panelRef.current?.toggleAttribute('inert', !drawerOpen) }, [drawerOpen])
+  // Open: Escape closes it, focus moves in, stays inside and returns to the bell that opened it
+  useModalA11y(panelRef, () => setDrawerOpen(false), { active: drawerOpen })
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
@@ -278,6 +274,9 @@ export function NotificationDrawer() {
         {/* Drawer panel */}
         <div
           ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Notifications"
           className={`
             absolute top-0 right-0 h-full w-[380px] max-w-[calc(100vw-2rem)]
             bg-slate-950 border-l border-white/5

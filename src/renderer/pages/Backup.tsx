@@ -54,6 +54,7 @@ import type {
 import type { FleetBackupEntry, FleetBackupListResponse, BackupStackChoice, MemberOutcome } from '../../shared/fleetScopedOps'
 import { LoadingState } from '../components/common/PageState'
 import RecoveryBundleCard from '../components/backup/RecoveryBundleCard'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1004,7 +1005,7 @@ export default function Backup() {
       {/* Restore Confirmation Modal                                        */}
       {/* ================================================================= */}
       {restoreTarget && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <ModalOverlay onClose={() => { if (!restoreLoading) { setRestoreTarget(null); setRestoreConfirmText('') } }} className="fixed inset-0 z-[9999] flex items-center justify-center">
           {/* Overlay */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -1131,7 +1132,7 @@ export default function Backup() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

@@ -3,9 +3,10 @@
 // sheet that hosts forms on phones (bottom) and desktops (centred).
 // =============================================================================
 
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, Check, X, ShieldAlert } from 'lucide-react'
+import { useModalA11y } from '../../hooks/useModalA11y'
 import type { HubFirewall } from '../../../shared/types'
 
 export function ago(epoch: number): string {
@@ -62,11 +63,14 @@ export const MATCH_LABEL: Record<string, string> = {
   manual: 'mapped by hand',
 }
 
+/** A sheet (a bottom sheet on a phone, a centred dialog above): Escape closes it, focus moves in (the first field, else the close button), cycles inside and returns to what opened it */
 export function Sheet({ title, subtitle, icon, onClose, children, wide = false }: { title: string; subtitle?: ReactNode; icon?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const titleId = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalA11y(panelRef, onClose)
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto scrollbar-thin glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up`} onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto scrollbar-thin glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up`} onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-start gap-3 mb-4">
           {icon && <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 shrink-0">{icon}</div>}

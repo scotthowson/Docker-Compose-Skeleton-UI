@@ -34,6 +34,7 @@ import VmCapsule from '../components/fleet/VmCapsule'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { LoadingState, ErrorState } from '../components/common/PageState'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -136,7 +137,7 @@ function DeleteConfirmModal({
   }
 
   return createPortal(
-    <div
+    <ModalOverlay onClose={onClose}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
@@ -212,7 +213,7 @@ function DeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }
@@ -234,7 +235,7 @@ function BatchDeleteConfirmModal({
   const expected = String(count)
 
   return createPortal(
-    <div
+    <ModalOverlay onClose={onClose}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
@@ -309,7 +310,7 @@ function BatchDeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   )
 }

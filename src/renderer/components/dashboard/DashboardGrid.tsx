@@ -46,6 +46,7 @@ import NotesCard from './NotesCard'
 import PowerCard from './PowerCard'
 import BookmarksCard from './BookmarksCard'
 import ProxmoxCard from './ProxmoxCard'
+import ModalOverlay from '../common/ModalOverlay'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Layers, HeartPulse, Activity, Box, Server, HardDrive,
@@ -451,7 +452,7 @@ export default function DashboardGrid({
 
       {/* ── Card picker ── */}
       {showPicker && editMode && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowPicker(false)}>
+        <ModalOverlay onClose={() => setShowPicker(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowPicker(false)}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 animate-scale-in border border-white/10" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2"><Plus className="h-4 w-4 text-emerald-400" /><h3 className="text-sm font-semibold text-slate-200">Add Cards</h3></div>
@@ -516,7 +517,7 @@ export default function DashboardGrid({
               })()}
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>

@@ -37,6 +37,7 @@ import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useComposeLinter, useEnvLinter, type LintDiagnostic } from '../../hooks/useComposeLinter'
 import type { StackInfo, StackAnnotation, ComposeVersion } from '../../../shared/types'
+import { useModalA11y } from '../../hooks/useModalA11y'
 
 interface Props {
   stack: StackInfo
@@ -285,6 +286,8 @@ function EditorDiagnostics({ diagnostics, counts, validation, kind }: {
 
 export default function EditStackOverlay({ stack, onClose, onSaved, initialService }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  // focus stays inside and returns to what opened it (Escape steps back through search and edit mode first: handled below)
+  useModalA11y(overlayRef, () => {}, { closeOnEscape: false })
   const composeTextareaRef = useRef<HTMLTextAreaElement>(null)
   const focusedServiceRef = useRef<string | null>(null)
   const { addToast } = useToast()

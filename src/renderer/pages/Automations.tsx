@@ -29,6 +29,7 @@ import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import type { AutomationRule, AutomationHistoryEntry } from '../../shared/types'
+import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
 // Constants & Helpers
@@ -732,7 +733,7 @@ export default function Automations() {
       {/* Automation History Panel                                             */}
       {/* ------------------------------------------------------------------- */}
       {historyRuleId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+        <ModalOverlay onClose={closeHistory} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
@@ -856,12 +857,12 @@ export default function Automations() {
               </button>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
 
       {showCreateModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+        <ModalOverlay onClose={() => setShowCreateModal(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
@@ -1037,7 +1038,7 @@ export default function Automations() {
               </div>
             </div>
           </div>
-        </div>,
+        </ModalOverlay>,
         document.body,
       )}
     </div>
