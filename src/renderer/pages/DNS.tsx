@@ -29,6 +29,7 @@ import {
   Wand2,
   Lock,
   Route,
+  ShieldOff,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -896,6 +897,7 @@ function RoutesPanel(props: {
                           <span className="text-[10px] text-slate-600 font-mono shrink-0">.{domain}</span>
                           {(route as FleetRoute).member && <VmCapsule member={(route as FleetRoute).member} name={(route as FleetRoute).member_name} vmid={(route as FleetRoute).vmid} size="xs" />}
                           {route.conflict && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-rose-500/15 text-rose-400" title="Two routes claim this subdomain"><AlertTriangle size={9} /> conflict</span>}
+                          {route.crowdsec === 'bypass' && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 shrink-0" title="CrowdSec's bouncer never checks this route: it does not use Traefik's traefik-chain, so an address CrowdSec has banned can still reach it."><ShieldOff size={9} /> unprotected</span>}
                           {cfConfigured && rec && (
                             <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold shrink-0 ${rec.proxied ? 'bg-orange-500/10 text-orange-300' : 'bg-white/5 text-slate-400'}`} title={`${rec.type} → ${rec.content}${rec.proxied ? ' (proxied)' : ' (DNS only)'}`}>
                               {rec.proxied ? <Cloud size={9} /> : <Globe size={9} />} {rec.type}

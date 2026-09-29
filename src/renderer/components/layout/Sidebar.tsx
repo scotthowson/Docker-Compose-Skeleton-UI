@@ -52,6 +52,7 @@ import {
   Download,
   Globe,
   Server,
+  ShieldCheck,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -82,6 +83,7 @@ export const navItems: NavItem[] = [
   { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
   { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
   { id: 'dns', label: 'DNS & Routes', icon: Globe, section: 'main' },
+  { id: 'crowdsec', label: 'CrowdSec', icon: ShieldCheck, section: 'main' },
   { id: 'proxmox', label: 'Proxmox', icon: Server, section: 'main' },
   // ── Monitoring ──
   { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },

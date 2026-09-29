@@ -8,6 +8,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** the JSON body of the error answer, when it had one (a `reason`, `rolled_back` …) */
+    public data?: Record<string, unknown>,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -113,8 +115,10 @@ export class ApiClient {
 
     if (!response.ok) {
       let errorMessage = response.statusText
+      let errorData: Record<string, unknown> | undefined
       try {
         const data = await response.json()
+        if (data && typeof data === 'object') errorData = data as Record<string, unknown>
         if (data && typeof data.error === 'string') {
           errorMessage = data.error
         } else if (data && typeof data.message === 'string') {
@@ -136,9 +140,9 @@ export class ApiClient {
           this.authToken = null
           window.dispatchEvent(new CustomEvent('api-auth-expired'))
         }
-        throw new ApiError(401, errorMessage)
+        throw new ApiError(401, errorMessage, errorData)
       }
-      throw new ApiError(response.status, errorMessage)
+      throw new ApiError(response.status, errorMessage, errorData)
     }
 
     // Read body as text first, then parse — more resilient to encoding issues
@@ -184,8 +188,8 @@ export class ApiClient {
     return this.request<T>('POST', path, body ? JSON.stringify(body) : undefined, timeoutOverride)
   }
 
-  async put<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('PUT', path, body ? JSON.stringify(body) : undefined)
+  async put<T>(path: string, body?: unknown, timeoutOverride?: number): Promise<T> {
+    return this.request<T>('PUT', path, body ? JSON.stringify(body) : undefined, timeoutOverride)
   }
 
   async delete<T>(path: string): Promise<T> {

@@ -60,17 +60,30 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
   if (!data) {
     return <div className="glass-card p-4 md:p-6 h-full skeleton" />
   }
+  // deployed but not running well (stopped, restarting, Docker down): say so, and send the person to the page that fixes it
+  if (!data.installed && data.state && data.state !== 'not_deployed') {
+    return (
+      <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col">
+        <div className="flex items-center gap-2 mb-3"><ShieldAlert size={14} className="text-amber-400" />{title}</div>
+        <p className="text-sm text-amber-300">{data.title || 'CrowdSec needs attention'}</p>
+        <p className="text-xs text-slate-500 mt-1 flex-1">{data.detail || 'Open the CrowdSec page for the reason and the one-click fix.'}</p>
+        <button onClick={() => setCurrentPage('crowdsec')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Open CrowdSec →</button>
+      </div>
+    )
+  }
   if (!data.installed) {
     return (
       <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col">
         <div className="flex items-center gap-2 mb-3"><ShieldOff size={14} className="text-slate-500" />{title}</div>
         <p className="text-xs text-slate-500 flex-1">CrowdSec is not running. Deploy the <span className="text-slate-300">crowdsec</span> template to block scanners and brute-force attempts at the reverse proxy.</p>
-        <button onClick={() => setCurrentPage('templates')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Open templates →</button>
+        <button onClick={() => setCurrentPage('crowdsec')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Set up CrowdSec →</button>
       </div>
     )
   }
 
   const decisions = data.decisions ?? []
+  // what the CrowdSec page raises as needing attention (a bouncer that stopped asking, a chain without the bouncer ...) counts here too
+  const attention = (data.issues ?? []).filter((i) => i.severity === 'warning' || i.severity === 'error')
   const banned = data.client_banned
   const trusted = data.trusted ?? []
   const whitelist = data.whitelist?.addresses ?? []
@@ -79,16 +92,22 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
     <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          {banned ? <ShieldAlert size={14} className="text-rose-400" /> : <ShieldCheck size={14} className="text-emerald-400" />}
+          {banned ? <ShieldAlert size={14} className="text-rose-400" /> : attention.length > 0 ? <ShieldAlert size={14} className="text-amber-400" /> : <ShieldCheck size={14} className="text-emerald-400" />}
           {title}
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${decisions.length ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
-          {decisions.length} active ban{decisions.length === 1 ? '' : 's'}
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${attention.length > 0 ? 'bg-amber-500/15 text-amber-300' : decisions.length ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+          {attention.length > 0 ? 'needs attention' : `${decisions.length} active ban${decisions.length === 1 ? '' : 's'}`}
         </span>
       </div>
 
+      {attention.length > 0 && (
+        <button type="button" onClick={() => setCurrentPage('crowdsec')} className="mb-3 w-full text-left rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/15 transition-colors">
+          <span className="font-medium">{attention[0].title}</span>{attention.length > 1 ? ` and ${attention.length - 1} more` : ''}
+          <span className="block text-[10px] mt-0.5">Open the CrowdSec page to fix it</span>
+        </button>
+      )}
       {banned && (
-        <div className="mb-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+        <div className="mb-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
           Your address <span className="font-mono">{data.client_ip}</span> is currently banned.
         </div>
       )}
@@ -138,6 +157,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
           </button>
         )}
         <span className="ml-auto text-[10px] text-slate-600">{trusted.length} trusted</span>
+        <button onClick={() => setCurrentPage('crowdsec')} className="text-[11px] text-cyan-400 hover:text-cyan-300">Open CrowdSec →</button>
       </div>
     </div>
   )
