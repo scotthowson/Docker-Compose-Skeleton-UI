@@ -588,6 +588,8 @@ export default function Export() {
               {isAdmin && (
                 <button
                   onClick={() => toggleCard(card.id)}
+                  aria-label={`Select ${card.title} for the batch export`}
+                  aria-pressed={selectedCards.has(card.id)}
                   className={`absolute top-3 right-3 z-10 w-5 h-5 rounded-md border transition-all flex items-center justify-center ${
                     selectedCards.has(card.id)
                       ? 'bg-violet-500/30 border-violet-500/40 text-violet-400'

@@ -226,14 +226,14 @@ function RecordModal({ zone, initial, onClose, onSaved }: {
               <p className="text-[10px] text-slate-500 font-mono">{fqdn}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
         </div>
 
         <div className="px-6 pb-4 space-y-4 overflow-y-auto scrollbar-thin">
           <div className="grid grid-cols-[120px_1fr] gap-3">
             <div>
               <label className="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Type</label>
-              <select value={type} onChange={(e) => { const t = e.target.value as EditableType; setType(t); setProxied(PROXIABLE_TYPES.has(t) ? proxied : false) }} className={inputCls} disabled={editing}>
+              <select aria-label="Type" value={type} onChange={(e) => { const t = e.target.value as EditableType; setType(t); setProxied(PROXIABLE_TYPES.has(t) ? proxied : false) }} className={inputCls} disabled={editing}>
                 {EDITABLE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
@@ -887,8 +887,8 @@ function RoutesPanel(props: {
                           />
                           <span className="text-[10px] text-slate-600 font-mono">.{domain}</span>
                           {checkingSubdomain ? <Loader2 size={11} className="animate-spin text-slate-500" /> : subdomainAvailable === true ? <CheckCircle size={11} className="text-emerald-400" /> : subdomainAvailable === false ? <XCircle size={11} className="text-rose-400" /> : null}
-                          <button onClick={() => onRenameSave(route)} disabled={saving} className="text-emerald-400 hover:text-emerald-300 shrink-0">{saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}</button>
-                          <button onClick={onRenameCancel} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
+                          <button aria-label="Save" onClick={() => onRenameSave(route)} disabled={saving} className="text-emerald-400 hover:text-emerald-300 shrink-0">{saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}</button>
+                          <button aria-label="Cancel" onClick={onRenameCancel} className="text-slate-500 hover:text-slate-300 shrink-0"><X size={12} /></button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -961,7 +961,7 @@ function RecordsPanel(props: {
         <div className="flex items-center gap-2 min-w-0">
           <Globe size={14} className="text-emerald-400 shrink-0" />
           {zones.length > 1 ? (
-            <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="bg-slate-950/60 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none">
+            <select aria-label="Zone" value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="bg-slate-950/60 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none">
               <option value="">{zoneName} (DCS domain)</option>
               {zones.filter((z) => z.name !== zoneName).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
             </select>

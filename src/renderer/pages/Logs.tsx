@@ -543,7 +543,7 @@ export default function Logs() {
 
             {/* Lines dropdown */}
             <div className="relative shrink-0">
-              <select
+              <select aria-label="Lines"
                 value={lineCount}
                 onChange={(e) => setLineCount(Number(e.target.value))}
                 className="

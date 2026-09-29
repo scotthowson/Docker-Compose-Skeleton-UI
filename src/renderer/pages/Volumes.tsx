@@ -647,7 +647,7 @@ export default function Volumes() {
               <ListChecks size={16} className="text-amber-400" />
               Batch Delete Results
             </h3>
-            <button
+            <button aria-label="Close"
               onClick={() => setBatchResults(null)}
               className="text-slate-500 hover:text-slate-300 transition-colors"
             >
@@ -784,7 +784,7 @@ export default function Volumes() {
             "
           />
           {searchQuery && (
-            <button
+            <button aria-label="Clear the search"
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
             >
@@ -854,6 +854,7 @@ export default function Volumes() {
                   <th className="text-center px-3 py-3 w-10">
                     <button
                       onClick={selectedVolumes.size === filteredVolumes.length ? clearSelection : selectAll}
+                      aria-label={selectedVolumes.size === filteredVolumes.length && filteredVolumes.length > 0 ? 'Clear the selection' : 'Select all'}
                       className="text-slate-500 hover:text-emerald-400 transition-colors"
                     >
                       {selectedVolumes.size === filteredVolumes.length && filteredVolumes.length > 0 ? (

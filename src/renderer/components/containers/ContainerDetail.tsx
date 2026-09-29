@@ -904,7 +904,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
           {renaming ? (
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <input
+              <input aria-label="New name"
                 autoFocus
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
@@ -914,10 +914,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 }}
                 className="px-2 py-1 text-base md:text-lg font-bold text-white bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0 flex-1"
               />
-              <button onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all flex-shrink-0">
+              <button aria-label="Save" onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all flex-shrink-0">
                 {renameLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               </button>
-              <button onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all flex-shrink-0">
+              <button aria-label="Cancel" onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all flex-shrink-0">
                 <X size={16} />
               </button>
             </div>
@@ -1739,7 +1739,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           </span>
                           <span className="text-xs text-slate-600 flex-shrink-0">=</span>
                           {canEditEnv && envEditingKey === entry.key ? (
-                            <input
+                            <input aria-label={`Value of ${entry.key}`}
                               type="text"
                               autoFocus
                               value={envDrafts[entry.key] ?? entry.value}

@@ -295,7 +295,7 @@ export default function DashboardGrid({
                       </span>
                     </div>
                     {/* Remove */}
-                    <button onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
+                    <button aria-label="Remove the card" onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
                       className="absolute top-2 right-2 z-20 h-5 w-5 rounded-full flex items-center justify-center shadow-lg bg-slate-800/90 border border-white/10 text-rose-400 hover:bg-rose-500/30 transition-colors"><X size={8} /></button>
                     {/* Move handle */}
                     <div className="absolute -left-1 top-3 z-20 cursor-move" onMouseDown={(e) => handleMoveDown(e, card.id, card.x, card.y)}>
@@ -358,7 +358,7 @@ export default function DashboardGrid({
                         {pluginMeta?.title || cardName}
                       </span>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
+                    <button aria-label="Remove the card" onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
                       className="absolute top-2 right-2 z-20 h-5 w-5 rounded-full flex items-center justify-center shadow-lg bg-slate-800/90 border border-white/10 text-rose-400 hover:bg-rose-500/30 transition-colors"><X size={8} /></button>
                     <div className="absolute -left-1 top-3 z-20 cursor-move" onMouseDown={(e) => handleMoveDown(e, card.id, card.x, card.y)}>
                       <div className="h-8 w-5 rounded-md bg-slate-800/90 border border-white/10 flex items-center justify-center shadow-lg hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-colors">
@@ -412,7 +412,7 @@ export default function DashboardGrid({
                     </span>
                   </div>
                   {/* Remove button (top-right inside card) */}
-                  <button onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
+                  <button aria-label="Remove the card" onClick={(e) => { e.stopPropagation(); onToggleCard(card.id) }}
                     className="absolute top-2 right-2 z-20 h-5 w-5 rounded-full flex items-center justify-center shadow-lg bg-slate-800/90 border border-white/10 text-rose-400 hover:bg-rose-500/30 transition-colors"><X size={8} /></button>
                   {/* Move handle */}
                   <div className="absolute -left-1 top-3 z-20 cursor-move" onMouseDown={(e) => handleMoveDown(e, card.id, card.x, card.y)}>
@@ -455,7 +455,7 @@ export default function DashboardGrid({
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 animate-scale-in border border-white/10" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2"><Plus className="h-4 w-4 text-emerald-400" /><h3 className="text-sm font-semibold text-slate-200">Add Cards</h3></div>
-              <button onClick={() => setShowPicker(false)} className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5"><X size={14} /></button>
+              <button aria-label="Close" onClick={() => setShowPicker(false)} className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5"><X size={14} /></button>
             </div>
             <div className="space-y-2 max-h-[60vh] overflow-y-auto scrollbar-thin">
               {hiddenCards.length === 0 ? (

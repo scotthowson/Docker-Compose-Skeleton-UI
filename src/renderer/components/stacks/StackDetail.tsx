@@ -340,7 +340,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               >
                 {renameLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
               </button>
-              <button
+              <button aria-label="Cancel the rename"
                 onClick={() => { setRenameMode(false); setRenameTo('') }}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >

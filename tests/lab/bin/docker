@@ -1,0 +1,1124 @@
+#!/usr/bin/env python3
+"""A stand-in for the docker CLI in the dashboard's test lab (tests/lab/lab.sh).
+
+The lab's API copies run with this file first on their PATH, so they never reach
+a real Docker daemon. It answers the read-only calls the DCS API makes (ps,
+inspect, stats, images, networks, volumes, system df/info, compose ls/ps/config,
+logs, events, top, port, version) from a fixed set of containers, and refuses
+every call that would change anything (start, stop, rm, pull, run, exec,
+compose up/down, prune, ...) with exit status 1.
+
+DCS_FAKE_DOCKER_PROFILE picks the set: "hub" (networking-security and
+monitoring-management) or "member" (media-services, the stack in VM 100).
+--format takes the subset of Go templates the API uses: fields, json, index,
+eq/ne, if/else, range (with variables), println, string literals and .Label.
+"""
+import datetime
+import hashlib
+import json
+import os
+import re
+import sys
+import time
+
+NOW = time.time()
+PROFILE = os.environ.get('DCS_FAKE_DOCKER_PROFILE', 'hub')
+# a follower (logs -f, events) ends with the process that reads it: orphans go to a subreaper (systemd --user),
+# not always to PID 1, so a parent that is not the one we started with means the reader is gone
+PARENT = os.getppid()
+HOST = f'lab-{PROFILE}'
+VERSION = '29.1.3'
+COMPOSE_VERSION = 'v2.40.3'
+
+
+def sha(s):
+    return hashlib.sha256(s.encode()).hexdigest()
+
+
+def rfc3339(ts):
+    return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.') + f'{int((ts % 1) * 1e9):09d}Z'
+
+
+def local_stamp(ts):
+    d = datetime.datetime.fromtimestamp(ts).astimezone()
+    return d.strftime('%Y-%m-%d %H:%M:%S %z %Z')
+
+
+def human(seconds):
+    """go-units HumanDuration"""
+    s = int(seconds)
+    if s < 1:
+        return 'Less than a second'
+    if s == 1:
+        return '1 second'
+    if s < 60:
+        return f'{s} seconds'
+    m = s // 60
+    if m == 1:
+        return 'About a minute'
+    if m < 60:
+        return f'{m} minutes'
+    h = m // 60
+    if h == 1:
+        return 'About an hour'
+    if h < 48:
+        return f'{h} hours'
+    if h < 24 * 7 * 2:
+        return f'{h // 24} days'
+    if h < 24 * 30 * 2:
+        return f'{h // 24 // 7} weeks'
+    if h < 24 * 365 * 2:
+        return f'{h // 24 // 30} months'
+    return f'{h // 24 // 365} years'
+
+
+def size_h(n):
+    for unit in ('B', 'kB', 'MB', 'GB', 'TB'):
+        if n < 1000 or unit == 'TB':
+            return f'{n:.0f}{unit}' if unit == 'B' else f'{n:.3g}{unit}'
+        n /= 1000.0
+    return f'{n}B'
+
+
+# -----------------------------------------------------------------------------
+# The containers
+# -----------------------------------------------------------------------------
+
+DAY = 86400
+BASE_DIR = os.getcwd()
+while BASE_DIR != '/' and not os.path.isdir(os.path.join(BASE_DIR, 'Stacks')):
+    BASE_DIR = os.path.dirname(BASE_DIR)
+if BASE_DIR == '/':
+    BASE_DIR = os.path.expanduser('~')
+
+# name, stack, image, state, (health or None), started seconds ago, exit code, ports [(host, container, proto)], networks, volumes, cpu %, mem MiB, mem limit MiB
+SPECS = {
+    'hub': [
+        ('traefik', 'networking-security', 'traefik:v3.1', 'running', 'healthy', 3 * DAY + 5400, 0, [(80, 80, 'tcp'), (443, 443, 'tcp')], ['proxy', 'networking-security_default'], [], 0.8, 48, 0),
+        ('whoami', 'networking-security', 'traefik/whoami:latest', 'running', None, 3 * DAY + 5300, 0, [], ['proxy'], [], 0.0, 6, 0),
+        ('dashdot', 'monitoring-management', 'mauricenino/dashdot:latest', 'running', 'healthy', 2 * DAY + 600, 0, [(3001, 3001, 'tcp')], ['monitoring-management_default'], ['dashdot-data'], 2.4, 96, 512),
+        ('redis', 'monitoring-management', 'redis:alpine', 'running', 'healthy', 2 * DAY + 580, 0, [], ['monitoring-management_default'], ['redis-data'], 0.3, 12, 256),
+        ('uptime-kuma', 'monitoring-management', 'louislam/uptime-kuma:1', 'exited', None, 2 * 3600, 1, [], ['monitoring-management_default'], ['uptime-kuma-data'], 0.0, 0, 0),
+    ],
+    'member': [
+        ('jellyfin', 'media-services', 'jellyfin/jellyfin:10.9.11', 'running', 'healthy', 26 * 3600, 0, [(8096, 8096, 'tcp')], ['media-services_default'], ['jellyfin-config'], 4.1, 612, 2048),
+        ('radarr', 'media-services', 'lscr.io/linuxserver/radarr:latest', 'running', 'unhealthy', 26 * 3600 - 40, 0, [(7878, 7878, 'tcp')], ['media-services_default'], ['radarr-config'], 1.2, 188, 0),
+        ('sonarr', 'media-services', 'lscr.io/linuxserver/sonarr:latest', 'exited', None, 5 * 3600, 0, [(8989, 8989, 'tcp')], ['media-services_default'], ['sonarr-config'], 0.0, 0, 0),
+    ],
+}
+SPECS = SPECS.get(PROFILE, SPECS['hub'])
+
+NET_SUBNETS = {'bridge': '172.17.0.0/16', 'proxy': '172.20.0.0/16', 'networking-security_default': '172.21.0.0/16',
+               'monitoring-management_default': '172.22.0.0/16', 'media-services_default': '172.23.0.0/16', 'host': '', 'none': ''}
+
+
+def image_ref(img):
+    return img if ':' in img.rsplit('/', 1)[-1] else img + ':latest'
+
+
+def image_id(img):
+    return 'sha256:' + sha('image:' + image_ref(img))
+
+
+class Container:
+    def __init__(self, spec, index):
+        (self.name, self.stack, self.image, self.state, self.health, ago, self.exit_code, self.ports, self.networks,
+         self.volumes, self.cpu, self.mem_mib, self.mem_limit_mib) = spec
+        self.id = sha('container:' + PROFILE + ':' + self.name)
+        self.index = index
+        self.created = NOW - ago - 3600 * 24 * 7
+        self.started = NOW - ago if self.state == 'running' else NOW - ago - 3600 * 20
+        self.finished = NOW - ago if self.state != 'running' else 0
+        self.service = self.name
+        self.workdir = os.path.join(BASE_DIR, 'Stacks', self.stack)
+        self.config_file = os.path.join(self.workdir, 'docker-compose.yml')
+
+    @property
+    def running(self):
+        return self.state == 'running'
+
+    def labels(self):
+        return {
+            'com.docker.compose.project': self.stack,
+            'com.docker.compose.service': self.service,
+            'com.docker.compose.project.working_dir': self.workdir,
+            'com.docker.compose.project.config_files': self.config_file,
+            'com.docker.compose.container-number': '1',
+            'com.docker.compose.oneoff': 'False',
+            'com.docker.compose.version': COMPOSE_VERSION.lstrip('v'),
+        }
+
+    def status_text(self):
+        if self.running:
+            h = f' ({self.health})' if self.health else ''
+            return f'Up {human(NOW - self.started)}{h}'
+        return f'Exited ({self.exit_code}) {human(NOW - self.finished)} ago'
+
+    def ports_text(self):
+        out = []
+        for host, cont, proto in self.ports:
+            if self.running:
+                out.append(f'0.0.0.0:{host}->{cont}/{proto}')
+                out.append(f'[::]:{host}->{cont}/{proto}')
+        return ', '.join(out)
+
+    def ip(self, net_index=0):
+        base = NET_SUBNETS.get(self.networks[net_index] if self.networks else 'bridge', '172.17.0.0/16').split('.')
+        return f'{base[0]}.{base[1]}.0.{self.index + 2}'
+
+    def ps_row(self):
+        return PsRow({
+            'Command': '"/entrypoint.sh"',
+            'CreatedAt': local_stamp(self.created),
+            'ID': self.id[:12],
+            'Image': self.image,
+            'Labels': ','.join(f'{k}={v}' for k, v in self.labels().items()),
+            'LocalVolumes': str(len(self.volumes)),
+            'Mounts': ','.join(self.volumes),
+            'Names': self.name,
+            'Networks': ','.join(self.networks),
+            'Ports': self.ports_text(),
+            'RunningFor': f'{human(NOW - self.created)} ago',
+            'Size': '0B',
+            'State': self.state,
+            'Status': self.status_text(),
+        }, self.labels())
+
+    def inspect(self):
+        health = None
+        if self.health:
+            health = {'Status': self.health if self.running else 'unhealthy', 'FailingStreak': 3 if self.health == 'unhealthy' else 0,
+                      'Log': [{'Start': rfc3339(NOW - 30), 'End': rfc3339(NOW - 29.8), 'ExitCode': 1 if self.health == 'unhealthy' else 0,
+                               'Output': 'curl: (7) Failed to connect to localhost port 7878: Connection refused' if self.health == 'unhealthy' else 'ok'}]}
+        port_map = {f'{c}/{p}': ([{'HostIp': '0.0.0.0', 'HostPort': str(h)}, {'HostIp': '::', 'HostPort': str(h)}] if self.running else None) for h, c, p in self.ports}
+        nets = {}
+        for i, n in enumerate(self.networks):
+            nets[n] = {'IPAMConfig': None, 'Links': None, 'Aliases': [self.name, self.service], 'MacAddress': f'02:42:ac:1{i}:00:{self.index + 2:02x}',
+                       'NetworkID': sha('network:' + n), 'EndpointID': sha('ep:' + self.name + n) if self.running else '',
+                       'Gateway': self.ip(i).rsplit('.', 2)[0] + '.0.1' if self.running else '', 'IPAddress': self.ip(i) if self.running else '',
+                       'IPPrefixLen': 16 if self.running else 0, 'IPv6Gateway': '', 'GlobalIPv6Address': '', 'GlobalIPv6PrefixLen': 0, 'DNSNames': [self.name, self.service]}
+        mounts = [{'Type': 'volume', 'Name': v, 'Source': f'/var/lib/docker/volumes/{v}/_data', 'Destination': '/data' if i == 0 else f'/data{i}',
+                   'Driver': 'local', 'Mode': 'z', 'RW': True, 'Propagation': ''} for i, v in enumerate(self.volumes)]
+        mounts.append({'Type': 'bind', 'Source': os.path.join(self.workdir, 'App-Data', self.name), 'Destination': '/config', 'Mode': 'rw', 'RW': True, 'Propagation': 'rprivate'})
+        env = ['PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'TZ=America/Toronto', 'PUID=1000', 'PGID=1000']
+        return {
+            'Id': self.id,
+            'Created': rfc3339(self.created),
+            'Path': '/entrypoint.sh',
+            'Args': [],
+            'State': {'Status': self.state, 'Running': self.running, 'Paused': False, 'Restarting': False, 'OOMKilled': False, 'Dead': False,
+                      'Pid': 4000 + self.index if self.running else 0, 'ExitCode': self.exit_code, 'Error': '',
+                      'StartedAt': rfc3339(self.started), 'FinishedAt': rfc3339(self.finished) if self.finished else '0001-01-01T00:00:00Z',
+                      **({'Health': health} if health else {})},
+            'Image': image_id(self.image),
+            'ResolvConfPath': f'/var/lib/docker/containers/{self.id}/resolv.conf',
+            'HostnamePath': f'/var/lib/docker/containers/{self.id}/hostname',
+            'LogPath': f'/var/lib/docker/containers/{self.id}/{self.id}-json.log',
+            'Name': '/' + self.name,
+            'RestartCount': 2 if self.health == 'unhealthy' else 0,
+            'Driver': 'overlay2',
+            'Platform': 'linux',
+            'HostConfig': {'Binds': [f'{m["Source"]}:{m["Destination"]}:rw' for m in mounts if m['Type'] == 'bind'],
+                           'NetworkMode': self.networks[0] if self.networks else 'bridge',
+                           'PortBindings': {f'{c}/{p}': [{'HostIp': '', 'HostPort': str(h)}] for h, c, p in self.ports},
+                           'RestartPolicy': {'Name': 'unless-stopped', 'MaximumRetryCount': 0},
+                           'Privileged': False, 'CapAdd': None, 'CapDrop': None, 'SecurityOpt': None, 'ReadonlyRootfs': False,
+                           'Memory': self.mem_limit_mib * 1048576, 'NanoCpus': 0, 'CpuShares': 0, 'LogConfig': {'Type': 'json-file', 'Config': {}}},
+            'Mounts': mounts,
+            'Config': {'Hostname': self.id[:12], 'Domainname': '', 'User': '', 'Tty': False, 'Env': env,
+                       'Cmd': None, 'Image': self.image, 'Volumes': {m['Destination']: {} for m in mounts if m['Type'] == 'volume'} or None,
+                       'WorkingDir': '/', 'Entrypoint': ['/entrypoint.sh'], 'Labels': self.labels(),
+                       'ExposedPorts': {f'{c}/{p}': {} for _, c, p in self.ports} or None,
+                       **({'Healthcheck': {'Test': ['CMD-SHELL', 'curl -fs http://localhost/ || exit 1'], 'Interval': 30000000000}} if self.health else {})},
+            'NetworkSettings': {'Bridge': '', 'SandboxID': sha('sandbox:' + self.name) if self.running else '', 'Ports': port_map if self.running else {},
+                                'Networks': nets},
+        }
+
+    def stats(self):
+        mem = self.mem_mib * 1048576 if self.running else 0
+        limit = (self.mem_limit_mib or 32 * 1024) * 1048576
+        return {'BlockIO': '12.3MB / 4.1MB' if self.running else '0B / 0B', 'CPUPerc': f'{self.cpu:.2f}%' if self.running else '0.00%',
+                'Container': self.id[:12], 'ID': self.id[:12], 'MemPerc': f'{(mem / limit * 100):.2f}%',
+                'MemUsage': f'{mem / 1048576:.1f}MiB / {limit / 1073741824:.2f}GiB' if self.running else '0B / 0B',
+                'Name': self.name, 'NetIO': '1.2MB / 845kB' if self.running else '0B / 0B', 'PIDs': str(12 + self.index) if self.running else '0'}
+
+
+class PsRow(dict):
+    """a `docker ps` formatter row: its fields, and the .Label method"""
+    def __init__(self, fields, labels):
+        super().__init__(fields)
+        self._labels = labels
+
+    def Label(self, key):  # noqa: N802 - the Go method name
+        return self._labels.get(key, '')
+
+
+CONTAINERS = [Container(s, i) for i, s in enumerate(SPECS)]
+
+
+def images():
+    out = {}
+    for c in CONTAINERS:
+        ref = image_ref(c.image)
+        if ref not in out:
+            repo, tag = ref.rsplit(':', 1)
+            size = 40_000_000 + int(sha(ref)[:6], 16) % 700_000_000
+            created = NOW - (3 + int(sha(ref)[6:8], 16) % 200) * DAY
+            out[ref] = {'Repository': repo, 'Tag': tag, 'ID': image_id(c.image), 'Size': size, 'Created': created,
+                        'Containers': sum(1 for x in CONTAINERS if image_ref(x.image) == ref), 'dangling': False}
+    # an image no container uses, and a dangling layer left by an update
+    out['alpine:3.20'] = {'Repository': 'alpine', 'Tag': '3.20', 'ID': image_id('alpine:3.20'), 'Size': 7_800_000, 'Created': NOW - 90 * DAY, 'Containers': 0, 'dangling': False}
+    out['<none>:<none>'] = {'Repository': '<none>', 'Tag': '<none>', 'ID': 'sha256:' + sha('dangling-' + PROFILE), 'Size': 152_000_000, 'Created': NOW - 21 * DAY, 'Containers': 0, 'dangling': True}
+    return list(out.values())
+
+
+def image_row(im, no_trunc=False):
+    iid = im['ID'] if no_trunc else im['ID'].split(':', 1)[1][:12]
+    return {'Containers': str(im['Containers']), 'CreatedAt': local_stamp(im['Created']), 'CreatedSince': f'{human(NOW - im["Created"])} ago',
+            'Digest': '<none>', 'ID': iid, 'Repository': im['Repository'], 'SharedSize': 'N/A', 'Size': size_h(im['Size']),
+            'Tag': im['Tag'], 'UniqueSize': 'N/A', 'VirtualSize': size_h(im['Size'])}
+
+
+def image_inspect(im):
+    return {'Id': im['ID'], 'RepoTags': [] if im['dangling'] else [f'{im["Repository"]}:{im["Tag"]}'],
+            'RepoDigests': [] if im['dangling'] else [f'{im["Repository"]}@sha256:{sha("digest:" + im["Repository"] + im["Tag"])}'],
+            'Parent': '', 'Comment': '', 'Created': rfc3339(im['Created']), 'DockerVersion': '', 'Author': '',
+            'Config': {'Env': ['PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'], 'Cmd': None, 'Labels': {'org.opencontainers.image.source': f'https://github.com/{im["Repository"]}'}},
+            'Architecture': 'amd64', 'Os': 'linux', 'Size': im['Size'], 'VirtualSize': im['Size'],
+            'RootFS': {'Type': 'layers', 'Layers': [f'sha256:{sha("layer" + str(i) + im["ID"])}' for i in range(3)]}}
+
+
+def networks():
+    names = ['bridge', 'host', 'none']
+    for c in CONTAINERS:
+        for n in c.networks:
+            if n not in names:
+                names.append(n)
+    out = []
+    for n in names:
+        members = {c.id: {'Name': c.name, 'EndpointID': sha('ep:' + c.name + n), 'MacAddress': '02:42:ac:11:00:02',
+                          'IPv4Address': c.ip(c.networks.index(n)) + '/16', 'IPv6Address': ''} for c in CONTAINERS if c.running and n in c.networks}
+        driver = 'host' if n == 'host' else 'null' if n == 'none' else 'bridge'
+        sub = NET_SUBNETS.get(n, '')
+        out.append({'Name': n, 'Id': sha('network:' + n), 'Created': rfc3339(NOW - 30 * DAY), 'Scope': 'local', 'Driver': driver, 'EnableIPv4': True, 'EnableIPv6': False,
+                    'IPAM': {'Driver': 'default', 'Options': None, 'Config': [{'Subnet': sub, 'Gateway': sub.rsplit('.', 2)[0] + '.0.1'}] if sub else []},
+                    'Internal': False, 'Attachable': n == 'proxy', 'Ingress': False, 'ConfigFrom': {'Network': ''}, 'ConfigOnly': False,
+                    'Containers': members, 'Options': {}, 'Labels': ({'com.docker.compose.network': 'default', 'com.docker.compose.project': n.rsplit('_', 1)[0]} if n.endswith('_default') else {})})
+    return out
+
+
+def volumes():
+    names = []
+    for c in CONTAINERS:
+        names += [v for v in c.volumes if v not in names]
+    names.append(f'old-{PROFILE}-cache')
+    out = []
+    for v in names:
+        users = [c.name for c in CONTAINERS if v in c.volumes]
+        out.append({'CreatedAt': datetime.datetime.fromtimestamp(NOW - 20 * DAY).astimezone().isoformat(timespec='seconds'), 'Driver': 'local',
+                    'Labels': {'com.docker.compose.project': CONTAINERS[0].stack, 'com.docker.compose.volume': v} if users else {},
+                    'Mountpoint': f'/var/lib/docker/volumes/{v}/_data', 'Name': v, 'Options': None, 'Scope': 'local',
+                    '_users': users, '_size': 1_000_000 * (1 + int(sha(v)[:4], 16) % 900)})
+    return out
+
+
+# -----------------------------------------------------------------------------
+# A small Go text/template: the parts DCS's --format strings use
+# -----------------------------------------------------------------------------
+
+class TemplateError(Exception):
+    pass
+
+
+def tokenize(src):
+    out, i = [], 0
+    while i < len(src):
+        j = src.find('{{', i)
+        if j < 0:
+            out.append(('text', src[i:]))
+            break
+        if j > i:
+            out.append(('text', src[i:j]))
+        k = src.find('}}', j)
+        if k < 0:
+            raise TemplateError('unclosed action')
+        out.append(('action', src[j + 2:k].strip()))
+        i = k + 2
+    return out
+
+
+def parse(tokens, pos=0, stop=('end',)):
+    nodes = []
+    while pos < len(tokens):
+        kind, val = tokens[pos]
+        if kind == 'text':
+            nodes.append(('text', val))
+            pos += 1
+            continue
+        word = val.split(None, 1)[0] if val else ''
+        if word in stop or word == 'else':
+            return nodes, pos
+        if word in ('if', 'range'):
+            body, pos = parse(tokens, pos + 1)
+            other = []
+            if tokens[pos][1].startswith('else'):
+                other, pos = parse(tokens, pos + 1)
+            if tokens[pos][1] != 'end':
+                raise TemplateError('missing end')
+            nodes.append((word, val[len(word):].strip(), body, other))
+            pos += 1
+            continue
+        nodes.append(('action', val))
+        pos += 1
+    return nodes, pos
+
+
+def lex_expr(s):
+    toks, i = [], 0
+    while i < len(s):
+        ch = s[i]
+        if ch.isspace():
+            i += 1
+        elif ch == '"':
+            j, buf = i + 1, ''
+            while s[j] != '"':
+                if s[j] == '\\':
+                    buf += {'n': '\n', 't': '\t', '"': '"', '\\': '\\'}.get(s[j + 1], s[j + 1])
+                    j += 2
+                else:
+                    buf += s[j]
+                    j += 1
+            toks.append(('str', buf))
+            i = j + 1
+        elif ch in '()':
+            toks.append((ch, ch))
+            i += 1
+        elif s.startswith(':=', i):
+            toks.append((':=', ':='))
+            i += 2
+        elif ch == ',':
+            toks.append((',', ','))
+            i += 1
+        else:
+            j = i
+            while j < len(s) and not s[j].isspace() and s[j] not in '()",':
+                j += 1
+            toks.append(('word', s[i:j]))
+            i = j
+    return toks
+
+
+def field(v, name):
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        if name in v:
+            return v[name]
+        attr = getattr(v, name, None)
+        return attr if callable(attr) else None
+    return getattr(v, name, None)
+
+
+def resolve_word(w, dot, scope):
+    if w == '.':
+        return dot
+    if w.startswith('$'):
+        head, _, rest = w.partition('.')
+        v = scope.get(head)
+        for part in [p for p in rest.split('.') if p]:
+            v = field(v, part)
+        return v
+    if w.startswith('.'):
+        v = dot
+        for part in [p for p in w.split('.') if p]:
+            v = field(v, part)
+        return v
+    if re.fullmatch(r'-?\d+', w):
+        return int(w)
+    if w in ('true', 'false'):
+        return w == 'true'
+    if w == 'nil':
+        return None
+    return ('func', w)
+
+
+def gostr(v):
+    if v is None:
+        return '<no value>'
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    if isinstance(v, list):
+        return '[' + ' '.join(gostr(x) for x in v) + ']'
+    if isinstance(v, dict):
+        return 'map[' + ' '.join(f'{k}:{gostr(x)}' for k, x in sorted(v.items())) + ']'
+    return str(v)
+
+
+def truthy(v):
+    return not (v is None or v is False or v == 0 or v == '' or v == [] or v == {})
+
+
+FUNCS = {
+    'json': lambda v: json.dumps(v, separators=(',', ':'), default=str),
+    'index': lambda v, *keys: _index(v, keys),
+    'eq': lambda a, *bs: any(a == b for b in bs),
+    'ne': lambda a, b: a != b,
+    'not': lambda a: not truthy(a),
+    'println': lambda *a: ' '.join(gostr(x) for x in a) + '\n',
+    'print': lambda *a: ''.join(gostr(x) for x in a),
+    'printf': lambda f, *a: f.replace('%s', '{}').replace('%d', '{}').replace('%v', '{}').format(*[gostr(x) for x in a]),
+    'len': lambda v: len(v or []),
+    'join': lambda v, sep: sep.join(gostr(x) for x in (v or [])),
+    'lower': lambda s: str(s).lower(),
+    'upper': lambda s: str(s).upper(),
+    'title': lambda s: str(s).title(),
+    'split': lambda s, sep: str(s).split(sep),
+}
+
+
+def _index(v, keys):
+    for k in keys:
+        if v is None:
+            return None
+        v = v.get(k) if isinstance(v, dict) else (v[k] if isinstance(v, list) and -len(v) <= k < len(v) else None)
+    return v
+
+
+def eval_expr(toks, dot, scope):
+    """one command: operand [args...]; parenthesised sub-commands, fields after a ')'"""
+    def operand(i):
+        kind, val = toks[i]
+        if kind == '(':
+            depth, j = 1, i + 1
+            while depth:
+                depth += {'(': 1, ')': -1}.get(toks[j][0], 0)
+                j += 1
+            v = eval_expr(toks[i + 1:j - 1], dot, scope)
+            if j < len(toks) and toks[j][0] == 'word' and toks[j][1].startswith('.'):
+                for part in [p for p in toks[j][1].split('.') if p]:
+                    v = field(v, part)
+                j += 1
+            return v, j
+        if kind == 'str':
+            return val, i + 1
+        return resolve_word(val, dot, scope), i + 1
+
+    first, i = operand(0)
+    args = []
+    while i < len(toks):
+        a, i = operand(i)
+        args.append(a)
+    if isinstance(first, tuple) and first[0] == 'func':
+        fn = FUNCS.get(first[1])
+        if not fn:
+            raise TemplateError(f'function "{first[1]}" not defined')
+        return fn(*args)
+    if callable(first):
+        return first(*args)
+    return first
+
+
+def render(nodes, dot, scope):
+    out = []
+    for n in nodes:
+        if n[0] == 'text':
+            out.append(n[1])
+        elif n[0] == 'action':
+            toks = lex_expr(n[1])
+            if len(toks) >= 2 and toks[1][0] == ':=':
+                scope[toks[0][1]] = eval_expr(toks[2:], dot, scope)
+                continue
+            v = eval_expr(toks, dot, scope)
+            out.append(v if isinstance(v, str) else gostr(v))
+        elif n[0] == 'if':
+            branch = n[2] if truthy(eval_expr(lex_expr(n[1]), dot, scope)) else n[3]
+            out.append(render(branch, dot, dict(scope)))
+        elif n[0] == 'range':
+            toks = lex_expr(n[1])
+            kv = []
+            if ':=' in [t[0] for t in toks]:
+                at = [t[0] for t in toks].index(':=')
+                kv = [t[1] for t in toks[:at] if t[0] == 'word']
+                toks = toks[at + 1:]
+            coll = eval_expr(toks, dot, scope)
+            items = sorted(coll.items()) if isinstance(coll, dict) else list(enumerate(coll or []))
+            if not items:
+                out.append(render(n[3], dot, dict(scope)))
+            for k, v in items:
+                s2 = dict(scope)
+                if len(kv) == 2:
+                    s2[kv[0]], s2[kv[1]] = k, v
+                elif len(kv) == 1:
+                    s2[kv[0]] = v
+                out.append(render(n[2], v, s2))
+    return ''.join(out)
+
+
+def fmt(template, obj):
+    template = template.replace('\\t', '\t').replace('\\n', '\n')
+    nodes, _ = parse(tokenize(template))
+    return render(nodes, obj, {'$': obj})
+
+
+def emit(rows, template, default):
+    for r in rows:
+        line = fmt(template, r) if template else default(r)
+        sys.stdout.write(line if line.endswith('\n') else line + '\n')
+
+
+# -----------------------------------------------------------------------------
+# Commands
+# -----------------------------------------------------------------------------
+
+def refuse(what):
+    sys.stderr.write(f'Error response from daemon: lab: "docker {what}" is disabled in the UI test lab (tests/lab/bin/docker)\n')
+    sys.exit(1)
+
+
+def opts(argv, flags_with_value=('--format', '-f', '--filter', '--tail', '--since', '--until', '--type', '-n', '--limit', '-t', '--time', '-p', '--project-name', '--env-file', '--project-directory', '--profile', '--progress', '--ansi', '-s', '--signal')):
+    """split argv into (options, positionals); repeated options collect in lists"""
+    o, pos, i = {}, [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--':
+            pos += argv[i + 1:]
+            break
+        if a.startswith('--') and '=' in a:
+            k, v = a.split('=', 1)
+            o.setdefault(k, []).append(v)
+        elif a in flags_with_value and i + 1 < len(argv):
+            o.setdefault(a, []).append(argv[i + 1])
+            i += 1
+        elif a.startswith('-') and len(a) > 1:
+            if a.startswith('--'):
+                o.setdefault(a, []).append(True)
+            else:
+                for ch in a[1:]:
+                    o.setdefault('-' + ch, []).append(True)
+        else:
+            pos.append(a)
+        i += 1
+    return o, pos
+
+
+def one(o, *names):
+    for n in names:
+        if n in o:
+            return o[n][-1]
+    return None
+
+
+def find_container(ref):
+    ref = ref.lstrip('/')
+    for c in CONTAINERS:
+        if ref in (c.name, c.id) or (len(ref) >= 4 and c.id.startswith(ref)):
+            return c
+    return None
+
+
+def find_image(ref):
+    for im in images():
+        if ref in (im['ID'], im['ID'].split(':', 1)[1]) or (len(ref) >= 4 and im['ID'].split(':', 1)[1].startswith(ref)):
+            return im
+        if not im['dangling'] and ref in (f'{im["Repository"]}:{im["Tag"]}', im['Repository'] if im['Tag'] == 'latest' else None):
+            return im
+    return None
+
+
+def ps_filter(c, filters):
+    groups = {}
+    for f in filters:
+        k, _, v = f.partition('=')
+        groups.setdefault(k, []).append(v)
+    for k, vals in groups.items():
+        ok = False
+        for v in vals:
+            if k == 'status':
+                ok |= c.state == v
+            elif k == 'label':
+                lk, _, lv = v.partition('=')
+                ok |= lk in c.labels() and (not lv or c.labels()[lk] == lv)
+            elif k == 'health':
+                ok |= (c.health or 'none') == v and c.running
+            elif k == 'volume':
+                ok |= v in c.volumes
+            elif k == 'name':
+                ok |= v in c.name
+            elif k == 'id':
+                ok |= c.id.startswith(v)
+            elif k == 'network':
+                ok |= v in c.networks
+            elif k == 'ancestor':
+                ok |= v in (c.image, image_ref(c.image))
+            else:
+                ok = True
+        if not ok:
+            return False
+    return True
+
+
+def cmd_ps(argv):
+    o, _ = opts(argv)
+    rows = [c for c in CONTAINERS if ('-a' in o or '--all' in o or c.running) and ps_filter(c, o.get('--filter', []) + o.get('-f', []))]
+    if '-q' in o or '--quiet' in o:
+        for c in rows:
+            print(c.id if '--no-trunc' in o else c.id[:12])
+        return
+    tmpl = one(o, '--format')
+    if tmpl == 'json':
+        tmpl = '{{json .}}'
+    if tmpl and tmpl.startswith('table'):
+        tmpl = None
+    if not tmpl:
+        print('CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES')
+    emit([c.ps_row() for c in rows], tmpl, lambda r: f'{r["ID"]}   {r["Image"]}   {r["Command"]}   {r["RunningFor"]}   {r["Status"]}   {r["Ports"]}   {r["Names"]}')
+
+
+def inspect_objects(refs, kind=None):
+    out, missing = [], []
+    for r in refs:
+        obj = None
+        if kind in (None, 'container'):
+            c = find_container(r)
+            obj = c.inspect() if c else None
+        if obj is None and kind in (None, 'image'):
+            im = find_image(r)
+            obj = image_inspect(im) if im else None
+        if obj is None and kind in (None, 'network'):
+            obj = next((n for n in networks() if r in (n['Name'], n['Id']) or n['Id'].startswith(r)), None)
+        if obj is None and kind in (None, 'volume'):
+            v = next((v for v in volumes() if v['Name'] == r), None)
+            obj = {k: x for k, x in v.items() if not k.startswith('_')} if v else None
+        if obj is None:
+            missing.append(r)
+        else:
+            out.append(obj)
+    return out, missing
+
+
+def cmd_inspect(argv, kind=None):
+    o, refs = opts(argv)
+    kind = kind or one(o, '--type')
+    objs, missing = inspect_objects(refs, kind)
+    tmpl = one(o, '--format', '-f')
+    if tmpl:
+        for obj in objs:
+            s = fmt(tmpl, obj)
+            sys.stdout.write(s if s.endswith('\n') else s + '\n')
+    else:
+        print(json.dumps(objs, indent=4))
+    for m in missing:
+        sys.stderr.write(f'Error: No such object: {m}\n')
+    if missing:
+        sys.exit(1)
+
+
+def cmd_stats(argv):
+    o, names = opts(argv)
+    rows = [c for c in CONTAINERS if (c.running or '-a' in o) and (not names or c.name in names or any(c.id.startswith(n) for n in names))]
+    if names and not rows:
+        sys.stderr.write(f'Error response from daemon: No such container: {names[0]}\n')
+        sys.exit(1)
+    emit([c.stats() for c in rows], one(o, '--format'), lambda r: f'{r["ID"]}   {r["Name"]}   {r["CPUPerc"]}   {r["MemUsage"]}   {r["MemPerc"]}   {r["NetIO"]}   {r["BlockIO"]}   {r["PIDs"]}')
+
+
+def cmd_images(argv):
+    o, pos = opts(argv)
+    filt = o.get('--filter', []) + o.get('-f', [])
+    rows = [im for im in images() if not ('dangling=true' in filt and not im['dangling']) and not ('dangling=false' in filt and im['dangling'])]
+    if pos:
+        rows = [im for im in rows if im['Repository'] == pos[0].split(':')[0]]
+    if '-q' in o or '--quiet' in o:
+        for im in rows:
+            print(im['ID'] if '--no-trunc' in o else im['ID'].split(':', 1)[1][:12])
+        return
+    tmpl = one(o, '--format')
+    if tmpl == 'json':
+        tmpl = '{{json .}}'
+    emit([image_row(im, '--no-trunc' in o) for im in rows], tmpl, lambda r: f'{r["Repository"]}   {r["Tag"]}   {r["ID"]}   {r["CreatedSince"]}   {r["Size"]}')
+
+
+def cmd_network(argv):
+    sub, rest = (argv[0], argv[1:]) if argv else ('ls', [])
+    if sub in ('ls', 'list'):
+        o, _ = opts(rest)
+        nets = networks()
+        filt = o.get('--filter', []) + o.get('-f', [])
+        if 'dangling=true' in filt:
+            nets = [n for n in nets if n['Name'] not in ('bridge', 'host', 'none') and not n['Containers']]
+        if '-q' in o or '--quiet' in o:
+            for n in nets:
+                print(n['Id'][:12])
+            return
+        emit([{'CreatedAt': local_stamp(NOW - 30 * DAY), 'Driver': n['Driver'], 'ID': n['Id'][:12], 'IPv6': 'false', 'Internal': 'false',
+               'Labels': ','.join(f'{k}={v}' for k, v in n['Labels'].items()), 'Name': n['Name'], 'Scope': n['Scope']} for n in nets],
+             one(o, '--format'), lambda r: f'{r["ID"]}   {r["Name"]}   {r["Driver"]}   {r["Scope"]}')
+    elif sub == 'inspect':
+        cmd_inspect(rest, 'network')
+    else:
+        refuse(f'network {sub}')
+
+
+def cmd_volume(argv):
+    sub, rest = (argv[0], argv[1:]) if argv else ('ls', [])
+    if sub in ('ls', 'list'):
+        o, _ = opts(rest)
+        vols = volumes()
+        filt = o.get('--filter', []) + o.get('-f', [])
+        if 'dangling=true' in filt:
+            vols = [v for v in vols if not v['_users']]
+        if '-q' in o or '--quiet' in o:
+            for v in vols:
+                print(v['Name'])
+            return
+        emit([{'Availability': 'N/A', 'Driver': v['Driver'], 'Group': 'N/A', 'Labels': ','.join(f'{k}={x}' for k, x in v['Labels'].items()),
+               'Links': 'N/A', 'Mountpoint': v['Mountpoint'], 'Name': v['Name'], 'Scope': 'local', 'Size': 'N/A', 'Status': 'N/A'} for v in vols],
+             one(o, '--format'), lambda r: f'{r["Driver"]}   {r["Name"]}')
+    elif sub == 'inspect':
+        cmd_inspect(rest, 'volume')
+    else:
+        refuse(f'volume {sub}')
+
+
+def cmd_system(argv):
+    sub, rest = (argv[0], argv[1:]) if argv else ('', [])
+    if sub == 'info':
+        return cmd_info(rest)
+    if sub != 'df':
+        refuse(f'system {sub}')
+    o, _ = opts(rest)
+    ims, vols = images(), volumes()
+    used_imgs = [im for im in ims if im['Containers']]
+    running = [c for c in CONTAINERS if c.running]
+    rows = [
+        {'Type': 'Images', 'TotalCount': str(len(ims)), 'Active': str(len(used_imgs)), 'Size': size_h(sum(i['Size'] for i in ims)),
+         'Reclaimable': f'{size_h(sum(i["Size"] for i in ims if not i["Containers"]))} ({round(100 * sum(i["Size"] for i in ims if not i["Containers"]) / max(1, sum(i["Size"] for i in ims)))}%)'},
+        {'Type': 'Containers', 'TotalCount': str(len(CONTAINERS)), 'Active': str(len(running)), 'Size': '2.1MB', 'Reclaimable': '312kB (14%)'},
+        {'Type': 'Local Volumes', 'TotalCount': str(len(vols)), 'Active': str(sum(1 for v in vols if v['_users'])), 'Size': size_h(sum(v['_size'] for v in vols)),
+         'Reclaimable': f'{size_h(sum(v["_size"] for v in vols if not v["_users"]))} ({round(100 * sum(v["_size"] for v in vols if not v["_users"]) / max(1, sum(v["_size"] for v in vols)))}%)'},
+        {'Type': 'Build Cache', 'TotalCount': '0', 'Active': '0', 'Size': '0B', 'Reclaimable': '0B'},
+    ]
+    tmpl = one(o, '--format')
+    if '-v' in o or '--verbose' in o:
+        ctx = {'Images': [image_row(i) for i in ims], 'Containers': [c.ps_row() for c in CONTAINERS], 'BuildCache': [],
+               'Volumes': [{'Availability': 'N/A', 'Driver': 'local', 'Group': 'N/A', 'Labels': '', 'Links': str(len(v['_users'])), 'Mountpoint': v['Mountpoint'],
+                            'Name': v['Name'], 'Scope': 'local', 'Size': size_h(v['_size']), 'Status': 'N/A'} for v in vols]}
+        if tmpl:
+            print(fmt(tmpl, ctx))
+        else:
+            print(json.dumps(ctx))
+        return
+    if not tmpl:
+        print('TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE')
+    emit(rows, tmpl, lambda r: f'{r["Type"]:<16}{r["TotalCount"]:<10}{r["Active"]:<10}{r["Size"]:<10}{r["Reclaimable"]}')
+
+
+def info_obj():
+    running = sum(1 for c in CONTAINERS if c.running)
+    return {'ID': sha('daemon:' + PROFILE)[:36], 'Containers': len(CONTAINERS), 'ContainersRunning': running, 'ContainersPaused': 0,
+            'ContainersStopped': len(CONTAINERS) - running, 'Images': len(images()), 'Driver': 'overlay2', 'DockerRootDir': '/var/lib/docker',
+            'Name': HOST, 'ServerVersion': VERSION, 'OperatingSystem': 'Debian GNU/Linux 13 (trixie)', 'OSType': 'linux', 'Architecture': 'x86_64',
+            'KernelVersion': '6.12.48+deb13-amd64', 'NCPU': 4, 'MemTotal': 8 * 1073741824, 'CgroupDriver': 'systemd', 'CgroupVersion': '2',
+            'LoggingDriver': 'json-file', 'SecurityOptions': ['name=apparmor', 'name=seccomp,profile=builtin', 'name=cgroupns'],
+            'Warnings': None, 'LiveRestoreEnabled': False, 'Swarm': {'LocalNodeState': 'inactive'}}
+
+
+def cmd_info(argv):
+    o, _ = opts(argv)
+    tmpl = one(o, '--format', '-f')
+    if tmpl:
+        print(fmt(tmpl, info_obj()))
+        return
+    i = info_obj()
+    print(f'Client:\n Version:    {VERSION}\n Context:    default\n\nServer:\n Containers: {i["Containers"]}\n  Running: {i["ContainersRunning"]}\n  Paused: 0\n  Stopped: {i["ContainersStopped"]}\n Images: {i["Images"]}\n Server Version: {VERSION}\n Storage Driver: overlay2\n Operating System: {i["OperatingSystem"]}\n Name: {HOST}')
+
+
+def cmd_version(argv):
+    o, _ = opts(argv)
+    tmpl = one(o, '--format', '-f')
+    obj = {'Client': {'Version': VERSION, 'ApiVersion': '1.52', 'Os': 'linux', 'Arch': 'amd64'},
+           'Server': {'Version': VERSION, 'ApiVersion': '1.52', 'MinAPIVersion': '1.24', 'Os': 'linux', 'Arch': 'amd64', 'KernelVersion': '6.12.48+deb13-amd64'}}
+    if tmpl:
+        print(fmt(tmpl, obj))
+    else:
+        print(f'Client:\n Version:           {VERSION}\n API version:       1.52\n\nServer:\n Engine:\n  Version:          {VERSION}\n  API version:      1.52 (minimum version 1.24)')
+
+
+LOG_LINES = [
+    'Starting {name}...',
+    '[info] Configuration loaded from /config',
+    '[info] Listening on 0.0.0.0:{port}',
+    '[info] Health endpoint ready',
+    '[warn] No update channel configured, using stable',
+    '[info] Scheduled task "cleanup" registered (every 6h)',
+    '[info] 200 GET /api/health 2ms',
+    '[info] 200 GET /api/status 5ms',
+]
+
+
+def cmd_logs(argv):
+    # -f is --follow and -t --timestamps here (elsewhere -f takes a value)
+    argv = ['--follow' if a == '-f' else '--timestamps' if a == '-t' else a for a in argv]
+    o, pos = opts(argv)
+    c = find_container(pos[0]) if pos else None
+    if not c:
+        sys.stderr.write(f'Error response from daemon: No such container: {pos[0] if pos else ""}\n')
+        sys.exit(1)
+    tail = one(o, '--tail', '-n')
+    port = c.ports[0][1] if c.ports else 80
+    lines = []
+    for i, l in enumerate(LOG_LINES * 3):
+        ts = c.started + i * 37
+        if ts > NOW:
+            break
+        text = l.format(name=c.name, port=port)
+        if c.health == 'unhealthy' and i % 5 == 4:
+            text = '[error] Healthcheck failed: connection refused on :%d' % port
+        lines.append((ts, text))
+    if tail and tail != 'all':
+        lines = lines[-int(tail):]
+    stamps = '--timestamps' in o
+    for ts, text in lines:
+        print(f'{rfc3339(ts)} {text}' if stamps else text, flush=True)
+    if '--follow' in o:
+        # keep the stream open with a line now and then; a closed pipe ends it
+        try:
+            for _ in range(720):
+                time.sleep(5)
+                if os.getppid() != PARENT:
+                    break
+                print(f'{rfc3339(time.time())} [info] 200 GET /api/health 1ms' if stamps else '[info] 200 GET /api/health 1ms', flush=True)
+        except (BrokenPipeError, KeyboardInterrupt):
+            pass
+
+
+def cmd_events(argv):
+    o, _ = opts(argv)
+    tmpl = one(o, '--format')
+    evs = []
+    for c in CONTAINERS:
+        t = int(c.started if c.running else c.finished)
+        if NOW - t < 3600:
+            evs.append({'status': 'start' if c.running else 'die', 'id': c.id, 'from': c.image, 'Type': 'container', 'Action': 'start' if c.running else 'die',
+                        'Actor': {'ID': c.id, 'Attributes': {'name': c.name, 'image': c.image, 'com.docker.compose.project': c.stack}}, 'scope': 'local',
+                        'time': t, 'timeNano': t * 1_000_000_000, 'Time': t})
+    if one(o, '--until'):
+        emit(evs, tmpl, lambda e: json.dumps(e))
+        return
+    # a live stream: nothing happens in the lab; end with the process that reads it
+    try:
+        for _ in range(720):
+            time.sleep(5)
+            if os.getppid() != PARENT:
+                break
+    except KeyboardInterrupt:
+        pass
+
+
+def cmd_top(argv):
+    _, pos = opts(argv)
+    c = find_container(pos[0]) if pos else None
+    if not c:
+        sys.stderr.write('Error response from daemon: No such container\n')
+        sys.exit(1)
+    if not c.running:
+        sys.stderr.write(f'Error response from daemon: container {c.id} is not running\n')
+        sys.exit(1)
+    print('UID                 PID                 PPID                %CPU                TIME                CMD')
+    print(f'root                {4000 + c.index}                {3990 + c.index}                {c.cpu:.1f}                00:01:12            /entrypoint.sh')
+    print(f'1000                {4010 + c.index}                {4000 + c.index}                0.1                 00:00:03            {c.name} --config /config')
+
+
+def cmd_port(argv):
+    _, pos = opts(argv)
+    c = find_container(pos[0]) if pos else None
+    if not c:
+        sys.exit(1)
+    for h, cp, p in c.ports:
+        if len(pos) > 1 and pos[1] not in (f'{cp}/{p}', str(cp)):
+            continue
+        print(f'{cp}/{p} -> 0.0.0.0:{h}\n{cp}/{p} -> [::]:{h}' if len(pos) == 1 else f'0.0.0.0:{h}\n[::]:{h}')
+
+
+def compose_project(o):
+    p = one(o, '-p', '--project-name')
+    if p:
+        return p
+    f = one(o, '-f', '--file')
+    if f:
+        return os.path.basename(os.path.dirname(os.path.abspath(f)))
+    d = one(o, '--project-directory')
+    return os.path.basename(os.path.abspath(d or os.getcwd()))
+
+
+def cmd_compose(argv):
+    # global options come before the subcommand
+    i, glob = 0, []
+    takes = ('-f', '--file', '-p', '--project-name', '--env-file', '--project-directory', '--profile', '--progress', '--ansi')
+    while i < len(argv) and argv[i].startswith('-'):
+        glob.append(argv[i])
+        if argv[i] in takes and i + 1 < len(argv):
+            glob.append(argv[i + 1])
+            i += 1
+        i += 1
+    sub, rest = (argv[i], argv[i + 1:]) if i < len(argv) else ('', [])
+    g, _ = opts(glob)
+    if sub == 'version' or '--version' in glob or '-v' in glob:
+        print(COMPOSE_VERSION.lstrip('v') if '--short' in rest else f'Docker Compose version {COMPOSE_VERSION}')
+        return
+    if sub == 'ls':
+        o, _ = opts(rest)
+        projects = {}
+        for c in CONTAINERS:
+            projects.setdefault(c.stack, []).append(c)
+        rows = []
+        for name, cs in sorted(projects.items()):
+            up = sum(1 for c in cs if c.running)
+            status = ', '.join(x for x in ([f'running({up})'] if up else []) + ([f'exited({len(cs) - up})'] if len(cs) > up else []))
+            if up or '-a' in o or '--all' in o:
+                rows.append({'Name': name, 'Status': status, 'ConfigFiles': cs[0].config_file})
+        if one(o, '--format') == 'json':
+            print(json.dumps(rows))
+        else:
+            for r in rows:
+                print(f'{r["Name"]}   {r["Status"]}   {r["ConfigFiles"]}')
+        return
+    proj = compose_project(g)
+    mine = [c for c in CONTAINERS if c.stack == proj]
+    if sub == 'ps':
+        o, services = opts(rest)
+        rows = [c for c in mine if (c.running or '-a' in o or '--all' in o) and (not services or c.service in services)]
+        if '-q' in o or '--quiet' in o:
+            for c in rows:
+                print(c.id)
+            return
+        tmpl = one(o, '--format')
+        objs = [{'ID': c.id[:12], 'Name': c.name, 'Image': c.image, 'Command': '"/entrypoint.sh"', 'Project': c.stack, 'Service': c.service,
+                 'Created': int(c.created), 'CreatedAt': local_stamp(c.created), 'State': c.state, 'Status': c.status_text(), 'Health': c.health or '',
+                 'ExitCode': c.exit_code, 'Ports': c.ports_text(), 'Labels': ','.join(f'{k}={v}' for k, v in c.labels().items()),
+                 'Publishers': [{'URL': '0.0.0.0', 'TargetPort': cp, 'PublishedPort': h, 'Protocol': p} for h, cp, p in c.ports]} for c in rows]
+        if tmpl == 'json':
+            for obj in objs:
+                print(json.dumps(obj))
+            return
+        if not tmpl:
+            print('NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS')
+        emit(objs, tmpl, lambda r: f'{r["Name"]}   {r["Image"]}   {r["Command"]}   {r["Service"]}   {r["CreatedAt"]}   {r["Status"]}   {r["Ports"]}')
+        return
+    if sub == 'images':
+        print('CONTAINER   REPOSITORY   TAG   IMAGE ID   SIZE')
+        for c in mine:
+            repo, tag = image_ref(c.image).rsplit(':', 1)
+            print(f'{c.name}   {repo}   {tag}   {image_id(c.image).split(":", 1)[1][:12]}   {size_h(40_000_000 + int(sha(image_ref(c.image))[:6], 16) % 700_000_000)}')
+        return
+    if sub == 'config':
+        o, _ = opts(rest)
+        files = g.get('-f', []) + g.get('--file', [])
+        if not files:
+            files = [os.path.join(os.getcwd(), 'docker-compose.yml')]
+        text = ''
+        for f in files:
+            try:
+                with open(f, encoding='utf-8') as fh:
+                    text += fh.read()
+            except OSError as e:
+                sys.stderr.write(f'open {f}: {e.strerror}\n')
+                sys.exit(1)
+        if '--services' in o:
+            for m in re.finditer(r'^  ([A-Za-z0-9._-]+):\s*$', text, re.M):
+                print(m.group(1))
+        elif '-q' in o or '--quiet' in o:
+            pass
+        else:
+            sys.stdout.write(text)
+        return
+    if sub == 'top':
+        for c in mine:
+            if c.running:
+                print(c.name)
+                cmd_top([c.name])
+        return
+    if sub == 'logs':
+        o, services = opts(rest)
+        for c in mine:
+            if not services or c.service in services:
+                cmd_logs([c.name] + (['--tail', one(o, '--tail', '-n')] if one(o, '--tail', '-n') else []))
+        return
+    refuse(f'compose {sub}')
+
+
+READ_ONLY_CONTAINER = {'ls': cmd_ps, 'list': cmd_ps, 'ps': cmd_ps, 'inspect': lambda a: cmd_inspect(a, 'container'), 'stats': cmd_stats,
+                       'logs': cmd_logs, 'top': cmd_top, 'port': cmd_port}
+
+
+def main(argv):
+    # global options: -H/--host/--context are ignored (the lab has one daemon)
+    while argv and argv[0] in ('-H', '--host', '-c', '--context', '--config', '-l', '--log-level'):
+        argv = argv[2:]
+    if not argv:
+        print('Usage:  docker [OPTIONS] COMMAND')
+        return
+    cmd, rest = argv[0], argv[1:]
+    if cmd in ('--version', '-v'):
+        print(f'Docker version {VERSION}, build lab0000')
+    elif cmd == 'version':
+        cmd_version(rest)
+    elif cmd == 'info':
+        cmd_info(rest)
+    elif cmd == 'system':
+        cmd_system(rest)
+    elif cmd == 'ps':
+        cmd_ps(rest)
+    elif cmd == 'inspect':
+        cmd_inspect(rest)
+    elif cmd == 'container':
+        sub = rest[0] if rest else ''
+        if sub in READ_ONLY_CONTAINER:
+            READ_ONLY_CONTAINER[sub](rest[1:])
+        else:
+            refuse(f'container {sub}')
+    elif cmd == 'image':
+        sub = rest[0] if rest else ''
+        if sub == 'inspect':
+            cmd_inspect(rest[1:], 'image')
+        elif sub in ('ls', 'list'):
+            cmd_images(rest[1:])
+        else:
+            refuse(f'image {sub}')
+    elif cmd == 'images':
+        cmd_images(rest)
+    elif cmd == 'stats':
+        cmd_stats(rest)
+    elif cmd == 'network':
+        cmd_network(rest)
+    elif cmd == 'volume':
+        cmd_volume(rest)
+    elif cmd == 'logs':
+        cmd_logs(rest)
+    elif cmd == 'events':
+        cmd_events(rest)
+    elif cmd == 'top':
+        cmd_top(rest)
+    elif cmd == 'port':
+        cmd_port(rest)
+    elif cmd == 'compose':
+        cmd_compose(rest)
+    elif cmd == 'search':
+        o, _ = opts(rest)
+        rows = [{'Name': 'nginx', 'Description': 'Official build of Nginx.', 'StarCount': '20812', 'IsOfficial': '[OK]', 'IsAutomated': ''},
+                {'Name': 'linuxserver/nginx', 'Description': 'An Nginx container, brought to you by LinuxServer.io.', 'StarCount': '221', 'IsOfficial': '', 'IsAutomated': ''}]
+        emit(rows, one(o, '--format'), lambda r: f'{r["Name"]}   {r["Description"]}   {r["StarCount"]}   {r["IsOfficial"]}')
+    else:
+        refuse(cmd)
+
+
+if __name__ == '__main__':
+    try:
+        main(sys.argv[1:])
+    except BrokenPipeError:
+        pass
+    except TemplateError as e:
+        sys.stderr.write(f'template parsing error: {e}\n')
+        sys.exit(1)

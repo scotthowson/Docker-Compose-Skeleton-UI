@@ -130,7 +130,7 @@ function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps
               <Download size={14} />
               <span className="hidden sm:inline">Save</span>
             </button>
-            <button
+            <button aria-label="Close"
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
             >
@@ -434,7 +434,7 @@ export default function FileBrowser() {
         </label>
         <div className="relative">
           <Box size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <select
+          <select aria-label="Select Container"
             value={selectedContainer}
             onChange={(e) => handleContainerChange(e.target.value)}
             disabled={containersLoading}

@@ -461,7 +461,7 @@ export default function Stacks() {
                 </div>
               </div>
               {isComplete && (
-                <button
+                <button aria-label="Close"
                   onClick={() => {
                     setShowBatchProgress(false)
                     setBatchResults(null)

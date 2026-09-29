@@ -9,6 +9,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Select, Switch, Tooltip } from '@mantine/core'
 import { CalendarClock, Loader2, Play } from 'lucide-react'
 import { useToast } from '../common/Toast'
 import { createSchedule, deleteSchedule, fetchSchedules, runSchedule, updateSchedule } from '../../api/endpoints'
@@ -137,24 +138,27 @@ export default function AutoImageUpdates({ scope, members, recreateDefault }: { 
           <p className="text-[10px] text-slate-500 mt-0.5">{list === null && !error ? 'Reading the schedules…' : error ? <span className="text-rose-300">{error}</span> : sub}</p>
         </div>
         {busy && <Loader2 size={14} className="animate-spin text-slate-400" />}
-        <select
+        <Select
+          size="xs"
+          className="w-full sm:w-64"
+          aria-label="Automatic image updates"
           value={value}
           disabled={busy || list === null}
-          onChange={(e) => choose(e.target.value)}
-          aria-label="Automatic image updates"
-          className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
-        >
-          <option value="off">Off</option>
-          {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          {value === 'custom' && <option value="custom" disabled>A custom time (see Schedules)</option>}
-          {value === 'mixed' && <option value="mixed" disabled>Different on some servers</option>}
-        </select>
+          onChange={(v) => { if (v !== null && v !== value) choose(v) }}
+          data={[
+            { value: 'off', label: 'Off' },
+            ...PRESETS.map((p) => ({ value: p.id, label: p.label })),
+            ...(value === 'custom' ? [{ value: 'custom', label: 'A custom time (see Schedules)', disabled: true }] : []),
+            ...(value === 'mixed' ? [{ value: 'mixed', label: 'Different on some servers', disabled: true }] : []),
+          ]}
+        />
       </div>
-      <div className="flex items-center gap-x-4 gap-y-1 flex-wrap pl-11">
-        <label className="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer select-none" title="On: the containers that run the old copy are recreated right after the pull. Off: the images are pulled and the containers keep running on the old copy until someone recreates them.">
-          <input type="checkbox" checked={recreateOn} disabled={busy || list === null} onChange={(e) => setMode(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-emerald-500" />
-          Recreate the containers after pulling
-        </label>
+      <div className="flex items-center gap-x-4 gap-y-1 flex-wrap pl-11 text-slate-400">
+        <Tooltip label="On: the containers that run the old copy are recreated right after the pull. Off: the images are pulled and the containers keep running on the old copy until someone recreates them.">
+          <span className="inline-flex">
+            <Switch size="xs" checked={recreateOn} disabled={busy || list === null} onChange={(e) => setMode(e.currentTarget.checked)} label="Recreate the containers after pulling" styles={{ label: { fontSize: 11 } }} />
+          </span>
+        </Tooltip>
         {active.length > 0 && (
           <button type="button" onClick={runNow} disabled={busy} className="inline-flex items-center gap-1.5 text-[11px] text-cyan-300 hover:text-cyan-200 disabled:opacity-50">
             <Play size={11} /> Run now
@@ -163,7 +167,7 @@ export default function AutoImageUpdates({ scope, members, recreateDefault }: { 
         {silent.length > 0 && <span className="text-[10px] text-amber-300">Not answering: {silent.join(', ')}</span>}
       </div>
       <p className="text-[10px] text-slate-500 pl-11 leading-relaxed">
-        Each server does it by itself, with this page closed: it pulls the newer image of everything that runs, then recreates the containers on the old copy. The result goes to your notification channels and the Unattended updates list; the log is logs/image-update.log.
+        Each server does it by itself, with this page closed: it pulls the newer image of everything that runs{recreateOn ? ', then recreates the containers on the old copy' : ' and leaves the containers as they are'}. The result goes to your notification channels and the Unattended updates list; the log is logs/image-update.log.
       </p>
     </div>
   )

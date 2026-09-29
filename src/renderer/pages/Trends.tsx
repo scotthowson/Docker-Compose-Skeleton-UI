@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import {
   TrendingUp,
   Clock,
@@ -518,6 +519,7 @@ export default function Trends() {
           {/* Auto-refresh toggle */}
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
+            aria-pressed={autoRefresh}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
               autoRefresh
                 ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/25'
@@ -544,24 +546,16 @@ export default function Trends() {
       {/* ----------------------------------------------------------------- */}
       {/* Time range selector                                                */}
       {/* ----------------------------------------------------------------- */}
-      <div className="flex items-center gap-3">
-        <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
-          {TIME_RANGES.map((tr) => (
-            <button
-              key={tr.id}
-              onClick={() => setRange(tr.id)}
-              className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-                range === tr.id
-                  ? 'bg-white/[0.08] text-slate-200 shadow-sm shadow-black/20 neon-cyan'
-                  : 'text-slate-500 hover:text-slate-400'
-              }`}
-            >
-              <Clock size={12} className={range === tr.id ? 'text-emerald-400' : 'text-slate-500'} />
-              <span className="hidden sm:inline">{tr.label}</span>
-              <span className="sm:hidden">{tr.shortLabel}</span>
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <SegmentedControl
+          aria-label="Time range"
+          value={range}
+          onChange={(v) => setRange(v as TimeRange)}
+          data={TIME_RANGES.map((tr) => ({
+            value: tr.id,
+            label: <span className="flex items-center gap-1.5"><Clock size={12} aria-hidden /><span className="hidden sm:inline">{tr.label}</span><span className="sm:hidden">{tr.shortLabel}</span></span>,
+          }))}
+        />
 
         {/* Configure Alerts gear button — admin only */}
         {isAdmin && (
@@ -727,7 +721,7 @@ export default function Trends() {
                 <Settings2 size={16} className="text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Alert Thresholds</h3>
               </div>
-              <button
+              <button aria-label="Close"
                 onClick={() => setShowAlertConfig(false)}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
               >
@@ -749,7 +743,7 @@ export default function Trends() {
                       <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
                       <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.cpu_warning}%</span>
                     </div>
-                    <input
+                    <input aria-label="CPU warning"
                       type="range"
                       min={10}
                       max={100}
@@ -763,7 +757,7 @@ export default function Trends() {
                       <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
                       <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.cpu_critical}%</span>
                     </div>
-                    <input
+                    <input aria-label="CPU critical"
                       type="range"
                       min={10}
                       max={100}
@@ -789,7 +783,7 @@ export default function Trends() {
                       <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
                       <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.memory_warning}%</span>
                     </div>
-                    <input
+                    <input aria-label="Memory warning"
                       type="range"
                       min={10}
                       max={100}
@@ -803,7 +797,7 @@ export default function Trends() {
                       <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
                       <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.memory_critical}%</span>
                     </div>
-                    <input
+                    <input aria-label="Memory critical"
                       type="range"
                       min={10}
                       max={100}
@@ -829,7 +823,7 @@ export default function Trends() {
                       <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
                       <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.disk_warning}%</span>
                     </div>
-                    <input
+                    <input aria-label="Disk warning"
                       type="range"
                       min={10}
                       max={100}
@@ -843,7 +837,7 @@ export default function Trends() {
                       <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
                       <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.disk_critical}%</span>
                     </div>
-                    <input
+                    <input aria-label="Disk critical"
                       type="range"
                       min={10}
                       max={100}

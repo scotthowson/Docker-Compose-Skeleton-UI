@@ -47,6 +47,7 @@ import {
   Satellite, Home,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { Switch } from '@mantine/core'
 import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -1141,7 +1142,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               <p className="text-[11px] text-slate-500 truncate">{headerSub}</p>
             </div>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0 ml-2"
           >
@@ -1410,13 +1411,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 {v.description && <p className="text-[10px] text-slate-500 mt-0.5">{v.description}</p>}
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">{v.name}</p>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleVariableChange(v.name, isOn ? 'false' : 'true')}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${isOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                              >
-                                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isOn ? 'translate-x-6' : 'translate-x-1'}`} />
-                              </button>
+                              <Switch aria-label={v.label} checked={isOn} onChange={() => handleVariableChange(v.name, isOn ? 'false' : 'true')} className="shrink-0 ml-3" />
                             </div>
                           )
                         }
@@ -1529,19 +1524,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       : 'Pull the images, create and start the containers right away'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAutoStart((prev) => !prev)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
-                    autoStart ? 'bg-emerald-500' : 'bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      autoStart ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                <Switch aria-label="Auto-start after deploy" checked={autoStart} onChange={() => setAutoStart((prev) => !prev)} className="shrink-0 ml-3" />
               </div>
 
               {/* Optional services toggles */}
@@ -1557,24 +1540,17 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <p className="text-[11px] text-slate-500">{opt.description}</p>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setExcludedServices((prev) => {
+                        <Switch
+                          aria-label={opt.label}
+                          checked={!isExcluded}
+                          onChange={() => setExcludedServices((prev) => {
                             const next = new Set(prev)
                             if (isExcluded) next.delete(opt.service)
                             else next.add(opt.service)
                             return next
                           })}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 shrink-0 ml-3 ${
-                            !isExcluded ? 'bg-emerald-500' : 'bg-slate-700'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                              !isExcluded ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
+                          className="shrink-0 ml-3"
+                        />
                       </div>
                     )
                   })}
@@ -1596,13 +1572,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     </button>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-500">{enableRouting ? `${routeServices.filter((s) => s.enabled).length} route${routeServices.filter((s) => s.enabled).length !== 1 ? 's' : ''}` : 'Off'}</span>
-                      <button
-                        type="button"
-                        onClick={() => setEnableRouting(!enableRouting)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableRouting ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                      >
-                        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableRouting ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                      </button>
+                      <Switch size="sm" aria-label="HTTPS routing" checked={enableRouting} onChange={() => setEnableRouting(!enableRouting)} className="shrink-0" />
                     </div>
                   </div>
 
@@ -1618,12 +1588,15 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         <div key={svc.name} className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all ${svc.enabled ? 'border-white/5 bg-white/[0.03]' : 'border-white/[0.03] opacity-50'}`}>
                           <button
                             type="button"
+                            role="checkbox"
+                            aria-checked={svc.enabled}
+                            aria-label={`Route ${svc.name} over HTTPS`}
                             onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, enabled: !s.enabled } : s))}
                             className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${svc.enabled ? 'bg-emerald-500/30 border-emerald-500/40 text-emerald-400' : 'border-white/10'}`}
                           >
                             {svc.enabled && <CheckCircle size={10} />}
                           </button>
-                          <input
+                          <input aria-label={`Subdomain for ${svc.name}`}
                             type="text"
                             value={svc.subdomain}
                             onChange={(e) => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } : s))}
@@ -1734,7 +1707,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 <span className="text-[10px] font-semibold text-slate-400">{svcName}.{traefikDomain}</span>
                               </div>
-                              <textarea
+                              <textarea aria-label={`Route for ${svcName}.${traefikDomain}`}
                                 value={routeYaml}
                                 onChange={(e) => setCustomRoutes((prev) => ({ ...prev, [svcName]: e.target.value }))}
                                 rows={Math.min(routeYaml.split('\n').length + 1, 16)}
@@ -1754,13 +1727,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Network size={12} className="text-slate-500" />
                       <span className="text-[11px] text-slate-400">Connect to <span className="text-emerald-400 font-medium">proxy</span> network</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setConnectProxy(!connectProxy)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${connectProxy ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${connectProxy ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" aria-label="Connect to the proxy network" checked={connectProxy} onChange={() => setConnectProxy(!connectProxy)} className="shrink-0" />
                   </div>
 
                   {/* Authelia SSO Protection Toggle */}
@@ -1769,13 +1736,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Shield size={12} className="text-violet-400" />
                       <span className="text-[11px] text-slate-400">Protect with <span className="text-violet-400 font-medium">Authelia</span> SSO</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setEnableAuthelia(!enableAuthelia)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableAuthelia ? 'bg-violet-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableAuthelia ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" color="violet" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} className="shrink-0" />
                   </div>
                 </div>
               )}
@@ -1788,13 +1749,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Store size={13} className="text-orange-400" />
                       <span className="text-[11px] font-medium text-slate-300">Add to <span className="text-orange-400 font-medium">Homarr</span> Dashboard</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAddToHomarr(!addToHomarr)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${addToHomarr ? 'bg-orange-500' : 'bg-slate-700'}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${addToHomarr ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                    </button>
+                    <Switch size="sm" color="orange" aria-label="Add to the Homarr dashboard" checked={addToHomarr} onChange={() => setAddToHomarr(!addToHomarr)} className="shrink-0" />
                   </div>
                   {!homarrHasKey && (
                     <p className="px-3 pb-2 -mt-0.5 text-[10px] text-slate-500">Without an API key the app lands in Homarr's library only — add the key in Server Config → Integrations</p>
@@ -1810,20 +1765,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <span className="text-[11px] font-medium text-slate-300">Resource Limits</span>
                     <span className="text-[10px] text-slate-500">per service</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnableResourceLimits(!enableResourceLimits)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0 ${enableResourceLimits ? 'bg-amber-500' : 'bg-slate-700'}`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${enableResourceLimits ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                  </button>
+                  <Switch size="sm" color="amber" aria-label="Resource limits" checked={enableResourceLimits} onChange={() => setEnableResourceLimits(!enableResourceLimits)} className="shrink-0" />
                 </div>
                 {enableResourceLimits && (
                   <div className="px-3 py-3 border-t border-white/5 space-y-3 animate-fade-in">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Memory Limit</label>
-                        <select
+                        <select aria-label="Memory Limit"
                           value={memLimit}
                           onChange={(e) => setMemLimit(e.target.value)}
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
@@ -1841,7 +1790,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       </div>
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">CPU Limit</label>
-                        <select
+                        <select aria-label="CPU Limit"
                           value={cpuLimit}
                           onChange={(e) => setCpuLimit(e.target.value)}
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
@@ -2335,7 +2284,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <p className="text-[10px] text-slate-500">Define a reusable stack template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+          <button aria-label="Close" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -2377,7 +2326,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Category</label>
-                <select
+                <select aria-label="Category"
                   value={category}
                   onChange={(e) => {
                     const cat = e.target.value
@@ -2401,7 +2350,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Default Target Stack</label>
-              <select
+              <select aria-label="Default Target Stack"
                 value={targetStack}
                 onChange={(e) => setTargetStack(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
@@ -2688,7 +2637,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
+          <button aria-label="Close" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
             <X size={16} />
           </button>
         </div>
@@ -3730,7 +3679,7 @@ export default function Templates() {
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
               <span className="text-[10px] text-slate-500">{deduplicatedHistory.length} events</span>
             </div>
-            <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <button aria-label="Close" onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
               <X size={14} />
             </button>
           </div>
@@ -3815,7 +3764,7 @@ export default function Templates() {
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/[0.04] border border-white/5 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.06] focus:shadow-lg focus:shadow-emerald-500/5 transition-all duration-200"
               />
               {search ? (
-                <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                <button aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                   <X size={14} />
                 </button>
               ) : (

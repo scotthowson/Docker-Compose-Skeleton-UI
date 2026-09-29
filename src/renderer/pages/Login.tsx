@@ -923,7 +923,7 @@ export default function Login() {
                     <p className="text-xs font-semibold text-amber-300">Session Expired</p>
                     <p className="text-[10px] text-amber-400/70 mt-0.5">Your session has expired. Please sign in again to continue.</p>
                   </div>
-                  <button onClick={() => setSessionExpiredNotice(false)} className="p-1 rounded text-amber-500/50 hover:text-amber-400 transition-colors shrink-0 ml-auto">
+                  <button aria-label="Dismiss" onClick={() => setSessionExpiredNotice(false)} className="p-1 rounded text-amber-500/50 hover:text-amber-400 transition-colors shrink-0 ml-auto">
                     <X size={12} />
                   </button>
                 </div>
@@ -996,6 +996,9 @@ export default function Login() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    role="checkbox"
+                    aria-checked={rememberMe}
+                    aria-label={sessionLabel}
                     onClick={() => setRememberMe(!rememberMe)}
                     className={`
                       flex items-center justify-center w-4 h-4 rounded border transition-all

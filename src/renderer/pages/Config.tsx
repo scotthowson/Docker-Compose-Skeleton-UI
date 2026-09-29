@@ -3,6 +3,7 @@
 // =============================================================================
 
 import React, { useEffect, useState, useCallback } from 'react'
+import { Switch } from '@mantine/core'
 import {
   Settings2,
   Globe,
@@ -40,25 +41,9 @@ import type { ServerConfig } from '../../shared/types'
 // Toggle Button
 // ---------------------------------------------------------------------------
 
-function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onChange(!value)}
-      className={`
-        relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${value ? 'bg-emerald-500' : 'bg-slate-700'}
-      `}
-    >
-      <span
-        className={`
-          inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200
-          ${value ? 'translate-x-6' : 'translate-x-1'}
-        `}
-      />
-    </button>
-  )
+/** the dashboard's toggle (a Mantine Switch, themed in lib/mantine.tsx), named for a screen reader */
+function Toggle({ value, onChange, disabled, label }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+  return <Switch checked={value} disabled={disabled} onChange={() => { if (!disabled) onChange(!value) }} aria-label={label} className="shrink-0" />
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +71,7 @@ function ToggleRow({
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
-      <Toggle value={value} onChange={(v) => onChange(configKey, v)} disabled={disabled} />
+      <Toggle label={label} value={value} onChange={(v) => onChange(configKey, v)} disabled={disabled} />
     </div>
   )
 }
@@ -114,7 +99,7 @@ function SelectRow({
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
-      <select
+      <select aria-label={label}
         value={value}
         onChange={(e) => onChange(configKey, e.target.value)}
         disabled={disabled}
@@ -158,7 +143,7 @@ function TextRow({
       {readOnly ? (
         <span className="text-sm text-slate-400 font-mono truncate max-w-[180px] md:max-w-[260px]" title={value}>{value}</span>
       ) : (
-        <input
+        <input aria-label={label}
           type={type}
           value={value}
           onChange={(e) => onChange(configKey, e.target.value)}
@@ -197,7 +182,7 @@ function NumberRow({
         <span className="text-sm font-medium text-slate-200">{label}</span>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
-      <input
+      <input aria-label={label}
         type="number"
         value={value}
         onChange={(e) => onChange(configKey, parseInt(e.target.value, 10))}

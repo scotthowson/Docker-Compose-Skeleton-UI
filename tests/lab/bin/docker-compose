@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "lab: docker-compose is disabled in the UI test lab (tests/lab/bin/docker-compose)" >&2
+exit 1

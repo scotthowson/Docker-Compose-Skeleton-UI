@@ -117,7 +117,7 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
                 <h3 className="text-sm font-semibold text-slate-100">Spotlight containers</h3>
                 <p className="text-[11px] text-slate-500">{draft.length} chosen</p>
               </div>
-              <button onClick={() => setPicking(false)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+              <button aria-label="Close" onClick={() => setPicking(false)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
             </div>
             <div className="px-5 py-3">
               <div className="relative">

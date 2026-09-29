@@ -55,6 +55,7 @@ function Stepper({ label, unit, value, steps, min, max, disabled, onChange }: {
           <Minus size={13} />
         </button>
         <div className="flex-1 min-w-0 flex items-baseline justify-center gap-1">
+          {/* the number box is as wide as its digits, so its unit fits a phone's narrow stepper ("32 GB", not "32 G") */}
           <input inputMode="numeric" aria-label={label} value={text} disabled={disabled}
             onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
             onBlur={(e) => commit(e.currentTarget.value)}
@@ -63,7 +64,8 @@ function Stepper({ label, unit, value, steps, min, max, disabled, onChange }: {
               else if (e.key === 'ArrowUp') { e.preventDefault(); up() }
               else if (e.key === 'ArrowDown') { e.preventDefault(); down() }
             }}
-            className="w-9 bg-transparent text-right text-sm font-semibold text-slate-100 tabular-nums focus:outline-none" />
+            style={{ width: `${Math.max(text.length, 1) + 0.6}ch` }}
+            className="min-w-0 bg-transparent text-right text-sm font-semibold text-slate-100 tabular-nums focus:outline-none" />
           <span className="text-[11px] text-slate-500 truncate">{unit}</span>
         </div>
         <button type="button" aria-label={`More ${label.toLowerCase()}`} onClick={up} disabled={disabled || value >= max}

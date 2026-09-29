@@ -6,32 +6,105 @@
 // =============================================================================
 
 import { useConnectionStore } from '../../stores/connectionStore'
-import { useEffect, useState } from 'react'
-import { Loader2, Rocket, Server } from 'lucide-react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { Select, Switch, type ComboboxItem, type ComboboxParsedItem, type OptionsFilter } from '@mantine/core'
+import { Check, Loader2, Rocket, Server } from 'lucide-react'
 import { fetchFleetProvisionDefaults, provisionFleet } from '../../api/endpoints'
 import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
 import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
 import { VmSizeControl } from './VmSizeControl'
+import { isMobile } from '../../hooks/useMobile'
 
 export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string; /** what the VMs are built from: cat:<id> (catalogue), url, pve:<file> (imported already), iso:<volid> (installer, by hand) */ os: string; image_url: string; /** bake a DCS template first when the chosen image has none, then clone it for every VM */ bake: boolean }
 
-/** The operating-system choices: the catalogue, what Proxmox already holds, a URL */
-export function osChoices(d: FleetProvisionDefaults | null): { value: string; label: string; group: string; byHand?: boolean }[] {
-  const out: { value: string; label: string; group: string; byHand?: boolean }[] = []
-  for (const tp of d?.images?.templates ?? []) out.push({ value: `tpl:${tp.image_id}`, label: `${d?.images?.catalogue.find((c) => c.id === tp.image_id)?.label.replace(/ — .*$/, '') ?? tp.image_id} — DCS template VM ${tp.vmid}, baked ${new Date(tp.baked_at * 1000).toLocaleDateString()}`, group: 'Baked DCS templates — cloned in about 40 s' })
-  for (const c of (d?.images?.catalogue ?? []).filter((c) => c.prebuilt)) out.push({ value: `cat:${c.id}`, label: c.label, group: 'DCS images — purpose-built for the fleet (recommended)' })
-  for (const c of (d?.images?.catalogue ?? []).filter((c) => !c.prebuilt)) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — tools and Docker installed by the hub' })
-  for (const i of d?.images?.on_proxmox?.imports ?? []) out.push({ value: `pve:${i.file}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB, on ${i.storage})`, group: 'On Proxmox already — cloud images' })
-  for (const i of d?.images?.on_proxmox?.isos ?? []) out.push({ value: `iso:${i.volid}`, label: `${i.file} (${(i.size / 1073741824).toFixed(1)} GB) — install by hand, then join`, group: 'On Proxmox already — installer ISOs', byHand: true })
-  out.push({ value: 'url', label: 'A cloud image from a URL…', group: 'Anything else' })
+export interface OsChoice {
+  value: string
+  label: string
+  group: string
+  byHand?: boolean
+  /** the short name the picker shows ("DCS Fedora 44", "Debian 13 (trixie)", a file) */
+  name: string
+  /** the facts the picker shows muted on the right, read from the data: size, SELinux, apt/dnf, storage */
+  hint?: string
+}
+
+const gbOf = (bytes: number) => `${(bytes / 1073741824).toFixed(1)} GB`
+/** "DCS Fedora 44 — purpose-built, …" → "DCS Fedora 44"; "Debian 13 (trixie) cloud image, tools and …" → "Debian 13 (trixie)" */
+const shortName = (label: string) => label.replace(/ — .*$/, '').replace(/ cloud image\b.*$/, '')
+/** what a catalogue label says in passing: SELinux, its size "(400 MB)" */
+const labelFacts = (label: string) => [/selinux/i.test(label) ? 'SELinux' : '', /\((\d[\d.,]* ?[KMGT]B)\)\s*$/.exec(label)?.[1] ?? ''].filter(Boolean).join(' · ')
+
+/** The operating-system choices: the purpose-built DCS images first, the baked templates, the other cloud images, what Proxmox already holds, a URL */
+export function osChoices(d: FleetProvisionDefaults | null): OsChoice[] {
+  const out: OsChoice[] = []
+  const catalogue = d?.images?.catalogue ?? []
+  for (const c of catalogue.filter((c) => c.prebuilt)) out.push({ value: `cat:${c.id}`, label: c.label, group: 'DCS images — purpose-built for the fleet (recommended)', name: shortName(c.label), hint: labelFacts(c.label) })
+  for (const tp of d?.images?.templates ?? []) {
+    const base = catalogue.find((c) => c.id === tp.image_id)?.label.replace(/ — .*$/, '') ?? tp.image_id
+    const baked = new Date(tp.baked_at * 1000).toLocaleDateString()
+    out.push({ value: `tpl:${tp.image_id}`, label: `${base} — DCS template VM ${tp.vmid}, baked ${baked}`, group: 'Baked DCS templates — cloned in about 40 s', name: shortName(base), hint: `VM ${tp.vmid} · ${baked}` })
+  }
+  for (const c of catalogue.filter((c) => !c.prebuilt)) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — tools and Docker installed by the hub', name: shortName(c.label), hint: c.family })
+  for (const i of d?.images?.on_proxmox?.imports ?? []) out.push({ value: `pve:${i.file}`, label: `${i.file} (${gbOf(i.size)}, on ${i.storage})`, group: 'On Proxmox already — cloud images', name: i.file, hint: `${gbOf(i.size)} · ${i.storage}` })
+  for (const i of d?.images?.on_proxmox?.isos ?? []) out.push({ value: `iso:${i.volid}`, label: `${i.file} (${gbOf(i.size)}) — install by hand, then join`, group: 'On Proxmox already — installer ISOs', byHand: true, name: i.file, hint: `${gbOf(i.size)} · by hand` })
+  out.push({ value: 'url', label: 'A cloud image from a URL…', group: 'Anything else', name: 'A cloud image from a URL…' })
   return out
 }
 export function osLabel(s: VmSettings | null, d: FleetProvisionDefaults | null): string {
   if (!s) return ''
   if (s.os === 'url') return s.image_url ? s.image_url.split('/').pop() ?? s.image_url : 'a URL'
   const c = osChoices(d).find((o) => o.value === s.os)
-  if (c) return c.label.replace(/ — .*$/, '').replace(/ \(.*\)$/, '')
+  if (c) return c.name
   return s.os.replace(/^(cat|pve|iso):/, '')
+}
+
+/** an option of a picker: its name, and its facts muted on the right */
+function OptionRow({ label, hint, checked }: { label: string; hint?: ReactNode; checked?: boolean }) {
+  return (
+    <span className="flex items-center gap-3 w-full min-w-0">
+      <span className="truncate flex-1">{label}</span>
+      {hint ? <span className="text-[11px] text-slate-500 tabular-nums shrink-0">{hint}</span> : null}
+      <Check size={13} className={`shrink-0 ${checked ? '' : 'invisible'}`} aria-hidden />
+    </span>
+  )
+}
+
+/** A picker in a Proxmox form: the choices (grouped when they carry a group), searched by name, fact and group on a
+ *  keyboard (a phone gets the plain list, without its keyboard popping up), each fact muted on the right */
+function FleetSelect({ id, value, onChange, choices, disabled, empty }: { id: string; value: string; onChange: (v: string) => void; choices: { value: string; name: string; hint?: string; group?: string }[]; disabled?: boolean; empty: string }) {
+  const byValue = new Map(choices.map((o) => [o.value, o]))
+  const groups = Array.from(new Set(choices.map((o) => o.group ?? '')))
+  const item = (o: { value: string; name: string }): ComboboxItem => ({ value: o.value, label: o.name })
+  const data = groups.some(Boolean)
+    ? groups.map((g) => ({ group: g, items: choices.filter((o) => (o.group ?? '') === g).map(item) }))
+    : choices.map(item)
+  const filter: OptionsFilter = ({ options, search }) => {
+    const q = search.trim().toLowerCase()
+    if (!q) return options
+    const hit = (o: ComboboxItem) => { const c = byValue.get(o.value); return `${o.label} ${c?.hint ?? ''} ${c?.group ?? ''}`.toLowerCase().includes(q) }
+    const found: ComboboxParsedItem[] = []
+    for (const x of options) {
+      if ('group' in x) { const items = x.items.filter(hit); if (items.length) found.push({ ...x, items }) }
+      else if (hit(x)) found.push(x)
+    }
+    return found
+  }
+  return (
+    <Select
+      id={id}
+      variant="fleet"
+      data={data}
+      value={value}
+      onChange={(v) => { if (v !== null) onChange(v) }}
+      disabled={disabled}
+      searchable={!isMobile && choices.length > 6}
+      spellCheck={false}
+      autoComplete="off"
+      filter={filter}
+      nothingFoundMessage={empty}
+      renderOption={({ option, checked }) => <OptionRow label={option.label} hint={byValue.get(option.value)?.hint} checked={checked} />}
+    />
+  )
 }
 /** The request fields the settings stand for (the hub takes image | image_url | image_file | iso) */
 export function vmSettingsToRequest(s: VmSettings): Omit<FleetProvisionRequest, 'vms'> {
@@ -69,67 +142,71 @@ export function settingsFromDefaults(d: FleetProvisionDefaults, saved: Partial<V
 export function VmSettingsFields({ value, onChange, defaults, disabled = false }: { value: VmSettings; onChange: (v: VmSettings) => void; defaults: FleetProvisionDefaults | null; disabled?: boolean }) {
   const set = (k: keyof VmSettings, v: string | number) => onChange({ ...value, [k]: k === 'bake' ? Boolean(v) : v })
   const storages = defaults?.storages ?? []
+  const id = useId()
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div className="col-span-2 sm:col-span-4">
-        <label className={labelCls}>Operating system</label>
+        <label htmlFor={`${id}-os`} className={labelCls}>Operating system</label>
         <div className="flex gap-2 flex-wrap">
-          <select value={value.os} onChange={(e) => set('os', e.target.value)} className={`${inputCls} flex-1 min-w-[16rem]`} disabled={disabled}>
-            {Array.from(new Set(osChoices(defaults).map((o) => o.group))).map((g) => (
-              <optgroup key={g} label={g}>{osChoices(defaults).filter((o) => o.group === g).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
-            ))}
-          </select>
-          {value.os === 'url' && <input value={value.image_url} onChange={(e) => set('image_url', e.target.value)} className={`${inputCls} flex-[2] min-w-[16rem]`} disabled={disabled} placeholder="https://…/image.qcow2 (cloud-init, apt or dnf)" />}
+          <div className="flex-1 min-w-[16rem]">
+            <FleetSelect id={`${id}-os`} value={value.os} onChange={(v) => set('os', v)} choices={osChoices(defaults)} disabled={disabled} empty="No image matches" />
+          </div>
+          {value.os === 'url' && <input value={value.image_url} onChange={(e) => set('image_url', e.target.value)} className={`${inputCls} flex-[2] min-w-[16rem]`} disabled={disabled} placeholder="https://…/image.qcow2 (cloud-init, apt or dnf)" aria-label="Image URL" />}
         </div>
         {!value.os.startsWith('iso:') && !value.os.startsWith('tpl:') && !value.os.startsWith('cat:dcs-') && (
-          <label className="mt-2 flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
-            <input type="checkbox" checked={value.bake} onChange={(e) => set('bake', e.target.checked ? 1 : 0)} disabled={disabled} className="mt-0.5 accent-amber-400" />
-            <span>Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about 40 s instead of about 85 s, and the template stays for the next builds.</span>
-          </label>
+          <div className="mt-2.5 text-slate-300">
+            <Switch
+              size="sm"
+              color="amber"
+              checked={value.bake}
+              onChange={(e) => set('bake', e.currentTarget.checked ? 1 : 0)}
+              disabled={disabled}
+              label="Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about 40 s instead of about 85 s, and the template stays for the next builds."
+              styles={{ label: { fontSize: 11, lineHeight: 1.5 } }}
+            />
+          </div>
         )}
         <p className="text-[10px] text-slate-500 mt-1">
           {value.os.startsWith('cat:dcs-') ? 'A purpose-built DCS image: a Docker host and nothing else, with the tools, Docker and the guest agent already in place — nothing to install or bake. The VM boots in seconds; only the fresh DCS code and the join run.' : value.os.startsWith('tpl:') ? 'A baked DCS template: the VM is a clone with the tools, Docker and the guest agent already in place; only cloud-init, the fresh DCS code and the join run.' : value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
         </p>
       </div>
       <div>
-        <label className={labelCls}>Node</label>
-        <input value={value.node} onChange={(e) => set('node', e.target.value)} className={inputCls} disabled={disabled} placeholder="pve" />
+        <label htmlFor={`${id}-node`} className={labelCls}>Node</label>
+        <input id={`${id}-node`} value={value.node} onChange={(e) => set('node', e.target.value)} className={inputCls} disabled={disabled} placeholder="pve" />
       </div>
       <div>
-        <label className={labelCls}>Disk storage</label>
+        <label htmlFor={`${id}-storage`} className={labelCls}>Disk storage</label>
         {storages.length ? (
-          <select value={value.storage} onChange={(e) => set('storage', e.target.value)} className={inputCls} disabled={disabled}>
-            {storages.filter((s) => s.images).map((s) => <option key={s.storage} value={s.storage}>{s.storage} · {s.type} · {Math.round(s.avail / 1073741824)} GB free</option>)}
-          </select>
-        ) : <input value={value.storage} onChange={(e) => set('storage', e.target.value)} className={inputCls} disabled={disabled} placeholder="local-lvm" />}
+          <FleetSelect id={`${id}-storage`} value={value.storage} onChange={(v) => set('storage', v)} disabled={disabled} empty="No storage holds VM disks"
+            choices={storages.filter((s) => s.images).map((s) => ({ value: s.storage, name: s.storage, hint: `${s.type} · ${Math.round(s.avail / 1073741824)} GB free` }))} />
+        ) : <input id={`${id}-storage`} value={value.storage} onChange={(e) => set('storage', e.target.value)} className={inputCls} disabled={disabled} placeholder="local-lvm" />}
       </div>
       <div>
-        <label className={labelCls}>Image storage</label>
+        <label htmlFor={`${id}-images`} className={labelCls}>Image storage</label>
         {storages.length ? (
-          <select value={value.image_storage} onChange={(e) => set('image_storage', e.target.value)} className={inputCls} disabled={disabled}>
-            {storages.filter((s) => s.dir).map((s) => <option key={s.storage} value={s.storage}>{s.storage}{s.import_ready ? '' : ' (import switched on by the hub)'}</option>)}
-          </select>
-        ) : <input value={value.image_storage} onChange={(e) => set('image_storage', e.target.value)} className={inputCls} disabled={disabled} placeholder="local" />}
+          <FleetSelect id={`${id}-images`} value={value.image_storage} onChange={(v) => set('image_storage', v)} disabled={disabled} empty="No directory storage"
+            choices={storages.filter((s) => s.dir).map((s) => ({ value: s.storage, name: s.storage, hint: s.import_ready ? undefined : 'import switched on by the hub' }))} />
+        ) : <input id={`${id}-images`} value={value.image_storage} onChange={(e) => set('image_storage', e.target.value)} className={inputCls} disabled={disabled} placeholder="local" />}
       </div>
       <div>
-        <label className={labelCls}>Bridge</label>
-        <input value={value.bridge} onChange={(e) => set('bridge', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="vmbr0" />
+        <label htmlFor={`${id}-bridge`} className={labelCls}>Bridge</label>
+        <input id={`${id}-bridge`} value={value.bridge} onChange={(e) => set('bridge', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="vmbr0" />
       </div>
       <div>
-        <label className={labelCls}>First address</label>
-        <input value={value.ip_start} onChange={(e) => set('ip_start', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.200" />
+        <label htmlFor={`${id}-first`} className={labelCls}>First address</label>
+        <input id={`${id}-first`} value={value.ip_start} onChange={(e) => set('ip_start', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.200" />
       </div>
       <div>
-        <label className={labelCls}>Prefix</label>
-        <input type="number" min={8} max={30} value={value.cidr} onChange={(e) => set('cidr', Number(e.target.value) || 24)} className={`${inputCls} font-mono`} disabled={disabled} />
+        <label htmlFor={`${id}-prefix`} className={labelCls}>Prefix</label>
+        <input id={`${id}-prefix`} type="number" min={8} max={30} value={value.cidr} onChange={(e) => set('cidr', Number(e.target.value) || 24)} className={`${inputCls} font-mono`} disabled={disabled} />
       </div>
       <div>
-        <label className={labelCls}>Gateway</label>
-        <input value={value.gateway} onChange={(e) => set('gateway', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.1" />
+        <label htmlFor={`${id}-gateway`} className={labelCls}>Gateway</label>
+        <input id={`${id}-gateway`} value={value.gateway} onChange={(e) => set('gateway', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.1" />
       </div>
       <div>
-        <label className={labelCls}>DNS</label>
-        <input value={value.dns} onChange={(e) => set('dns', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.1" />
+        <label htmlFor={`${id}-dns`} className={labelCls}>DNS</label>
+        <input id={`${id}-dns`} value={value.dns} onChange={(e) => set('dns', e.target.value)} className={`${inputCls} font-mono`} disabled={disabled} placeholder="192.168.1.1" />
       </div>
     </div>
   )

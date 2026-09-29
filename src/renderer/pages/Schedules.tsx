@@ -212,7 +212,7 @@ export default function Schedules() {
                       </button>
                     )}
                     {/* Expand */}
-                    <button onClick={() => handleExpand(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                    <button aria-label={isExpanded ? 'Hide the runs' : 'Show the runs'} aria-expanded={isExpanded} onClick={() => handleExpand(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
                       {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                     </button>
                     {/* Delete */}
@@ -267,7 +267,7 @@ export default function Schedules() {
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center"><Plus size={16} className="text-emerald-400" /></div>
                 <h2 className="text-base font-semibold text-white">New Schedule</h2>
               </div>
-              <button onClick={() => setShowCreate(false)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
+              <button aria-label="Close" onClick={() => setShowCreate(false)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleCreate() }} className="space-y-4">
               <div>
@@ -276,13 +276,13 @@ export default function Schedules() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Schedule</label>
-                <select value={form.schedule} onChange={e => setForm({ ...form, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
+                <select aria-label="Schedule" value={form.schedule} onChange={e => setForm({ ...form, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
                   {scheduleOptions.map(o => <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Action</label>
-                <select value={form.action} onChange={e => setForm({ ...form, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
+                <select aria-label="Action" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
                   {actionOptions.map(a => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
                 </select>
                 {actionTargetHints[form.action] && (
@@ -317,22 +317,22 @@ export default function Schedules() {
                 <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center"><Pencil size={14} className="text-violet-400" /></div>
                 <h2 className="text-base font-semibold text-white">Edit Schedule</h2>
               </div>
-              <button onClick={() => setEditingId(null)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
+              <button aria-label="Close" onClick={() => setEditingId(null)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleEdit() }} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
-                <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" autoFocus />
+                <input aria-label="Name" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" autoFocus />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Schedule</label>
-                <select value={editForm.schedule} onChange={e => setEditForm({ ...editForm, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
+                <select aria-label="Schedule" value={editForm.schedule} onChange={e => setEditForm({ ...editForm, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
                   {scheduleOptions.map(o => <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Action</label>
-                <select value={editForm.action} onChange={e => setEditForm({ ...editForm, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
+                <select aria-label="Action" value={editForm.action} onChange={e => setEditForm({ ...editForm, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
                   {actionOptions.map(a => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
                 </select>
               </div>

@@ -1,8 +1,10 @@
 // =============================================================================
 // FleetScopeChips — Everywhere · Hub · one VM: the row every fleet-aware page
-// shows above its list (Health, Images, Updates)
+// shows above its list (Health, Images, Updates). A group of pressed/unpressed
+// buttons for a screen reader; each chip explains itself in a tooltip.
 // =============================================================================
 
+import { Tooltip } from '@mantine/core'
 import { Boxes, Server, Loader2 } from 'lucide-react'
 import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 
@@ -15,35 +17,43 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
   const off = 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
   return (
     // a phone gets one swipeable row (sixteen VMs would otherwise push the page down); wider screens wrap
-    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-wrap">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1 shrink-0">{label}</span>
+    <div role="group" aria-label={label} className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-wrap">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1 shrink-0" aria-hidden>{label}</span>
       {everywhere && (
-        <button
-          type="button"
-          onClick={() => onChange('all')}
-          title={`The hub and its ${members.length} VM${members.length === 1 ? '' : 's'} in one list`}
-          className={`${base} ${scope === 'all' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' : off}`}
-        >
-          <Boxes size={11} /> Everywhere
-        </button>
+        <Tooltip label={`The hub and its ${members.length} VM${members.length === 1 ? '' : 's'} in one list`}>
+          <button
+            type="button"
+            aria-pressed={scope === 'all'}
+            onClick={() => onChange('all')}
+            className={`${base} ${scope === 'all' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' : off}`}
+          >
+            <Boxes size={11} /> Everywhere
+          </button>
+        </Tooltip>
       )}
-      <button type="button" onClick={() => onChange('hub')} title="Only what runs on the hub itself" className={`${base} ${scope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : off}`}>
-        <Server size={11} /> Hub
-      </button>
-      {members.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          onClick={() => { if (m.reachable) onChange(m.id) }}
-          disabled={!m.reachable}
-          title={m.reachable ? `VM${m.vmid ? ` #${m.vmid}` : ''} · DCS ${m.version}` : 'not answering'}
-          className={`${base} ${scope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : off}`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-          {m.name}
+      <Tooltip label="Only what runs on the hub itself">
+        <button type="button" aria-pressed={scope === 'hub'} onClick={() => onChange('hub')} className={`${base} ${scope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : off}`}>
+          <Server size={11} /> Hub
         </button>
+      </Tooltip>
+      {members.map((m) => (
+        // the span carries the tooltip: a disabled button (a VM that does not answer) gets no pointer events
+        <Tooltip key={m.id} label={m.reachable ? `VM${m.vmid ? ` #${m.vmid}` : ''} · DCS ${m.version}` : `${m.name} is not answering`}>
+          <span className="inline-flex shrink-0">
+            <button
+              type="button"
+              aria-pressed={scope === m.id}
+              onClick={() => { if (m.reachable) onChange(m.id) }}
+              disabled={!m.reachable}
+              className={`${base} ${scope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : off}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              {m.name}
+            </button>
+          </span>
+        </Tooltip>
       ))}
-      {busy && <Loader2 size={12} className="animate-spin text-slate-500" />}
+      {busy && <Loader2 size={12} className="animate-spin text-slate-500" aria-label="Loading" />}
     </div>
   )
 }

@@ -3,6 +3,7 @@
 // =============================================================================
 
 import React, { useState, useCallback, useEffect } from 'react'
+import { Switch as MantineSwitch } from '@mantine/core'
 import { Timer, Layout, RotateCcw, User, Gamepad2,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -165,7 +166,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
                   <p className="text-xs text-slate-500">{field.description}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
+                  <input aria-label={`${field.label} (seconds)`}
                     type="number"
                     min={field.min}
                     max={field.max}
@@ -183,7 +184,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
                 </div>
               </div>
               {/* Range slider */}
-              <input
+              <input aria-label={field.label}
                 type="range"
                 min={field.min}
                 max={field.max}
@@ -222,22 +223,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
             <p className="text-sm font-medium text-slate-300">Sidebar Collapsed</p>
             <p className="text-xs text-slate-500">Start with a compact sidebar</p>
           </div>
-          <button
-            onClick={toggleSidebar}
-            className={`
-              relative inline-flex h-6 w-11 items-center rounded-full
-              transition-colors duration-200 focus:outline-none
-              ${sidebarCollapsed ? 'bg-emerald-500' : 'bg-slate-700'}
-            `}
-          >
-            <span
-              className={`
-                inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
-                transition-transform duration-200
-                ${sidebarCollapsed ? 'translate-x-6' : 'translate-x-1'}
-              `}
-            />
-          </button>
+          <Switch label="Sidebar collapsed" on={sidebarCollapsed} onChange={() => toggleSidebar()} />
         </div>
       </div>
 
@@ -284,16 +270,9 @@ const LANDING_PAGES: { id: PageId; label: string }[] = [
   { id: 'activity', label: 'Activity' },
 ]
 
-function Switch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!on)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${on ? 'bg-emerald-500' : 'bg-slate-700'}`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${on ? 'translate-x-6' : 'translate-x-1'}`} />
-    </button>
-  )
+/** the dashboard's toggle (a Mantine Switch, themed in lib/mantine.tsx), named for a screen reader */
+function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return <MantineSwitch checked={on} onChange={() => onChange(!on)} aria-label={label} />
 }
 
 function PersonalSettings() {
@@ -313,7 +292,7 @@ function PersonalSettings() {
           <p className="text-sm font-medium text-slate-300">Start on</p>
           <p className="text-xs text-slate-500">The page that opens right after you sign in</p>
         </div>
-        <select
+        <select aria-label="Start on"
           value={defaultPage ?? 'dashboard'}
           onChange={(e) => updateSetting('defaultPage', e.target.value as PageId)}
           className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
@@ -327,7 +306,7 @@ function PersonalSettings() {
           <p className="text-sm font-medium text-slate-300">24-hour clock</p>
           <p className="text-xs text-slate-500">The clock in the status bar ({use24hClock !== false ? '13:05' : '1:05 PM'})</p>
         </div>
-        <Switch on={use24hClock !== false} onChange={(v) => updateSetting('use24hClock', v)} />
+        <Switch label="24-hour clock" on={use24hClock !== false} onChange={(v) => updateSetting('use24hClock', v)} />
       </div>
 
       <div className="flex items-center justify-between py-2">
@@ -335,7 +314,7 @@ function PersonalSettings() {
           <p className="text-sm font-medium text-slate-300">Reduce motion</p>
           <p className="text-xs text-slate-500">Skip animations and transitions everywhere</p>
         </div>
-        <Switch on={!!reduceMotion} onChange={(v) => updateSetting('reduceMotion', v)} />
+        <Switch label="Reduce motion" on={!!reduceMotion} onChange={(v) => updateSetting('reduceMotion', v)} />
       </div>
     </div>
   )
@@ -407,7 +386,7 @@ function DiscordPresenceSettings() {
           <p className="text-sm font-medium text-slate-300">Show my server on Discord</p>
           <p className="text-xs text-slate-500">Needs the Discord desktop app running and an Application ID below</p>
         </div>
-        <Switch on={enabled} onChange={(v) => { setEnabled(v); void save(v, clientId) }} />
+        <Switch label="Show my server on Discord" on={enabled} onChange={(v) => { setEnabled(v); void save(v, clientId) }} />
       </div>
 
       <div className="py-2">

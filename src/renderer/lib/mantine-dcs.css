@@ -1,0 +1,80 @@
+/* =============================================================================
+   The dashboard's skin for the Mantine components it uses: the states a theme
+   cannot express. Colours come from the --dcs-* variables lib/mantine.tsx sets
+   for each scheme, so the light theme needs no rules of its own here.
+   ============================================================================= */
+
+/* a field in focus: the emerald border (theme) and the dashboard's soft ring */
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  box-shadow: 0 0 0 1px var(--dcs-field-ring);
+}
+
+/* dropdown options: one quiet highlight for the pointer and the keyboard, the chosen one in emerald */
+.mantine-Select-option[data-combobox-selected],
+.mantine-Combobox-option[data-combobox-selected] {
+  background-color: var(--dcs-option-hover);
+  color: inherit;
+}
+@media (hover: hover) {
+  .mantine-Select-option:hover:not([data-combobox-disabled]),
+  .mantine-Combobox-option:hover:not([data-combobox-disabled]) {
+    background-color: var(--dcs-option-hover);
+  }
+}
+.mantine-Select-option[data-checked],
+.mantine-Combobox-option[data-checked] {
+  color: var(--dcs-option-checked);
+}
+/* a group's heading draws a hairline after its text; on a phone the text needs the whole width */
+@media (max-width: 480px) {
+  .mantine-Select-groupLabel::after,
+  .mantine-Combobox-groupLabel::after {
+    display: none;
+  }
+}
+
+/* a badge that is a button (a VM capsule that finds its guest): the same pill, lit on hover, ringed on focus */
+button.mantine-Badge-root {
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+}
+button.mantine-Badge-root:hover {
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.07);
+}
+.light button.mantine-Badge-root:hover {
+  box-shadow: inset 0 0 0 100px rgba(15, 23, 42, 0.05);
+}
+button.mantine-Badge-root:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+/* the phone shell (index.css) reads 9 and 10 px text at 12 px and gives buttons a 40 px floor:
+   the pills follow the text and stay pills */
+@media (max-width: 767px) {
+  main .mantine-Badge-root[data-size='sm'],
+  main .mantine-Badge-root[data-size='xs'] {
+    font-size: 12px !important;
+    height: 22px !important;
+    line-height: 20px !important;
+  }
+  main button.mantine-Badge-root {
+    min-height: 0 !important;
+  }
+}
+
+/* segmented filters: muted choices that brighten on hover; the chosen one in its colour on its tint */
+.mantine-SegmentedControl-label:not([data-active]) {
+  color: var(--dcs-seg-label);
+}
+.mantine-SegmentedControl-label[data-active] {
+  color: var(--dcs-seg-active, inherit);
+}
+@media (hover: hover) {
+  .mantine-SegmentedControl-label:not([data-active], [data-disabled]):hover {
+    color: var(--dcs-seg-label-hover);
+  }
+}
+.mantine-SegmentedControl-label {
+  font-weight: 500;
+}

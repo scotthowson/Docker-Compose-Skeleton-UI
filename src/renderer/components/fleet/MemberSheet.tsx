@@ -110,16 +110,16 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
         </div>
         <div>
           <label className={labelCls}>Username on that server</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} disabled={busy} autoComplete="off" />
+          <input aria-label="Username on that server" value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} disabled={busy} autoComplete="off" />
         </div>
         <div>
           <label className={labelCls}>Password{editing ? ' (leave empty to keep)' : ''}</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} disabled={busy} autoComplete="new-password" />
+          <input aria-label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} disabled={busy} autoComplete="new-password" />
         </div>
         {vms.length > 0 && (
           <div className="sm:col-span-2">
             <label className={labelCls}>Runs in</label>
-            <select value={vmKey} onChange={(e) => setVmKey(e.target.value)} className={inputCls} disabled={busy}>
+            <select aria-label="Runs in" value={vmKey} onChange={(e) => setVmKey(e.target.value)} className={inputCls} disabled={busy}>
               <option value="">{editing ? 'Keep the current guest' : 'Let the hub match the guest'}</option>
               {vms.map((v) => <option key={`${v.node}/${v.type}/${v.vmid}`} value={`${v.node}/${v.type}/${v.vmid}`}>{v.name} · {v.type === 'qemu' ? 'VM' : 'LXC'} {v.vmid} on {v.node}</option>)}
             </select>

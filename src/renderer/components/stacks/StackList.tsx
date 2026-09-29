@@ -403,7 +403,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             "
           />
           {search && (
-            <button
+            <button aria-label="Clear the search"
               onClick={() => setSearch('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
             >
@@ -601,7 +601,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                   <p className="text-[10px] text-slate-500">{stacks.length} stacks analyzed</p>
                 </div>
               </div>
-              <button onClick={() => setLintAllResults(null)} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400">
+              <button aria-label="Close" onClick={() => setLintAllResults(null)} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400">
                 <X size={16} />
               </button>
             </div>

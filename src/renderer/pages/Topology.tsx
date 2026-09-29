@@ -302,7 +302,7 @@ function DetailPanel({
               <p className="text-[10px] text-slate-500">Container Details</p>
             </div>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all shrink-0"
           >

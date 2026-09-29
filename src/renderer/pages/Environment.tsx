@@ -637,7 +637,7 @@ export default function Environment() {
           {/* Stack selector + toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="relative flex-1 sm:max-w-sm">
-              <select
+              <select aria-label="Stack"
                 value={selectedStack}
                 onChange={(e) => setSelectedStack(e.target.value)}
                 disabled={stacksLoading && stacks.length === 0}

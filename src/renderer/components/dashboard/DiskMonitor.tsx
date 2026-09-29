@@ -87,10 +87,10 @@ function DiskRow({ disk, label, onLabelChange }: {
                 className="flex-1 bg-slate-900/60 border border-emerald-500/30 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none"
                 placeholder="Custom label..."
               />
-              <button onClick={handleSave} className="text-emerald-400 hover:text-emerald-300">
+              <button aria-label="Save" onClick={handleSave} className="text-emerald-400 hover:text-emerald-300">
                 <Check size={12} />
               </button>
-              <button onClick={handleCancel} className="text-slate-500 hover:text-slate-300">
+              <button aria-label="Cancel" onClick={handleCancel} className="text-slate-500 hover:text-slate-300">
                 <X size={12} />
               </button>
             </div>
@@ -227,8 +227,8 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
                   className="flex-1 bg-slate-900/60 border border-violet-500/30 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none"
                   placeholder="Custom label..."
                 />
-                <button onClick={handleSave} className="text-violet-400 hover:text-violet-300"><Check size={12} /></button>
-                <button onClick={handleCancel} className="text-slate-500 hover:text-slate-300"><X size={12} /></button>
+                <button aria-label="Save" onClick={handleSave} className="text-violet-400 hover:text-violet-300"><Check size={12} /></button>
+                <button aria-label="Cancel" onClick={handleCancel} className="text-slate-500 hover:text-slate-300"><X size={12} /></button>
               </div>
             ) : (
               <>
@@ -320,8 +320,8 @@ function CustomDiskRow({ custom, serverDisk, label, onLabelChange }: {
                 className="flex-1 bg-slate-900/60 border border-violet-500/30 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none"
                 placeholder="Custom label..."
               />
-              <button onClick={handleSave} className="text-violet-400 hover:text-violet-300"><Check size={12} /></button>
-              <button onClick={handleCancel} className="text-slate-500 hover:text-slate-300"><X size={12} /></button>
+              <button aria-label="Save" onClick={handleSave} className="text-violet-400 hover:text-violet-300"><Check size={12} /></button>
+              <button aria-label="Cancel" onClick={handleCancel} className="text-slate-500 hover:text-slate-300"><X size={12} /></button>
             </div>
           ) : (
             <>

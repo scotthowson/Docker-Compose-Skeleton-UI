@@ -427,7 +427,7 @@ export default function Maintenance() {
               <BookOpen size={16} className="text-cyan-400" />
               <h2 className="text-sm font-semibold text-white">Maintenance Guide</h2>
             </div>
-            <button onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
+            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
               <X size={14} className="text-slate-400" />
             </button>
           </div>

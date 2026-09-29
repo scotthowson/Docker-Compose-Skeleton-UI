@@ -204,7 +204,7 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
                 {existing.map((c) => <option key={c.id} value={c.id}>{c.title} · {c.plugin}</option>)}
               </select>
             )}
-            <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+            <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
           </div>
         </div>
 
@@ -220,8 +220,8 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
               <div className="col-span-2"><label className={label}>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} className={field} placeholder="My card" /></div>
               <div><label className={label}>Plugin</label><input value={plugin} onChange={(e) => setPlugin(e.target.value)} className={`${field} font-mono`} placeholder="my-cards" title="Cards are grouped in a plugin; a new name creates one" /></div>
               <div><label className={label}>Card id</label><input value={cardId} onChange={(e) => setCardId(slug(e.target.value))} className={`${field} font-mono`} placeholder={slug(title)} /></div>
-              <div><label className={label}>Icon</label><div className="flex items-center gap-2"><span className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-300 shrink-0"><IconPreview size={14} /></span><select value={icon} onChange={(e) => setIcon(e.target.value)} className={`${field} bg-slate-800`}>{ICON_CHOICES.map((n) => <option key={n} value={n}>{n}</option>)}</select></div></div>
-              <div><label className={label}>Default size</label><div className="flex items-center gap-2"><input type="number" min={3} max={24} value={w} onChange={(e) => setW(Math.max(3, Math.min(24, Number(e.target.value) || 6)))} className={field} /><span className="text-slate-600 text-xs">×</span><input type="number" min={2} max={16} value={h} onChange={(e) => setH(Math.max(2, Math.min(16, Number(e.target.value) || 4)))} className={field} /></div></div>
+              <div><label className={label}>Icon</label><div className="flex items-center gap-2"><span className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-300 shrink-0"><IconPreview size={14} /></span><select aria-label="Icon" value={icon} onChange={(e) => setIcon(e.target.value)} className={`${field} bg-slate-800`}>{ICON_CHOICES.map((n) => <option key={n} value={n}>{n}</option>)}</select></div></div>
+              <div><label className={label}>Default size</label><div className="flex items-center gap-2"><input aria-label="Default width" type="number" min={3} max={24} value={w} onChange={(e) => setW(Math.max(3, Math.min(24, Number(e.target.value) || 6)))} className={field} /><span className="text-slate-600 text-xs">×</span><input aria-label="Default height" type="number" min={2} max={16} value={h} onChange={(e) => setH(Math.max(2, Math.min(16, Number(e.target.value) || 4)))} className={field} /></div></div>
             </div>
 
             {mode === 'data' ? (
@@ -229,7 +229,7 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
                 <div>
                   <label className={label}>Endpoint</label>
                   <div className="flex gap-2">
-                    <select value={spec.path} onChange={(e) => setSpec({ ...spec, path: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
+                    <select aria-label="Endpoint" value={spec.path} onChange={(e) => setSpec({ ...spec, path: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
                       {!catalogue.some((c) => c.path === spec.path) && <option value={spec.path}>{spec.path}</option>}
                       {catalogue.map((c) => <option key={c.path} value={c.path} title={c.description}>{c.path}</option>)}
                     </select>
@@ -256,16 +256,16 @@ export default function CardStudio({ onClose, onSaved }: { onClose: () => void; 
                 <div className="grid grid-cols-2 gap-3">
                   {(spec.widget === 'number' || spec.widget === 'gauge' || spec.widget === 'badge') && <div><label className={label}>Label under the value</label><input value={spec.label} onChange={(e) => setSpec({ ...spec, label: e.target.value })} className={field} placeholder="running containers" /></div>}
                   {(spec.widget === 'number' || spec.widget === 'gauge') && <div><label className={label}>Unit</label><input value={spec.unit} onChange={(e) => setSpec({ ...spec, unit: e.target.value })} className={field} placeholder="%, GB, ms…" /></div>}
-                  {spec.widget === 'gauge' && <div><label className={label}>Full scale</label><input type="number" value={spec.max} onChange={(e) => setSpec({ ...spec, max: Number(e.target.value) || 100 })} className={field} /></div>}
+                  {spec.widget === 'gauge' && <div><label className={label}>Full scale</label><input aria-label="Full scale" type="number" value={spec.max} onChange={(e) => setSpec({ ...spec, max: Number(e.target.value) || 100 })} className={field} /></div>}
                   {spec.widget === 'list' && <><div><label className={label}>Item label field</label><input value={spec.itemLabel} onChange={(e) => setSpec({ ...spec, itemLabel: e.target.value.trim() })} className={`${field} font-mono`} placeholder="name" /></div><div><label className={label}>Item value field</label><input value={spec.itemValue} onChange={(e) => setSpec({ ...spec, itemValue: e.target.value.trim() })} className={`${field} font-mono`} placeholder="state" /></div></>}
-                  <div><label className={label}>Refresh every (s)</label><input type="number" min={0} value={spec.refresh} onChange={(e) => setSpec({ ...spec, refresh: Math.max(0, Number(e.target.value) || 0) })} className={field} /></div>
+                  <div><label className={label}>Refresh every (s)</label><input aria-label="Refresh every (s)" type="number" min={0} value={spec.refresh} onChange={(e) => setSpec({ ...spec, refresh: Math.max(0, Number(e.target.value) || 0) })} className={field} /></div>
                 </div>
                 <button onClick={() => { setHtml(generated); setMode('code') }} className="flex items-center gap-1.5 text-[11px] text-violet-300 hover:text-violet-200 transition-colors"><Sparkles size={12} /> Open the generated code to customise it</button>
               </div>
             ) : (
               <div className="space-y-2">
                 <label className={label}>HTML, CSS and JS <span className="normal-case tracking-normal text-slate-600">(one file · use window.dcs.fetch('/path') or fetch('/path') for data)</span></label>
-                <textarea value={html} onChange={(e) => setHtml(e.target.value)} spellCheck={false} className="w-full h-[46vh] resize-y rounded-lg bg-slate-950/70 border border-white/10 p-3 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-violet-500/40 leading-relaxed" />
+                <textarea aria-label="HTML, CSS and JS" value={html} onChange={(e) => setHtml(e.target.value)} spellCheck={false} className="w-full h-[46vh] resize-y rounded-lg bg-slate-950/70 border border-white/10 p-3 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-violet-500/40 leading-relaxed" />
               </div>
             )}
           </div>

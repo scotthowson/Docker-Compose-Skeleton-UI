@@ -197,7 +197,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
             {type === 'page' ? 'Page' : type === 'stack' ? 'Stack Name' : type === 'container' ? 'Container Name' : 'Reference'}
           </label>
           {type === 'page' ? (
-            <select
+            <select aria-label="Page"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50"
@@ -483,7 +483,7 @@ export default function Bookmarks() {
             className="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-white/5 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30"
           />
           {search && (
-            <button
+            <button aria-label="Clear the search"
               onClick={() => setSearch('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
             >

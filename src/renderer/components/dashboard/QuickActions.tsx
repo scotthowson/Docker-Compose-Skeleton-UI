@@ -275,7 +275,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
               <p className="text-[11px] text-slate-500">Your shortcuts, in your order. Saved to your dashboard.</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-6 py-4 space-y-2">
           {list.length === 0 && <p className="text-xs text-slate-500 text-center py-6">No actions yet — add one below.</p>}
@@ -296,15 +296,15 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {a.kind === 'page' && (
-                    <select value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800`}>
+                    <select aria-label="Page" value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800`}>
                       {(Object.keys(pageTitles) as PageId[]).filter((p) => isAdmin || !ADMIN_ONLY_PAGES.has(p)).map((p) => <option key={p} value={p}>{pageTitles[p]}</option>)}
                     </select>
                   )}
                   {a.kind === 'url' && <input value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} placeholder="https://…" spellCheck={false} className={`${field} flex-1 min-w-[12rem] font-mono`} />}
                   {a.kind === 'stack' && (
                     <>
-                      <select value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{STACK_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-                      <select value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
+                      <select aria-label="Stack action" value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{STACK_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
+                      <select aria-label="Stack" value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
                         {!stacks.some((s) => s.name === a.target) && <option value={a.target}>{a.target || 'choose a stack'}</option>}
                         {stacks.map((s) => <option key={`${s.member ?? ''}|${s.name}`} value={s.name}>{s.name}{s.member_name ? ` · ${s.member_name}` : ''}</option>)}
                       </select>
@@ -312,26 +312,26 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                   )}
                   {a.kind === 'container' && (
                     <>
-                      <select value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{CONTAINER_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-                      <select value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
+                      <select aria-label="Container action" value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{CONTAINER_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
+                      <select aria-label="Container" value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} className={`${field} bg-slate-800 font-mono`}>
                         {!containers.some((c) => c.name === a.target) && <option value={a.target}>{a.target || 'choose a container'}</option>}
                         {containers.map((c) => <option key={`${c.member ?? ''}|${c.name}`} value={c.name}>{c.name}{c.member_name ? ` · ${c.member_name}` : ''}</option>)}
                       </select>
                     </>
                   )}
                   {a.kind === 'maintenance' && (
-                    <select value={a.target} onChange={(e) => { const job = MAINTENANCE_JOBS.find((j) => j.id === e.target.value); update(a.id, { target: e.target.value, ...(job ? { label: job.label, icon: job.icon, color: job.color } : {}) }) }} className={`${field} bg-slate-800`}>
+                    <select aria-label="Maintenance job" value={a.target} onChange={(e) => { const job = MAINTENANCE_JOBS.find((j) => j.id === e.target.value); update(a.id, { target: e.target.value, ...(job ? { label: job.label, icon: job.icon, color: job.color } : {}) }) }} className={`${field} bg-slate-800`}>
                       {MAINTENANCE_JOBS.map((j) => <option key={j.id} value={j.id}>{j.label}</option>)}
                     </select>
                   )}
                   {a.kind === 'schedule' && (
-                    <select value={a.target} onChange={(e) => { const s = schedules.find((x) => x.id === e.target.value); update(a.id, { target: e.target.value, ...(s ? { label: s.name } : {}) }) }} className={`${field} bg-slate-800`}>
+                    <select aria-label="Schedule" value={a.target} onChange={(e) => { const s = schedules.find((x) => x.id === e.target.value); update(a.id, { target: e.target.value, ...(s ? { label: s.name } : {}) }) }} className={`${field} bg-slate-800`}>
                       {schedules.length === 0 && <option value="">No schedules yet</option>}
                       {schedules.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   )}
                   {a.kind === 'automation' && (
-                    <select value={a.target} onChange={(e) => { const s = automations.find((x) => x.id === e.target.value); update(a.id, { target: e.target.value, ...(s ? { label: s.name } : {}) }) }} className={`${field} bg-slate-800`}>
+                    <select aria-label="Automation" value={a.target} onChange={(e) => { const s = automations.find((x) => x.id === e.target.value); update(a.id, { target: e.target.value, ...(s ? { label: s.name } : {}) }) }} className={`${field} bg-slate-800`}>
                       {automations.length === 0 && <option value="">No automations yet</option>}
                       {automations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>

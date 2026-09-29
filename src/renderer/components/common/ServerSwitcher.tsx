@@ -183,7 +183,7 @@ export function ServerSwitcher() {
                       </div>
                       <div className="flex-1 min-w-0 text-left">
                         {isEditing ? (
-                          <input
+                          <input aria-label="Server name"
                             ref={editInputRef}
                             value={editName}
                             onChange={e => setEditName(e.target.value)}
