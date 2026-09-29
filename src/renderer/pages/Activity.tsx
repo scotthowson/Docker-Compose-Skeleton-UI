@@ -3,6 +3,7 @@
 // =============================================================================
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import {
   Play, Square, Plus, Trash2, RefreshCw, Download,
   Box, Network, HardDrive, Database,
@@ -631,25 +632,14 @@ export default function Activity() {
 
           {/* Filters row */}
           <div className="flex items-center gap-3 flex-wrap animate-fade-in">
-            {/* Type filter tabs */}
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/5">
-              {FILTER_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveFilter(tab.key)}
-                  className={`
-                    flex items-center gap-1.5 rounded-lg px-3 py-1.5
-                    text-xs font-medium transition-all duration-200
-                    ${activeFilter === tab.key
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-300 hover:bg-white/5 border border-transparent'
-                    }
-                  `}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
+            {/* Type filter: one choice (the dashboard's segmented control); a phone swipes it sideways */}
+            <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+              <SegmentedControl
+                aria-label="Show"
+                value={activeFilter}
+                onChange={(v) => setActiveFilter(v as FilterType)}
+                data={FILTER_TABS.map((tab) => ({ value: tab.key, label: <span className="flex items-center gap-1.5">{tab.icon}{tab.label}</span> }))}
+              />
             </div>
 
             {/* Search */}
@@ -669,7 +659,7 @@ export default function Activity() {
                 "
               />
               {searchQuery && (
-                <button
+                <button aria-label="Clear the search"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
                 >
@@ -756,7 +746,7 @@ export default function Activity() {
                   {/* Action type filter */}
                   <div className="flex items-center gap-1.5">
                     <ListFilter size={13} className="text-slate-500" />
-                    <select
+                    <select aria-label="Filter by action"
                       value={auditActionFilter}
                       onChange={(e) => setAuditActionFilter(e.target.value)}
                       className="rounded-lg px-2.5 py-1.5 text-xs bg-slate-900/60 border border-white/10 text-slate-300 focus:outline-none focus:border-emerald-500/40 transition-colors appearance-none cursor-pointer"
@@ -780,7 +770,7 @@ export default function Activity() {
                       className="w-full rounded-lg pl-8 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-600 bg-slate-900/60 border border-white/10 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-200"
                     />
                     {auditFilter && (
-                      <button
+                      <button aria-label="Clear the filter"
                         onClick={() => setAuditFilter('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
                       >

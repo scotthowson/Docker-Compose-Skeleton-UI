@@ -167,7 +167,7 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
               <p className="text-[10px] text-slate-500">{editing ? `${initial?.name} is rebuilt with the settings below` : 'Configure a new isolated network'}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={18} /></button>
+          <button aria-label="Close" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={18} /></button>
         </div>
 
         {editing && (
@@ -432,7 +432,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
                 Edit
               </button>
             )}
-            <button onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
+            <button aria-label="Close" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
               <X size={18} />
             </button>
           </div>
@@ -550,7 +550,7 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
                 <div className="mt-4 pt-4 border-t border-white/5">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Connect a container</p>
                   <div className="flex items-center gap-2">
-                    <select
+                    <select aria-label="Connect a container"
                       value={connectTarget}
                       onChange={(e) => setConnectTarget(e.target.value)}
                       disabled={connectable.length === 0}
@@ -871,13 +871,13 @@ export default function Networks() {
         />
       )}
 
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10 flex items-center justify-center">
+      {/* Page header — the actions wrap under the title on a phone instead of running off it */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10 flex items-center justify-center shrink-0">
             <Network className="w-5 h-5 text-blue-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Networks</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
             {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={networksLoading && !!networksData} /></div>}
             <p className="text-sm text-slate-400">
