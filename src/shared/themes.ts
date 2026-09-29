@@ -671,7 +671,7 @@ const SPECS: BuiltInSpec[] = [
     description: 'The dashboard as shipped: slate glass with emerald and cyan.',
     mode: 'dark',
     dark: { ...STOCK_DARK_PALETTE },
-    light: pal('059669 0891b2  f1f5f9 ffffff e2e8f0 cbd5e1  0f172a 607086  047857 b35207 be123c 0e7490'),
+    light: pal('059669 0891b2  f1f5f9 ffffff e2e8f0 cbd5e1  0f172a 475569  047857 b35207 be123c 0e7490'),
     looks: { dark: 'Slate', light: 'Daylight' },
   },
   {

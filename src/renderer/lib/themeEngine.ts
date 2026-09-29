@@ -183,23 +183,39 @@ const FAMILY_HEXES: Record<'success' | 'warning' | 'danger' | 'info', Record<str
 
 /** the steps of a look's neutral scale that stand in for Tailwind's slate, white and black */
 interface Ramp {
-  /** text ramp (text-slate-100 … 700): dark: dimmer = toward the background; light: slate-500/600 read darker than 400, so toward text */
+  /**
+   * The text ramp (text-slate-100 … 700) keeps the dark design's order of emphasis in both looks: 100
+   * headings, 300 body, 400 (= muted) secondary text, 500/600 quieter notes, 700 separators and the
+   * faintest icons. Each step moves from muted toward the background; in a light look 500 and 600 stop
+   * where they would drop under AA on the background or the surface.
+   */
   t100: string; t200: string; t300: string; t400: string; t500: string; t600: string; t700: string
   /** neutral solids (bg/border slate-500/600/700) between the raised surface and muted text */
   n500: string; n600: string; n700: string
 }
 
+/** a colour moved toward another by up to `most`, as far as it can go and still reach `min` against each backdrop */
+function fadeWithin(c: string, toward: string, most: number, against: string[], min: number): string {
+  let best = c
+  for (let k = 0.02; k <= most + 1e-9; k += 0.02) {
+    const next = mixHex(c, toward, k)
+    if (!against.every((b) => contrastRatio(next, b) >= min)) break
+    best = next
+  }
+  return best
+}
+
 function rampOf(p: ThemePalette, mode: ThemeMode): Ramp {
   const light = mode === 'light'
-  const { bg, surfaceRaised: raised, text, textMuted: muted } = p
+  const { bg, surface, surfaceRaised: raised, text, textMuted: muted } = p
   return {
     t100: text,
     t200: mixHex(text, muted, light ? 0.1 : 0.16),
     t300: mixHex(text, muted, light ? 0.3 : 0.4),
     t400: muted,
-    t500: light ? mixHex(muted, text, 0.35) : mixHex(muted, bg, 0.3),
-    t600: light ? mixHex(muted, text, 0.55) : mixHex(muted, bg, 0.5),
-    t700: light ? mixHex(muted, text, 0.7) : mixHex(muted, bg, 0.65),
+    t500: light ? fadeWithin(muted, bg, 0.25, [bg, surface], 4.5) : mixHex(muted, bg, 0.3),
+    t600: light ? fadeWithin(muted, bg, 0.4, [bg, surface], 4.5) : mixHex(muted, bg, 0.5),
+    t700: mixHex(muted, bg, light ? 0.62 : 0.65),
     n500: mixHex(raised, muted, 0.6),
     n600: mixHex(raised, muted, 0.36),
     n700: mixHex(raised, muted, 0.2),
@@ -327,7 +343,10 @@ function emitClasses(s: Sheet, p: ThemePalette, stock: ThemePalette, mode: Theme
       s.cls(cls, rgba(p.text, alpha * (prop === 'shadow' ? 0.2 : 0.4)))
       continue
     }
-    if (value) s.cls(cls, alpha === null ? value : rgba(value, alpha))
+    // dimmed text (text-amber-400/80, text-slate-500/80) reads as the solid step on a light page: the
+    // dimming was meant for bright text on dark glass; faint separators (/[0.06]) stay translucent
+    const solid = light && fg && alpha !== null && alpha >= 0.5
+    if (value) s.cls(cls, alpha === null || solid ? value : rgba(value, alpha))
   }
 
   // Text written onto a solid status colour: the dark design pairs bright chips with dark text
