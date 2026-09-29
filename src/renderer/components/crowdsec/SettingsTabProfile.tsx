@@ -626,10 +626,10 @@ function OverridesEditor({ rows, problems, scenarios, presets, rev, editing, dis
             const note = [label, installed ? installed.description : known > 1 ? `${known} installed scenarios` : known === 1 && pat.endsWith('*') ? '1 installed scenario' : ''].filter(Boolean).join(' · ')
             return (
               <li key={`${r.id}-${rev}`} className={`rounded-lg border p-2.5 ${pr.pattern || pr.length ? 'border-rose-500/25 bg-rose-500/[0.04]' : 'border-white/5 bg-white/[0.02]'}`}>
-                <div className="grid gap-2 md:grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] md:items-start">
-                  <span className="hidden md:flex h-9 items-center justify-center text-[11px] tabular-nums text-slate-600" aria-hidden="true">{i + 1}</span>
+                <div className="grid gap-2 lg:grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] lg:items-start">
+                  <span className="hidden lg:flex h-9 items-center justify-center text-[11px] tabular-nums text-slate-600" aria-hidden="true">{i + 1}</span>
                   <ScenarioInput value={r.pattern} onChange={(v) => onPatch(r.id, { pattern: v })} scenarios={scenarios} ariaLabel={`Scenario, row ${i + 1}`} invalid={!!pr.pattern} disabled={disabled} autoFocus={justAdded === r.id} />
-                  <div className="flex items-center justify-between gap-2 md:contents">
+                  <div className="flex items-center justify-between gap-2 lg:contents">
                     <CompactLength value={r.duration} onChange={(v) => onPatch(r.id, { duration: v })} presets={presets} ariaLabel={`Ban length, row ${i + 1}`} disabled={disabled} invalid={!!pr.length} />
                     <div className="flex items-center gap-1 shrink-0">
                       <button type="button" className={ICON_BTN} aria-label={`Move row ${i + 1} up`} title="Check this one earlier" disabled={disabled || i === 0} onClick={() => onMove(i, -1)}><ArrowUp size={13} /></button>
@@ -639,7 +639,7 @@ function OverridesEditor({ rows, problems, scenarios, presets, rev, editing, dis
                   </div>
                 </div>
                 {(pr.pattern || pr.length || pr.warn || note) && (
-                  <div className="md:pl-[1.75rem] mt-1.5 space-y-0.5">
+                  <div className="lg:pl-[1.75rem] mt-1.5 space-y-0.5">
                     {pr.pattern && <p className="text-[11px] text-rose-300" role="alert">{pr.pattern}</p>}
                     {pr.length && <p className="text-[11px] text-rose-300" role="alert">{pr.length}</p>}
                     {pr.warn && <p className="text-[11px] text-amber-300">{pr.warn}</p>}

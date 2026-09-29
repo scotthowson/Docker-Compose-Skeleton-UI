@@ -258,7 +258,7 @@ export function ProfileSentence({ d }: { d: Draft }) {
 /** a row of the settings list: what it is and what it does on the left, the control (and its default) on the right */
 export function Setting({ title, help, changed = false, hint, children, id }: { title: string; help: ReactNode; changed?: boolean; hint?: ReactNode; children: ReactNode; id?: string }) {
   return (
-    <div className="grid gap-x-8 gap-y-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]" data-setting={id}>
+    <div className="grid gap-x-8 gap-y-3 py-4 first:pt-0 last:pb-0 xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]" data-setting={id}>
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-sm font-medium text-slate-200">{title}</h3>
