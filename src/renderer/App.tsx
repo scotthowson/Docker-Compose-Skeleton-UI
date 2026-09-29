@@ -564,7 +564,7 @@ export default function App() {
           </div>
           <div className="text-center">
             <h1 className="text-lg font-semibold text-gradient">DCS Manager</h1>
-            <p className="text-xs text-slate-500 mt-1.5">Docker Compose Skeleton</p>
+            <p className="text-xs text-slate-500 mt-1.5">DCS Orchestrator</p>
           </div>
           <div className="w-32 h-0.5 rounded-full bg-white/[0.06] overflow-hidden">
             <div className="h-full w-1/3 rounded-full bg-emerald-500/40 animate-pulse" />

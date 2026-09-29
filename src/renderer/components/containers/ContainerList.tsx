@@ -16,13 +16,11 @@ import { EmptyState } from '../common/PageState'
 import FleetScopeChips from '../fleet/FleetScopeChips'
 import VmCapsule from '../fleet/VmCapsule'
 import PageHeader from '../common/PageHeader'
+import SortableTh from '../common/SortableTh'
 import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_QUIET } from '../../lib/ui'
 import type { FleetScope, ScopeMember } from '../../hooks/useFleetScope'
 import {
   Search,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   Box,
   CircleCheck,
   CircleX,
@@ -260,13 +258,6 @@ const ContainerList: React.FC<ContainerListProps> = ({
   const runningCount = containers.filter((c) => c.state.toLowerCase() === 'running').length
   const stoppedCount = containers.filter((c) => ['exited', 'dead'].includes(c.state.toLowerCase())).length
   const pausedCount = containers.filter((c) => c.state.toLowerCase() === 'paused').length
-
-  const SortIcon: React.FC<{ columnKey: SortKey }> = ({ columnKey }) => {
-    if (sort.key !== columnKey) return <ChevronsUpDown className="h-3 w-3 text-slate-500" />
-    return sort.direction === 'asc'
-      ? <ChevronUp className="h-3 w-3 text-emerald-400" />
-      : <ChevronDown className="h-3 w-3 text-emerald-400" />
-  }
 
   const favSet = new Set(favorites)
   // the page's own line (constants/pageTitles) unless it shows one part of a fleet
@@ -517,21 +508,15 @@ const ContainerList: React.FC<ContainerListProps> = ({
                 )}
                 <th className="w-8"><span className="sr-only">Favorite</span></th>
                 {COLUMNS.map((col, idx) => (
-                  <th
+                  <SortableTh
                     key={`${col.key}-${idx}`}
-                    onClick={() => handleSort(col.key)}
-                    className={`
-                      px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400
-                      cursor-pointer select-none hover:text-slate-200 transition-colors
-                      ${col.align === 'center' ? 'text-center' : 'text-left'}
-                      ${col.hiddenClass ?? ''}
-                    `}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {col.label}
-                      <SortIcon columnKey={col.key} />
-                    </span>
-                  </th>
+                    label={col.label}
+                    active={sort.key === col.key}
+                    direction={sort.direction}
+                    onSort={() => handleSort(col.key)}
+                    align={col.align === 'center' ? 'center' : 'left'}
+                    className={col.hiddenClass}
+                  />
                 ))}
                 <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">
                   Actions

@@ -53,7 +53,7 @@ const ALL_PAGES = [
   'dashboard', 'stacks', 'containers', 'images', 'health', 'uptime', 'networks', 'volumes', 'logs', 'system', 'diagnostics',
   'config', 'settings', 'bookmarks', 'activity', 'users', 'maintenance', 'environment', 'backup', 'terminal', 'cronjobs',
   'trends', 'updates', 'notifications', 'snapshots', 'templates', 'automations', 'topology', 'file-browser', 'disk-analysis',
-  'secrets', 'schedules', 'plugins', 'event-feed', 'export', 'dns', 'proxmox',
+  'secrets', 'schedules', 'plugins', 'event-feed', 'export', 'dns', 'proxmox', 'crowdsec',
 ]
 const list = (v, all) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : all)
 const PAGES = list(process.env.PAGES, ALL_PAGES)

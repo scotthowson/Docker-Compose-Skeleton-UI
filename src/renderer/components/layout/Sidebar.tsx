@@ -99,7 +99,7 @@ export function Sidebar() {
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
-  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Docker Compose Skeleton'
+  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'DCS Orchestrator'
   const systemStatus = useSystemStore((s) => s.status)
   const healthReport = useHealthStore((s) => s.report)
   const connectionStatus = useConnectionStore((s) => s.status)
