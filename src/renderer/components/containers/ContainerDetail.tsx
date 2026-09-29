@@ -27,6 +27,7 @@ import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import { NukeDialog } from './NukeDialog'
+import { Tooltip as Hint } from '@mantine/core'   // (recharts' Tooltip is the other one here)
 import OnDemandDialog from './OnDemandDialog'
 import HomarrChip from './HomarrChip'
 import ThemeButton from './ThemeButton'
@@ -943,7 +944,18 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         {/* Action buttons row — wraps on mobile */}
         <div className="flex flex-wrap items-center gap-2">
           {/* on demand is Sablier beside the Traefik that serves the route: a VM's containers are
-              served by the hub's Traefik and Sablier cannot wake them from there (not yet) */}
+              served by the hub's Traefik and Sablier cannot wake them from there (not yet); the button
+              stays visible for them, switched off, and says why */}
+          {isAdmin && member && (
+            <Hint label="Not for a container in a VM yet. Sablier has to run beside the Traefik that serves the route, and that is the hub's. Sablier has no login of its own, so it is not opened to the network the VM is on. Containers that run on the hub can start on demand." multiline w={320} withArrow>
+              <span className="inline-flex cursor-not-allowed">
+                <button type="button" disabled aria-disabled="true" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white/5 text-slate-500 border-white/10 opacity-60 pointer-events-none">
+                  <Moon className="h-3.5 w-3.5" />
+                  Start on demand
+                </button>
+              </span>
+            </Hint>
+          )}
           {isAdmin && !member && (
             <button
               onClick={() => setOnDemandOpen(true)}
