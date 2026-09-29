@@ -451,6 +451,12 @@ npm run electron
 | Windows | NSIS installer |
 | Android | APK (via Capacitor) |
 
+### Testing the UI
+
+`tests/ui-sweep.mjs` walks every page in both themes at desktop and phone width against a throwaway lab
+(`tests/lab/lab.sh start`: a mock Proxmox and API copies that never touch Docker) and fails on console errors,
+phone overflow, unnamed buttons, missing focus states and broken safe clicks — see [tests/README.md](tests/README.md).
+
 ---
 
 ## License
