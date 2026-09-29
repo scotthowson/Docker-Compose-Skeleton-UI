@@ -38,5 +38,6 @@ export const pageTitles: Record<PageId, string> = {
   export: 'Export Center',
   dns: 'DNS & Routes',
   proxmox: 'Proxmox',
+  crowdsec: 'CrowdSec',
   setup: 'Setup Wizard',
 }

@@ -159,6 +159,11 @@ import type {
   PluginListResponse,
   PluginCatalogResponse,
   CrowdSecStatusResponse,
+  CrowdSecUnbanResponse, CrowdSecDecisionQuery, CrowdSecDecisionsResponse, CrowdSecBanBody, CrowdSecBanResponse, CrowdSecBulkDeleteResponse, CrowdSecImportResponse,
+  CrowdSecExportResponse, CrowdSecAlertsResponse, CrowdSecAlertDetail, CrowdSecAllowlistResponse, CrowdSecAllowAddBody, CrowdSecAllowAddResponse,
+  CrowdSecBouncersResponse, CrowdSecMachinesResponse, CrowdSecBouncerAddResponse, CrowdSecMetricsResponse, CrowdSecHubResponse, CrowdSecHubAvailableResponse,
+  CrowdSecHubChangeResponse, CrowdSecLogsResponse, CrowdSecSimulationResponse, CrowdSecSimulationSetResponse, CrowdSecCommunityResponse, CrowdSecSettingsResponse,
+  CrowdSecSettingsBody, CrowdSecNotifyResponse, CrowdSecNotifyBody, CrowdSecPreviewResponse, CrowdSecNotifyTestResponse, CrowdSecServiceResponse, CrowdSecFix,
   PluginInstallResponse,
   PluginDeleteResponse,
   PluginHooksListResponse,
@@ -1833,12 +1838,25 @@ export function getOsUpdateStatus(): Promise<OsUpdateStatusResponse> {
 }
 
 // ---------------------------------------------------------------------------
-// CrowdSec
+// CrowdSec (the dashboard card, and the CrowdSec page — every call may name a fleet member)
 // ---------------------------------------------------------------------------
 
-/** GET /crowdsec/status — presence, whitelist state and active decisions */
-export function crowdsecStatus(): Promise<CrowdSecStatusResponse> {
-  return apiClient.get<CrowdSecStatusResponse>('/crowdsec/status')
+/** an address or network for a URL path: only the characters an address has, the slash of a range stays a slash */
+function csAddr(v: string): string {
+  return v.replace(/[^0-9a-fA-F:./]/g, '')
+}
+function csQuery(q: Record<string, string | number | boolean | undefined | null>): string {
+  const parts: string[] = []
+  for (const [k, v] of Object.entries(q)) {
+    if (v === undefined || v === null || v === '' || v === false) continue
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+  }
+  return parts.length ? `?${parts.join('&')}` : ''
+}
+
+/** GET /crowdsec/status — which state CrowdSec is in, what is wrong and how to fix it, and the numbers for the status strip */
+export function crowdsecStatus(member?: string | null): Promise<CrowdSecStatusResponse> {
+  return apiClient.get<CrowdSecStatusResponse>(memberPath(member, '/crowdsec/status'))
 }
 
 /** POST /crowdsec/unban-me — remove bans on the caller's and the home public address */
@@ -1851,9 +1869,161 @@ export function crowdsecTrust(ip?: string): Promise<{ success: boolean; addresse
   return apiClient.post('/crowdsec/trust', ip ? { ip } : {})
 }
 
-/** DELETE /crowdsec/decisions/:ip — unban one address */
-export function crowdsecUnban(ip: string): Promise<{ success: boolean; ip: string; message: string }> {
-  return apiClient.delete(`/crowdsec/decisions/${encodeURIComponent(ip)}`)
+/** DELETE /crowdsec/decisions/:value — lift the ban on one address or network */
+export function crowdsecUnban(value: string, member?: string | null): Promise<CrowdSecUnbanResponse> {
+  return apiClient.delete(memberPath(member, `/crowdsec/decisions/${csAddr(value)}`))
+}
+
+/** GET /crowdsec/decisions — active bans, filtered and sorted on the server */
+export function crowdsecDecisions(query: CrowdSecDecisionQuery = {}, member?: string | null): Promise<CrowdSecDecisionsResponse> {
+  return apiClient.get<CrowdSecDecisionsResponse>(memberPath(member, `/crowdsec/decisions${csQuery({ ...query })}`))
+}
+
+/** POST /crowdsec/decisions — ban an address or a network (a duration, or permanent = ten years) */
+export function crowdsecBan(body: CrowdSecBanBody, member?: string | null): Promise<CrowdSecBanResponse> {
+  return apiClient.post<CrowdSecBanResponse>(memberPath(member, '/crowdsec/decisions'), body, member ? 60000 : undefined)
+}
+
+/** POST /crowdsec/decisions/delete — lift several bans at once */
+export function crowdsecBulkUnban(body: { ids?: number[]; values?: string[] }, member?: string | null): Promise<CrowdSecBulkDeleteResponse> {
+  return apiClient.post<CrowdSecBulkDeleteResponse>(memberPath(member, '/crowdsec/decisions/delete'), body, 120000)
+}
+
+/** POST /crowdsec/decisions/import — ban many addresses from CSV, JSON or one address per line */
+export function crowdsecImportBans(body: { format?: 'auto' | 'csv' | 'json' | 'values'; content: string; duration?: string; reason?: string; permanent?: boolean }, member?: string | null): Promise<CrowdSecImportResponse> {
+  return apiClient.post<CrowdSecImportResponse>(memberPath(member, '/crowdsec/decisions/import'), body, 120000)
+}
+
+/** GET /crowdsec/decisions/export — the active bans as CSV or JSON text */
+export function crowdsecExportBans(format: 'csv' | 'json', query: CrowdSecDecisionQuery = {}, member?: string | null): Promise<CrowdSecExportResponse> {
+  return apiClient.get<CrowdSecExportResponse>(memberPath(member, `/crowdsec/decisions/export${csQuery({ ...query, format })}`))
+}
+
+/** GET /crowdsec/alerts — recent detections */
+export function crowdsecAlerts(query: { window?: '1h' | '6h' | '24h' | '7d' | '30d'; q?: string; scenario?: string; country?: string; ip?: string; simulated?: 'any' | 'yes' | 'no'; limit?: number; offset?: number } = {}, member?: string | null): Promise<CrowdSecAlertsResponse> {
+  return apiClient.get<CrowdSecAlertsResponse>(memberPath(member, `/crowdsec/alerts${csQuery({ ...query })}`))
+}
+
+/** GET /crowdsec/alerts/:id — one alert with the requests that raised it */
+export function crowdsecAlert(id: number, member?: string | null): Promise<{ alert: CrowdSecAlertDetail }> {
+  return apiClient.get<{ alert: CrowdSecAlertDetail }>(memberPath(member, `/crowdsec/alerts/${Math.floor(id)}`))
+}
+
+/** GET /crowdsec/allowlist — everything that is never banned */
+export function crowdsecAllowlist(member?: string | null): Promise<CrowdSecAllowlistResponse> {
+  return apiClient.get<CrowdSecAllowlistResponse>(memberPath(member, '/crowdsec/allowlist'))
+}
+/** POST /crowdsec/allowlist — never ban an address or network */
+export function crowdsecAllow(body: CrowdSecAllowAddBody, member?: string | null): Promise<CrowdSecAllowAddResponse> {
+  return apiClient.post<CrowdSecAllowAddResponse>(memberPath(member, '/crowdsec/allowlist'), body, member ? 60000 : undefined)
+}
+/** DELETE /crowdsec/allowlist/:value */
+export function crowdsecDisallow(value: string, member?: string | null): Promise<{ success: boolean; value: string; mechanism: string; message: string }> {
+  return apiClient.delete(memberPath(member, `/crowdsec/allowlist/${csAddr(value)}`))
+}
+
+/** GET /crowdsec/bouncers */
+export function crowdsecBouncers(member?: string | null): Promise<CrowdSecBouncersResponse> {
+  return apiClient.get<CrowdSecBouncersResponse>(memberPath(member, '/crowdsec/bouncers'))
+}
+/** GET /crowdsec/machines */
+export function crowdsecMachines(member?: string | null): Promise<CrowdSecMachinesResponse> {
+  return apiClient.get<CrowdSecMachinesResponse>(memberPath(member, '/crowdsec/machines'))
+}
+/** POST /crowdsec/bouncers — register a bouncer; the API key is in the answer, once */
+export function crowdsecAddBouncer(name: string, member?: string | null): Promise<CrowdSecBouncerAddResponse> {
+  return apiClient.post<CrowdSecBouncerAddResponse>(memberPath(member, '/crowdsec/bouncers'), { name })
+}
+/** DELETE /crowdsec/bouncers/:name */
+export function crowdsecDeleteBouncer(name: string, member?: string | null): Promise<{ success: boolean; name: string; was_dcs_bouncer: boolean; message: string }> {
+  return apiClient.delete(memberPath(member, `/crowdsec/bouncers/${encodeURIComponent(name)}`))
+}
+/** POST /crowdsec/bouncers/register-traefik — the fix for "bans are not enforced at the proxy" */
+export function crowdsecRegisterTraefikBouncer(member?: string | null): Promise<{ success: boolean; name: string; message: string }> {
+  return apiClient.post(memberPath(member, '/crowdsec/bouncers/register-traefik'), undefined, 120000)
+}
+
+/** GET /crowdsec/metrics — what has been happening (window 24h, 7d or 30d) */
+export function crowdsecMetrics(window: '24h' | '7d' | '30d' = '24h', member?: string | null): Promise<CrowdSecMetricsResponse> {
+  return apiClient.get<CrowdSecMetricsResponse>(memberPath(member, `/crowdsec/metrics${csQuery({ window })}`))
+}
+
+/** GET /crowdsec/hub — installed collections, scenarios, parsers and suggestions */
+export function crowdsecHub(member?: string | null): Promise<CrowdSecHubResponse> {
+  return apiClient.get<CrowdSecHubResponse>(memberPath(member, '/crowdsec/hub'))
+}
+/** GET /crowdsec/hub?type=&available=1 — what can be installed */
+export function crowdsecHubAvailable(type: 'collections' | 'scenarios' | 'parsers', q = '', limit = 40, member?: string | null): Promise<CrowdSecHubAvailableResponse> {
+  return apiClient.get<CrowdSecHubAvailableResponse>(memberPath(member, `/crowdsec/hub${csQuery({ type, available: 1, q, limit })}`))
+}
+/** POST /crowdsec/hub/update and /upgrade, /install, /remove */
+export function crowdsecHubUpdate(member?: string | null): Promise<CrowdSecHubChangeResponse> {
+  return apiClient.post(memberPath(member, '/crowdsec/hub/update'), undefined, 150000)
+}
+export function crowdsecHubUpgrade(member?: string | null): Promise<CrowdSecHubChangeResponse> {
+  return apiClient.post(memberPath(member, '/crowdsec/hub/upgrade'), undefined, 240000)
+}
+export function crowdsecHubInstall(type: 'collections' | 'scenarios' | 'parsers', name: string, member?: string | null): Promise<CrowdSecHubChangeResponse> {
+  return apiClient.post(memberPath(member, '/crowdsec/hub/install'), { type, name }, 200000)
+}
+export function crowdsecHubRemove(type: 'collections' | 'scenarios' | 'parsers', name: string, member?: string | null): Promise<CrowdSecHubChangeResponse> {
+  return apiClient.post(memberPath(member, '/crowdsec/hub/remove'), { type, name }, 200000)
+}
+
+/** GET /crowdsec/logs — the tail of the container's log */
+export function crowdsecLogs(opts: { lines?: number; level?: 'all' | 'warn' | 'error'; q?: string; lapi?: boolean } = {}, member?: string | null): Promise<CrowdSecLogsResponse> {
+  return apiClient.get<CrowdSecLogsResponse>(memberPath(member, `/crowdsec/logs${csQuery({ lines: opts.lines, level: opts.level, q: opts.q, lapi: opts.lapi ? 1 : undefined })}`))
+}
+
+/** GET /crowdsec/simulation and POST — scenarios that alert without banning */
+export function crowdsecSimulation(member?: string | null): Promise<CrowdSecSimulationResponse> {
+  return apiClient.get<CrowdSecSimulationResponse>(memberPath(member, '/crowdsec/simulation'))
+}
+export function crowdsecSetSimulation(body: { scenario?: string; global?: boolean; enabled: boolean }, member?: string | null): Promise<CrowdSecSimulationSetResponse> {
+  return apiClient.post<CrowdSecSimulationSetResponse>(memberPath(member, '/crowdsec/simulation'), body, 60000)
+}
+
+/** GET /crowdsec/community — community blocklist and console */
+export function crowdsecCommunity(member?: string | null): Promise<CrowdSecCommunityResponse> {
+  return apiClient.get<CrowdSecCommunityResponse>(memberPath(member, '/crowdsec/community'))
+}
+
+/** GET /crowdsec/settings and PUT — the ban profile (restarts CrowdSec, so the timeout is long) */
+export function crowdsecSettings(member?: string | null): Promise<CrowdSecSettingsResponse> {
+  return apiClient.get<CrowdSecSettingsResponse>(memberPath(member, '/crowdsec/settings'))
+}
+export function crowdsecSaveSettings(body: CrowdSecSettingsBody, member?: string | null): Promise<CrowdSecSettingsResponse> {
+  return apiClient.put<CrowdSecSettingsResponse>(memberPath(member, '/crowdsec/settings'), body, 180000)
+}
+
+/** GET /crowdsec/notifications, PUT, and the preview / test / reset calls — the Discord alerts */
+export function crowdsecNotify(member?: string | null): Promise<CrowdSecNotifyResponse> {
+  return apiClient.get<CrowdSecNotifyResponse>(memberPath(member, '/crowdsec/notifications'))
+}
+export function crowdsecSaveNotify(body: CrowdSecNotifyBody, member?: string | null): Promise<CrowdSecNotifyResponse> {
+  return apiClient.put<CrowdSecNotifyResponse>(memberPath(member, '/crowdsec/notifications'), body, 180000)
+}
+export function crowdsecPreviewNotify(body: { settings?: CrowdSecNotifyBody['settings']; sample?: string; alert_id?: number }, member?: string | null): Promise<CrowdSecPreviewResponse> {
+  return apiClient.post<CrowdSecPreviewResponse>(memberPath(member, '/crowdsec/notifications/preview'), body, 30000)
+}
+export function crowdsecTestNotify(body: { settings?: CrowdSecNotifyBody['settings']; sample?: string; webhook_url?: string; include_mention?: boolean }, member?: string | null): Promise<CrowdSecNotifyTestResponse> {
+  return apiClient.post<CrowdSecNotifyTestResponse>(memberPath(member, '/crowdsec/notifications/test'), body, 45000)
+}
+export function crowdsecResetNotify(member?: string | null): Promise<CrowdSecNotifyResponse> {
+  return apiClient.post<CrowdSecNotifyResponse>(memberPath(member, '/crowdsec/notifications/reset'), undefined, 180000)
+}
+
+/** POST /crowdsec/service — start, restart or reload the container */
+export function crowdsecService(action: 'start' | 'restart' | 'reload', member?: string | null): Promise<CrowdSecServiceResponse> {
+  return apiClient.post<CrowdSecServiceResponse>(memberPath(member, '/crowdsec/service'), { action }, 150000)
+}
+
+/** run a fix button the status offered (kind "api") */
+export function crowdsecRunFix(fix: CrowdSecFix, member?: string | null): Promise<{ success?: boolean; message?: string }> {
+  const path = memberPath(member, fix.path)
+  if (fix.method === 'POST') return apiClient.post(path, fix.body ?? undefined, 150000)
+  if (fix.method === 'PUT') return apiClient.put(path, fix.body ?? undefined, 150000)
+  return apiClient.get(path)
 }
 
 // =============================================================================

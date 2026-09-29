@@ -10,7 +10,7 @@ import {
   LogOut, RefreshCw, Download, Lock, Shield, UserCircle, Bookmark, Zap, Users,
   FileCode, Archive, Database, TerminalSquare, CalendarClock,
   TrendingUp, ArrowUpCircle, Bell as BellIcon, Camera, LayoutTemplate, Bot, Share2,
-  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks, Globe, Server, BookOpen, ExternalLink,
+  FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks, Globe, Server, BookOpen, ExternalLink, ShieldCheck,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSystemStore } from '../stores/systemStore'
@@ -88,6 +88,7 @@ const pageIcon: Record<PageId, React.ReactNode> = {
   export: <Download size={16} />,
   dns: <Globe size={16} />,
   proxmox: <Server size={16} />,
+  crowdsec: <ShieldCheck size={16} />,
   setup: <Sparkles size={16} />,
 }
 
@@ -129,6 +130,7 @@ const pageLabels: Record<PageId, string> = {
   export: 'Export Center',
   dns: 'DNS & Routes',
   proxmox: 'Proxmox',
+  crowdsec: 'CrowdSec',
   setup: 'Setup Wizard',
 }
 
@@ -263,6 +265,7 @@ export function CommandPalette() {
       templates: 'Compose templates, scaffolding, presets',
       dns: 'Traefik routes, Cloudflare DNS records, certificates',
       proxmox: 'VMs and containers on your Proxmox host: state, load, power',
+      crowdsec: 'Intrusion prevention: bans, alerts, allowlist, countries, Discord alerts, ban length',
       updates: 'Image updates, available upgrades',
       trends: 'Resource trends, metrics, history, graphs',
       terminal: 'Terminal, shell, command line, exec',
@@ -299,6 +302,7 @@ export function CommandPalette() {
       templates: ['template', 'scaffold', 'preset', 'compose template'],
       dns: ['dns', 'routes', 'cloudflare', 'domain', 'traefik', 'subdomain', 'certificate'],
       proxmox: ['proxmox', 'pve', 'vm', 'virtual machine', 'lxc', 'hypervisor', 'node'],
+      crowdsec: ['crowdsec', 'ban', 'unban', 'block', 'blocklist', 'allowlist', 'whitelist', 'attack', 'intrusion', 'fail2ban', 'bouncer', 'security', 'country', 'ip', 'brute force'],
       updates: ['update', 'upgrade', 'new version', 'outdated'],
       trends: ['trend', 'metric', 'chart', 'graph', 'history', 'cpu usage', 'memory usage'],
       terminal: ['terminal', 'shell', 'bash', 'exec', 'command', 'cli', 'ssh'],
@@ -316,7 +320,7 @@ export function CommandPalette() {
       export: ['export', 'download', 'report', 'backup', 'json'],
     }
 
-    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'event-feed', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'export', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings', 'dns', 'proxmox']
+    const allPages: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks', 'activity', 'event-feed', 'topology', 'file-browser', 'templates', 'updates', 'trends', 'secrets', 'schedules', 'plugins', 'terminal', 'cronjobs', 'disk-analysis', 'maintenance', 'environment', 'backup', 'export', 'notifications', 'automations', 'snapshots', 'logs', 'system', 'diagnostics', 'users', 'config', 'settings', 'dns', 'crowdsec', 'proxmox']
     // Filter out admin-only pages for non-admin users
     const pages = allPages.filter((p) => !ADMIN_ONLY_PAGES.has(p) || isAdmin)
     for (const page of pages) {

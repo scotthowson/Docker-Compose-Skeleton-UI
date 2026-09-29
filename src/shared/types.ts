@@ -1457,6 +1457,7 @@ export type PageId =
   | 'export'
   | 'dns'
   | 'proxmox'
+  | 'crowdsec'
   | 'setup'
 
 /**
@@ -2769,18 +2770,121 @@ export interface TotpVerifyResponse { success: boolean; message: string }
 export interface TotpValidateResponse { success: boolean; token?: string; username?: string; role?: string }
 
 
-// GET /crowdsec/status
+// =============================================================================
+// CrowdSec (the CrowdSec page; the API lives in .lib/crowdsec.sh and .lib/crowdsec-config.sh)
+// =============================================================================
+
+/** One active ban (GET /crowdsec/decisions). `ip` and `since` are the older names of `value` and `created_at`. */
 export interface CrowdSecDecision {
   ip: string
-  scope?: string
+  value?: string
+  id?: number
+  scope?: 'Ip' | 'Range' | string
   scenario?: string
   origin?: string
   duration?: string
   type?: string
   since?: string
   country?: string
+  simulated?: boolean
+  /** seconds left when the answer was made; `expires_at` (ISO) is the fixed point for a live countdown */
+  seconds_left?: number
+  expires_at?: string
+  /** a ban of a year or more: DCS bans "for ever" as ten years */
+  permanent?: boolean
+  created_at?: string
+  alert_id?: number
+  events?: number
+  as_number?: string
+  as_name?: string
+  latitude?: number | null
+  longitude?: number | null
+  machine?: string
+  kind?: string
+  /** plain words for what it is: Web probing, Manual ban, Community blocklist … */
+  label?: string
+  family?: 'bruteforce' | 'exploit' | 'probe' | 'manual' | 'community' | 'other'
 }
 
+export type CrowdSecState =
+  | 'healthy' | 'not_deployed' | 'stopped' | 'crash_loop' | 'starting' | 'unhealthy' | 'lapi_unreachable' | 'docker_unavailable'
+
+export interface CrowdSecFix {
+  id: string
+  label: string
+  /** api: call `method path` with `body`; ui: the page goes somewhere (logs, deploy, hub …) */
+  kind: 'api' | 'ui'
+  method: string
+  path: string
+  body: unknown
+  primary: boolean
+}
+
+export interface CrowdSecIssue {
+  code: string
+  severity: 'info' | 'warning' | 'error'
+  title: string
+  detail: string
+  fix: CrowdSecFix | null
+}
+
+export interface CrowdSecTraefikInfo {
+  present: boolean
+  container?: string
+  state?: string
+  running?: boolean
+  project?: string
+  workdir?: string
+}
+
+export interface CrowdSecPreflight {
+  docker: { ok: boolean; version: string }
+  traefik: CrowdSecTraefikInfo
+  template: { name: string; title: string; description: string; target_stack: string; variables: { name: string; label: string; description: string; default: string; required: boolean }[] } | null
+  target_stack: string
+  target_reason: string
+  stacks: string[]
+  discord: { configured: boolean }
+  enforcement: boolean
+  blockers: string[]
+  warnings: string[]
+  can_deploy: boolean
+}
+
+export interface CrowdSecCounts {
+  decisions: number
+  decisions_active: number
+  simulated: number
+  /** community blocklist entries CrowdSec holds (not listed on the page) */
+  community: number
+  alerts_24h: number
+  machines: number
+  bouncers: number
+  collections: number
+  scenarios: number
+  parsers: number
+  updates: number
+  countries_24h: number
+  sources_24h: number
+}
+
+export interface CrowdSecAcquisitionSource { name: string; reads: number; parsed: number; unparsed: number; pour: number }
+
+export interface CrowdSecBouncerBrief { registered: boolean; name: string; last_pull?: string | null; type?: string; version?: string; ip_address?: string }
+
+export interface CrowdSecMachine {
+  id: string
+  ip_address: string
+  version: string
+  validated: boolean
+  last_push: string | null
+  last_heartbeat: string | null
+  os: string
+  auth_type?: string
+  datasources: Record<string, number>
+}
+
+/** GET /crowdsec/status — the state CrowdSec is in, and (when it is healthy) the numbers for the status strip. The first four fields are the ones the dashboard card has always used. */
 export interface CrowdSecStatusResponse {
   installed: boolean
   running: boolean
@@ -2792,7 +2896,339 @@ export interface CrowdSecStatusResponse {
   whitelist?: { synced_at?: string; public_ip?: string; file?: string; addresses?: string[]; reloaded?: boolean }
   decisions?: CrowdSecDecision[]
   decision_count?: number
+  /** absent on a DCS older than the CrowdSec page */
+  state?: CrowdSecState
+  title?: string
+  detail?: string
+  fixes?: CrowdSecFix[]
+  issues?: CrowdSecIssue[]
+  deployed?: boolean
+  container_state?: string
+  health?: string
+  image?: string
+  restart_count?: number
+  exit_code?: number
+  started_at?: string
+  stack?: string | null
+  defined_in?: string | null
+  docker?: { ok: boolean; version: string }
+  traefik?: CrowdSecTraefikInfo
+  version?: string
+  version_number?: string
+  log_tail?: string[]
+  preflight?: CrowdSecPreflight | null
+  generated_at?: number
+  allowlist_mechanism?: 'native' | 'parser' | 'unknown'
+  features?: { allowlists: boolean; decisions_import: boolean; simulation: boolean }
+  counts?: CrowdSecCounts
+  bouncer?: CrowdSecBouncerBrief
+  bouncers?: CrowdSecBouncerRow[]
+  machines?: CrowdSecMachine[]
+  acquisition?: { sources: CrowdSecAcquisitionSource[]; reads: number; parsed: number; unparsed: number; parse_rate: number | null }
+  enforcement?: { routes_dir: string; middleware_file: string; middleware_present: boolean; in_chain: boolean }
 }
+
+export interface CrowdSecFacet { value: string; count: number }
+
+/** GET /crowdsec/decisions */
+export interface CrowdSecDecisionsResponse {
+  decisions: CrowdSecDecision[]
+  count: number
+  total: number
+  offset: number
+  limit: number
+  as_of: number
+  truncated: boolean
+  community: number
+  facets: {
+    origins: CrowdSecFacet[]
+    scenarios: CrowdSecFacet[]
+    countries: CrowdSecFacet[]
+    types: CrowdSecFacet[]
+    scopes: CrowdSecFacet[]
+    unknown_country: number
+  }
+}
+
+export interface CrowdSecDecisionQuery {
+  q?: string
+  scope?: 'ip' | 'range' | ''
+  origin?: string
+  type?: string
+  country?: string
+  scenario?: string
+  simulated?: 'any' | 'yes' | 'no'
+  sort?: 'created' | 'expires' | 'value' | 'country' | 'scenario' | 'origin'
+  dir?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
+}
+
+export interface CrowdSecBanBody { value: string; duration?: string; permanent?: boolean; reason?: string }
+export interface CrowdSecBanResponse {
+  success: boolean
+  value: string
+  scope: 'Ip' | 'Range'
+  duration: string
+  reason: string
+  permanent: boolean
+  replaced: number
+  expires_at: string
+  message: string
+}
+export interface CrowdSecUnbanResponse { success: boolean; ip: string; value: string; scope: string; deleted: number; message: string }
+export interface CrowdSecBulkDeleteResponse {
+  success: boolean
+  requested: number
+  deleted: number
+  failed: number
+  results: { id?: number | string; value?: string; ok: boolean; deleted: number; error?: string }[]
+}
+export interface CrowdSecImportResponse {
+  success: boolean
+  format: string
+  total: number
+  imported: number
+  skipped: number
+  allowlisted: number
+  skipped_entries: { line: number; value: string; reason: string; message: string }[]
+  error: string | null
+}
+export interface CrowdSecExportResponse { format: 'csv' | 'json'; filename: string; count: number; content: string; generated_at: number }
+
+export interface CrowdSecAlertSource {
+  value: string
+  ip: string
+  scope: string
+  range: string
+  country: string
+  as_number: string
+  as_name: string
+  latitude: number | null
+  longitude: number | null
+}
+export interface CrowdSecAlert {
+  id: number
+  scenario: string
+  message: string
+  events_count: number
+  created_at: string
+  start_at: string
+  stop_at: string
+  machine: string
+  kind: string
+  simulated: boolean
+  remediation: boolean
+  capacity: number
+  leakspeed: string
+  source: CrowdSecAlertSource
+  decisions: { id: number; type: string; value: string; scope: string; origin: string; duration: string; simulated: boolean }[]
+  label: string
+  family: 'bruteforce' | 'exploit' | 'probe' | 'manual' | 'other'
+  banned: boolean
+}
+export interface CrowdSecAlertsResponse {
+  alerts: CrowdSecAlert[]
+  count: number
+  total: number
+  window: string
+  offset: number
+  limit: number
+  as_of: number
+  retention_days: number
+  facets: { scenarios: CrowdSecFacet[]; countries: CrowdSecFacet[]; unknown_country: number }
+}
+export interface CrowdSecAlertDetail extends Omit<CrowdSecAlert, 'banned'> {
+  uuid: string
+  meta: { key: string; value: string }[]
+  context: Record<string, unknown>
+  events: { timestamp: string; fields: Record<string, string> }[]
+}
+
+export interface CrowdSecAllowEntry {
+  value: string
+  kind: 'ip' | 'range'
+  comment: string
+  created_at: string
+  expires_at: string | null
+  list: string | null
+  source: 'managed' | 'env' | 'allowlist' | 'other' | 'trusted'
+  managed: boolean
+  removable: boolean
+}
+export interface CrowdSecAllowlistResponse {
+  mechanism: 'native' | 'parser'
+  list_name: string | null
+  supports_expiry: boolean
+  note: string
+  entries: CrowdSecAllowEntry[]
+  lists: { name: string; description: string; items: number; created_at: string; updated_at: string }[]
+  count: number
+  client_ip: string
+  home: { public_ip: string; synced_at: string | null }
+}
+export interface CrowdSecAllowAddBody { value: string; comment?: string; expires?: string }
+export interface CrowdSecAllowAddResponse { success: boolean; value: string; kind: 'ip' | 'range'; mechanism: string; comment: string; expires_at: string | null; removed_bans: number; message: string }
+
+export interface CrowdSecBouncerRow {
+  name: string
+  type: string
+  version: string
+  ip_address: string
+  last_pull: string | null
+  created_at: string
+  revoked: boolean
+  auto_created?: boolean
+  dcs?: boolean
+  status?: 'active' | 'idle' | 'never' | 'revoked'
+}
+export interface CrowdSecBouncersResponse {
+  bouncers: CrowdSecBouncerRow[]
+  count: number
+  dcs_bouncer: CrowdSecBouncerRow | null
+  name: string
+  enforcement: { routes_dir: string; middleware_file: string; middleware_present: boolean; in_chain: boolean }
+  traefik: CrowdSecTraefikInfo
+  traefik_registerable: boolean
+}
+export interface CrowdSecMachinesResponse { machines: CrowdSecMachine[]; count: number }
+export interface CrowdSecBouncerAddResponse { success: boolean; name: string; api_key: string; shown_once: boolean; message: string }
+
+export interface CrowdSecMetricsResponse {
+  window: '24h' | '7d' | '30d'
+  since: number
+  retention_days: number
+  window_supported: boolean
+  totals: { alerts: number; events: number; sources: number; countries: number; scenarios: number; banned_now: number; manual: number }
+  bucket_seconds: number
+  timeline: { t: number; alerts: number; events: number }[]
+  scenarios: { scenario: string; label: string; family: string; alerts: number; events: number; sources: number }[]
+  countries: { code: string; alerts: number; events: number; sources: number }[]
+  unknown_country: number
+  sources: { value: string; country: string; as_number: string; as_name: string; alerts: number; events: number; last_seen: number; scenarios: string[]; banned: boolean }[]
+  networks: { as_number: string; as_name: string; alerts: number; sources: number }[]
+  bans_by_country: { code: string; count: number }[]
+  map_points: { lat: number; lon: number; country: string; alerts: number; sources: number }[]
+  acquisition: { source: string; reads: number; parsed: number; unparsed: number; poured: number }[]
+  parsers: { name: string; hits: number; parsed: number; unparsed: number }[]
+  decisions_by_origin: { origin: string; count: number }[]
+  lapi_requests: number
+  as_of: number
+}
+
+export interface CrowdSecHubItem { name: string; version: string; description: string; status: string; enabled: boolean; update: boolean; tainted: boolean; local: boolean }
+export interface CrowdSecHubResponse {
+  installed: { collections: CrowdSecHubItem[]; scenarios: CrowdSecHubItem[]; parsers: CrowdSecHubItem[] }
+  counts: { collections: number; scenarios: number; parsers: number; updates: number }
+  suggestions: { name: string; group: string; title: string; description: string; installed: boolean }[]
+}
+export interface CrowdSecHubAvailableResponse {
+  type: 'collections' | 'scenarios' | 'parsers'
+  items: { name: string; description: string; version: string; installed: boolean; update: boolean }[]
+  count: number
+  total: number
+}
+
+export interface CrowdSecLogLine { time: string; level: 'info' | 'warn' | 'error' | 'debug' | string; module: string; message: string }
+export interface CrowdSecLogsResponse { container: string; state: string; lines: CrowdSecLogLine[]; count: number; lapi_included: boolean }
+
+export interface CrowdSecSimulationResponse {
+  global: boolean
+  exclusions: string[]
+  scenarios: { name: string; description: string; simulated: boolean }[]
+  simulated_count: number
+  note: string
+}
+
+export interface CrowdSecCommunityResponse {
+  capi: { registered: boolean; reachable: boolean; sharing: boolean; pulling: boolean; console_blocklists: boolean; error: string | null }
+  console: { authenticated: boolean; enrolled: boolean; registered: boolean; decision_management: boolean; plan: string; sharing: Record<string, boolean> }
+  community_decisions: number
+  note: string
+}
+
+/** The ban profile: how long CrowdSec bans by itself */
+export interface CrowdSecProfileSettings {
+  duration: string
+  range_duration: string
+  escalate: { enabled: boolean; max: string }
+  overrides: { pattern: string; duration: string }[]
+}
+export interface CrowdSecSettingsResponse {
+  mode: 'dcs' | 'stock' | 'custom' | 'missing'
+  editable: boolean
+  custom: boolean
+  profile: CrowdSecProfileSettings
+  manual_duration: string
+  defaults: CrowdSecProfileSettings
+  presets: string[]
+  limits: { auto_max: string; manual_max: string; overrides_max: number }
+  live: { file: string; profiles: string[]; notified: boolean; escalate: boolean; ip_duration: string | null; range_duration: string | null }
+  drift: boolean
+  backups: { name: string; kind: string; created_at: string; size: number }[]
+  raw: string | null
+  retention_days: number
+  help: { duration: string; escalate: string; overrides: string }
+  success?: boolean
+  applied?: { changed: boolean; message: string; backup: string | null }
+}
+export interface CrowdSecSettingsBody { profile?: Partial<Omit<CrowdSecProfileSettings, 'escalate'>> & { escalate?: Partial<CrowdSecProfileSettings['escalate']> }; manual_duration?: string; take_over?: boolean }
+
+export interface CrowdSecMessageField { name: string; value: string; inline: boolean }
+export interface CrowdSecNotifySettings {
+  v: number
+  enabled: boolean
+  webhook: { mode: 'global' | 'custom' | 'keep' }
+  identity: { name: string; avatar_url: string }
+  embed: { color_mode: 'auto' | 'fixed'; color: string }
+  mention: { mode: 'none' | 'role' | 'user' | 'here' | 'everyone'; id: string; text: string }
+  events: { bans: boolean; simulated: boolean; detect_only: boolean }
+  filters: { min_events: number; only: string[]; ignore: string[] }
+  delivery: { group_wait: number; group_threshold: number; max_retry: number; timeout: number }
+  message: { title: string; description: string; footer: string; link: string; timestamp: boolean; fields: CrowdSecMessageField[] }
+}
+export interface CrowdSecPlaceholder { name: string; group: string; label: string; example: string; description: string }
+export interface CrowdSecWebhookView {
+  mode: 'global' | 'custom' | 'keep'
+  configured: boolean
+  masked: string | null
+  sources: Record<'global' | 'custom' | 'keep', { configured: boolean; masked: string | null }>
+}
+export interface CrowdSecNotifyResponse {
+  settings: CrowdSecNotifySettings
+  webhook: CrowdSecWebhookView
+  defaults: CrowdSecNotifySettings
+  placeholders: CrowdSecPlaceholder[]
+  samples: string[]
+  state: { enabled: boolean; wired: boolean; plugin_active: boolean; file: 'dcs' | 'other' | 'missing'; profile_mode: string; drift: boolean; working: boolean }
+  status: {
+    last_test: { at: number; ok: boolean; http: number; message: string; sample: string } | null
+    last_apply: { at: number; ok: boolean; message: string } | null
+    delivery_errors: { time: string; message: string }[]
+    note: string
+  }
+  limits: { title: number; description: number; footer: number; fields: number; group_threshold_max: number }
+  info: { unban: string }
+  success?: boolean
+  applied?: { changed: boolean; message: string }
+}
+export interface CrowdSecNotifyBody { settings?: DeepPartial<CrowdSecNotifySettings>; webhook_url?: string; clear_custom_webhook?: boolean; take_over?: boolean }
+export interface CrowdSecPreviewResponse {
+  valid: boolean
+  error?: string
+  sample?: string
+  payload: DiscordWebhookPayload | null
+  alert?: { id: number; scenario: string }
+}
+export interface DiscordEmbedField { name: string; value: string; inline?: boolean }
+export interface DiscordEmbed { title?: string; description?: string; url?: string; color?: number; fields?: DiscordEmbedField[]; footer?: { text: string }; timestamp?: string }
+export interface DiscordWebhookPayload { username?: string; avatar_url?: string; content?: string; allowed_mentions?: Record<string, unknown>; embeds: DiscordEmbed[] }
+export interface CrowdSecNotifyTestResponse { success: boolean; delivered: boolean; http: number; message: string; sample: string; at: number; webhook: string }
+export interface CrowdSecServiceResponse { success: boolean; action: string; state: string; message: string }
+export interface CrowdSecHubChangeResponse { success: boolean; action?: string; type?: string; name?: string; message: string; detail?: string }
+export interface CrowdSecSimulationSetResponse { success: boolean; global: boolean; exclusions: string[]; message: string }
+
+type DeepPartial<T> = { [K in keyof T]?: T[K] extends (infer U)[] ? U[] : T[K] extends object ? DeepPartial<T[K]> : T[K] }
 
 // TLS state of the reverse proxy (GET /routes/certificates)
 export interface RouteCertificate {

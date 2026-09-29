@@ -54,6 +54,7 @@ import Plugins from './pages/Plugins'
 import EventFeed from './pages/EventFeed'
 import DNS from './pages/DNS'
 import Proxmox from './pages/Proxmox'
+import CrowdSec from './pages/CrowdSec'
 import Export from './pages/Export'
 import SetupWizard from './pages/SetupWizard'
 import KeyboardShortcutsPanel from './components/common/KeyboardShortcutsPanel'
@@ -102,6 +103,7 @@ const pageComponents: Record<PageId, React.ComponentType> = {
   'event-feed': EventFeed,
   dns: DNS,
   proxmox: Proxmox,
+  crowdsec: CrowdSec,
   export: Export,
   setup: SetupWizard as unknown as React.ComponentType,
 }
