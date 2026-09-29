@@ -7,9 +7,9 @@
   <img src="https://img.shields.io/badge/Android-APK-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android APK" />
 </p>
 
-# Docker Compose Skeleton UI
+# DCS Orchestrator — the dashboard
 
-A premium desktop and mobile application for managing [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) servers. Dark glassmorphism design, 35+ pages, real-time monitoring, and full server administration — built with Electron, React, and Tailwind CSS.
+The dashboard of [DCS Orchestrator](https://github.com/scotthowson/dcs-orchestrator): a desktop, browser and Android app for a hub and the Proxmox VMs it builds, one stack per VM. Light and dark looks for every theme, about 40 pages, real-time monitoring, CrowdSec, updates, backups and full server administration — built with Electron, React, Mantine and Tailwind CSS.
 
 > **Platforms:** Linux (AppImage, .deb, .rpm) &bull; macOS (.dmg) &bull; Windows (NSIS) &bull; Android (APK via Capacitor)
 
@@ -18,8 +18,8 @@ A premium desktop and mobile application for managing [Docker Compose Skeleton](
 ## Quick Start
 
 ```bash
-git clone https://github.com/scotthowson/Docker-Compose-Skeleton-UI.git
-cd Docker-Compose-Skeleton-UI
+git clone https://github.com/scotthowson/dcs-orchestrator-ui.git
+cd dcs-orchestrator-ui
 npm install
 
 # Desktop — Electron + Vite HMR
@@ -32,7 +32,7 @@ npm run dev
 npm run build
 ```
 
-**Requirements:** Node.js 20+, npm, and a running [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) instance with `API_ENABLED=true`.
+**Requirements:** Node.js 20+, npm, and a running [DCS Orchestrator](https://github.com/scotthowson/dcs-orchestrator) server (its API is on by default).
 
 ---
 
@@ -259,7 +259,7 @@ Traefik elsewhere: switch it on, copy the snippet the panel shows into that Trae
 - **DCS Discord Bot** (`bot/`, image `ghcr.io/scotthowson/dcs-discord-bot`) — slash commands with buttons and confirmations: status, usage, health, containers, stacks, top, disk, updates, logs, routes, power, security, schedules, audit; start, stop, restart, update, deploy (dry-run first), backup, prune, run, unban and DCS self-update for the admins you name; locked to the channels you list; the bot's status line mirrors the server
 - **Rich Presence** (desktop app) — "Managing *your server* · containers · stacks · health" on your profile while the app is open (Settings → Discord Rich Presence)
 - **Brand kit** (`brand/discord/`) — app icon, bot avatar and banner, notification and CrowdSec avatars, presence art, with a note on where each goes
-- The complete walkthrough (webhook, rules, CrowdSec alerts, the bot's application, invite URL, IDs and account, Rich Presence) is [docs/DISCORD.md](https://github.com/scotthowson/Docker-Compose-Skeleton-AIO/blob/main/docs/DISCORD.md) in the DCS repository
+- The complete walkthrough (webhook, rules, CrowdSec alerts, the bot's application, invite URL, IDs and account, Rich Presence) is [docs/DISCORD.md](https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/DISCORD.md) in the DCS repository
 
 ### Activity
 
@@ -417,7 +417,7 @@ src/
 
 ## API Compatibility
 
-Connects to the Docker Compose Skeleton REST API (default `http://127.0.0.1:9876`). All ~80 endpoints are typed and wrapped:
+Connects to the DCS Orchestrator REST API (default `http://127.0.0.1:9876`; the reference is [docs/API.md](https://github.com/scotthowson/dcs-orchestrator/blob/main/docs/API.md)). The endpoints the dashboard uses are typed and wrapped:
 
 ```
 /setup    /status    /health     /stacks      /containers   /images
