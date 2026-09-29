@@ -6,7 +6,7 @@ export interface AppSettings {
   containerPollingInterval: number
   imagePollingInterval: number
   logPollingInterval: number
-  theme: 'dark' | 'light'
+  theme: 'dark' | 'light' | 'system'
   sidebarCollapsed: boolean
   windowBounds: { width: number; height: number }
 }
@@ -18,7 +18,7 @@ export const appStore = new Store<AppSettings>({
     containerPollingInterval: 10000,
     imagePollingInterval: 60000,
     logPollingInterval: 3000,
-    theme: 'dark',
+    theme: 'system',
     sidebarCollapsed: false,
     windowBounds: { width: 1400, height: 900 },
   },

@@ -882,7 +882,8 @@ export interface AppSettings {
   containerPollingInterval: number
   imagePollingInterval: number
   logPollingInterval: number
-  theme: 'dark' | 'light'
+  /** the look: dark, light, or the device's preference (the header switch always sets dark or light) */
+  theme: 'dark' | 'light' | 'system'
   sidebarCollapsed: boolean
   /** Custom labels for disk mount points — e.g., { "/mnt/plex": "Plex Drive" } */
   diskLabels: Record<string, string>

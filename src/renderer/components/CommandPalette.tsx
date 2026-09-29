@@ -13,6 +13,7 @@ import {
   FolderOpen, PieChart, Sparkles, KeyRound, Puzzle, Radio, ListChecks, Globe, Server, BookOpen, ExternalLink,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { toggleMode, useResolvedMode } from '../lib/colorMode'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useApiLink } from '../hooks/useApiLink'
@@ -172,7 +173,7 @@ export function CommandPalette() {
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed)
-  const theme = useSettingsStore((s) => s.theme)
+  const theme = useResolvedMode()
   const status = useSystemStore((s) => s.status)
   const healthReported = useHealthStore((s) => s.report)
   const apiLink = useApiLink()
@@ -390,7 +391,7 @@ export function CommandPalette() {
       type: 'action',
       keywords: ['theme', 'dark', 'light', 'mode', 'toggle'],
       onSelect: () => {
-        updateSetting('theme', theme === 'dark' ? 'light' : 'dark')
+        toggleMode()
         setOpen(false)
       },
     })

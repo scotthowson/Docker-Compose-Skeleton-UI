@@ -9,7 +9,7 @@
 //     and forth lands on the same palettes
 //   - documents with a single palette (every theme made before 4.0) still load
 //   - the JSON contract round-trips through validateTheme
-//   - theme names and aliases resolve
+//   - theme names and aliases resolve; the engine builds every look
 // The TypeScript sources are bundled with esbuild (already a dev dependency).
 // =============================================================================
 
@@ -18,6 +18,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { INVENTORY, renderInventory, scanClasses } from './theme-classes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dcs-check-themes-'))
@@ -29,6 +30,7 @@ async function load(entry) {
 }
 
 const T = await load('src/shared/themes.ts')
+const E = await load('src/renderer/lib/themeEngine.ts')
 fs.rmSync(tmp, { recursive: true, force: true })
 
 let failures = 0
@@ -201,6 +203,38 @@ for (const [from, to] of Object.entries(T.THEME_ALIASES)) ok(!!T.BUILT_IN_BY_NAM
 for (const name of EXPECTED) ok(T.resolveThemeAlias(name) === name && T.isBuiltInTheme(name), `${name} resolves to itself`)
 ok(T.isBuiltInTheme(T.DEFAULT_THEME_NAME), 'the default theme is a built-in')
 ok(!T.isBuiltInTheme('nope'), 'an unknown name is not a built-in')
+
+// ---------------------------------------------------------------------------
+section('Engine')
+for (const t of T.BUILT_IN_THEMES) {
+  for (const mode of T.THEME_MODES) {
+    const css = E.buildThemeCss(t, mode)
+    ok(!/undefined|NaN/.test(css), `${t.name} ${mode}: no undefined/NaN in the stylesheet`)
+    ok(css.includes(`--dcs-bg: ${T.themeLook(t, mode).bg}`), `${t.name} ${mode}: the palette variables are set`)
+    ok(css.length < 400000, `${t.name} ${mode}: stylesheet size ${(css.length / 1024).toFixed(0)} KB`)
+  }
+}
+const stock = E.buildThemeCss(T.BUILT_IN_BY_NAME['dcs-emerald'], 'dark')
+ok(!/\{[^}]*!important/.test(stock.replace(/html\[data-theme\] \{[^}]*\}/g, '')), 'DCS Emerald dark overrides no class (renders exactly as shipped)')
+
+// every colour class the pages use is restyled by a look that changes everything (no leftover emerald or slate)
+const current = fs.readFileSync(INVENTORY, 'utf8')
+ok(current === renderInventory(scanClasses()), 'src/renderer/lib/themeClasses.ts lists the colour classes in use (run node scripts/theme-classes.mjs)')
+const inventory = [...current.matchAll(/'([^']+)'/g)].map((m) => m[1])
+const escCls = (cls) => cls.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`)
+for (const [name, mode] of [['nord-night', 'light'], ['gruvbox-dark', 'dark'], ['dracula', 'light'], ['catppuccin-mocha', 'dark']]) {
+  const css = E.buildThemeCss(T.BUILT_IN_BY_NAME[name], mode)
+  const left = inventory.filter((cls) => {
+    // decorative hues keep their colour in every theme; only their pale text is darkened on a light look
+    const deco = /-(violet|purple|fuchsia|pink|indigo)-(\d+)/.exec(cls)
+    if (deco) return mode === 'light' && /(^|:)(text|placeholder|fill|stroke)-/.test(cls) && +deco[2] <= 500 && !css.includes(`.${escCls(cls)}`)
+    if (/-black(\/|$)/.test(cls) && mode === 'dark') return false // black stays black on a dark look
+    if (/(^|:)(bg|text|border)-(white|black)$/.test(cls) && cls !== 'text-white' && !cls.endsWith(':text-white')) return false // solid white knobs, plain black
+    if (/(^|:)text-black/.test(cls)) return false
+    return !css.includes(`.${escCls(cls)}`)
+  })
+  ok(left.length === 0, `${name} ${mode}: every colour class is restyled${left.length ? ` — not: ${left.slice(0, 12).join(' ')}` : ''}`)
+}
 
 console.log(`\n${checks - failures}/${checks} checks passed${failures ? `, ${failures} FAILED` : ''}`)
 process.exit(failures ? 1 : 0)

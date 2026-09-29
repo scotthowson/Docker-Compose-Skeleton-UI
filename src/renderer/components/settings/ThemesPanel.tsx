@@ -207,7 +207,7 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
   useEffect(() => {
     if (!preview) { setThemePreviewing(false); syncDocumentTheme(); return }
     setThemePreviewing(true)
-    const t = setTimeout(() => applyTheme(draft), 60)
+    const t = setTimeout(() => applyTheme(draft, draft.mode), 60)
     return () => clearTimeout(t)
   }, [draft, preview])
   useEffect(() => () => { setThemePreviewing(false); syncDocumentTheme() }, [])

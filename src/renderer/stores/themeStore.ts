@@ -2,20 +2,28 @@
 // themeStore — the themes a dashboard can wear: the built-ins, the ones stored
 // on the server (GET /themes, cached so the look is right before the first
 // answer), and the ones made on this device. Resolves the effective theme
-// (personal choice, else the server's active one) and dresses the document.
+// (personal choice, else the server's active one, else DCS Emerald) and the
+// mode (settings.theme), and dresses the document in that look of that theme.
 // =============================================================================
 
 import { create } from 'zustand'
 import {
   type Theme,
   type ThemeMeta,
+  type ThemeMode,
   type ThemeSaveResponse,
   BUILT_IN_BY_NAME,
+  DEFAULT_THEME_NAME,
+  isBuiltInCopy,
+  resolveThemeAlias,
   themeFromMeta,
+  themeLook,
   validateTheme,
 } from '../../shared/themes'
 import { fetchThemes, fetchTheme, saveTheme, deleteTheme, importTheme, setActiveTheme, isThemeApiMissing } from '../api/themes'
-import { applyTheme, isThemePreviewing } from '../lib/themeEngine'
+import { applyTheme, buildThemeCss, isThemePreviewing } from '../lib/themeEngine'
+import { resolveMode } from '../lib/colorMode'
+import { syncNativeLook } from '../lib/nativeLook'
 import { useSettingsStore } from './settingsStore'
 
 const CACHE_KEY = 'dcs-theme-cache'
@@ -234,20 +242,39 @@ export const useThemeStore = create<ThemeStoreState>((set, get) => ({
 /** where a theme of this name would come from: this device, the server, or the dashboard itself */
 export type ThemeSource = 'local' | 'server' | 'built-in'
 
-/** a theme by name: this device's copy first, then the server's, then the built-in */
+/** a listing entry as a theme, made once per entry (its derived look is computed once too) */
+const metaThemes = new WeakMap<ThemeMeta, Theme>()
+export function themeForMeta(meta: ThemeMeta): Theme {
+  return fromMeta(meta)
+}
+function fromMeta(meta: ThemeMeta): Theme {
+  let t = metaThemes.get(meta)
+  if (!t) {
+    t = themeFromMeta(meta)
+    metaThemes.set(meta, t)
+  }
+  return t
+}
+
+/**
+ * A theme by name: this device's copy first, then the server's, then the built-in.
+ * A server copy of a built-in (what "Set for everyone" stores) is the built-in.
+ */
 export function resolveTheme(name: string): { theme: Theme; source: ThemeSource } | null {
   if (!name) return null
+  const id = resolveThemeAlias(name)
   const { docs, metas, localThemes } = useThemeStore.getState()
-  const local = localThemes.find((t) => t.name === name)
+  const local = localThemes.find((t) => t.name === id)
   if (local) return { theme: local, source: 'local' }
-  const doc = docs[name]
-  if (doc) return { theme: doc, source: 'server' }
-  const meta = metas.find((m) => m.name === name)
+  const builtIn = BUILT_IN_BY_NAME[id]
+  const doc = docs[id]
+  if (doc) return builtIn && isBuiltInCopy(doc) ? { theme: builtIn, source: 'built-in' } : { theme: doc, source: 'server' }
+  const meta = metas.find((m) => m.name === id)
   if (meta) {
     // the palette applies from the listing at once; ensureDoc brings the css if it has any
-    return { theme: themeFromMeta(meta), source: 'server' }
+    const theme = fromMeta(meta)
+    return builtIn && !meta.has_css && isBuiltInCopy(theme) ? { theme: builtIn, source: 'built-in' } : { theme, source: 'server' }
   }
-  const builtIn = BUILT_IN_BY_NAME[name]
   return builtIn ? { theme: builtIn, source: 'built-in' } : null
 }
 
@@ -257,13 +284,14 @@ export function effectiveThemeName(): string {
   return s.themeName || s.serverThemeActive || ''
 }
 
-export function getEffectiveTheme(): Theme | null {
-  return resolveTheme(effectiveThemeName())?.theme ?? null
+/** the theme in effect; DCS Emerald when none is chosen or the chosen one cannot be found */
+export function getEffectiveTheme(): Theme {
+  return resolveTheme(effectiveThemeName())?.theme ?? BUILT_IN_BY_NAME[DEFAULT_THEME_NAME]
 }
 
 /** true when the effective theme is a server theme whose css has not been fetched yet */
 export function effectiveThemeNeedsDoc(): string | null {
-  const name = effectiveThemeName()
+  const name = resolveThemeAlias(effectiveThemeName())
   if (!name) return null
   const { docs, metas, localThemes } = useThemeStore.getState()
   if (localThemes.some((t) => t.name === name) || docs[name]) return null
@@ -272,18 +300,59 @@ export function effectiveThemeNeedsDoc(): string | null {
 }
 
 /**
- * Dress the document in the effective theme. With none chosen, the theme
- * stylesheet goes and the dark/light setting decides the mode, as before.
+ * Before 4.0 a theme decided the mode itself and the dark/light switch did
+ * nothing while one was on. The first time this dashboard runs, the person keeps
+ * the look they had: the mode of the theme they wore becomes their choice.
+ */
+function settleModeOnce(): void {
+  const s = useSettingsStore.getState()
+  if (s.themeModeMigrated) return
+  const name = effectiveThemeName()
+  if (name) {
+    const found = resolveTheme(name)
+    // a server theme that is not cached yet: wait for the list (a later sync finishes this)
+    if (!found && useThemeStore.getState().supported === null) return
+    if (found && s.theme !== found.theme.mode) s.updateSetting('theme', found.theme.mode)
+  }
+  s.updateSetting('themeModeMigrated', true)
+}
+
+/** what the page shows before the first paint next time (index.html reads it): both looks of the theme and the mode setting */
+const BOOT_KEY = 'dcs-boot-look'
+let bootWritten = ''
+function rememberBootLook(theme: Theme, pref: string): void {
+  const look = (m: ThemeMode) => themeLook(theme, m)
+  const boot = JSON.stringify({
+    v: 1,
+    pref,
+    name: theme.name,
+    css: { dark: buildThemeCss(theme, 'dark'), light: buildThemeCss(theme, 'light') },
+    bg: { dark: look('dark').bg, light: look('light').bg },
+    meta: { dark: look('dark').surface, light: look('light').surface },
+  })
+  if (boot === bootWritten) return
+  bootWritten = boot
+  try {
+    localStorage.setItem(BOOT_KEY, boot)
+  } catch {
+    // storage full or unavailable: the next start shows the stock look for a moment
+  }
+}
+
+/**
+ * Dress the document in the effective theme, in the mode the person chose (or
+ * their device prefers). The one place the look is decided; the studio's
+ * preview is the only other caller of applyTheme.
  */
 export function syncDocumentTheme(): void {
-  if (isThemePreviewing()) return
+  const settings = useSettingsStore.getState()
+  // until the saved settings are read, the look index.html put up stays
+  if (!settings.settingsLoaded || isThemePreviewing()) return
+  settleModeOnce()
+  const pref = useSettingsStore.getState().theme
+  const mode = resolveMode(pref)
   const theme = getEffectiveTheme()
-  if (theme) {
-    applyTheme(theme)
-    return
-  }
-  applyTheme(null)
-  const mode = useSettingsStore.getState().theme
-  document.documentElement.classList.toggle('light', mode === 'light')
-  document.documentElement.classList.toggle('dark', mode === 'dark')
+  applyTheme(theme, mode)
+  rememberBootLook(theme, pref)
+  syncNativeLook(theme, mode, pref)
 }

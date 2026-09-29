@@ -16,7 +16,7 @@ import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
 import ThemesPanel from '../components/settings/ThemesPanel'
-import { useThemeStore, resolveTheme } from '../stores/themeStore'
+import { useSystemMode } from '../lib/colorMode'
 import { CSS_SANITIZE_NOTE } from '../lib/cssSanitize'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
@@ -834,13 +834,9 @@ function DiskLabelManager() {
 // ---------------------------------------------------------------------------
 
 function AppearanceSettings() {
+  // the mode: dark, light, or the device's preference (the header switch always sets dark or light)
   const theme = useSettingsStore((s) => s.theme)
-  // the theme in effect (personal or the server's) decides the mode while it is on
-  const themeName = useSettingsStore((s) => s.themeName)
-  const serverThemeActive = useSettingsStore((s) => s.serverThemeActive)
-  useThemeStore((s) => s.metas)
-  useThemeStore((s) => s.localThemes)
-  const activeTheme = resolveTheme(themeName || serverThemeActive)?.theme ?? null
+  const systemMode = useSystemMode()
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
   const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Docker Compose Skeleton'
   const updateSetting = useSettingsStore((s) => s.updateSetting)
@@ -972,45 +968,39 @@ function AppearanceSettings() {
       {/* Divider */}
       <div className="border-t border-white/[0.03]" />
 
-      {/* Theme Toggle */}
+      {/* Mode: which look of the theme shows */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Palette size={16} className="text-violet-400" />
-          <h4 className="text-sm font-semibold text-slate-200">Theme</h4>
+          <h4 className="text-sm font-semibold text-slate-200">Mode</h4>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => updateSetting('theme', 'dark')}
-            className={`
-              flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
-              ${theme === 'dark'
-                ? 'bg-slate-800 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/20'
-                : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-              }
-            `}
-          >
-            <Moon size={14} />
-            <span className="text-xs font-medium">Dark</span>
-          </button>
-          <button
-            onClick={() => updateSetting('theme', 'light')}
-            className={`
-              flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
-              ${theme === 'light'
-                ? 'bg-slate-800 border-amber-500/30 text-amber-400 ring-1 ring-amber-500/20'
-                : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-              }
-            `}
-          >
-            <Sun size={14} />
-            <span className="text-xs font-medium">Light</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Mode">
+          {([
+            { id: 'dark', label: 'Dark', icon: <Moon size={14} /> },
+            { id: 'light', label: 'Light', icon: <Sun size={14} /> },
+            { id: 'system', label: 'System', icon: <Monitor size={14} /> },
+          ] as const).map((m) => (
+            <button
+              key={m.id}
+              role="radio"
+              aria-checked={theme === m.id}
+              onClick={() => updateSetting('theme', m.id)}
+              className={`
+                flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
+                ${theme === m.id
+                  ? 'bg-slate-800 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/20'
+                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
+                }
+              `}
+            >
+              {m.icon}
+              <span className="text-xs font-medium">{m.label}</span>
+            </button>
+          ))}
         </div>
-        {activeTheme && (
-          <p className="text-[10px] text-slate-500 mt-2">
-            The theme <span className="text-slate-300">{activeTheme.title}</span> is on and it is a {activeTheme.mode} theme, so it decides the mode while it is active. Pick a theme of the other mode, or follow the server, in Themes below.
-          </p>
-        )}
+        <p className="text-[11px] text-slate-500 mt-2">
+          Every theme has a dark and a light look. {theme === 'system' ? `System follows this device (${systemMode} now).` : 'The switch at the top right flips between them.'}
+        </p>
       </div>
 
       {/* Background Image */}

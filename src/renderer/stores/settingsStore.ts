@@ -11,6 +11,8 @@ export interface ThemeSettings {
   themeName: string
   /** cache of GET /themes → active, so the server's theme applies before the first fetch answers */
   serverThemeActive: string
+  /** set once the mode was carried over from a dashboard where the theme decided it (before 4.0) */
+  themeModeMigrated: boolean
 }
 
 export type PersistedSettings = AppSettings & ThemeSettings
@@ -21,7 +23,8 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   containerPollingInterval: 5000,
   imagePollingInterval: 60000,
   logPollingInterval: 3000,
-  theme: 'dark',
+  // until the person picks one, the look follows the device (prefers-color-scheme)
+  theme: 'system',
   sidebarCollapsed: false,
   diskLabels: {},
   pinnedDisks: [],
@@ -44,9 +47,12 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   reduceMotion: false,
   themeName: '',
   serverThemeActive: '',
+  themeModeMigrated: false,
 }
 
 interface SettingsState extends PersistedSettings {
+  /** true once the saved settings were read (not persisted): the look waits for it */
+  settingsLoaded: boolean
   currentPage: PageId
   navigationPayload: Record<string, unknown> | null
   setCurrentPage: (page: PageId, payload?: Record<string, unknown>) => void
@@ -91,6 +97,7 @@ const TRANSIENT_PAGES: ReadonlySet<string> = new Set(['setup', 'login'])
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULT_SETTINGS,
+  settingsLoaded: false,
   currentPage: 'dashboard',
   navigationPayload: null,
 
@@ -145,9 +152,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         restoredPage = lastPage
       }
     }
+    // a mode this build does not know (a hand-edited file, an old build's typo) means "follow the device"
+    const mode = (stored as Record<string, unknown>).theme
+    const theme = mode === 'dark' || mode === 'light' || mode === 'system' ? mode : DEFAULT_SETTINGS.theme
     set({
       ...DEFAULT_SETTINGS,
       ...stored,
+      theme,
+      settingsLoaded: true,
       ...(restoredPage ? { currentPage: restoredPage } : {}),
     })
   },

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, session, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme } from 'electron'
 import path from 'path'
 import http from 'http'
 import Store from 'electron-store'
@@ -52,13 +52,26 @@ const store = new Store({
     containerPollingInterval: 10000,
     imagePollingInterval: 60000,
     logPollingInterval: 3000,
-    theme: 'dark',
+    // dark, light or system (follow the OS) — the renderer's mode setting
+    theme: 'system',
     sidebarCollapsed: false,
     windowBounds: { width: 1400, height: 900 },
   },
 })
 
 let mainWindow: BrowserWindow | null = null
+
+// The renderer stores {pref, bg: {dark, light}} under "appearance" whenever its look changes
+// (lib/nativeLook): nativeTheme follows the mode (title bar, native menus and dialogs) and the
+// window shows the page's colour before the first paint
+function applyAppearance(value: unknown): string {
+  const a = value && typeof value === 'object' ? value as { pref?: unknown; bg?: { dark?: unknown; light?: unknown } } : {}
+  nativeTheme.themeSource = a.pref === 'dark' || a.pref === 'light' ? a.pref : 'system'
+  const bg = nativeTheme.shouldUseDarkColors ? a.bg?.dark : a.bg?.light
+  const color = typeof bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : '#0f172a'
+  mainWindow?.setBackgroundColor(color)
+  return color
+}
 
 function createWindow() {
   const bounds = store.get('windowBounds') as { width: number; height: number }
@@ -68,7 +81,7 @@ function createWindow() {
     height: bounds.height,
     minWidth: 1024,
     minHeight: 680,
-    backgroundColor: '#0f172a',
+    backgroundColor: applyAppearance(store.get('appearance')),
     titleBarStyle: 'hiddenInset',
     frame: process.platform === 'darwin' ? false : true,
     webPreferences: {
@@ -120,6 +133,7 @@ ipcMain.handle('set-setting', (_event, key: string, value: unknown) => {
   } else {
     store.set(key, value)
   }
+  if (key === 'appearance') applyAppearance(value)
   if (key.startsWith('discord')) void applyPresenceSettings()
   return true
 })
