@@ -6,21 +6,19 @@
 
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LayoutDashboard, Layers, Box, HeartPulse, Menu, X, Search } from 'lucide-react'
+import { Menu, X, Search } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useHealthStore } from '../../stores/healthStore'
 import { useApiLink } from '../../hooks/useApiLink'
 import { navItems } from './Sidebar'
+import { pageMeta } from '../../constants/pageTitles'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import type { PageId } from '../../../shared/types'
 
-const PRIMARY: { id: PageId; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { id: 'stacks', label: 'Stacks', icon: Layers },
-  { id: 'containers', label: 'Containers', icon: Box },
-  { id: 'health', label: 'Health', icon: HeartPulse },
-]
+/** the four pages the bottom bar reaches for: each with the name and icon every other place gives it */
+const PRIMARY: { id: PageId; label: string; icon: React.ElementType }[] = (['dashboard', 'stacks', 'containers', 'health'] as const)
+  .map((id) => ({ id, label: pageMeta[id].label, icon: pageMeta[id].icon }))
 
 const GROUPS: { label: string; ids: PageId[] }[] = [
   { label: 'Core', ids: ['images', 'networks', 'volumes', 'dns', 'templates'] },

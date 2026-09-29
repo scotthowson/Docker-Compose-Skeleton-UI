@@ -7,6 +7,7 @@ import { Switch as MantineSwitch } from '@mantine/core'
 import { Timer, Layout, RotateCcw, User, Gamepad2,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { pageLabel } from '../../constants/pageTitles'
 import type { PageId } from '../../../shared/types'
 import type { AppSettings as AppSettingsType } from '../../../shared/types'
 
@@ -257,18 +258,8 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
 // Personal preferences
 // ---------------------------------------------------------------------------
 
-const LANDING_PAGES: { id: PageId; label: string }[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'stacks', label: 'Stacks' },
-  { id: 'containers', label: 'Containers' },
-  { id: 'health', label: 'Health' },
-  { id: 'uptime', label: 'Uptime' },
-  { id: 'topology', label: 'Topology' },
-  { id: 'updates', label: 'Updates' },
-  { id: 'templates', label: 'Templates' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'activity', label: 'Activity' },
-]
+const LANDING_PAGES: { id: PageId; label: string }[] = (['dashboard', 'stacks', 'containers', 'health', 'uptime', 'topology', 'updates', 'templates', 'logs', 'activity'] as const)
+  .map((id) => ({ id, label: pageLabel(id) }))
 
 /** the dashboard's toggle (a Mantine Switch, themed in lib/mantine.tsx), named for a screen reader */
 function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {

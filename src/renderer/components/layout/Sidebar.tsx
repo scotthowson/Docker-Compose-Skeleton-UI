@@ -8,17 +8,7 @@ import { useFleetRole } from '../../hooks/useFleetRole'
 import { useFleetTotals } from '../../hooks/useFleetTotals'
 import React, { useEffect } from 'react'
 import {
-  LayoutDashboard,
-  Layers,
-  Box,
-  HardDrive,
   HeartPulse,
-  Clock,
-  Network,
-  ScrollText,
-  Monitor,
-  Settings2,
-  Cog,
   ChevronsLeft,
   ChevronsRight,
   Container,
@@ -27,31 +17,6 @@ import {
   AlertTriangle,
   Wifi,
   WifiOff,
-  Bookmark,
-  Zap,
-  Shield,
-  Users,
-  Wrench,
-  FileCode,
-  Archive,
-  Database,
-  TerminalSquare,
-  CalendarClock,
-  TrendingUp,
-  ArrowUpCircle,
-  Bell,
-  Camera,
-  LayoutTemplate,
-  Bot,
-  Share2,
-  FolderOpen,
-  PieChart,
-  KeyRound,
-  Puzzle,
-  Radio,
-  Download,
-  Globe,
-  Server,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSystemStore } from '../../stores/systemStore'
@@ -64,6 +29,7 @@ import { isMobile } from '../../hooks/useMobile'
 import { ServerSwitcher } from '../common/ServerSwitcher'
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
+import { pageMeta } from '../../constants/pageTitles'
 
 export interface NavItem {
   id: PageId
@@ -72,52 +38,52 @@ export interface NavItem {
   section?: 'main' | 'system'
 }
 
+/** a sidebar entry: where a page sits here; its name and icon are the page's own (constants/pageTitles) */
+const nav = (id: PageId, section: 'main' | 'system'): NavItem => ({ id, label: pageMeta[id].label, icon: pageMeta[id].icon, section })
+
 export const navItems: NavItem[] = [
   // ── Core ──
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'main' },
-  { id: 'stacks', label: 'Stacks', icon: Layers, section: 'main' },
-  { id: 'containers', label: 'Containers', icon: Box, section: 'main' },
-  { id: 'images', label: 'Images', icon: HardDrive, section: 'main' },
-  { id: 'networks', label: 'Networks', icon: Network, section: 'main' },
-  { id: 'volumes', label: 'Volumes', icon: Database, section: 'main' },
-  { id: 'health', label: 'Health', icon: HeartPulse, section: 'main' },
-  { id: 'dns', label: 'DNS & Routes', icon: Globe, section: 'main' },
-  { id: 'proxmox', label: 'Proxmox', icon: Server, section: 'main' },
+  nav('dashboard', 'main'),
+  nav('stacks', 'main'),
+  nav('containers', 'main'),
+  nav('images', 'main'),
+  nav('networks', 'main'),
+  nav('volumes', 'main'),
+  nav('health', 'main'),
+  nav('dns', 'main'),
+  nav('proxmox', 'main'),
   // ── Monitoring ──
-  { id: 'uptime', label: 'Uptime', icon: Clock, section: 'main' },
-  { id: 'trends', label: 'Trends', icon: TrendingUp, section: 'main' },
-  { id: 'topology', label: 'Topology', icon: Share2, section: 'main' },
-  { id: 'updates', label: 'Updates', icon: ArrowUpCircle, section: 'main' },
-  { id: 'activity', label: 'Activity', icon: Zap, section: 'main' },
-  { id: 'event-feed', label: 'Live Events', icon: Radio, section: 'main' },
+  nav('uptime', 'main'),
+  nav('trends', 'main'),
+  nav('topology', 'main'),
+  nav('updates', 'main'),
+  nav('activity', 'main'),
+  nav('event-feed', 'main'),
   // ── Management ──
-  { id: 'templates', label: 'Templates', icon: LayoutTemplate, section: 'main' },
-  { id: 'secrets', label: 'Secrets', icon: KeyRound, section: 'main' },
-  { id: 'schedules', label: 'Schedules', icon: CalendarClock, section: 'main' },
-  { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark, section: 'main' },
-  { id: 'file-browser', label: 'File Browser', icon: FolderOpen, section: 'main' },
-  { id: 'plugins', label: 'Plugins', icon: Puzzle, section: 'main' },
+  nav('templates', 'main'),
+  nav('secrets', 'main'),
+  nav('schedules', 'main'),
+  nav('bookmarks', 'main'),
+  nav('file-browser', 'main'),
+  nav('plugins', 'main'),
   // ── System ──
-  { id: 'terminal', label: 'Terminal', icon: TerminalSquare, section: 'system' },
-  { id: 'logs', label: 'Logs', icon: ScrollText, section: 'system' },
-  { id: 'environment', label: 'Environment', icon: FileCode, section: 'system' },
-  { id: 'diagnostics', label: 'Diagnostics', icon: Shield, section: 'system' },
-  { id: 'system', label: 'System', icon: Monitor, section: 'system' },
-  { id: 'maintenance', label: 'Maintenance', icon: Wrench, section: 'system' },
-  { id: 'disk-analysis', label: 'Disk Analysis', icon: PieChart, section: 'system' },
-  { id: 'backup', label: 'Backup', icon: Archive, section: 'system' },
-  { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock, section: 'system' },
-  { id: 'users', label: 'Users', icon: Users, section: 'system' },
-  { id: 'notifications', label: 'Notifications', icon: Bell, section: 'system' },
-  { id: 'automations', label: 'Automations', icon: Bot, section: 'system' },
-  { id: 'snapshots', label: 'Snapshots', icon: Camera, section: 'system' },
-  { id: 'export', label: 'Export', icon: Download, section: 'system' },
-  { id: 'config', label: 'Config', icon: Settings2, section: 'system' },
-  { id: 'settings', label: 'Settings', icon: Cog, section: 'system' },
+  nav('terminal', 'system'),
+  nav('logs', 'system'),
+  nav('environment', 'system'),
+  nav('diagnostics', 'system'),
+  nav('system', 'system'),
+  nav('maintenance', 'system'),
+  nav('disk-analysis', 'system'),
+  nav('backup', 'system'),
+  nav('cronjobs', 'system'),
+  nav('users', 'system'),
+  nav('notifications', 'system'),
+  nav('automations', 'system'),
+  nav('snapshots', 'system'),
+  nav('export', 'system'),
+  nav('config', 'system'),
+  nav('settings', 'system'),
 ]
-
-/** the entry's label (the VMs are the stacks, so a hub says Stacks too) */
-function navLabel(item: NavItem, _isHub: boolean): string { return item.label }
 
 export function Sidebar() {
   // a hub: the badge counts the VMs (the merged stack list), not this server's own stacks
@@ -373,14 +339,13 @@ function NavButton({
   statusIcon?: { icon: React.ElementType; color: string; title: string }
   onClick: () => void
 }) {
-  const { isHub } = useFleetRole()
   const Icon = item.icon
   const StatusIcon = statusIcon?.icon
 
   return (
     <button
       onClick={onClick}
-      title={collapsed ? navLabel(item, isHub) : undefined}
+      title={collapsed ? item.label : undefined}
       className={`
         group relative flex items-center gap-3 w-full
         rounded-lg px-3 py-2
@@ -418,7 +383,7 @@ function NavButton({
 
       {!collapsed && (
         <>
-          <span className="truncate whitespace-nowrap flex-1 text-left">{navLabel(item, isHub)}</span>
+          <span className="truncate whitespace-nowrap flex-1 text-left">{item.label}</span>
           {/* Status icon (health check / connection indicator) */}
           {StatusIcon && (
             <StatusIcon

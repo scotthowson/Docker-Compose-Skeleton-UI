@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { Loader2, Lock } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Header } from './components/layout/Header'
-import { pageTitles } from './constants/pageTitles'
+import { pageLabel } from './constants/pageTitles'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { ConfirmDialogHost } from './components/common/ConfirmDialog'
@@ -332,9 +332,7 @@ export default function App() {
 
   // Sync document title with current page
   useEffect(() => {
-    // on a hub the Stacks page is the VMs page
-    const title = pageTitles[currentPage] || 'Dashboard'
-    document.title = `${title} — DCS Manager`
+    document.title = `${pageLabel(currentPage)} — DCS Manager`
   }, [currentPage])
 
   // Custom CSS injection — with security sanitization

@@ -50,11 +50,11 @@ There is no React Router. Navigation is a `currentPage: PageId` state in `settin
 
 **To add a new page:**
 1. Add to `PageId` union in `src/shared/types.ts`
-2. Create `src/renderer/pages/YourPage.tsx` (default export)
-3. Import and add to `pageComponents` + `pageOrder` in `App.tsx`
-4. Add nav item (with icon) to `navItems` array in `Sidebar.tsx`
-5. Add page title to `pageTitles` in `Header.tsx`
-6. Add icon + label to `pageIcon`, `pageLabels`, and `pages` array in `CommandPalette.tsx`
+2. Name it once in `pageMeta` in `src/renderer/constants/pageTitles.ts` (label, icon, a one-line subtitle, the names it went by as `aliases`). The sidebar, the phone menu, the breadcrumb, the top bar on a phone, the command palette, the quick-action picker, the browser tab and the page's own heading (`<PageHeader page="…" />`) all read that entry; where a sentence names a page, write `pageLabel('id')`, never the words
+3. Create `src/renderer/pages/YourPage.tsx` (default export)
+4. Import and add to `pageComponents` + `pageOrder` in `App.tsx`
+5. Give it a place in the sidebar (`nav('id', 'main' | 'system')` in `navItems`, `Sidebar.tsx`) and a group in `MobileNav.tsx`
+6. Add its id to `allPages` and its search words to `pageDescriptions` / `pageKeywords` in `CommandPalette.tsx`
 
 ### State Management (Zustand)
 
