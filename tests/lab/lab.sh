@@ -50,11 +50,11 @@ make_install() {
     mkdir -p "$dir/vm-images"; cp "$AIO/vm-images/images.json" "$dir/vm-images/" 2>/dev/null || true   # the list of DCS images the New VM sheet offers
     cp -r "$AIO/docs/." "$dir/docs/"
     cp "$AIO/compose.sh" "$AIO/VERSION" "$dir/"
-    grep -vE '^(API_BIND|API_AUTH_ENABLED|API_INSECURE_NO_AUTH|API_TRUSTED_PROXIES|API_IP_WHITELIST|API_PORT|API_RATE_LIMIT|API_SINGLE_SESSION|API_RESPONSE_CACHE|PROXMOX_[A-Z_]+|FLEET_SCAN_PORTS|FLEET_SELF_URL|METRICS_ENABLED|SCHEDULER_ENABLED)=' "$AIO/.env.example" > "$dir/.env"
+    grep -vE '^(API_BIND|API_AUTH_ENABLED|API_INSECURE_NO_AUTH|API_TRUSTED_PROXIES|API_IP_WHITELIST|API_PORT|API_RATE_LIMIT|API_SINGLE_SESSION|API_RESPONSE_CACHE|PROXMOX_[A-Z_]+|FLEET_SCAN_PORTS|FLEET_SELF_URL|METRICS_ENABLED)=' "$AIO/.env.example" > "$dir/.env"
     {
         # the response cache replays the first caller's Access-Control-Allow-Origin, and the lab serves
         # two dashboards (this checkout and a reference one) from different origins: no cache here
-        printf 'API_PORT=%s\nAPI_AUTH_ENABLED=true\nAPI_RATE_LIMIT=100000\nAPI_SINGLE_SESSION=false\nAPI_RESPONSE_CACHE=false\nMETRICS_ENABLED=false\nSCHEDULER_ENABLED=false\n' "$port"
+        printf 'API_PORT=%s\nAPI_AUTH_ENABLED=true\nAPI_RATE_LIMIT=100000\nAPI_SINGLE_SESSION=false\nAPI_RESPONSE_CACHE=false\nMETRICS_ENABLED=false\n' "$port"
         printf 'SERVER_NAME=%s\nFLEET_SELF_URL=http://127.0.0.1:%s\n' "lab-$role" "$port"
         if [[ "$role" == hub ]]; then
             printf 'PROXMOX_URL=http://127.0.0.1:%s\nPROXMOX_TOKEN_ID=%s\nPROXMOX_TOKEN_SECRET=%s\nPROXMOX_VERIFY_TLS=false\nFLEET_SCAN_PORTS=%s\n' "$PVE_PORT" "$PVE_TOKEN_ID" "$PVE_SECRET" "$MEMBER_PORT"

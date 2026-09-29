@@ -328,20 +328,12 @@ export default function Config() {
     NOTIFICATION_STACKS: d.notification_stacks ?? '',
     ENABLE_COLORS: d.enable_colors ?? true,
     COLOR_MODE: d.color_mode ?? 'auto',
-    COLOR_THEME: d.color_theme ?? 'dark',
     FORCE_COLOR: d.force_color ?? false,
     VERBOSE_MODE: d.verbose_mode ?? false,
     SHOW_SYSTEM_INFO: d.show_system_info ?? true,
     PROGRESS_BAR_WIDTH: d.progress_bar_width ?? 50,
     ENABLE_LOG_DATE: d.enable_log_date ?? true,
-    ENABLE_MILLISECONDS: d.enable_milliseconds ?? false,
-    LOG_DATE_FORMAT: d.log_date_format ?? '%Y-%m-%d %H:%M:%S',
-    ENABLE_LOG_MOOD: d.enable_log_mood ?? true,
-    ENABLE_LOG_PID: d.enable_log_pid ?? false,
-    ENABLE_LOG_HOSTNAME: d.enable_log_hostname ?? false,
-    LOG_MAX_SIZE: d.log_max_size ?? '10M',
     LOG_BACKUP_COUNT: d.log_backup_count ?? 12,
-    LOG_RETENTION_DAYS: d.log_retention_days ?? 30,
     ENABLE_STRUCTURED_LOGGING: d.enable_structured_logging ?? false,
     // Traefik/DNS
     TRAEFIK_DOMAIN: d.traefik_domain ?? '',
@@ -353,27 +345,19 @@ export default function Config() {
     HEALTH_CHECK_DELAY: d.health_check_delay ?? 10,
     CRITICAL_CONTAINERS: d.critical_containers ?? '',
     IMPORTANT_CONTAINERS: d.important_containers ?? '',
-    HEALTH_SCORE_ENABLED: d.health_score_enabled ?? true,
     // Metrics/Features
     METRICS_ENABLED: d.metrics_enabled ?? true,
     METRICS_COLLECT_INTERVAL: d.metrics_collect_interval ?? 60,
     ROLLBACK_ENABLED: d.rollback_enabled ?? true,
-    SCHEDULER_ENABLED: d.scheduler_enabled ?? true,
     PLUGINS_ENABLED: d.plugins_enabled ?? true,
     PLUGINS_HOOKS_ENABLED: d.plugins_hooks_enabled ?? true,
     METRICS_RETENTION_DAYS: d.metrics_retention_days ?? 7,
-    INCLUDE_RESOURCE_METRICS: d.include_resource_metrics ?? true,
     ROLLBACK_MAX_SNAPSHOTS: d.rollback_max_snapshots ?? 10,
     SCHEDULER_CHECK_INTERVAL: d.scheduler_check_interval ?? 60,
     // Docker
-    DOCKER_TIMEOUT: d.docker_timeout ?? 120,
-    FORCE_RECREATE: d.force_recreate ?? false,
-    REMOVE_ORPHANED_CONTAINERS: d.remove_orphaned_containers ?? true,
     SERVICE_START_DELAY: d.service_start_delay ?? 0,
     SERVICE_STOP_DELAY: d.service_stop_delay ?? 0,
     DOCKER_STACKS: d.docker_stacks ?? '',
-    MAX_PARALLEL_OPERATIONS: d.max_parallel_operations ?? 3,
-    STACK_START_TIMEOUT: d.stack_start_timeout ?? 300,
     // Backup
     BACKUP_SOURCE_DIR: d.backup_source_dir ?? '',
     BACKUP_DEST_DIR: d.backup_dest_dir ?? '',
@@ -709,14 +693,6 @@ export default function Config() {
               options={['auto', 'always', 'never']}
               onChange={handleStringChange}
             />
-            <SelectRow
-              label="Color Theme"
-              description="Terminal color theme preset"
-              configKey="COLOR_THEME"
-              value={String(edits.COLOR_THEME ?? cfg.color_theme ?? 'dark')}
-              options={['dark', 'light', 'high-contrast', 'minimal']}
-              onChange={handleStringChange}
-            />
             <ToggleRow
               label="Force Color"
               description="Force color output regardless of terminal type detection"
@@ -763,45 +739,7 @@ export default function Config() {
               value={Boolean(edits.ENABLE_LOG_DATE ?? cfg.enable_log_date ?? true)}
               onChange={handleBoolChange}
             />
-            <ToggleRow
-              label="Milliseconds"
-              description="Include millisecond precision in timestamps"
-              configKey="ENABLE_MILLISECONDS"
-              value={Boolean(edits.ENABLE_MILLISECONDS ?? cfg.enable_milliseconds ?? false)}
-              onChange={handleBoolChange}
-            />
-            <TextRow
-              label="Date Format"
-              description="strftime format pattern for timestamps"
-              configKey="LOG_DATE_FORMAT"
-              value={String(edits.LOG_DATE_FORMAT ?? cfg.log_date_format ?? '%Y-%m-%d %H:%M:%S')}
-              onChange={handleStringChange}
-              placeholder="%Y-%m-%d %H:%M:%S"
-            />
-            <ToggleRow
-              label="Log Level Indicators"
-              description="Show colored log level labels (INFO, WARN, ERROR)"
-              configKey="ENABLE_LOG_MOOD"
-              value={Boolean(edits.ENABLE_LOG_MOOD ?? cfg.enable_log_mood ?? true)}
-              onChange={handleBoolChange}
-            />
-            <ToggleRow
-              label="Process ID"
-              description="Include process ID (PID) in log entries"
-              configKey="ENABLE_LOG_PID"
-              value={Boolean(edits.ENABLE_LOG_PID ?? cfg.enable_log_pid ?? false)}
-              onChange={handleBoolChange}
-            />
-            <ToggleRow
-              label="Hostname"
-              description="Include server hostname in log entries"
-              configKey="ENABLE_LOG_HOSTNAME"
-              value={Boolean(edits.ENABLE_LOG_HOSTNAME ?? cfg.enable_log_hostname ?? false)}
-              onChange={handleBoolChange}
-            />
-            <TextRow label="Max Log Size" description="Max size per log file before rotation (e.g. 10M, 50M)" configKey="LOG_MAX_SIZE" value={String(edits.LOG_MAX_SIZE ?? '10M')} onChange={handleStringChange} placeholder="10M" />
             <NumberRow label="Log Backup Count" description="Number of rotated log archives to keep" configKey="LOG_BACKUP_COUNT" value={Number(edits.LOG_BACKUP_COUNT ?? 12)} onChange={handleNumberChange} min={1} max={100} />
-            <NumberRow label="Log Retention Days" description="How many days to keep log archives" configKey="LOG_RETENTION_DAYS" value={Number(edits.LOG_RETENTION_DAYS ?? 30)} onChange={handleNumberChange} min={1} max={365} />
             <ToggleRow label="Structured Logging" description="Enable JSONL structured log output" configKey="ENABLE_STRUCTURED_LOGGING" value={Boolean(edits.ENABLE_STRUCTURED_LOGGING)} onChange={handleBoolChange} />
           </GroupCard>
 
@@ -1035,13 +973,8 @@ export default function Config() {
             description="Container engine and stack management"
 
           >
-            <NumberRow label="Docker Timeout" description="Seconds before docker commands are killed" configKey="DOCKER_TIMEOUT" value={Number(edits.DOCKER_TIMEOUT ?? 120)} onChange={handleNumberChange} min={30} max={600} />
-            <ToggleRow label="Force Recreate" description="Always recreate containers on start, even if unchanged" configKey="FORCE_RECREATE" value={Boolean(edits.FORCE_RECREATE)} onChange={handleBoolChange} />
-            <ToggleRow label="Remove Orphaned Containers" description="Remove containers not defined in compose files" configKey="REMOVE_ORPHANED_CONTAINERS" value={Boolean(edits.REMOVE_ORPHANED_CONTAINERS)} onChange={handleBoolChange} />
             <NumberRow label="Service Start Delay" description="Seconds to wait between starting each stack" configKey="SERVICE_START_DELAY" value={Number(edits.SERVICE_START_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
             <NumberRow label="Service Stop Delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
-            <NumberRow label="Stack Start Timeout" description="Maximum seconds to wait for a stack to start" configKey="STACK_START_TIMEOUT" value={Number(edits.STACK_START_TIMEOUT ?? 300)} onChange={handleNumberChange} min={30} max={900} />
-            <NumberRow label="Max Parallel Operations" description="Maximum concurrent Docker operations" configKey="MAX_PARALLEL_OPERATIONS" value={Number(edits.MAX_PARALLEL_OPERATIONS ?? 3)} onChange={handleNumberChange} min={1} max={10} />
             <SelectRow label="Compose Version" description="Docker Compose version detection mode" configKey="DOCKER_COMPOSE_VERSION" value={String(edits.DOCKER_COMPOSE_VERSION ?? 'auto')} onChange={handleStringChange} options={['auto', 'v1', 'v2']} />
             <TextRow label="Stack Startup Order" description="Space-separated stack names defining startup sequence" configKey="DOCKER_STACKS" value={String(edits.DOCKER_STACKS ?? '')} onChange={handleStringChange} />
           </GroupCard>
@@ -1050,12 +983,11 @@ export default function Config() {
           <GroupCard
             icon={<HeartPulse size={16} className="text-rose-400" />}
             title="Health & Monitoring"
-            description="Health checks, scoring, and container prioritization"
+            description="Health checks and container prioritization"
 
           >
             <ToggleRow label="Post-Startup Health Check" description="Run a health check after all stacks start" configKey="ENABLE_POST_STARTUP_HEALTH_CHECK" value={Boolean(edits.ENABLE_POST_STARTUP_HEALTH_CHECK)} onChange={handleBoolChange} />
             <NumberRow label="Health Check Delay" description="Seconds to wait before the health check" configKey="HEALTH_CHECK_DELAY" value={Number(edits.HEALTH_CHECK_DELAY ?? 10)} onChange={handleNumberChange} min={0} max={120} />
-            <ToggleRow label="Health Score" description="Calculate container health scores (affects dashboard)" configKey="HEALTH_SCORE_ENABLED" value={Boolean(edits.HEALTH_SCORE_ENABLED)} onChange={handleBoolChange} />
             <TextRow label="Critical Containers" description="Comma-separated names — unhealthy triggers critical alerts" configKey="CRITICAL_CONTAINERS" value={String(edits.CRITICAL_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="traefik,pihole" />
             <TextRow label="Important Containers" description="Comma-separated names — unhealthy triggers warnings" configKey="IMPORTANT_CONTAINERS" value={String(edits.IMPORTANT_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="plex,nextcloud" />
           </GroupCard>
@@ -1070,11 +1002,9 @@ export default function Config() {
             <ToggleRow label="Metrics Collection" description="Collect CPU, memory, disk metrics at regular intervals" configKey="METRICS_ENABLED" value={Boolean(edits.METRICS_ENABLED)} onChange={handleBoolChange} />
             <NumberRow label="Metrics Interval" description="Seconds between metrics snapshots" configKey="METRICS_COLLECT_INTERVAL" value={Number(edits.METRICS_COLLECT_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={600} />
             <ToggleRow label="Rollback" description="Snapshot compose files before changes for one-click rollback" configKey="ROLLBACK_ENABLED" value={Boolean(edits.ROLLBACK_ENABLED)} onChange={handleBoolChange} />
-            <ToggleRow label="Scheduler" description="Cron-like task scheduler daemon" configKey="SCHEDULER_ENABLED" value={Boolean(edits.SCHEDULER_ENABLED)} onChange={handleBoolChange} />
             <ToggleRow label="Plugins" description="Load plugins from .plugins/ directory" configKey="PLUGINS_ENABLED" value={Boolean(edits.PLUGINS_ENABLED)} onChange={handleBoolChange} />
             <ToggleRow label="Plugin Hooks" description="Fire plugin hooks on stack start/stop/update events" configKey="PLUGINS_HOOKS_ENABLED" value={Boolean(edits.PLUGINS_HOOKS_ENABLED)} onChange={handleBoolChange} />
             <NumberRow label="Metrics Retention Days" description="Days of metrics history to keep" configKey="METRICS_RETENTION_DAYS" value={Number(edits.METRICS_RETENTION_DAYS ?? 7)} onChange={handleNumberChange} min={1} max={90} />
-            <ToggleRow label="Include Resource Metrics" description="Include CPU/memory data in health reports" configKey="INCLUDE_RESOURCE_METRICS" value={Boolean(edits.INCLUDE_RESOURCE_METRICS)} onChange={handleBoolChange} />
             <NumberRow label="Rollback Max Snapshots" description="Maximum compose snapshots per stack" configKey="ROLLBACK_MAX_SNAPSHOTS" value={Number(edits.ROLLBACK_MAX_SNAPSHOTS ?? 10)} onChange={handleNumberChange} min={1} max={50} />
             <NumberRow label="Scheduler Check Interval" description="Seconds between scheduler checks" configKey="SCHEDULER_CHECK_INTERVAL" value={Number(edits.SCHEDULER_CHECK_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
           </GroupCard>
@@ -1187,20 +1117,12 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     NOTIFICATION_STACKS: data.notification_stacks ?? '',
     ENABLE_COLORS: data.enable_colors ?? true,
     COLOR_MODE: data.color_mode ?? 'auto',
-    COLOR_THEME: data.color_theme ?? 'dark',
     FORCE_COLOR: data.force_color ?? false,
     VERBOSE_MODE: data.verbose_mode ?? false,
     SHOW_SYSTEM_INFO: data.show_system_info ?? true,
     PROGRESS_BAR_WIDTH: data.progress_bar_width ?? 50,
     ENABLE_LOG_DATE: data.enable_log_date ?? true,
-    ENABLE_MILLISECONDS: data.enable_milliseconds ?? false,
-    LOG_DATE_FORMAT: data.log_date_format ?? '%Y-%m-%d %H:%M:%S',
-    ENABLE_LOG_MOOD: data.enable_log_mood ?? true,
-    ENABLE_LOG_PID: data.enable_log_pid ?? false,
-    ENABLE_LOG_HOSTNAME: data.enable_log_hostname ?? false,
-    LOG_MAX_SIZE: data.log_max_size ?? '10M',
     LOG_BACKUP_COUNT: data.log_backup_count ?? 12,
-    LOG_RETENTION_DAYS: data.log_retention_days ?? 30,
     ENABLE_STRUCTURED_LOGGING: data.enable_structured_logging ?? false,
     TRAEFIK_DOMAIN: data.traefik_domain ?? '',
     TRAEFIK_ACME_EMAIL: data.traefik_acme_email ?? '',
@@ -1210,25 +1132,17 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     HEALTH_CHECK_DELAY: data.health_check_delay ?? 10,
     CRITICAL_CONTAINERS: data.critical_containers ?? '',
     IMPORTANT_CONTAINERS: data.important_containers ?? '',
-    HEALTH_SCORE_ENABLED: data.health_score_enabled ?? true,
     METRICS_ENABLED: data.metrics_enabled ?? true,
     METRICS_COLLECT_INTERVAL: data.metrics_collect_interval ?? 60,
     ROLLBACK_ENABLED: data.rollback_enabled ?? true,
-    SCHEDULER_ENABLED: data.scheduler_enabled ?? true,
     PLUGINS_ENABLED: data.plugins_enabled ?? true,
     PLUGINS_HOOKS_ENABLED: data.plugins_hooks_enabled ?? true,
     METRICS_RETENTION_DAYS: data.metrics_retention_days ?? 7,
-    INCLUDE_RESOURCE_METRICS: data.include_resource_metrics ?? true,
     ROLLBACK_MAX_SNAPSHOTS: data.rollback_max_snapshots ?? 10,
     SCHEDULER_CHECK_INTERVAL: data.scheduler_check_interval ?? 60,
-    DOCKER_TIMEOUT: data.docker_timeout ?? 120,
-    FORCE_RECREATE: data.force_recreate ?? false,
-    REMOVE_ORPHANED_CONTAINERS: data.remove_orphaned_containers ?? true,
     SERVICE_START_DELAY: data.service_start_delay ?? 0,
     SERVICE_STOP_DELAY: data.service_stop_delay ?? 0,
     DOCKER_STACKS: data.docker_stacks ?? '',
-    MAX_PARALLEL_OPERATIONS: data.max_parallel_operations ?? 3,
-    STACK_START_TIMEOUT: data.stack_start_timeout ?? 300,
     BACKUP_SOURCE_DIR: data.backup_source_dir ?? '',
     BACKUP_DEST_DIR: data.backup_dest_dir ?? '',
     BACKUP_RETENTION_COUNT: data.backup_retention_count ?? 7,

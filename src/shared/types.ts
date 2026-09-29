@@ -370,17 +370,11 @@ export interface ServerConfig {
   notification_stacks: string
   enable_colors: boolean
   color_mode: string
-  color_theme: string
   force_color: boolean
   verbose_mode: boolean
   show_system_info: boolean
   progress_bar_width: number
   enable_log_date: boolean
-  enable_milliseconds: boolean
-  log_date_format: string
-  enable_log_mood: boolean
-  enable_log_pid: boolean
-  enable_log_hostname: boolean
   api_enabled: boolean
   server_name: string
   server_subtitle: string
@@ -399,12 +393,10 @@ export interface ServerConfig {
   health_check_delay: number
   critical_containers: string
   important_containers: string
-  health_score_enabled: boolean
   // Metrics/Features
   metrics_enabled: boolean
   metrics_collect_interval: number
   rollback_enabled: boolean
-  scheduler_enabled: boolean
   plugins_enabled: boolean
   plugins_hooks_enabled: boolean
   // Backup
@@ -412,13 +404,8 @@ export interface ServerConfig {
   backup_dest_dir: string
   backup_retention_count: number
   // Docker
-  docker_timeout: number
-  force_recreate: boolean
-  remove_orphaned_containers: boolean
   service_start_delay: number
   docker_stacks: string
-  max_parallel_operations: number
-  stack_start_timeout: number
   service_stop_delay: number
   // API extended
   api_auth_enabled: boolean
@@ -429,13 +416,10 @@ export interface ServerConfig {
   api_cors_origins: string
   api_ip_whitelist: string
   // Log extended
-  log_max_size: string
   log_backup_count: number
-  log_retention_days: number
   enable_structured_logging: boolean
   // Metrics extended
   metrics_retention_days: number
-  include_resource_metrics: boolean
   // Features extended
   rollback_max_snapshots: number
   secrets_encryption: boolean

@@ -450,7 +450,6 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         NTFY_URL: data.defaults.NTFY_URL || '',
         NTFY_TOPIC: data.defaults.NTFY_TOPIC || '',
         LOG_LEVEL: data.defaults.LOG_LEVEL || 'INFO',
-        DOCKER_TIMEOUT: data.defaults.DOCKER_TIMEOUT || '300',
         BACKUP_SOURCE_DIR: data.defaults.BACKUP_SOURCE_DIR || '',
         BACKUP_DEST_DIR: data.defaults.BACKUP_DEST_DIR || '',
         CONTINUE_ON_FAILURE: data.defaults.CONTINUE_ON_FAILURE || 'true',
@@ -1736,7 +1735,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       />
 
                       {/* Number: Service start delay */}
-                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Start Delay (seconds)</label>
                           <input aria-label="Start Delay (seconds)"
@@ -1745,17 +1744,6 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             max="60"
                             value={envVars.SERVICE_START_DELAY || '5'}
                             onChange={(e) => setEnvVars({ ...envVars, SERVICE_START_DELAY: e.target.value })}
-                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Docker Timeout (seconds)</label>
-                          <input aria-label="Docker Timeout (seconds)"
-                            type="number"
-                            min="30"
-                            max="900"
-                            value={envVars.DOCKER_TIMEOUT || '300'}
-                            onChange={(e) => setEnvVars({ ...envVars, DOCKER_TIMEOUT: e.target.value })}
                             className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                           />
                         </div>
@@ -2527,7 +2515,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 )}
 
                 {(() => {
-                  const startupDefaults: Record<string, string> = { LOG_LEVEL: 'INFO', CONTINUE_ON_FAILURE: 'true', SKIP_HEALTHCHECK_WAIT: 'false', SERVICE_START_DELAY: '5', DOCKER_TIMEOUT: '300', ENABLE_POST_STARTUP_HEALTH_CHECK: 'true' }
+                  const startupDefaults: Record<string, string> = { LOG_LEVEL: 'INFO', CONTINUE_ON_FAILURE: 'true', SKIP_HEALTHCHECK_WAIT: 'false', SERVICE_START_DELAY: '5', ENABLE_POST_STARTUP_HEALTH_CHECK: 'true' }
                   const changed = Object.entries(startupDefaults).filter(([k, v]) => envVars[k] && envVars[k] !== v)
                   return changed.length > 0 ? (
                     <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
