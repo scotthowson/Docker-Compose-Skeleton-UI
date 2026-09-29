@@ -2825,6 +2825,14 @@ export interface ContainerThemeState {
   enabled: boolean
   theme: string
   addons: string[]
+  /** DCS wrote the theme (false: a theme.park middleware written by hand in the route) */
+  managed?: boolean
+  /** the middleware that carries the theme now */
+  middleware?: string
+  /** theme.park middlewares written by hand on the route (they give way to DCS's theme) */
+  foreign?: { middleware: string; theme: string; addons: string[] }[]
+  /** the name this Traefik knows the theme.park plugin by ("theme-park", "themepark"; "" when undeclared) */
+  plugin?: string
   catalog: {
     themes: string[]
     community: string[]

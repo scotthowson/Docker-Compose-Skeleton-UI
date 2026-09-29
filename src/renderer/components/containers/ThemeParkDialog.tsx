@@ -35,7 +35,9 @@ function addonLabel(app: string, addon: string): string {
 }
 
 export default function ThemeParkDialog({ containerName, member, state, onClose, onChanged, onError }: Props) {
-  const [theme, setTheme] = useState(state.enabled && state.theme ? state.theme : (state.catalog.themes.includes('nord') ? 'nord' : state.catalog.themes[0] ?? 'dark'))
+  // a theme written by hand may spell a name without its dash ("spacegray" for "space-gray"): the catalogue's spelling is preselected
+  const known = (t: string) => [...state.catalog.themes, ...state.catalog.community].find((c) => c.replace(/-/g, '') === t.replace(/-/g, '')) ?? t
+  const [theme, setTheme] = useState(state.enabled && state.theme ? known(state.theme) : (state.catalog.themes.includes('nord') ? 'nord' : state.catalog.themes[0] ?? 'dark'))
   const [addons, setAddons] = useState<string[]>(state.enabled ? state.addons : [])
   const [busy, setBusy] = useState<'apply' | 'remove' | null>(null)
   const darker = addons.some((a) => a.endsWith('-darker'))
@@ -80,7 +82,7 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
             <Palette size={18} className="text-fuchsia-300" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-slate-100">{state.enabled ? `Theme: ${label(state.theme)}` : 'Theme'}</h3>
+            <h3 className="text-sm font-semibold text-slate-100">{state.enabled ? `Theme: ${label(state.theme)}${state.managed === false ? ' (from your route)' : ''}` : 'Theme'}</h3>
             <p className="text-[11px] text-slate-500 truncate"><span className="font-mono">{containerName}</span> · theme.park for {appName}</p>
           </div>
           <button type="button" onClick={onClose} disabled={!!busy} className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-40" title="Close">
@@ -91,6 +93,19 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
         <p className="text-xs text-slate-400 leading-relaxed mb-4">
           Traefik adds the theme's stylesheet to {appName}'s pages as they pass through its route{state.host ? <> (<span className="font-mono text-slate-300">{state.host}</span>)</> : null}. Nothing inside the container changes; opened directly by its port, the app keeps its own look.
         </p>
+
+        {(state.foreign ?? []).length > 0 && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-fuchsia-500/[0.05] border border-fuchsia-500/15 mb-4">
+            <Palette size={13} className="text-fuchsia-300 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              This route already carries a theme.park middleware written by hand:{' '}
+              {(state.foreign ?? []).map((f) => (
+                <span key={f.middleware} className="font-mono text-fuchsia-200">{f.middleware} ({label(f.theme || 'base')}{f.addons.length ? ` + ${f.addons.map((a) => addonLabel(state.app, a)).join(', ')}` : ''})</span>
+              ))}
+              . Saving here puts this theme in its place on the route; your definition stays in the route file.
+            </p>
+          </div>
+        )}
 
         {cannot && (
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/[0.06] border border-amber-500/15 mb-4">
