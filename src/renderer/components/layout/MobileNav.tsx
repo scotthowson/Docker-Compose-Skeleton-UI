@@ -68,9 +68,9 @@ export function MobileNav() {
                 type="button"
                 onClick={() => go(p.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex-1 flex flex-col items-center justify-center gap-1 select-none transition-colors ${active ? 'text-emerald-400' : 'text-slate-500 active:text-slate-300'}`}
+                className={`relative flex-1 flex flex-col items-center justify-center gap-1 select-none transition-colors ${active ? 'accent-text' : 'text-slate-500 active:text-slate-300'}`}
               >
-                <span className={`relative flex items-center justify-center w-12 h-7 rounded-full transition-colors ${active ? 'bg-emerald-500/15' : ''}`}>
+                <span className={`relative flex items-center justify-center w-12 h-7 rounded-full transition-colors ${active ? 'accent-bg-subtle' : ''}`}>
                   <Icon size={22} strokeWidth={active ? 2.4 : 2} />
                   {p.id === 'health' && unhealthy > 0 && (
                     <span className="absolute -top-0.5 right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-4 text-center ring-2 ring-slate-900">{unhealthy}</span>
@@ -83,11 +83,11 @@ export function MobileNav() {
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className={`relative flex-1 flex flex-col items-center justify-center gap-1 select-none transition-colors ${!onPrimary || moreOpen ? 'text-emerald-400' : 'text-slate-500 active:text-slate-300'}`}
+            className={`relative flex-1 flex flex-col items-center justify-center gap-1 select-none transition-colors ${!onPrimary || moreOpen ? 'accent-text' : 'text-slate-500 active:text-slate-300'}`}
             aria-haspopup="dialog"
             aria-expanded={moreOpen}
           >
-            <span className={`flex items-center justify-center w-12 h-7 rounded-full ${!onPrimary || moreOpen ? 'bg-emerald-500/15' : ''}`}>
+            <span className={`flex items-center justify-center w-12 h-7 rounded-full ${!onPrimary || moreOpen ? 'accent-bg-subtle' : ''}`}>
               <Menu size={22} strokeWidth={!onPrimary ? 2.4 : 2} />
             </span>
             <span className="text-[11px] font-medium leading-none">{onPrimary ? 'More' : (byId.get(currentPage)?.label ?? 'More')}</span>
@@ -135,9 +135,9 @@ export function MobileNav() {
                             key={n.id}
                             type="button"
                             onClick={() => go(n.id)}
-                            className={`flex items-center gap-3 px-3.5 h-[52px] rounded-2xl border text-left transition-colors ${active ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300' : 'bg-white/[0.03] border-white/5 text-slate-200 active:bg-white/10'}`}
+                            className={`flex items-center gap-3 px-3.5 h-[52px] rounded-2xl border text-left transition-colors ${active ? 'accent-bg-subtle accent-border accent-text' : 'bg-white/[0.03] border-white/5 text-slate-200 active:bg-white/10'}`}
                           >
-                            <Icon size={20} className={active ? 'text-emerald-400' : 'text-slate-400'} />
+                            <Icon size={20} className={active ? 'accent-text' : 'text-slate-400'} />
                             <span className="text-[15px] font-medium truncate">{n.label}</span>
                           </button>
                         )
