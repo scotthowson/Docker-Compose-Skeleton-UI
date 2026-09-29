@@ -3253,7 +3253,7 @@ export interface ProxmoxStorageResponse { node: string; storages: ProxmoxStorage
 
 /** GET /fleet/provision/defaults — prefilled values for creating VMs */
 /** A cloud image the hub can have Proxmox download (cloud-init; apt or dnf inside) */
-export interface FleetImage { id: string; label: string; url: string; file: string; family?: string; /** a purpose-built DCS image (vm-images/): nothing to bake */ prebuilt?: boolean }
+export interface FleetImage { id: string; label: string; url: string; file: string; family?: string; /** a purpose-built DCS image (vm-images/): nothing to bake */ prebuilt?: boolean; /** what its kernel drives (vm-images/images.json): whether a GPU or a USB device can be passed through */ hardware?: string }
 /** A file already on a Proxmox storage: an imported cloud image, or an installer ISO */
 export interface FleetStoredImage { volid: string; file: string; size: number; storage: string }
 /** A DCS template the hub baked: VMs cloned from it build in about 40 s */

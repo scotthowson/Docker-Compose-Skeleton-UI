@@ -169,6 +169,10 @@ export function VmSettingsFields({ value, onChange, defaults, disabled = false }
         <p className="text-[10px] text-slate-500 mt-1">
           {value.os.startsWith('cat:dcs-') ? 'A purpose-built DCS image: a Docker host and nothing else, with the tools, Docker and the guest agent already in place — nothing to install or bake. The VM boots in seconds; only the fresh DCS code and the join run.' : value.os.startsWith('tpl:') ? 'A baked DCS template: the VM is a clone with the tools, Docker and the guest agent already in place; only cloud-init, the fresh DCS code and the join run.' : value.os.startsWith('iso:') ? 'An installer: the hub creates the VM with the ISO attached and shows the join code; you install in the Proxmox console, then join.' : 'A cloud image: Proxmox downloads it once (or the hub uploads it), the VM is installed, joined and running without a hand on it. Ubuntu, Debian, Fedora and AlmaLinux are covered; any cloud-init image with apt or dnf works.'}
         </p>
+        {(() => {
+          const hardware = defaults?.images?.catalogue?.find((c) => `cat:${c.id}` === value.os)?.hardware
+          return hardware ? <p className="text-[10px] text-slate-500 mt-1">{hardware}.</p> : null
+        })()}
       </div>
       <div>
         <label htmlFor={`${id}-node`} className={labelCls}>Node</label>

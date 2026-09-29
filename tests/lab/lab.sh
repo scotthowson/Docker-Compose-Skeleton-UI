@@ -47,6 +47,7 @@ make_install() {
     cp "$AIO/.config/schema.json" "$AIO/.config/template-gallery.json" "$AIO/.config/palette.sh" "$dir/.config/" 2>/dev/null || true
     cp -r "$AIO/.templates/." "$dir/.templates/"
     cp -r "$AIO/.plugins-catalog/." "$dir/.plugins-catalog/"
+    mkdir -p "$dir/vm-images"; cp "$AIO/vm-images/images.json" "$dir/vm-images/" 2>/dev/null || true   # the list of DCS images the New VM sheet offers
     cp -r "$AIO/docs/." "$dir/docs/"
     cp "$AIO/compose.sh" "$AIO/VERSION" "$dir/"
     grep -vE '^(API_BIND|API_AUTH_ENABLED|API_INSECURE_NO_AUTH|API_TRUSTED_PROXIES|API_IP_WHITELIST|API_PORT|API_RATE_LIMIT|API_SINGLE_SESSION|API_RESPONSE_CACHE|PROXMOX_[A-Z_]+|FLEET_SCAN_PORTS|FLEET_SELF_URL|METRICS_ENABLED|SCHEDULER_ENABLED)=' "$AIO/.env.example" > "$dir/.env"
