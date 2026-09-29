@@ -6,7 +6,7 @@
 // white/N), so every theme, dark or light, restyles them.
 // =============================================================================
 
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Copy, Check } from 'lucide-react'
 import { ApiError } from '../../api/client'
@@ -88,8 +88,17 @@ export function Segmented<T extends string>({ value, options, onChange, ariaLabe
   ariaLabel: string
   className?: string
 }) {
+  const box = useRef<HTMLDivElement>(null)
+  // a long row scrolls sideways on a phone: keep the chosen option in view (the palette and the overview open tabs by themselves)
+  const first = useRef(true)
+  useEffect(() => {
+    const c = box.current
+    const on = c?.querySelector<HTMLElement>('[aria-pressed="true"]')
+    if (c && on && c.scrollWidth > c.clientWidth) c.scrollTo({ left: on.offsetLeft - (c.clientWidth - on.offsetWidth) / 2, behavior: first.current ? 'auto' : 'smooth' })
+    first.current = false
+  }, [value])
   return (
-    <div role="group" aria-label={ariaLabel} className={`flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/5 overflow-x-auto scrollbar-none max-w-full ${className}`}>
+    <div ref={box} role="group" aria-label={ariaLabel} className={`relative flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/5 overflow-x-auto scrollbar-none max-w-full ${className}`}>
       {options.map((o) => {
         const on = o.value === value
         const Icon = o.icon
