@@ -34,6 +34,35 @@
   }
 }
 
+/* a badge that is a button (a VM capsule that finds its guest): the same pill, lit on hover, ringed on focus */
+button.mantine-Badge-root {
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+}
+button.mantine-Badge-root:hover {
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.07);
+}
+.light button.mantine-Badge-root:hover {
+  box-shadow: inset 0 0 0 100px rgba(15, 23, 42, 0.05);
+}
+button.mantine-Badge-root:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+/* the phone shell (index.css) reads 9 and 10 px text at 12 px and gives buttons a 40 px floor:
+   the pills follow the text and stay pills */
+@media (max-width: 767px) {
+  main .mantine-Badge-root[data-size='sm'],
+  main .mantine-Badge-root[data-size='xs'] {
+    font-size: 12px !important;
+    height: 22px !important;
+    line-height: 20px !important;
+  }
+  main button.mantine-Badge-root {
+    min-height: 0 !important;
+  }
+}
+
 /* segmented filters: muted choices that brighten on hover; the chosen one keeps its colour (theme) */
 .mantine-SegmentedControl-label:not([data-active]) {
   color: var(--dcs-seg-label);

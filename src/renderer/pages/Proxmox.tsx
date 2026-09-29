@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Badge, Tooltip } from '@mantine/core'
 import {
   RotateCcw, Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
@@ -105,7 +106,18 @@ function StatusDot({ status, className = '' }: { status: string; className?: str
   return <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${cls} ${className}`} aria-label={status} />
 }
 function TypeChip({ type }: { type: ProxmoxVm['type'] }) {
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded-md border font-medium leading-none shrink-0 ${type === 'qemu' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-violet-500/10 text-violet-300 border-violet-500/20'}`}>{type === 'qemu' ? 'VM' : 'LXC'}</span>
+  return <Badge component="span" color={type === 'qemu' ? 'cyan' : 'violet'}>{type === 'qemu' ? 'VM' : 'LXC'}</Badge>
+}
+/** Proxmox tags as pills (the ones DCS wants in emerald); past `max`, a +N that names the rest */
+function TagChips({ tags, max, wanted = [] }: { tags: string[]; max?: number; wanted?: string[] }) {
+  const shown = max && tags.length > max ? tags.slice(0, max) : tags
+  const rest = tags.slice(shown.length)
+  return (
+    <>
+      {shown.map((t) => <Badge key={t} component="span" color={wanted.includes(t) ? 'emerald' : 'slate'}>{t}</Badge>)}
+      {rest.length > 0 && <Tooltip label={`Also tagged ${rest.join(', ')}`}><Badge component="span" color="slate">+{rest.length}</Badge></Tooltip>}
+    </>
+  )
 }
 function SectionLabel({ icon: Icon, children, className = '' }: { icon: React.ElementType; children: ReactNode; className?: string }) {
   return <h2 className={`text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2 min-w-0 ${className}`}><Icon size={12} className="shrink-0" /> {children}</h2>
@@ -272,8 +284,8 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf
       <CardHead icon={Home} title="This server" right={<VmCapsule />} />
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-semibold text-slate-100 truncate">{fleet?.server_name || fleet?.hostname || 'DCS'}</span>
-        {isHub && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-200 border border-amber-500/20 font-medium leading-none shrink-0">hub</span>}
-        {role === 'member' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-medium leading-none shrink-0">member</span>}
+        {isHub && <Badge component="span" color="amber">hub</Badge>}
+        {role === 'member' && <Badge component="span" color="emerald">member</Badge>}
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5 truncate">
         DCS {fleet?.version || '…'}{fleet?.hostname ? ` · ${fleet.hostname}` : ''}
@@ -292,10 +304,10 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf
       {pveSelf?.guest && (
         <div className="mt-3 flex items-center gap-1.5 flex-wrap min-w-0">
           <Tag size={11} className="text-slate-500 shrink-0" />
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0" title={`${pveSelf.guest.type === 'lxc' ? 'Container' : 'VM'} ${pveSelf.guest.vmid} (${pveSelf.guest.name}) on ${pveSelf.guest.node} — the Proxmox guest this server runs in, found by its ${MATCH_LABEL[pveSelf.guest.matched_by] ?? pveSelf.guest.matched_by}`}>Proxmox tags</span>
-          {pveSelf.tags.map((t) => (
-            <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded-md border leading-none ${pveSelf.wanted.includes(t) ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-white/[0.04] text-slate-400 border-white/10'}`}>{t}</span>
-          ))}
+          <Tooltip label={`${pveSelf.guest.type === 'lxc' ? 'Container' : 'VM'} ${pveSelf.guest.vmid} (${pveSelf.guest.name}) on ${pveSelf.guest.node} — the Proxmox guest this server runs in, ${MATCH_LABEL[pveSelf.guest.matched_by] ?? `matched by ${pveSelf.guest.matched_by}`}`}>
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0 cursor-help">Proxmox tags</span>
+          </Tooltip>
+          <TagChips tags={pveSelf.tags} wanted={pveSelf.wanted} />
           {pveSelf.missing.length > 0 && (isAdmin
             ? <button type="button" onClick={onTag} disabled={tagging} title={`Give ${pveSelf.guest.type === 'lxc' ? 'container' : 'VM'} ${pveSelf.guest.vmid} the tag${pveSelf.missing.length > 1 ? 's' : ''} ${pveSelf.missing.join(' and ')} in Proxmox (the API token needs VM.Config.Options on it)`} className={MINI}>
                 {tagging ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />} Add {pveSelf.missing.join(', ')}
@@ -459,7 +471,7 @@ function VmContainers({ member, live, stack, isAdmin, onStackAction, busyKey, on
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${running ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-slate-200 truncate">{c.name}</p>
-                  <p className="text-[10px] text-slate-500 truncate">{c.image}{c.uptime_seconds ? ` · up ${fmtUptime(c.uptime_seconds)}` : ''}{c.health ? ` · ${c.health}` : ''}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{c.image}{c.uptime_seconds ? ` · up ${fmtUptime(c.uptime_seconds)}` : ''}{c.health && c.health !== 'none' ? ` · ${c.health}` : ''}</p>
                 </div>
                 {isAdmin && (cbusy.startsWith(`${c.name}:`) ? <Loader2 size={12} className="animate-spin text-cyan-400" /> : (
                   <div className="flex items-center gap-0.5">
@@ -552,11 +564,13 @@ interface VmRowProps {
 
 /** the DCS chip a member row wears: version, and the member's name when it differs from the guest's (offline: the guest is off, so the recorded version in grey) */
 function DcsChip({ vm, member, live, offline = false }: { vm: ProxmoxVm; member: FleetMemberBase; live?: FleetMemberLive; offline?: boolean }) {
-  const tone = offline ? 'bg-white/5 text-slate-400 border-white/10' : live && !live.reachable ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+  const color = offline ? 'slate' : live && !live.reachable ? 'rose' : 'amber'
   return (
-    <span title={`${member.name} at ${member.url}${member.matched_by ? ` — ${MATCH_LABEL[member.matched_by]}` : ''}`} className={`inline-flex items-center gap-1.5 px-2 h-5 rounded-full border font-medium leading-none whitespace-nowrap shrink-0 ${tone}`}>
-      <Satellite size={10} /> DCS {member.version || '?'}{member.name !== vm.name ? ` · ${member.name}` : ''}{offline && <span className="text-slate-500 font-normal">· offline</span>}
-    </span>
+    <Tooltip label={`${member.name} at ${member.url}${member.matched_by ? ` — ${MATCH_LABEL[member.matched_by]}` : ''}`}>
+      <Badge component="span" color={color} leftSection={<Satellite size={10} />}>
+        DCS {member.version || '?'}{member.name !== vm.name ? ` · ${member.name}` : ''}{offline ? ' · offline' : ''}
+      </Badge>
+    </Tooltip>
   )
 }
 
@@ -643,7 +657,7 @@ function VmCard(p: VmRowProps) {
             <span className="flex items-center gap-1 shrink-0"><Server size={10} /> {vm.node}</span>
             <span className="capitalize shrink-0">{vm.status}</span>
             <span className="flex items-center gap-1 tabular-nums shrink-0" title="Uptime"><Clock size={10} /> {running ? fmtUptime(vm.uptime) : '—'}</span>
-            {vm.tags.length > 0 && <span className="flex items-center gap-1 min-w-0" title={vm.tags.join(', ')}><Tag size={10} className="shrink-0" /> <span className="truncate">{vm.tags.join(', ')}</span></span>}
+            {vm.tags.length > 0 && <span className="flex items-center gap-1 min-w-0 overflow-hidden"><TagChips tags={vm.tags} max={2} /></span>}
           </div>
         </div>
         {member && isAdmin && (
@@ -722,7 +736,7 @@ function VmTableRow(p: VmRowProps) {
           <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} small /></div>
         ) : <span className="text-slate-600">—</span>}
       </td>
-      <td className={th}><div className="flex flex-wrap gap-1">{vm.tags.map((t) => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/5 text-slate-400 leading-none">{t}</span>)}</div></td>
+      <td className={th}><div className="flex flex-wrap gap-1"><TagChips tags={vm.tags} /></div></td>
       <td className={th}>
         <div className="flex items-center justify-end gap-1">
           {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} small />)}
@@ -806,7 +820,10 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
     if (d.config.description) facts.push(['Description', <span className="whitespace-pre-line break-words">{d.config.description}</span>])
   }
   return (
-    <Sheet title={vm.name} subtitle={`${vm.type === 'qemu' ? 'VM' : 'Container'} ${vm.vmid} on ${vm.node} · ${vm.status}${running ? ` · up ${fmtUptime(d?.uptime ?? vm.uptime)}` : ''}${vm.tags.length ? ` · ${vm.tags.join(', ')}` : ''}`} icon={<Server size={18} />} onClose={onClose} wide>
+    <Sheet title={vm.name} subtitle={<>
+      {`${vm.type === 'qemu' ? 'VM' : 'Container'} ${vm.vmid} on ${vm.node} · ${vm.status}${running ? ` · up ${fmtUptime(d?.uptime ?? vm.uptime)}` : ''}`}
+      {vm.tags.length > 0 && <span className="flex flex-wrap items-center gap-1 mt-1.5"><TagChips tags={vm.tags} /></span>}
+    </>} icon={<Server size={18} />} onClose={onClose} wide>
       <div className="space-y-3">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Tile label="CPU" value={running ? `${fmtPct(d?.cpu || vm.cpu)}%` : '—'} note={`${d?.cpus || vm.maxcpu} vCPU`} />
@@ -1051,8 +1068,8 @@ export default function Proxmox() {
   }
 
   const roleChip = role === 'member'
-    ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1"><Satellite size={10} /> member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</span>
-    : isHub ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20 flex items-center gap-1"><Satellite size={10} /> hub · {memberCount} member{memberCount === 1 ? '' : 's'}</span>
+    ? <Badge component="span" color="emerald" leftSection={<Satellite size={10} />}>member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</Badge>
+    : isHub ? <Badge component="span" color="amber" leftSection={<Satellite size={10} />}>hub · {memberCount} member{memberCount === 1 ? '' : 's'}</Badge>
     : null
 
   // the overview row: the cards that apply here, side by side; the builds take a full row of their own while any exist
@@ -1075,7 +1092,7 @@ export default function Proxmox() {
           <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2 flex-wrap"><Server size={20} className="text-amber-400" /> Proxmox {roleChip}</h1>
           <p className="text-sm text-slate-400 mt-1 tabular-nums">
             {!s ? 'Checking the link…' : !configured ? 'Not linked yet.' : !reachable ? 'Linked, but Proxmox does not answer.' : `Proxmox VE ${s.version} · ${s.nodes_online}/${s.nodes} node${s.nodes === 1 ? '' : 's'} online · ${s.vms.running} of ${s.vms.total} guests running`}
-            {overview.data && memberCount > 0 && ` · ${overview.data.totals.reachable}/${overview.data.totals.members} members answering · ${overview.data.totals.stacks} stacks · ${overview.data.totals.containers_running}/${overview.data.totals.containers_total} containers`}
+            {overview.data && memberCount > 0 && ` · ${overview.data.totals.reachable}/${overview.data.totals.members} members answering · ${overview.data.totals.stacks} stack${overview.data.totals.stacks === 1 ? '' : 's'} · ${overview.data.totals.containers_running}/${overview.data.totals.containers_total} containers`}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

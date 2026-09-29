@@ -187,9 +187,9 @@ const theme = createTheme({
     }),
     Combobox: Combobox.extend({ defaultProps: { zIndex: LAYER }, styles: { dropdown: DROPDOWN } }),
     Popover: Popover.extend({ defaultProps: { zIndex: LAYER }, styles: { dropdown: DROPDOWN } }),
-    // chips and pills: normal case, medium weight, a hairline border in their colour (the dashboard's chips)
+    // chips and pills: the dashboard's pill (10 px, normal case, medium weight, a hairline border in its colour)
     Badge: Badge.extend({
-      defaultProps: { variant: 'light', size: 'sm', radius: 'sm' },
+      defaultProps: { variant: 'light', size: 'sm', radius: 'xl' },
       vars: (_theme, props) => ({
         root: props.variant === 'light' ? { '--badge-bd': `1px solid var(--dcs-tint-${paletteColor(props.color, 'emerald')}-border)` } : {},
       }),
