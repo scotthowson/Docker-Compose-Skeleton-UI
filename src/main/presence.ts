@@ -44,7 +44,7 @@ const DEFAULT_PAYLOAD: PresencePayload = {
   largeImageKey: 'dcs',
   largeImageText: 'DCS Manager',
   startTimestamp: SESSION_STARTED,
-  buttons: [{ label: 'Get DCS', url: 'https://github.com/scotthowson/Docker-Compose-Skeleton-AIO' }],
+  buttons: [{ label: 'Get DCS', url: 'https://github.com/scotthowson/dcs-orchestrator' }],
 }
 
 let client: Client | null = null
