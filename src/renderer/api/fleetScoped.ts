@@ -13,7 +13,8 @@ import type {
   ContainerFileContentResponse, ContainerFilesResponse, ContainerInfo, ContainerLogsResponse,
   ContainerProcessesResponse, ContainerRenameResponse, ContainerResetPreview, ContainerResetResponse,
   ContainerStats, EventsResponse, HealthReport, LiveLogsResponse, LogArchivesResponse, LogsResponse,
-  LogStatsResponse, SablierToggleResponse, SablierSettingsResponse, TopologyResponse,
+  LogStatsResponse, SablierToggleResponse, SablierSettingsResponse, TopologyResponse, ContainerHomarrState, ContainerHomarrAddResponse,
+  ContainerThemeState, ContainerThemeResponse,
 } from '../../shared/types'
 import type { FleetContainerListResponse, RowMember, ScopeMemberTag } from '../../shared/fleetScoped'
 
@@ -122,6 +123,33 @@ export function updateContainerEnvOn(name: string, opts: { set?: Record<string, 
 /** POST /containers/:name/sablier — start on demand through Traefik, or serve normally again */
 export function setContainerSablierOn(name: string, body: { enabled: boolean; session?: string; display_name?: string; theme?: string; show_details?: boolean }, member: RowMember): Promise<SablierToggleResponse> {
   return apiClient.post<SablierToggleResponse>(memberPath(member, `/containers/${enc(name)}/sablier`), body)
+}
+
+/**
+ * GET /containers/:name/homarr — is the container on the Homarr dashboard (3.9.5). Always asked
+ * of the server the dashboard is connected to: in a fleet the hub runs Homarr and asks the VM
+ * (?member=) only for the container's address.
+ */
+export function fetchContainerHomarr(name: string, member: RowMember): Promise<ContainerHomarrState> {
+  return apiClient.get<ContainerHomarrState>(`/containers/${enc(name)}/homarr${member ? `?member=${enc(member)}` : ''}`)
+}
+
+/** POST /containers/:name/homarr — put the container on Homarr now (an app, and a tile with an API key) */
+export function addContainerHomarr(name: string, member: RowMember): Promise<ContainerHomarrAddResponse> {
+  return apiClient.post<ContainerHomarrAddResponse>(`/containers/${enc(name)}/homarr${member ? `?member=${enc(member)}` : ''}`, undefined, 45000)
+}
+
+/**
+ * GET /containers/:name/theme — the theme.park theme on the container's pages (3.9.5). Asked of the
+ * server the dashboard is connected to: in a fleet the hub's Traefik applies the theme to a VM's route.
+ */
+export function fetchContainerTheme(name: string, member: RowMember): Promise<ContainerThemeState> {
+  return apiClient.get<ContainerThemeState>(`/containers/${enc(name)}/theme${member ? `?member=${enc(member)}` : ''}`)
+}
+
+/** POST /containers/:name/theme — apply a theme.park theme (with add-ons) or remove it */
+export function setContainerTheme(name: string, member: RowMember, body: { enabled: boolean; theme?: string; addons?: string[] }): Promise<ContainerThemeResponse> {
+  return apiClient.post<ContainerThemeResponse>(`/containers/${enc(name)}/theme${member ? `?member=${enc(member)}` : ''}`, body, 90000)
 }
 
 /** GET /containers/:name/sablier — the container's current on-demand settings (3.9.4) */

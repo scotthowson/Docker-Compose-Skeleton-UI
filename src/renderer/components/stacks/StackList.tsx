@@ -484,7 +484,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           )}
           {(hubMode ? [...filtered.filter((s) => s.placement === 'vm')] : filtered).map((stack) => (
             <StackCard
-              key={stack.name}
+              key={`${stack.member ?? ''}|${stack.name}`}
               stack={stack}
               isActionLoading={actionLoading === stack.name}
               onAction={onAction}
@@ -504,7 +504,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
           )}
           {hubMode && filtered.filter((s) => s.placement !== 'vm').map((stack) => (
             <StackCard
-              key={stack.name}
+              key={`${stack.member ?? ''}|${stack.name}`}
               stack={stack}
               isActionLoading={actionLoading === stack.name}
               onAction={onAction}

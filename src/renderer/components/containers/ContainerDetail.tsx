@@ -28,6 +28,8 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import { NukeDialog } from './NukeDialog'
 import OnDemandDialog from './OnDemandDialog'
+import HomarrChip from './HomarrChip'
+import ThemeButton from './ThemeButton'
 import { Bomb } from 'lucide-react'
 import {
   AreaChart,
@@ -931,7 +933,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               </button>
             </>
           )}
-          <div className="flex items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
             {showCapsule && <VmCapsule member={member} name={memberName || containerInfo.member_name} vmid={containerInfo.vmid} />}
             <StatusBadge label={containerInfo.state} variants={STATE_VARIANTS} />
             <StatusBadge label={containerInfo.health} variants={HEALTH_VARIANTS} />
@@ -940,7 +942,9 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
         {/* Action buttons row — wraps on mobile */}
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {/* on demand is Sablier beside the Traefik that serves the route: a VM's containers are
+              served by the hub's Traefik and Sablier cannot wake them from there (not yet) */}
+          {isAdmin && !member && (
             <button
               onClick={() => setOnDemandOpen(true)}
               disabled={!!actionLoading}
@@ -951,6 +955,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               {containerInfo.on_demand ? 'On demand: on' : 'Start on demand'}
             </button>
           )}
+          {isAdmin && <ThemeButton containerName={containerName} member={member} disabled={!!actionLoading} />}
           {onDemandOpen && (
             <OnDemandDialog
               containerName={containerName}
@@ -1066,6 +1071,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               Processes
             </button>
           )}
+          {/* Homarr: under the health badge, at the right end of the row */}
+          <div className="ml-auto">
+            <HomarrChip containerName={containerName} member={member} isAdmin={isAdmin} />
+          </div>
         </div>
       </div>
 

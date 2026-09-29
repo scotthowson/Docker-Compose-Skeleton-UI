@@ -248,7 +248,7 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
 
           return (
             <div
-              key={c.name}
+              key={`${c.member ?? ''}|${c.name}`}
               className="relative group"
               onMouseEnter={() => setHoveredIdx(idx)}
               onMouseLeave={() => setHoveredIdx(null)}
@@ -356,7 +356,8 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
 
 function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
   const portEntries = useMemo(() => {
-    const entries: { container: string; host: string; container_port: string; protocol: string }[] = []
+    // a VM's ports are on the VM: each row keeps where it lives (the same port on two VMs is two rows, not a clash)
+    const entries: { container: string; host: string; container_port: string; protocol: string; member: string | null; member_name: string; address: string }[] = []
     for (const c of containers) {
       if (!c.ports) continue
       // Parse formats like: "0.0.0.0:8080->80/tcp, :::8080->80/tcp"
@@ -369,6 +370,9 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
             host: match[2],
             container_port: match[3],
             protocol: match[4].toUpperCase(),
+            member: c.member ?? null,
+            member_name: c.member_name ?? '',
+            address: c.member ? (c.member_host || '') : window.location.hostname,
           })
         }
       }
@@ -376,7 +380,7 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
     // Deduplicate by host port + container (0.0.0.0 and ::: map to same)
     const seen = new Set<string>()
     return entries.filter(e => {
-      const key = `${e.container}:${e.host}:${e.container_port}`
+      const key = `${e.member ?? ''}|${e.container}:${e.host}:${e.container_port}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -404,12 +408,13 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
         </thead>
         <tbody className="divide-y divide-white/[0.03]">
           {portEntries.slice(0, 20).map((entry) => (
-            <tr key={`${entry.container}-${entry.host}-${entry.container_port}`} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
+            <tr key={`${entry.member ?? ''}|${entry.container}-${entry.host}-${entry.container_port}`} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
               <td className="px-3 py-2">
                 <button
-                  onClick={() => window.open(`http://${window.location.hostname}:${entry.host}`, '_blank')}
-                  className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-medium text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors cursor-pointer"
-                  title={`Open http://${window.location.hostname}:${entry.host}`}
+                  onClick={() => { if (entry.address) window.open(`http://${entry.address}:${entry.host}`, '_blank') }}
+                  disabled={!entry.address}
+                  className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-medium text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-60"
+                  title={entry.address ? `Open http://${entry.address}:${entry.host}` : 'The VM\'s address is not known yet'}
                 >
                   :{entry.host}
                   <ExternalLink size={9} className="opacity-0 group-hover/port:opacity-100 transition-opacity" />
@@ -419,7 +424,10 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
               <td className="px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{entry.protocol}</span>
               </td>
-              <td className="px-3 py-2 text-xs font-medium text-slate-200 truncate max-w-[200px]">{entry.container}</td>
+              <td className="px-3 py-2 text-xs font-medium text-slate-200 truncate max-w-[240px]" title={entry.member ? `${entry.container} · VM ${entry.member_name || entry.member}` : entry.container}>
+                {entry.container}
+                {entry.member && <span className="ml-1.5 text-[10px] font-normal text-amber-300/80">· {entry.member_name || entry.member}</span>}
+              </td>
             </tr>
           ))}
         </tbody>

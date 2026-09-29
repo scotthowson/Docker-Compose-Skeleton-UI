@@ -487,7 +487,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     isFavorite={favSet.has(container.name)}
                     onToggleFavorite={toggleFavorite}
                     showCapsule={scope === 'all'}
-                    onOnDemand={isAdmin && !batchMode ? setOnDemandFor : undefined}
+                    onOnDemand={isAdmin && !batchMode && !container.member ? setOnDemandFor : undefined}
                   />
                 ))}
               </React.Fragment>
@@ -585,7 +585,7 @@ const ContainerList: React.FC<ContainerListProps> = ({
                     onQuickAction={handleQuickAction}
                     quickActionLoading={quickActionLoading}
                     showCapsule={scope === 'all'}
-                    onOnDemand={isAdmin && !batchMode ? setOnDemandFor : undefined}
+                    onOnDemand={isAdmin && !batchMode && !container.member ? setOnDemandFor : undefined}
                   />
                   )),
                 ])

@@ -1294,7 +1294,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg bg-slate-800 border border-white/10 shadow-xl shadow-black/30 scrollbar-thin">
                       {stacks.map((s) => (
                         <button
-                          key={s.name}
+                          key={`${s.member ?? ''}|${s.name}`}
                           onClick={() => { setTargetStack(s.name); setDropdownOpen(false); setConfirming(false) }}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors ${s.name === targetStack ? 'bg-white/5' : ''}`}
                         >

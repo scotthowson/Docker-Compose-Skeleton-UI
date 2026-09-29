@@ -220,6 +220,8 @@ export interface ContainerInfo {
   mem_percent?: number | null
   /** Fleet (3.9): the member VM this container runs on (absent = this server) */
   member?: string
+  /** Fleet (3.9.5): the VM's address, where its published ports are */
+  member_host?: string | null
   member_name?: string
   vmid?: number | null
 }
@@ -2804,6 +2806,75 @@ export interface SablierToggleResponse {
   display_name?: string
   show_details?: boolean
   message?: string
+}
+
+// GET /containers/{name}/theme (3.9.5) — a theme.park theme on the container's pages
+export interface ContainerThemeState {
+  container: string
+  /** the VM it runs in when the hub answered for one (null = this server) */
+  member: string | null
+  /** theme.park has themes for this app */
+  supported: boolean
+  /** theme.park's name for the app ("sonarr") */
+  app: string
+  /** a Traefik route serves it: the theme reaches the pages through that route */
+  routed: boolean
+  host: string
+  /** a Traefik runs where the theme is applied (this server, or the hub for a VM) */
+  traefik: boolean
+  enabled: boolean
+  theme: string
+  addons: string[]
+  catalog: {
+    themes: string[]
+    community: string[]
+    /** the add-ons theme.park has for this app */
+    addons: string[]
+  }
+  /** why it cannot be themed, when it cannot */
+  reason: string
+}
+
+export interface ContainerThemeResponse extends ContainerThemeState {
+  success: boolean
+  traefik_restarted: boolean
+  message: string
+}
+
+// GET /containers/{name}/homarr (3.9.5) — is the container on the Homarr dashboard
+export interface ContainerHomarrState {
+  container: string
+  /** the VM it runs in when the hub answered for one (null = this server) */
+  member: string | null
+  homarr: {
+    /** Homarr is deployed on this server (the hub, in a fleet) */
+    active: boolean
+    /** board: an API key is stored (app + tile); library: the app library only */
+    mode: 'board' | 'library' | 'none'
+    has_api_key: boolean
+  }
+  /** what DCS would put on Homarr */
+  target: {
+    url: string
+    /** route: its HTTPS route; port: a published port; "": nothing to open */
+    source: 'route' | 'port' | ''
+    host: string
+    name: string
+    icon: string
+    description: string
+    template: string
+  }
+  added: boolean
+  app: { id: string; name: string; href: string } | null
+  /** why it cannot be added, when it cannot */
+  reason: string
+}
+
+export interface ContainerHomarrAddResponse extends ContainerHomarrState {
+  success: boolean
+  already: boolean
+  result?: { mode: 'board' | 'library'; app_id: string; tile: boolean }
+  message: string
 }
 
 // GET /containers/{name}/sablier (3.9.4) — the current on-demand settings
