@@ -24,7 +24,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
 import { discoverServer } from '../lib/discover'
 import { useToast } from '../components/common/Toast'
-import { useSettingsStore } from '../stores/settingsStore'
+import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import PageHeader from '../components/common/PageHeader'
@@ -37,7 +37,8 @@ import {
 import { FIELD, INPUT, LABEL, FOCUS_RING as FOCUS, CHOICE, CHOICE_ON, CHOICE_OFF, SUBHEAD } from '../lib/fieldStyles'
 import { usePolling } from '../hooks/usePolling'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
-import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, fetchProfile, saveProfileToServer, updateConfig, fetchConfig } from '../api/endpoints'
+import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, updateConfig, fetchConfig } from '../api/endpoints'
+import { patchServerProfile, syncProfileFromServer, readLocalProfile, mergeServerProfile, cleanPrefs, PROFILE_KEYS, SYNCED_PREFS } from '../lib/userSync'
 import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, AlertThresholds, PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -126,10 +127,10 @@ function saveProfileData(data: ProfileData) {
   localStorage.setItem(key, JSON.stringify(data))
   // Dispatch event so Header and App re-read the data
   window.dispatchEvent(new Event('profile-updated'))
-  // Sync to server in background (fire-and-forget)
+  // Sync to server in background (fire-and-forget); the server's document is read first, so the choices stored beside the profile survive
   const isConnected = useConnectionStore.getState().status === 'connected'
   if (isConnected) {
-    saveProfileToServer(data as unknown as Record<string, unknown>).catch(() => {})
+    void patchServerProfile(data as unknown as Record<string, unknown>)
   }
 }
 
@@ -141,38 +142,20 @@ function ProfileSettings() {
   const [avatarPreview, setAvatarPreview] = useState(profile.icon)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Sync profile from server on mount
+  // Read the server's copy again when the page opens (sign-in has done it already; this catches a change made on another device meanwhile)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   useEffect(() => {
-    if (!isConnected) return
+    if (!isConnected || !currentUser) return
     let cancelled = false
-    fetchProfile()
-      .then((res) => {
-        if (cancelled || !res.profile) return
-        const serverProfile = res.profile as unknown as Partial<ProfileData>
-        if (typeof serverProfile.statusEmoji === 'string' && /^(\\u[0-9A-Fa-f]{4})+$/.test(serverProfile.statusEmoji)) {
-          try { serverProfile.statusEmoji = JSON.parse('"' + serverProfile.statusEmoji + '"') } catch { serverProfile.statusEmoji = '' }
-        }
-        const localProfile = getProfileData()
-        // Server wins for all fields, but keep local if server field is empty
-        const merged: ProfileData = { ...localProfile }
-        for (const k of Object.keys(serverProfile) as (keyof ProfileData)[]) {
-          const sv = serverProfile[k]
-          if (sv !== undefined && sv !== null && sv !== '') {
-            merged[k] = sv as string
-          }
-        }
-        // Save merged data locally
-        const key = getProfileKey()
-        localStorage.setItem(key, JSON.stringify(merged))
-        setProfile(merged)
-        setInitialProfile(merged)
-        setAvatarPreview(merged.icon)
-        window.dispatchEvent(new Event('profile-updated'))
-      })
-      .catch(() => {})
+    syncProfileFromServer(currentUser).then((ok) => {
+      if (cancelled || !ok) return
+      const merged = getProfileData()
+      setProfile(merged)
+      setInitialProfile(merged)
+      setAvatarPreview(merged.icon)
+    })
     return () => { cancelled = true }
-  }, [isConnected])
+  }, [isConnected, currentUser])
 
   const userInitial = (currentUser?.[0] ?? 'U').toUpperCase()
 
@@ -1663,135 +1646,6 @@ function AutoLockSettings() {
 // Export / Import Settings
 // ---------------------------------------------------------------------------
 
-function ExportImportSettings() {
-  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const handleExport = useCallback(() => {
-    const state = useSettingsStore.getState()
-    const exportData = {
-      _format: 'dcs-ui-settings',
-      _version: 1,
-      _exportedAt: new Date().toISOString(),
-      settings: {
-        serverUrl: state.serverUrl,
-        pollingInterval: state.pollingInterval,
-        containerPollingInterval: state.containerPollingInterval,
-        imagePollingInterval: state.imagePollingInterval,
-        logPollingInterval: state.logPollingInterval,
-        theme: state.theme,
-        sidebarCollapsed: state.sidebarCollapsed,
-        diskLabels: state.diskLabels,
-        pinnedDisks: state.pinnedDisks,
-        customDisks: state.customDisks,
-        stackAnnotations: state.stackAnnotations,
-        backgroundImage: state.backgroundImage,
-        autoLockMinutes: state.autoLockMinutes,
-        notificationsEnabled: state.notificationsEnabled,
-        rememberUsername: state.rememberUsername,
-        sessionDurationMinutes: state.sessionDurationMinutes,
-      },
-      profile: (() => {
-        try {
-          const raw = localStorage.getItem('user-profile')
-          return raw ? JSON.parse(raw) : null
-        } catch { return null }
-      })(),
-    }
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `dcs-ui-settings-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [])
-
-  // Listen for export-settings event from command palette
-  useEffect(() => {
-    const handler = () => handleExport()
-    window.addEventListener('export-settings', handler)
-    return () => window.removeEventListener('export-settings', handler)
-  }, [handleExport])
-
-  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string)
-        if (data._format !== 'dcs-ui-settings') {
-          setImportResult({ success: false, message: 'Invalid settings file format' })
-          return
-        }
-        const { settings, profile } = data
-        if (settings && typeof settings === 'object') {
-          const store = useSettingsStore.getState()
-          for (const [key, value] of Object.entries(settings)) {
-            store.updateSetting(key as keyof AppSettings, value as never)
-          }
-        }
-        if (profile && typeof profile === 'object') {
-          localStorage.setItem('user-profile', JSON.stringify(profile))
-          window.dispatchEvent(new Event('profile-updated'))
-        }
-        setImportResult({ success: true, message: 'Settings imported successfully' })
-        setTimeout(() => setImportResult(null), 4000)
-      } catch {
-        setImportResult({ success: false, message: 'Failed to parse settings file' })
-      }
-    }
-    reader.readAsText(file)
-    // Reset input so the same file can be imported again
-    e.target.value = ''
-  }, [])
-
-  return (
-    <div className="space-y-4">
-      <p className="text-[11px] text-slate-500">
-        Backup your settings, disk labels, stack annotations, and profile data to a JSON file, or restore from a previous export.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={handleExport} className={BTN_TOOLBAR_QUIET}>
-          <Download size={14} />
-          Export settings
-        </button>
-        <button onClick={() => fileInputRef.current?.click()} className={BTN_TOOLBAR_QUIET}>
-          <Upload size={14} />
-          Import settings
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          aria-label="Settings file to import"
-          onChange={handleImport}
-          className="hidden"
-        />
-      </div>
-
-      {importResult && (
-        <div className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs ${
-          importResult.success
-            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-            : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-        }`}>
-          {importResult.success ? <Check size={12} /> : <XCircle size={12} />}
-          {importResult.message}
-        </div>
-      )}
-
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-        <p className="text-[10px] text-slate-500">
-          Exported data includes: connection URL, polling intervals, theme, disk labels, custom disk locations, stack annotations, background image, auto-lock settings, notification preferences, and profile data. Credentials are <strong className="text-slate-400">never</strong> exported.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Connection Profiles (Phase 6A)
 // ---------------------------------------------------------------------------
@@ -2411,104 +2265,121 @@ function AlertThresholdsEditor() {
 // Settings Export / Import
 // ---------------------------------------------------------------------------
 
+/** what an export carries: the choices, labels and notes worth moving to another device. Not the server address (a file must not be able to repoint the dashboard), not tokens, not what lives for one session only */
+const EXPORT_SETTING_KEYS = [
+  'theme', 'themeName', 'defaultPage', 'use24hClock', 'reduceMotion', 'customCSS', 'sidebarCollapsed',
+  'pollingInterval', 'containerPollingInterval', 'imagePollingInterval', 'logPollingInterval',
+  'diskLabels', 'pinnedDisks', 'customDisks', 'stackAnnotations',
+  'autoLockMinutes', 'autoCheckUpdates', 'notificationsEnabled', 'projectName', 'projectSubtitle', 'rememberUsername', 'sessionDurationMinutes',
+] as const
+type ExportSettingKey = (typeof EXPORT_SETTING_KEYS)[number]
+
+/** one setting read from a file: a value of the kind the setting has is taken over, anything else is left out */
+function importableValue(key: ExportSettingKey, value: unknown): unknown {
+  if ((SYNCED_PREFS as readonly string[]).includes(key)) return (cleanPrefs({ [key]: value }) as Record<string, unknown>)[key]
+  const def = DEFAULT_SETTINGS[key] as unknown
+  if (typeof value !== typeof def || Array.isArray(value) !== Array.isArray(def) || value === null) return undefined
+  if (typeof value === 'number' && !Number.isFinite(value)) return undefined
+  if (typeof value === 'object' && JSON.stringify(value).length > 200000) return undefined
+  return value
+}
+
 function SettingsExportImport() {
-  const [importing, setImporting] = useState(false)
-  const [importPreview, setImportPreview] = useState<{ settingsCount: number; hasProfile: boolean } | null>(null)
-  const [importData, setImportData] = useState<Record<string, unknown> | null>(null)
+  const [importPreview, setImportPreview] = useState<{ settings: Record<string, unknown>; profile: Record<string, string> | null } | null>(null)
+  const [importError, setImportError] = useState('')
   const [importSuccess, setImportSuccess] = useState(false)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
   const pickRef = useRef<HTMLInputElement>(null)
 
   const handleExport = useCallback(() => {
-    const settings = useSettingsStore.getState()
-    const profile = localStorage.getItem('user-profile')
-    const exportPayload: Record<string, unknown> = {
-      _type: 'dcs-settings-export',
-      _version: 1,
-      _exported_at: new Date().toISOString(),
-      settings: { ...settings },
-      profile: (() => { try { return profile ? JSON.parse(profile) : null } catch { return null } })(),
-    }
-
-    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
+    const state = useSettingsStore.getState()
+    const user = useAuthStore.getState().currentUser
+    const settings: Record<string, unknown> = {}
+    for (const k of EXPORT_SETTING_KEYS) settings[k] = state[k]
+    const local = user ? readLocalProfile(user) : null
+    const profile: Record<string, string> = {}
+    if (local) for (const k of PROFILE_KEYS) if (typeof local[k] === 'string') profile[k] = local[k] as string
+    const payload = { _type: 'dcs-settings-export', _version: 2, _exported_at: new Date().toISOString(), settings, profile: Object.keys(profile).length ? profile : null }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
     a.href = url
-    a.download = `dcs-settings-${date}.json`
+    a.download = `dcs-settings-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
   }, [])
 
+  // The command palette's "Export settings"
+  useEffect(() => {
+    const handler = () => handleExport()
+    window.addEventListener('export-settings', handler)
+    return () => window.removeEventListener('export-settings', handler)
+  }, [handleExport])
+
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = '' // the same file can be picked again
     if (!file) return
-    setImporting(true)
     setImportSuccess(false)
-
+    setImportError('')
+    setImportPreview(null)
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string)
-        if (parsed._type !== 'dcs-settings-export') {
-          setImportPreview(null)
-          setImportData(null)
-          setImporting(false)
+        // this export and the one the dashboard made before 4.0.1 (dcs-ui-settings)
+        if (!parsed || (parsed._type !== 'dcs-settings-export' && parsed._format !== 'dcs-ui-settings')) {
+          setImportError('This is not a settings file exported from DCS Manager.')
           return
         }
-        const settingsCount = parsed.settings ? Object.keys(parsed.settings).length : 0
-        const hasProfile = !!parsed.profile
-        setImportPreview({ settingsCount, hasProfile })
-        setImportData(parsed)
+        const settings: Record<string, unknown> = {}
+        const given = parsed.settings && typeof parsed.settings === 'object' ? (parsed.settings as Record<string, unknown>) : {}
+        for (const k of EXPORT_SETTING_KEYS) {
+          if (!(k in given)) continue
+          const v = importableValue(k, given[k])
+          if (v !== undefined) settings[k] = v
+        }
+        let profile: Record<string, string> | null = null
+        if (parsed.profile && typeof parsed.profile === 'object') {
+          const p: Record<string, string> = {}
+          for (const k of PROFILE_KEYS) if (typeof parsed.profile[k] === 'string' && parsed.profile[k] !== '') p[k] = parsed.profile[k]
+          if (Object.keys(p).length > 0) profile = p
+        }
+        if (Object.keys(settings).length === 0 && !profile) {
+          setImportError('This file has nothing this dashboard can restore.')
+          return
+        }
+        setImportPreview({ settings, profile })
       } catch {
-        setImportPreview(null)
-        setImportData(null)
-        setImporting(false)
+        setImportError('This file could not be read as settings.')
       }
     }
     reader.readAsText(file)
   }, [])
 
   const handleImport = useCallback(() => {
-    if (!importData) return
-    const settings = (importData as Record<string, unknown>).settings as Record<string, unknown> | undefined
-    const profile = (importData as Record<string, unknown>).profile as Record<string, unknown> | undefined
-
-    if (settings) {
-      // SECURITY: Blocklist keys that could be dangerous when imported from external files
-      const skipKeys = new Set(['currentPage', '_type', '_version', '_exported_at', 'serverUrl', 'apiToken'])
-      for (const [key, value] of Object.entries(settings)) {
-        if (!skipKeys.has(key) && typeof key === 'string') {
-          updateSetting(key as keyof import('../../shared/types').AppSettings, value as never)
-        }
-      }
+    if (!importPreview) return
+    for (const [key, value] of Object.entries(importPreview.settings)) updateSetting(key as keyof AppSettings, value as never)
+    const user = useAuthStore.getState().currentUser
+    if (importPreview.profile && user) {
+      mergeServerProfile(user, importPreview.profile) // into this device's profile of the person, then to the server
+      if (useConnectionStore.getState().status === 'connected') void patchServerProfile(importPreview.profile)
     }
-
-    if (profile) {
-      localStorage.setItem('user-profile', JSON.stringify(profile))
-    }
-
+    setImportPreview(null)
     setImportSuccess(true)
-    setImporting(false)
-    setImportPreview(null)
-    setImportData(null)
     setTimeout(() => setImportSuccess(false), 3000)
-  }, [importData, updateSetting])
-
-  const cancelImport = useCallback(() => {
-    setImporting(false)
-    setImportPreview(null)
-    setImportData(null)
-  }, [])
+  }, [importPreview, updateSetting])
 
   return (
     <div className="space-y-4">
+      <p className="text-[11px] text-slate-500">
+        Save your choices, polling intervals, disk labels, stack notes and profile to a file, or restore them from one on any device. The server address and sign-in stay as they are on each device.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={handleExport} className={BTN_TOOLBAR_QUIET}>
           <Download size={14} />
           Export settings
         </button>
-
         <button onClick={() => pickRef.current?.click()} className={BTN_TOOLBAR_QUIET}>
           <Upload size={14} />
           Import settings
@@ -2517,24 +2388,31 @@ function SettingsExportImport() {
           ref={pickRef}
           type="file"
           accept=".json"
-          aria-label="Settings export to import"
+          aria-label="Settings file to import"
           onChange={handleFileSelect}
           className="hidden"
         />
       </div>
 
+      {importError && (
+        <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5 text-xs text-rose-400">
+          <XCircle size={12} className="shrink-0" />
+          {importError}
+        </div>
+      )}
+
       {importPreview && (
         <div className="rounded-lg bg-cyan-500/[0.06] border border-cyan-500/15 p-4 animate-fade-in">
           <p className="text-xs font-semibold text-cyan-300 mb-2">Import preview</p>
           <div className="space-y-1 mb-3">
-            <p className="text-[10px] text-slate-400">{importPreview.settingsCount} settings found</p>
-            <p className="text-[10px] text-slate-400">Profile data: {importPreview.hasProfile ? 'Yes' : 'No'}</p>
+            <p className="text-[10px] text-slate-400">{Object.keys(importPreview.settings).length} settings found</p>
+            <p className="text-[10px] text-slate-400">Profile data: {importPreview.profile ? 'Yes' : 'No'}</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleImport} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
               Apply import
             </button>
-            <button onClick={cancelImport} className={BTN_TOOLBAR_QUIET}>
+            <button onClick={() => setImportPreview(null)} className={BTN_TOOLBAR_QUIET}>
               Cancel
             </button>
           </div>
@@ -2542,15 +2420,11 @@ function SettingsExportImport() {
       )}
 
       {importSuccess && (
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 animate-fade-in">
+        <div role="status" className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 animate-fade-in">
           <Check size={13} className="text-emerald-400 shrink-0" />
           <p className="text-[11px] text-emerald-300">Settings imported successfully</p>
         </div>
       )}
-
-      <p className="text-[10px] text-slate-500">
-        Export saves your preferences, polling intervals, disk labels, and profile. Import restores them on any device.
-      </p>
     </div>
   )
 }
@@ -2820,10 +2694,7 @@ export default function Settings() {
             icon={<Download size={16} className="accent-text" />}
             title="Backup & restore"
           >
-            <ExportImportSettings />
-            <div className="border-t border-white/[0.03] mt-4 pt-4">
-              <SettingsExportImport />
-            </div>
+            <SettingsExportImport />
           </SectionCard>
         )}
 

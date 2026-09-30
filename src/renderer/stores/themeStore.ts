@@ -112,6 +112,7 @@ interface ThemeStoreState {
 }
 
 const cached = readCache()
+let themeRefresh: Promise<void> | null = null
 
 export const useThemeStore = create<ThemeStoreState>((set, get) => ({
   supported: null,
@@ -123,34 +124,38 @@ export const useThemeStore = create<ThemeStoreState>((set, get) => ({
   error: null,
   fetchedAt: cached.fetchedAt,
 
-  refresh: async () => {
-    if (get().loading) return
-    set({ loading: true })
-    try {
-      const res = await fetchThemes()
-      const metas = Array.isArray(res.themes) ? res.themes.filter((m) => m && typeof m.name === 'string') : []
-      const active = typeof res.active === 'string' ? res.active : ''
-      // keep the documents the listing still vouches for (same name, same save time)
-      const docs: Record<string, Theme> = {}
-      for (const [name, doc] of Object.entries(get().docs)) {
-        const m = metas.find((x) => x.name === name)
-        if (m && (!m.updated_at || m.updated_at === doc.updated_at)) docs[name] = doc
-      }
-      const fetchedAt = Date.now()
-      set({ supported: true, metas, docs, active, error: null, fetchedAt, loading: false })
-      writeCache({ metas, docs, active, fetchedAt })
-      const settings = useSettingsStore.getState()
-      if (settings.serverThemeActive !== active) settings.updateSetting('serverThemeActive', active)
-    } catch (err) {
-      if (isThemeApiMissing(err)) {
-        set({ supported: false, metas: [], docs: {}, active: '', error: null, loading: false })
-        writeCache({ metas: [], docs: {}, active: '', fetchedAt: Date.now() })
+  refresh: () => {
+    // one read at a time; a caller that arrives meanwhile waits for it (the sign-in needs the answer, not "already loading")
+    if (themeRefresh) return themeRefresh
+    themeRefresh = (async () => {
+      set({ loading: true })
+      try {
+        const res = await fetchThemes()
+        const metas = Array.isArray(res.themes) ? res.themes.filter((m) => m && typeof m.name === 'string') : []
+        const active = typeof res.active === 'string' ? res.active : ''
+        // keep the documents the listing still vouches for (same name, same save time)
+        const docs: Record<string, Theme> = {}
+        for (const [name, doc] of Object.entries(get().docs)) {
+          const m = metas.find((x) => x.name === name)
+          if (m && (!m.updated_at || m.updated_at === doc.updated_at)) docs[name] = doc
+        }
+        const fetchedAt = Date.now()
+        set({ supported: true, metas, docs, active, error: null, fetchedAt, loading: false })
+        writeCache({ metas, docs, active, fetchedAt })
         const settings = useSettingsStore.getState()
-        if (settings.serverThemeActive) settings.updateSetting('serverThemeActive', '')
-      } else {
-        set({ loading: false, error: errorMessage(err) })
+        if (settings.serverThemeActive !== active) settings.updateSetting('serverThemeActive', active)
+      } catch (err) {
+        if (isThemeApiMissing(err)) {
+          set({ supported: false, metas: [], docs: {}, active: '', error: null, loading: false })
+          writeCache({ metas: [], docs: {}, active: '', fetchedAt: Date.now() })
+          const settings = useSettingsStore.getState()
+          if (settings.serverThemeActive) settings.updateSetting('serverThemeActive', '')
+        } else {
+          set({ loading: false, error: errorMessage(err) })
+        }
       }
-    }
+    })().finally(() => { themeRefresh = null })
+    return themeRefresh
   },
 
   ensureDoc: async (name) => {

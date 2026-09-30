@@ -126,12 +126,15 @@ async function settle(page, extra = 500) {
 }
 
 async function setSettings(page, patch) {
-  await page.evaluate((p) => {
+  await page.evaluate((p, user) => {
     const s = JSON.parse(localStorage.getItem('app-settings') || '{}')
     Object.assign(s, p)
     localStorage.setItem('app-settings', JSON.stringify(s))
     localStorage.setItem('onboarding_complete', 'true')
-  }, patch)
+    // a device that has made its choices: since 4.0.1 a device that has not changed anything takes the person's stored choices at sign-in
+    // (lib/userSync), and every fresh browser of a sweep would otherwise take the theme an earlier run of it saved
+    localStorage.setItem('dcs-prefs-at-' + user, String(Date.now() + 86400000))
+  }, patch, USER)
 }
 
 async function signIn(page, api) {

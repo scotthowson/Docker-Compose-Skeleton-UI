@@ -78,7 +78,9 @@ Key stores to understand:
 
 ### Settings Persistence
 
-Dual backend: `window.electronAPI?.setSetting()` (electron-store JSON file) or `localStorage['app-settings']` (browser fallback). The `settingsStore.updateSetting()` auto-persists. Profile data is stored separately in `localStorage['user-profile']`.
+Dual backend: `window.electronAPI?.setSetting()` (electron-store JSON file) or `localStorage['app-settings']` (browser fallback). The `settingsStore.updateSetting()` auto-persists. Profile data is stored separately in `localStorage['user-profile-<username>']`.
+
+What belongs to the PERSON follows them to every device (`lib/userSync.ts`): the server keeps one document per user (`GET/POST /settings/profile`) with the profile fields (name, icon, status, accent colour, background image) and, under `prefs`, the choices that describe how they want the dashboard (dark / light / system, personal theme, reduced motion, 24-hour clock, start page, custom CSS). `hydrateUser()` reads it, the server themes and the dashboard layout at every sign-in (the sign-in page awaits it for at most 1.5 s; `App.tsx` covers a restored session and a server switch) and a choice changed on this device is written back a moment later. The server wins on a device that has changed nothing yet (`dcs-prefs-at-<username>` holds when this device last changed them). Add a setting to `SYNCED_PREFS` only if it describes the person, not the device (polling, sidebar, server address stay local). Never POST the profile without reading it first: `patchServerProfile()` does the read-merge-write.
 
 ### Authentication Flow
 

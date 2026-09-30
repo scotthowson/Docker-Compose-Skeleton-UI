@@ -64,6 +64,7 @@ import { apiClient } from './api/client'
 import { sseClient } from './lib/sse'
 import { sanitizeCss } from './lib/cssSanitize'
 import { useThemeStore, syncDocumentTheme, effectiveThemeNeedsDoc, THEME_POLL_MS } from './stores/themeStore'
+import { hydrateUser, resetUserSync } from './lib/userSync'
 import { toggleMode, useResolvedMode } from './lib/colorMode'
 import type { PageId } from '../shared/types'
 import ModalOverlay from './components/common/ModalOverlay'
@@ -294,14 +295,15 @@ export default function App() {
     if (pending) useThemeStore.getState().ensureDoc(pending)
   }, [settingsLoaded, theme, resolvedMode, themeName, serverThemeActive, themeMetas, themeDocs, localThemes, themesSupported])
 
-  // Follow the server: read GET /themes on connect and every five minutes
+  // Follow the server: read GET /themes once signed in (the list needs a session: asked before sign-in it is refused and the theme
+  // would wait for the next poll) and every five minutes
   useEffect(() => {
-    if (connectionStatus !== 'connected') return
+    if (connectionStatus !== 'connected' || !isAuthenticated) return
     const refresh = () => { useThemeStore.getState().refresh() }
     refresh()
     const interval = setInterval(refresh, THEME_POLL_MS)
     return () => clearInterval(interval)
-  }, [connectionStatus])
+  }, [connectionStatus, isAuthenticated])
 
   // Apply per-user appearance (accent color + background image)
   const [accentColor, setAccentColor] = useState('emerald')
@@ -332,6 +334,19 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-accent', accentColor)
   }, [accentColor])
+
+  // What belongs to the person (profile, icon, accent, personal theme and choices, dashboard layout) is read the moment they are
+  // signed in, on any device: the sign-in page already waited for it, this covers every other way in (a restored session, a server switch)
+  const apiToken = useAuthStore((s) => s.apiToken)
+  const wasSignedInRef = useRef(false)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (wasSignedInRef.current) { wasSignedInRef.current = false; resetUserSync() }   // signed out: the next sign-in reads everything again
+      return
+    }
+    wasSignedInRef.current = true
+    if (connectionStatus === 'connected') void hydrateUser()
+  }, [isAuthenticated, currentUser, apiToken, connectionStatus])
 
   // Sync document title with current page
   useEffect(() => {

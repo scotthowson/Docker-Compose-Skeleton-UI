@@ -16,6 +16,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useServerStore } from '../stores/serverStore'
 import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus, totpValidate } from '../api/endpoints'
+import { hydrateUser } from '../lib/userSync'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 import { discoverServer } from '../lib/discover'
 import Hint from '../components/common/Hint'
@@ -283,6 +284,8 @@ export default function Login() {
           setApiToken(loginRes.token)
           useServerStore.getState().rememberSession(loginRes.token, user)
           if (loginRes.role) setUserRole(loginRes.role, user)
+          // profile, icon, accent, personal theme and choices, layout: read now so the first page is already theirs (a slow server never holds the sign-in longer than this)
+          await hydrateUser({ user, timeoutMs: 1500 })
           return true
         }
         // Check if 2FA is required
@@ -424,6 +427,7 @@ export default function Login() {
         setApiToken(res.token)
         useServerStore.getState().rememberSession(res.token, res.username || username)
         if (res.role) setUserRole(res.role as 'admin' | 'user', res.username || username)
+        await hydrateUser({ user: res.username || username, timeoutMs: 1500 })
         setShowTotpInput(false)
         setTotpCode('')
 

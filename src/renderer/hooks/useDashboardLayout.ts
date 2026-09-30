@@ -11,8 +11,8 @@ import { useSettingsStore } from '../stores/settingsStore'
 const STORAGE_KEY_PREFIX = 'dashboard-layout-'
 
 /** One cache per server and user: the app can talk to several servers */
-function getStorageKey(): string {
-  const user = useAuthStore.getState().currentUser || 'default'
+function getStorageKey(person?: string): string {
+  const user = person || useAuthStore.getState().currentUser || 'default'
   const server = (useSettingsStore.getState().serverUrl || 'local').replace(/[^a-z0-9]/gi, '_')
   return `${STORAGE_KEY_PREFIX}${server}-${user}`
 }
@@ -100,6 +100,21 @@ function loadFromCache(): DashboardLayout | null {
     return repairCards(mergeRegistry(parsed))
   } catch {}
   return null
+}
+
+/**
+ * At sign-in (lib/userSync): put the person's layout from the server into the cache the Dashboard starts from, so its
+ * first paint is their layout and not the stock one. The newer copy wins, like the fetch on mount.
+ */
+export function primeDashboardLayout(person: string, serverLayout: DashboardLayout): void {
+  if (!serverLayout || !serverLayout.version || serverLayout.version < CURRENT_VERSION || !Array.isArray(serverLayout.cards)) return
+  try {
+    const key = getStorageKey(person)
+    const raw = localStorage.getItem(key)
+    const local = raw ? (JSON.parse(raw) as DashboardLayout) : null
+    if (local && (local.updated_at ?? 0) > (serverLayout.updated_at ?? 0)) return
+    localStorage.setItem(key, JSON.stringify(repairCards(mergeRegistry(serverLayout))))
+  } catch {}
 }
 
 /** Write layout to localStorage */
