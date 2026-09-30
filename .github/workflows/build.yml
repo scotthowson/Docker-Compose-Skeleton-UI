@@ -177,6 +177,5 @@ jobs:
           # v4.0.0-rc.1 is a pre-release: it is never the "latest release" and never reaches the ones on the stable channel
           prerelease: ${{ contains(github.ref_name, '-') }}
           draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
