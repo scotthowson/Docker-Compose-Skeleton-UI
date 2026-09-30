@@ -1,15 +1,15 @@
 // =============================================================================
-// FileBrowser — Container File Browser for exploring filesystem inside
-//               running Docker containers via the DCS REST API
+// File Browser — explore the filesystem inside a running container through the
+// DCS REST API: pick a container, walk its folders, read a file's text.
 // On a hub: the hub's containers or one VM's (every call rides the hub's
 // proxy to that VM); a file's text comes back as JSON, so it can be saved.
 // =============================================================================
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, useId } from 'react'
 import {
   FolderOpen, FileText, Link, Folder, ChevronRight,
   Loader2, WifiOff, AlertTriangle, X, ArrowUp,
-  RefreshCw, Search, Box, Download,
+  RefreshCw, Search, Box, Download, Info,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -17,6 +17,7 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import {
   fetchContainersScoped,
   fetchContainerFilesScoped,
@@ -27,8 +28,11 @@ import type {
   ContainerFileContentResponse,
   ContainerInfo,
 } from '../../shared/types'
-import { LoadingState, ErrorState } from '../components/common/PageState'
+import { LoadingState, ErrorState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import { BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, BTN_ICON } from '../lib/ui'
+import { CARD, FIELD, FOCUS_RING } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,29 +115,30 @@ function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps
 
   return createPortal(
     <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-      <div className="w-full max-w-6xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+      <div className="w-full max-w-6xl glass rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-white/5 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <FileText size={16} className="text-cyan-400 shrink-0" />
+            <FileText size={16} className="text-cyan-400 shrink-0" aria-hidden />
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-slate-200 truncate">{filePath}</h3>
-              <p className="text-[10px] text-slate-500">{formatBytes(size)}{where ? ` · ${where}` : ''}{isTooLarge ? ' · first part only' : ''}</p>
+              <h2 className="text-sm font-semibold text-slate-200 truncate">{filePath}</h2>
+              <p className="text-[11px] text-slate-500">{formatBytes(size)}{where ? ` · ${where}` : ''}{isTooLarge ? ' · first part only' : ''}</p>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
+              type="button"
               onClick={() => saveText(filePath, content)}
               disabled={isEmpty}
               title={isEmpty ? 'Nothing to save: the file is empty or binary' : isTooLarge ? 'Saves the retrieved part of the file as text' : 'Save this text as a file'}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 hover:text-slate-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`${BTN_CARD_QUIET} ${FOCUS_RING}`}
             >
-              <Download size={14} />
-              <span className="hidden sm:inline">Save</span>
+              <Download size={12} aria-hidden />
+              Save
             </button>
-            <button aria-label="Close"
+            <button type="button" aria-label="Close"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
+              className={`${BTN_ICON} text-slate-400 hover:text-slate-200 hover:bg-white/5 ${FOCUS_RING}`}
             >
               <X size={16} />
             </button>
@@ -143,20 +148,17 @@ function FileViewer({ filePath, content, size, where, onClose }: FileViewerProps
         {/* Body */}
         <div className="flex-1 overflow-auto p-0">
           {isEmpty && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <FileText size={28} className="text-slate-500" />
-              <p className="text-sm text-slate-500">File is empty or binary content cannot be displayed</p>
-            </div>
+            <EmptyState icon={<FileText size={28} />} title="File is empty or binary content cannot be displayed" />
           )}
           {!isEmpty && isTooLarge && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <AlertTriangle size={28} className="text-amber-500/60" />
-              <p className="text-sm text-slate-500">File content is too large to display ({formatBytes(size)})</p>
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center px-4">
+              <AlertTriangle size={26} className="text-amber-500/70" aria-hidden />
+              <p className="text-sm text-slate-400">File content is too large to display ({formatBytes(size)})</p>
               <p className="text-xs text-slate-500">Only the retrieved portion is shown below</p>
             </div>
           )}
           {!isEmpty && (
-            <pre className="p-4 md:p-6 text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap break-all bg-slate-950/50 min-h-[200px] overflow-auto scrollbar-thin">
+            <pre tabIndex={0} aria-label={`Text of ${filePath}`} className={`p-4 md:p-6 text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap break-all bg-slate-950/50 min-h-[200px] overflow-auto scrollbar-thin ${FOCUS_RING}`}>
               {content}
             </pre>
           )}
@@ -180,6 +182,8 @@ export default function FileBrowser() {
   const pageScope = scope === 'all' ? 'hub' : scope
   const member = pageScope === 'hub' ? null : scopeMember
   const whereLabel = hasFleet ? (member ? `VM ${memberName}` : 'the hub') : ''
+  const uid = useId()
+  const scopeVmid = scopeMembers.find((m) => m.id === member)?.vmid
 
   // -------------------------------------------------------------------------
   // State
@@ -344,16 +348,6 @@ export default function FileBrowser() {
     loadDirectory()
   }, [loadDirectory])
 
-  // Close file viewer on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (fileContent) { setFileContent(null); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [fileContent])
-
   // -------------------------------------------------------------------------
   // Derived data
   // -------------------------------------------------------------------------
@@ -362,65 +356,42 @@ export default function FileBrowser() {
   const breadcrumbs = useMemo(() => pathSegments(currentPath), [currentPath])
 
   // -------------------------------------------------------------------------
-  // Disconnected state
-  // -------------------------------------------------------------------------
-
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">
-          Connect to a server to browse container files
-        </p>
-      </div>
-    )
-  }
-
-  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* ----------------------------------------------------------------- */}
-      {/* Page header                                                        */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
-            <FolderOpen size={20} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold"><span className="text-gradient">File Browser</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Files of" busy={containersLoading} everywhere={false} /></div>}
-            <p className="text-xs text-slate-500">
-              {hasFleet ? `Browse files inside the running containers on ${whereLabel}` : 'Browse files inside running containers'}
-            </p>
-          </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="file-browser"
+        badge={hasFleet ? <VmCapsule member={member} name={memberName} vmid={scopeVmid} /> : undefined}
+        subtitle={hasFleet ? `Browse files inside the running containers on ${whereLabel}` : undefined}
+        actions={isConnected ? (
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={loading || !selectedContainer}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
+            className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Refresh</span>
+            Refresh
           </button>
-        </div>
-      </div>
+        ) : undefined}
+      >
+        {hasFleet && <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Files of" busy={containersLoading} everywhere={false} />}
+      </PageHeader>
 
+      {!isConnected ? (
+        <EmptyState icon={<WifiOff size={26} />} title="Connect to a server to browse container files" />
+      ) : (
+      <>
       {/* ----------------------------------------------------------------- */}
-      {/* Warning note                                                       */}
+      {/* Note                                                               */}
       {/* ----------------------------------------------------------------- */}
-      <div className="bg-amber-500/[0.06] border border-amber-500/15 rounded-xl px-4 py-3 flex items-start gap-2.5">
-        <AlertTriangle size={14} className="text-amber-500/70 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-amber-400/80 leading-relaxed">
+      <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.06] px-4 py-3 flex items-start gap-2.5">
+        <Info size={14} className="text-cyan-400 mt-0.5 shrink-0" aria-hidden />
+        <p className="text-xs text-cyan-200/90 leading-relaxed">
           Commands run as the container's default user. Some containers may not
           support file browsing.
         </p>
@@ -429,24 +400,25 @@ export default function FileBrowser() {
       {/* ----------------------------------------------------------------- */}
       {/* Container selector                                                 */}
       {/* ----------------------------------------------------------------- */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4">
-        <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 block font-semibold">
-          Select Container{whereLabel ? ` on ${whereLabel}` : ''}
+      <div className={`${CARD} p-4`}>
+        <label htmlFor={`${uid}-container`} className="text-[11px] text-slate-400 uppercase tracking-wider mb-2 block font-semibold">
+          Select container{whereLabel ? ` on ${whereLabel}` : ''}
         </label>
         <div className="relative">
-          <Box size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <select aria-label="Select Container"
+          <Box size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
+          <select
+            id={`${uid}-container`}
             value={selectedContainer}
             onChange={(e) => handleContainerChange(e.target.value)}
             disabled={containersLoading}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+            className={`${FIELD} !pl-9 !pr-9 !py-2.5 !text-xs appearance-none cursor-pointer`}
           >
             <option value="" className="bg-slate-900 text-slate-400">
               {containersLoading
-                ? 'Loading containers...'
+                ? 'Loading containers…'
                 : containers.length === 0
                   ? `No running containers${whereLabel ? ` on ${whereLabel}` : ''}`
-                  : '-- Choose a container --'}
+                  : 'Choose a container…'}
             </option>
             {containers.map((c) => (
               <option
@@ -462,12 +434,13 @@ export default function FileBrowser() {
           <ChevronRight
             size={14}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none rotate-90"
+            aria-hidden
           />
         </div>
         {containersError && (
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-rose-300">
-            <span className="flex items-center gap-1.5 min-w-0"><AlertTriangle size={12} className="shrink-0" /><span className="truncate">Could not list the containers{whereLabel ? ` on ${whereLabel}` : ''}: {containersError}</span></span>
-            <button onClick={loadContainers} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10 transition-all duration-200 shrink-0">Retry</button>
+          <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-xs text-rose-300">
+            <span className="flex items-center gap-1.5 min-w-0"><AlertTriangle size={12} className="shrink-0" aria-hidden /><span className="truncate">Could not list the containers{whereLabel ? ` on ${whereLabel}` : ''}: {containersError}</span></span>
+            <button type="button" onClick={loadContainers} className={`${BTN_CARD_QUIET} ${FOCUS_RING}`}>Retry</button>
           </div>
         )}
       </div>
@@ -476,33 +449,32 @@ export default function FileBrowser() {
       {/* Empty state — no container selected                                */}
       {/* ----------------------------------------------------------------- */}
       {!selectedContainer && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-            <Search size={22} className="text-slate-500" />
-          </div>
-          <p className="text-sm text-slate-500 text-center max-w-sm">
-            Select a running container above to browse its filesystem.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Search size={24} />}
+          title="Select a running container above to browse its filesystem"
+          hint={!containersLoading && containers.length === 0 ? 'Nothing is running here yet — start a stack and its containers show up in the list.' : undefined}
+        />
       )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Breadcrumb path bar                                                */}
       {/* ----------------------------------------------------------------- */}
       {selectedContainer && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl px-4 py-3">
+        <nav aria-label="Path" className={`${CARD} px-3 sm:px-4 py-2`}>
           <div className="flex items-center gap-1 flex-wrap text-xs">
-            <FolderOpen size={14} className="text-cyan-400 shrink-0 mr-1" />
+            <FolderOpen size={14} className="text-cyan-400 shrink-0 mr-1" aria-hidden />
             {breadcrumbs.map((seg, i) => (
               <span key={seg.fullPath} className="flex items-center gap-1">
                 {i > 0 && (
-                  <ChevronRight size={12} className="text-slate-500" />
+                  <ChevronRight size={12} className="text-slate-500" aria-hidden />
                 )}
                 <button
+                  type="button"
                   onClick={() => navigateTo(seg.fullPath)}
-                  className={`px-1.5 py-0.5 rounded transition-colors ${
+                  aria-current={i === breadcrumbs.length - 1 ? 'location' : undefined}
+                  className={`min-h-8 px-2 rounded-lg transition-colors ${FOCUS_RING} ${
                     i === breadcrumbs.length - 1
-                      ? 'text-slate-200 font-medium bg-white/[0.06]'
+                      ? 'text-slate-100 font-medium bg-white/[0.06]'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
@@ -511,7 +483,7 @@ export default function FileBrowser() {
               </span>
             ))}
           </div>
-        </div>
+        </nav>
       )}
 
       {/* ----------------------------------------------------------------- */}
@@ -525,12 +497,12 @@ export default function FileBrowser() {
       {selectedContainer && error && <ErrorState title="Failed to browse files" error={error} onRetry={handleRefresh} />}
 
       {/* ----------------------------------------------------------------- */}
-      {/* Directory listing table                                            */}
+      {/* Directory listing                                                  */}
       {/* ----------------------------------------------------------------- */}
       {selectedContainer && !error && (entries.length > 0 || (!loading && entries.length === 0 && currentPath !== '/')) && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
-          {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 border-b border-white/5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <div className={`${CARD} overflow-hidden`}>
+          {/* Column names (the rows are buttons that read out their own cells) */}
+          <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 border-b border-white/5 text-[10px] font-semibold uppercase tracking-wider text-slate-400" aria-hidden>
             <span className="w-5" />
             <span>Name</span>
             <span className="w-20 text-right">Size</span>
@@ -542,12 +514,15 @@ export default function FileBrowser() {
             {/* Parent directory (..) */}
             {currentPath !== '/' && (
               <button
+                type="button"
                 onClick={navigateUp}
-                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors group"
+                aria-label="Up to the parent folder"
+                className={`w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors group ${FOCUS_RING} focus-visible:ring-inset`}
               >
                 <ArrowUp
                   size={16}
-                  className="text-slate-500 group-hover:text-slate-300 transition-colors mt-0.5"
+                  className="text-slate-500 group-hover:text-slate-300 transition-colors"
+                  aria-hidden
                 />
                 <span className="text-xs text-slate-400 group-hover:text-slate-200 transition-colors font-medium">
                   ..
@@ -561,21 +536,22 @@ export default function FileBrowser() {
             {/* File/directory rows */}
             {sortedEntries.map((entry) => (
               <button
+                type="button"
                 key={entry.name}
                 onClick={() => handleEntryClick(entry)}
-                className="w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors group"
+                className={`w-full grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors group ${FOCUS_RING} focus-visible:ring-inset`}
               >
                 {/* Icon */}
-                <span className="mt-0.5">
+                <span className="flex" aria-hidden>
                   {entry.type === 'directory' ? (
                     <Folder
                       size={16}
-                      className="text-amber-400/80 group-hover:text-amber-400 transition-colors"
+                      className="text-cyan-400/80 group-hover:text-cyan-400 transition-colors"
                     />
                   ) : entry.type === 'symlink' ? (
                     <Link
                       size={16}
-                      className="text-violet-400/80 group-hover:text-violet-400 transition-colors"
+                      className="text-slate-400 group-hover:text-slate-200 transition-colors"
                     />
                   ) : (
                     <FileText
@@ -591,7 +567,7 @@ export default function FileBrowser() {
                     entry.type === 'directory'
                       ? 'text-cyan-400 group-hover:text-cyan-300 font-medium'
                       : entry.type === 'symlink'
-                        ? 'text-violet-400 group-hover:text-violet-300'
+                        ? 'text-slate-300 italic group-hover:text-slate-100'
                         : 'text-slate-300 group-hover:text-slate-100'
                   }`}
                 >
@@ -621,17 +597,14 @@ export default function FileBrowser() {
 
           {/* Empty directory */}
           {sortedEntries.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <FolderOpen size={24} className="text-slate-500" />
-              <p className="text-xs text-slate-500">Directory is empty</p>
-            </div>
+            <EmptyState compact icon={<FolderOpen size={24} />} title="Directory is empty" />
           )}
 
           {/* Loading indicator for subsequent fetches */}
           {loading && entries.length > 0 && (
-            <div className="flex items-center justify-center py-4 border-t border-white/[0.03]">
-              <Loader2 size={16} className="animate-spin text-slate-500" />
-              <span className="text-xs text-slate-500 ml-2">Loading...</span>
+            <div className="flex items-center justify-center py-4 border-t border-white/[0.03]" role="status">
+              <Loader2 size={16} className="animate-spin text-slate-500" aria-hidden />
+              <span className="text-xs text-slate-500 ml-2">Loading…</span>
             </div>
           )}
         </div>
@@ -645,16 +618,17 @@ export default function FileBrowser() {
         !loading &&
         entries.length === 0 &&
         currentPath === '/' && (
-          <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
-            <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <FolderOpen size={24} className="text-slate-500" />
-              <p className="text-xs text-slate-500">
-                No entries found at root. The container may not support file
-                listing.
-              </p>
-            </div>
+          <div className={`${CARD} overflow-hidden`}>
+            <EmptyState
+              compact
+              icon={<FolderOpen size={24} />}
+              title="No entries found at the root"
+              hint="The container may not support file listing."
+            />
           </div>
         )}
+      </>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* File content viewer modal                                          */}

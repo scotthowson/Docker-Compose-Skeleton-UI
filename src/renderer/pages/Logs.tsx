@@ -1,9 +1,11 @@
 // =============================================================================
-// Logs — Advanced log viewer with level filtering, color coding, and export
-// Enhanced with server-side filtering, log stats, and archive browser
+// Logs — the framework log with level filtering, colour coding, search and
+// export; a live tail; and the archived (rotated) logs. Stats on demand.
+// On a hub: the hub's own log or one VM's.
 // =============================================================================
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import {
   ScrollText, Search, ArrowDownToLine, RefreshCw, FileText,
   Download, Copy, Check, Filter, X, BarChart3, Archive, ChevronDown,
@@ -16,16 +18,21 @@ import { useLogStore } from '../stores/logStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import LiveLogViewer from '../components/logs/LiveLogViewer'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import type { LogsResponse, LogStatsResponse, LogArchivesResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { ErrorState, EmptyState } from '../components/common/PageState'
+import { ErrorState, EmptyState, LoadingState } from '../components/common/PageState'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, BTN_ICON_SM, TONE_QUIET, TONE_GHOST } from '../lib/ui'
+import { CARD, SEARCH_FIELD, FOCUS_RING } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Log level config
 // ---------------------------------------------------------------------------
 
 const LOG_LEVELS = ['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'DEBUG', 'CRITICAL', 'TIMING', 'STEP', 'FOCUS', 'STATUS'] as const
-type LogLevel = typeof LOG_LEVELS[number]
 
 const LINE_COUNT_OPTIONS = [100, 500, 1000, 2000, 5000] as const
 
@@ -78,7 +85,7 @@ type TabId = 'logs' | 'live' | 'archives'
 
 export default function Logs() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [serverSearch, setServerSearch] = useState('')
+  const [serverSearch] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
   const [activeLevels, setActiveLevels] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
@@ -128,7 +135,6 @@ export default function Logs() {
   }, [data, setLogs, scopeMember])
 
   const rawLogs = data?.logs ?? ''
-  const logFile = data?.log_file ?? ''
 
   // Split into lines for filtering and counting
   const allLines = useMemo(() => {
@@ -282,120 +288,84 @@ export default function Logs() {
     return Math.max(...counts, 1)
   }, [stats])
 
+  const scopeVmid = scopeMembers.find((m) => m.id === scopeMember)?.vmid
+
+  // the page's own line (constants/pageTitles) unless it shows part of a fleet
+  const subtitle = scopeMember
+    ? `The framework log inside the VM ${memberName}, polled through the hub`
+    : scope === 'all' && hasFleet
+      ? 'The hub\'s own framework log — every VM keeps its own, one chip away'
+      : undefined
+
   return (
-    <div className="space-y-4 flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
+    <div className="space-y-4 md:space-y-5 flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
-            <ScrollText className="w-6 h-6 text-amber-400" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Log Viewer</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}{hasFleet && !scopeMember && <span className="ml-2 text-sm font-medium text-emerald-200/90">· Hub</span>}</h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              {scopeMember
-                ? `The framework log inside the VM ${memberName}, polled through the hub`
-                : scope === 'all' && hasFleet
-                  ? 'The hub\'s own framework log — every VM keeps its own, one chip away'
-                  : 'Framework logs, filtering, and search'}
-            </p>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Log of" busy={polling && !!data} /></div>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="logs"
+        className="shrink-0"
+        badge={hasFleet ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeVmid} /> : undefined}
+        subtitle={subtitle}
+        actions={<>
           {/* Stats toggle */}
           <button
+            type="button"
             onClick={handleToggleStats}
-            className={`
-              flex items-center gap-1.5 rounded-lg px-3 py-2
-              text-xs font-medium border transition-all duration-200
-              ${showStats
-                ? 'text-violet-400 bg-violet-500/10 border-violet-500/20'
-                : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
-              }
-            `}
-            title="Toggle log statistics"
+            aria-label="Log statistics"
+            aria-pressed={showStats}
+            className={`${BTN_TOOLBAR} ${FOCUS_RING} ${showStats ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-300 hover:bg-cyan-500/25' : TONE_QUIET}`}
           >
             <BarChart3 size={14} />
             <span className="hidden sm:inline">Stats</span>
           </button>
-          <button
-            onClick={handleCopy}
-            className="
-              flex items-center gap-1.5 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              transition-all duration-200
-            "
-            title="Copy to clipboard"
-          >
+          <button type="button" onClick={handleCopy} aria-label={copied ? 'Copied' : 'Copy the lines'} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
             {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
             <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
           </button>
-          <button
-            onClick={handleDownload}
-            disabled={filteredLines.length === 0}
-            className="
-              flex items-center gap-1.5 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-            title="Download logs"
-          >
+          <button type="button" onClick={handleDownload} disabled={filteredLines.length === 0} aria-label="Export the lines" className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
             <Download size={14} />
             <span className="hidden sm:inline">Export</span>
           </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="
-              flex items-center gap-1.5 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-          >
+          <button type="button" onClick={refresh} disabled={loading} aria-label="Refresh" className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Log of" busy={polling && !!data} />}
+      </PageHeader>
 
       {/* Stats panel (collapsible) */}
       {showStats && (
-        <div className="glass rounded-xl border border-white/5 overflow-hidden shrink-0 animate-fade-in">
-          <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2">
-            <BarChart3 size={16} className="text-violet-400" />
-            <h3 className="text-sm font-semibold text-slate-200">Log Statistics</h3>
-            {statsLoading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" />}
+        <div className={`${CARD} overflow-hidden shrink-0 animate-fade-in`}>
+          <div className="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center gap-2">
+            <BarChart3 size={16} className="text-cyan-400" aria-hidden />
+            <h2 className="text-sm font-semibold text-slate-200">Log statistics</h2>
+            {statsLoading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" aria-hidden />}
             {!statsLoading && (
               <button
+                type="button"
                 onClick={loadStats}
-                className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                className={`${BTN_CARD_QUIET} ml-auto ${FOCUS_RING}`}
               >
+                <RefreshCw size={12} aria-hidden />
                 Refresh
               </button>
             )}
           </div>
 
-          <div className="p-5">
+          <div className="p-4 sm:p-5">
             {statsError && <ErrorState title="Failed to load log statistics" error={statsError} />}
 
             {statsLoading && !stats && (
-              <p className="text-sm text-slate-500">Loading statistics...</p>
+              <LoadingState compact label="Loading the statistics…" />
             )}
 
             {stats && (
               <div className="space-y-4">
                 {/* Overview row */}
-                <div className="flex items-center gap-4 flex-wrap text-xs">
+                <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs">
                   <div className="flex items-center gap-1.5 text-slate-400">
-                    <FileText size={13} className="text-slate-500" />
+                    <FileText size={13} className="text-slate-500" aria-hidden />
                     <span className="font-medium text-slate-300">{stats.total_lines.toLocaleString()}</span> lines
                   </div>
                   <div className="flex items-center gap-1.5 text-slate-400">
@@ -405,7 +375,7 @@ export default function Logs() {
                     <span className="font-medium text-slate-300">{stats.sessions}</span> sessions
                   </div>
                   <div className="flex items-center gap-1.5 text-slate-400">
-                    <Archive size={13} className="text-slate-500" />
+                    <Archive size={13} className="text-slate-500" aria-hidden />
                     <span className="font-medium text-slate-300">{stats.archives.count}</span> archives
                     <span className="text-slate-500">({stats.archives.total_size})</span>
                   </div>
@@ -446,13 +416,14 @@ export default function Logs() {
                     if (!colors) return null
                     const widthPx = Math.max(2, Math.round((count / statsMaxCount) * 120))
                     return (
-                      <div key={level} className="flex items-center gap-2 text-[10px]">
+                      <div key={level} className="flex items-center gap-2 text-[11px]">
                         <span className={`w-16 text-right font-medium ${colors.text}`}>{level}</span>
                         <div
                           className={`h-2 rounded-full ${colors.bg} border ${colors.border}`}
                           style={{ width: `${widthPx}px` }}
+                          aria-hidden
                         />
-                        <span className="text-slate-500">{count.toLocaleString()}</span>
+                        <span className="text-slate-500 tabular-nums">{count.toLocaleString()}</span>
                       </div>
                     )
                   })}
@@ -465,55 +436,23 @@ export default function Logs() {
 
       {/* Error state */}
       {error && (
-        <div className="glass rounded-xl p-4 border border-rose-500/20 shrink-0">
-          <p className="text-sm text-rose-400">Failed to fetch {scopeMember ? `the log of the VM ${memberName}` : 'logs'}: {error.message}</p>
+        <div role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3 text-xs text-rose-300 shrink-0">
+          Failed to fetch {scopeMember ? `the log of the VM ${memberName}` : 'the logs'}: {error.message}
         </div>
       )}
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => setActiveTab('logs')}
-          className={`
-            flex items-center gap-1.5 rounded-lg px-3 py-2
-            text-xs font-medium border transition-all duration-200
-            ${activeTab === 'logs'
-              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
-            }
-          `}
-        >
-          <ScrollText size={14} />
-          Logs
-        </button>
-        <button
-          onClick={() => setActiveTab('live')}
-          className={`
-            flex items-center gap-1.5 rounded-lg px-3 py-2
-            text-xs font-medium border transition-all duration-200
-            ${activeTab === 'live'
-              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
-            }
-          `}
-        >
-          <Radio size={14} />
-          Live
-        </button>
-        <button
-          onClick={() => setActiveTab('archives')}
-          className={`
-            flex items-center gap-1.5 rounded-lg px-3 py-2
-            text-xs font-medium border transition-all duration-200
-            ${activeTab === 'archives'
-              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-              : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
-            }
-          `}
-        >
-          <Archive size={14} />
-          Archives
-        </button>
+      {/* View: the log, the live tail, the archives */}
+      <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none shrink-0 self-start">
+        <SegmentedControl
+          aria-label="Log view"
+          value={activeTab}
+          onChange={(v) => setActiveTab(v as TabId)}
+          data={[
+            { value: 'logs', label: <span className="flex items-center gap-1.5"><ScrollText size={13} aria-hidden />Logs</span> },
+            { value: 'live', label: <span className="flex items-center gap-1.5"><Radio size={13} aria-hidden />Live</span> },
+            { value: 'archives', label: <span className="flex items-center gap-1.5"><Archive size={13} aria-hidden />Archives</span> },
+          ]}
+        />
       </div>
 
       {/* ================================================================= */}
@@ -524,21 +463,23 @@ export default function Logs() {
           {/* Controls bar */}
           <div className="flex items-center flex-wrap gap-3 shrink-0">
             {/* Search input */}
-            <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="relative flex-1 min-w-[12rem]">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
               <input
                 type="text"
-                placeholder="Search logs..."
+                aria-label="Search the logs"
+                placeholder="Search the logs…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="
-                  w-full rounded-lg pl-9 pr-4 py-2
-                  text-sm text-slate-200 placeholder-slate-600
-                  bg-slate-900/60 border border-white/10
-                  focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-                  transition-all duration-200
-                "
+                className={SEARCH_FIELD}
               />
+              {searchQuery && (
+                <Hint label="Clear the search">
+                  <button type="button" aria-label="Clear the search" onClick={() => setSearchQuery('')} className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1.5 top-1/2 -translate-y-1/2`}>
+                    <X size={14} />
+                  </button>
+                </Hint>
+              )}
             </div>
 
             {/* Lines dropdown */}
@@ -547,31 +488,30 @@ export default function Logs() {
                 value={lineCount}
                 onChange={(e) => setLineCount(Number(e.target.value))}
                 className="
-                  appearance-none rounded-lg pl-3 pr-8 py-2
+                  appearance-none rounded-lg h-[38px] pl-3 pr-8
                   text-xs font-medium text-slate-300
-                  bg-slate-900/60 border border-white/10
-                  focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-                  transition-all duration-200 cursor-pointer
+                  bg-white/5 border border-white/10
+                  focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30
+                  transition-colors cursor-pointer
                 "
               >
                 {LINE_COUNT_OPTIONS.map((n) => (
                   <option key={n} value={n}>{n} lines</option>
                 ))}
               </select>
-              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
             </div>
 
             {/* Filter toggle */}
             <button
+              type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className={`
-                flex items-center gap-1.5 rounded-lg px-3 py-2
-                text-xs font-medium border transition-all duration-200
-                ${showFilters || activeLevels.size > 0
-                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                  : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
-                }
-              `}
+              aria-expanded={showFilters}
+              className={`${BTN_TOOLBAR} !py-[9px] ${FOCUS_RING} ${
+                showFilters || activeLevels.size > 0
+                  ? 'bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/25'
+                  : TONE_QUIET
+              }`}
             >
               <Filter size={14} />
               Filters
@@ -581,8 +521,8 @@ export default function Logs() {
             </button>
 
             {/* Line count */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
-              <FileText size={14} />
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0" role="status">
+              <FileText size={14} aria-hidden />
               <span>
                 {hasFilters
                   ? `${filteredLines.length} / ${allLines.length}`
@@ -592,48 +532,50 @@ export default function Logs() {
 
             {/* Auto-scroll toggle */}
             <button
+              type="button"
               onClick={() => {
                 if (!autoScroll) scrollToBottom()
                 else setAutoScroll(false)
               }}
-              className={`
-                flex items-center gap-1.5 rounded-lg px-3 py-2
-                text-xs font-medium border transition-all duration-200
-                ${
-                  autoScroll
-                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                    : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'
-                }
-              `}
-              title={autoScroll ? 'Auto-scroll is ON' : 'Auto-scroll is OFF'}
+              aria-pressed={autoScroll}
+              className={`${BTN_TOOLBAR} !py-[9px] ${FOCUS_RING} ${
+                autoScroll
+                  ? 'bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/25'
+                  : TONE_QUIET
+              }`}
             >
               <ArrowDownToLine size={14} />
-              Auto
+              Auto-scroll
             </button>
           </div>
 
           {/* Level filter chips */}
           {showFilters && (
             <div className="flex items-center gap-2 flex-wrap shrink-0 animate-fade-in">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filter by level:</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filter by level</span>
+              {LOG_LEVELS.every((l) => (levelCounts[l] ?? 0) === 0) && (
+                <span className="text-[11px] text-slate-500">No log lines to filter yet</span>
+              )}
               {LOG_LEVELS.filter((l) => (levelCounts[l] ?? 0) > 0).map((level) => {
                 const active = activeLevels.has(level)
                 const colors = levelColors[level]
                 return (
                   <button
+                    type="button"
                     key={level}
+                    aria-pressed={active}
                     onClick={() => toggleLevel(level)}
                     className={`
-                      flex items-center gap-1.5 rounded-full px-2.5 py-1
-                      text-[11px] font-medium border transition-all duration-200
+                      flex items-center gap-1.5 rounded-full px-3 h-8 sm:h-7
+                      text-[11px] font-medium border transition-colors ${FOCUS_RING}
                       ${active
                         ? `${colors.text} ${colors.bg} ${colors.border}`
-                        : 'text-slate-500 bg-white/[0.03] border-white/5 hover:bg-white/5'
+                        : 'text-slate-400 bg-white/[0.03] border-white/10 hover:bg-white/5'
                       }
                     `}
                   >
                     {level}
-                    <span className={`text-[10px] ${active ? 'opacity-80' : 'opacity-50'}`}>
+                    <span className={`text-[10px] ${active ? 'opacity-80' : 'opacity-60'}`}>
                       {levelCounts[level] ?? 0}
                     </span>
                   </button>
@@ -641,13 +583,14 @@ export default function Logs() {
               })}
               {activeLevels.size > 0 && (
                 <button
+                  type="button"
                   onClick={() => {
                     setActiveLevels(new Set())
                     setServerLevel('')
                   }}
-                  className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+                  className={`flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors ${FOCUS_RING}`}
                 >
-                  <X size={12} />
+                  <X size={12} aria-hidden />
                   Clear
                 </button>
               )}
@@ -655,28 +598,32 @@ export default function Logs() {
           )}
 
           {/* Log output area */}
-          <div className="glass rounded-xl border border-white/5 overflow-hidden flex-1 min-h-0 flex flex-col">
-            <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
-              <ScrollText size={16} className="text-emerald-400" />
-              <h3 className="text-sm font-semibold text-slate-200">Output</h3>
+          <div className={`${CARD} overflow-hidden flex-1 min-h-0 flex flex-col`}>
+            <div className="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
+              <ScrollText size={16} className="text-emerald-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">Output</h2>
               {loading && (
-                <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" />
+                <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" aria-hidden />
               )}
             </div>
 
             <div
               ref={logContainerRef}
               onScroll={handleScroll}
-              className="
-                flex-1 overflow-auto p-4
+              tabIndex={0}
+              role="log"
+              aria-label="Log output"
+              aria-live="off"
+              className={`
+                flex-1 overflow-auto p-3 sm:p-4
                 bg-slate-950 border-t border-white/[0.03]
                 text-xs leading-relaxed
                 font-mono
-                scrollbar-thin select-text
-              "
+                scrollbar-thin select-text ${FOCUS_RING}
+              `}
             >
               {loading && filteredLines.length === 0 && (
-                <span className="text-slate-500">Loading logs...</span>
+                <span className="text-slate-500">Loading the logs…</span>
               )}
               {!loading && filteredLines.length === 0 && (
                 <span className="text-slate-500">
@@ -706,22 +653,23 @@ export default function Logs() {
       {/* ARCHIVES TAB */}
       {/* ================================================================= */}
       {activeTab === 'archives' && (
-        <div className="glass rounded-xl border border-white/5 overflow-hidden flex-1 min-h-0 flex flex-col">
-          <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
-            <Archive size={16} className="text-emerald-400" />
-            <h3 className="text-sm font-semibold text-slate-200">Archived Logs</h3>
+        <div className={`${CARD} overflow-hidden flex-1 min-h-0 flex flex-col`}>
+          <div className="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center gap-2 shrink-0">
+            <Archive size={16} className="text-emerald-400" aria-hidden />
+            <h2 className="text-sm font-semibold text-slate-200">Archived logs</h2>
             {archives && (
               <span className="text-xs text-slate-500 ml-1">
                 ({archives.archives.length} files, {archives.total_size} total)
               </span>
             )}
-            {archivesLoading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" />}
+            {archivesLoading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-auto" aria-hidden />}
             {!archivesLoading && (
               <button
+                type="button"
                 onClick={loadArchives}
-                className="ml-auto flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                className={`${BTN_CARD_QUIET} ml-auto ${FOCUS_RING}`}
               >
-                <RefreshCw size={12} />
+                <RefreshCw size={12} aria-hidden />
                 Refresh
               </button>
             )}
@@ -735,22 +683,20 @@ export default function Logs() {
             )}
 
             {archivesLoading && !archives && (
-              <div className="p-5">
-                <p className="text-sm text-slate-500">Loading archives...</p>
-              </div>
+              <LoadingState compact label="Loading the archives…" />
             )}
 
             {archives && archives.archives.length === 0 && (
-              <EmptyState compact title="No archived log files found." hint="Rotate the logs from the Maintenance page and the archive appears here." />
+              <EmptyState compact title="No archived log files found" hint={`Rotate the logs on the ${pageLabel('maintenance')} page and the archive appears here.`} />
             )}
 
             {archives && archives.archives.length > 0 && (
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-white/5 text-left">
-                    <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filename</th>
-                    <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Size</th>
-                    <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                    <th scope="col" className="px-4 sm:px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Filename</th>
+                    <th scope="col" className="px-4 sm:px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Size</th>
+                    <th scope="col" className="px-4 sm:px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -759,11 +705,11 @@ export default function Logs() {
                       key={archive.filename}
                       className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors"
                     >
-                      <td className="px-5 py-3">
-                        <span className="font-mono text-slate-300">{archive.filename}</span>
+                      <td className="px-4 sm:px-5 py-3">
+                        <span className="font-mono text-slate-300 break-all">{archive.filename}</span>
                       </td>
-                      <td className="px-5 py-3 text-slate-400">{archive.size}</td>
-                      <td className="px-5 py-3 text-slate-400">{archive.date}</td>
+                      <td className="px-4 sm:px-5 py-3 text-slate-400 whitespace-nowrap">{archive.size}</td>
+                      <td className="px-4 sm:px-5 py-3 text-slate-400 whitespace-nowrap">{archive.date}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,16 +1,18 @@
 // =============================================================================
-// Diagnostics — Deep-insight system diagnostics with gauges, matrices & alerts
+// Diagnostics — the system in depth: a health score, resource gauges, Start /
+// Stop / Restart for every stack, the container and image matrices, the ports,
+// the event mix, the networks and the alerts — and the factory reset.
 // =============================================================================
 
-import React, { useMemo, useState, useCallback, useEffect } from 'react'
+import React, { useMemo, useState, useCallback, useEffect, useId } from 'react'
 import {
   Shield, Activity, Cpu, MemoryStick, Box, HardDrive, Network,
   AlertTriangle, CheckCircle, XCircle, BarChart3, RefreshCw,
-  Zap, TrendingUp, Server, Play, Square, RotateCw, Wrench, Loader2, Power,
+  Zap, TrendingUp, Server, Play, Square, RotateCw, Loader2, Power,
   Lock, Trash2, RotateCcw, ExternalLink,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { Switch } from '@mantine/core'
+import { Switch, Badge } from '@mantine/core'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetScope } from '../hooks/useFleetScope'
 import {
@@ -22,6 +24,12 @@ import { apiClient } from '../api/client'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { EmptyState } from '../components/common/PageState'
+import { useConfirm } from '../components/common/ConfirmDialog'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_DANGER, TONE_OK, TONE_DANGER } from '../lib/ui'
+import { CARD, FOCUS_RING } from '../lib/pageKit'
 import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import type {
@@ -90,8 +98,8 @@ function HealthScoreRing({ score }: { score: number }) {
   const label = scoreLabel(score)
 
   return (
-    <div className="relative inline-flex items-center justify-center">
-      <svg width={220} height={220} viewBox="0 0 220 220" className="transform -rotate-90">
+    <div className="relative inline-flex items-center justify-center" role="img" aria-label={`Health score ${score} of 100: ${label.text}`}>
+      <svg width={220} height={220} viewBox="0 0 220 220" className="transform -rotate-90" aria-hidden>
         <defs>
           <linearGradient id="gaugeGradientGood" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#10b981" />
@@ -162,9 +170,9 @@ function SemiGauge({
   const color = mode === 'health' ? healthGaugeColor(clamped) : gaugeColor(clamped)
 
   return (
-    <div className="flex flex-col items-center glass border border-white/5 rounded-xl px-5 py-5 hover:border-white/10 transition-all duration-300">
-      <div className="relative mb-2">
-        <svg width={120} height={68} viewBox="0 0 120 68">
+    <div className={`flex flex-col items-center ${CARD} px-3 sm:px-5 py-4 sm:py-5 hover:border-white/10 transition-colors`}>
+      <div className="relative mb-2" role="img" aria-label={`${label}: ${Math.round(clamped)}${suffix}`}>
+        <svg width={120} height={68} viewBox="0 0 120 68" aria-hidden>
           <defs>
             <linearGradient id={`semiGrad-${label.replace(/\s/g, '')}`} x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#10b981" />
@@ -198,7 +206,7 @@ function SemiGauge({
         </div>
       </div>
       <div className="flex items-center gap-1.5 mt-1">
-        <span className="text-slate-500 opacity-60">{icon}</span>
+        <span className="text-slate-500 opacity-60" aria-hidden>{icon}</span>
         <span className="text-[10px] uppercase tracking-widest font-semibold text-slate-400">{label}</span>
       </div>
     </div>
@@ -211,10 +219,10 @@ function SemiGauge({
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div className="flex items-center gap-2.5 mb-4">
-      {icon}
-      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</h3>
-      <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
+    <div className="flex items-center gap-2.5 mb-4 w-full">
+      <span className="text-slate-500" aria-hidden>{icon}</span>
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</h2>
+      <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" aria-hidden />
     </div>
   )
 }
@@ -224,8 +232,6 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
 // =============================================================================
 
 function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) {
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-
   if (containers.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-slate-500 text-xs">
@@ -236,8 +242,8 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
 
   return (
     <div className="relative">
-      <div className="flex flex-wrap gap-1.5">
-        {containers.map((c, idx) => {
+      <div className="flex flex-wrap gap-1.5" role="list" aria-label="Containers by health">
+        {containers.map((c) => {
           const state = c.state?.toLowerCase() ?? ''
           const health = c.health?.toLowerCase() ?? ''
           let bg = 'bg-slate-600/40' // stopped
@@ -246,35 +252,21 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
             else if (health === 'unhealthy') bg = 'bg-rose-500'
             else bg = 'bg-amber-500/80' // starting / no healthcheck
           }
+          const what = `${c.name}: ${state || 'unknown'}${health ? ` / ${health}` : ''}${c.member ? ` (VM ${c.member_name || c.member})` : ''}`
 
           return (
-            <div
-              key={`${c.member ?? ''}|${c.name}`}
-              className="relative group"
-              onMouseEnter={() => setHoveredIdx(idx)}
-              onMouseLeave={() => setHoveredIdx(null)}
-            >
+            <Hint key={`${c.member ?? ''}|${c.name}`} label={what}>
               <div
-                className={`w-5 h-5 rounded-[4px] cursor-pointer transition-all duration-200
-                  ${bg} hover:scale-125 hover:ring-2 hover:ring-white/20`}
+                role="listitem"
+                aria-label={what}
+                className={`w-5 h-5 rounded-[4px] cursor-default transition-transform duration-200 ${bg} hover:scale-125 hover:ring-2 hover:ring-white/20`}
               />
-              {hoveredIdx === idx && (
-                <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none animate-fade-in">
-                  <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
-                    <p className="text-xs font-semibold text-slate-200">{c.name}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 capitalize">
-                      {state}{health ? ` / ${health}` : ''}
-                    </p>
-                  </div>
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-slate-900/95 border-r border-b border-white/10 rotate-45 -mt-1" />
-                </div>
-              )}
-            </div>
+            </Hint>
           )
         })}
       </div>
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-white/[0.03]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-4 pt-3 border-t border-white/[0.03]">
         {[
           { label: 'Healthy', color: 'bg-emerald-500' },
           { label: 'Starting', color: 'bg-amber-500/80' },
@@ -282,8 +274,8 @@ function ContainerHealthMatrix({ containers }: { containers: ContainerInfo[] }) 
           { label: 'Stopped', color: 'bg-slate-600/40' },
         ].map(({ label: l, color }) => (
           <div key={l} className="flex items-center gap-1.5">
-            <div className={`w-2.5 h-2.5 rounded-sm ${color}`} />
-            <span className="text-[10px] text-slate-500 font-medium">{l}</span>
+            <div className={`w-2.5 h-2.5 rounded-sm ${color}`} aria-hidden />
+            <span className="text-[11px] text-slate-500 font-medium">{l}</span>
           </div>
         ))}
       </div>
@@ -308,7 +300,7 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
 
   const total = images.length
   if (total === 0) {
-    return <EmptyState compact title="No images found" hint="Run a registry check on the Images page to discover images, or pull one from Docker Hub." />
+    return <EmptyState compact title="No images found" hint={`Run a registry check on the ${pageLabel('images')} page to discover images, or pull one from Docker Hub.`} />
   }
 
   const segments = [
@@ -321,27 +313,27 @@ function ImageFreshnessBar({ images }: { images: ImageInfo[] }) {
   return (
     <div>
       {/* Bar */}
-      <div className="flex h-5 rounded-full overflow-hidden bg-slate-800/60 mb-4">
+      <div className="flex h-5 rounded-full overflow-hidden bg-slate-800/60 mb-4" role="img" aria-label={`Image freshness: ${segments.map((seg) => `${seg.count} ${seg.label.toLowerCase()}`).join(', ')}`}>
         {segments.map((seg) => (
           <div
             key={seg.key}
             className={`${seg.color} transition-all duration-700 ease-out relative group`}
             style={{ width: `${(seg.count / total) * 100}%` }}
           >
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white/10" />
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white/10" aria-hidden />
           </div>
         ))}
       </div>
       {/* Labels */}
-      <div className="flex items-center gap-5 flex-wrap">
+      <div className="flex items-center gap-x-5 gap-y-1 flex-wrap">
         {segments.map((seg) => (
           <div key={seg.key} className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${seg.color}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${seg.color}`} aria-hidden />
             <span className="text-xs text-slate-400 font-medium">{seg.label}</span>
             <span className={`text-xs font-bold tabular-nums ${seg.textColor}`}>
               {seg.count}
             </span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[11px] text-slate-500">
               ({pct(seg.count, total)}%)
             </span>
           </div>
@@ -401,10 +393,10 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/5">
-            <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Host Port</th>
-            <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container Port</th>
-            <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Protocol</th>
-            <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container</th>
+            <th scope="col" className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Host port</th>
+            <th scope="col" className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Container port</th>
+            <th scope="col" className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Protocol</th>
+            <th scope="col" className="text-left px-3 py-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Container</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.03]">
@@ -412,13 +404,14 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
             <tr key={`${entry.member ?? ''}|${entry.container}-${entry.host}-${entry.container_port}`} className="hover:bg-white/[0.03] transition-colors duration-150 group/port">
               <td className="px-3 py-2">
                 <button
+                  type="button"
                   onClick={() => { if (entry.address) window.open(`http://${entry.address}:${entry.host}`, '_blank') }}
                   disabled={!entry.address}
-                  className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-medium text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-60"
+                  className={`inline-flex items-center gap-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 text-xs font-mono font-medium text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-60 ${FOCUS_RING}`}
                   title={entry.address ? `Open http://${entry.address}:${entry.host}` : 'The VM\'s address is not known yet'}
                 >
                   :{entry.host}
-                  <ExternalLink size={9} className="opacity-0 group-hover/port:opacity-100 transition-opacity" />
+                  <ExternalLink size={10} className="opacity-60 group-hover/port:opacity-100 group-focus-within/port:opacity-100 transition-opacity" aria-hidden />
                 </button>
               </td>
               <td className="px-3 py-2 font-mono text-xs text-slate-300">{entry.container_port}</td>
@@ -427,14 +420,14 @@ function PortAllocationMap({ containers }: { containers: ContainerInfo[] }) {
               </td>
               <td className="px-3 py-2 text-xs font-medium text-slate-200 truncate max-w-[240px]" title={entry.member ? `${entry.container} · VM ${entry.member_name || entry.member}` : entry.container}>
                 {entry.container}
-                {entry.member && <span className="ml-1.5 text-[10px] font-normal text-amber-300/80">· {entry.member_name || entry.member}</span>}
+                {entry.member && <span className="ml-1.5 text-[10px] font-normal text-violet-300/80">· {entry.member_name || entry.member}</span>}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       {portEntries.length > 20 && (
-        <div className="text-center py-2 text-[10px] text-slate-500">
+        <div className="text-center py-2 text-[11px] text-slate-500">
           +{portEntries.length - 20} more port mappings
         </div>
       )}
@@ -518,12 +511,12 @@ function EventFrequencyChart({ events }: { events: EventEntry[] }) {
 }
 
 // =============================================================================
-// Network Topology Summary
+// Networks summary
 // =============================================================================
 
-function NetworkTopology({ networks }: { networks: NetworkInfo[] }) {
+function NetworkSummary({ networks }: { networks: NetworkInfo[] }) {
   if (networks.length === 0) {
-    return <EmptyState compact title="No networks found" hint="Docker networks appear here once a stack creates one, or create one on the Networks page." />
+    return <EmptyState compact title="No networks found" hint={`Docker networks appear here once a stack creates one, or create one on the ${pageLabel('networks')} page.`} />
   }
 
   return (
@@ -531,25 +524,25 @@ function NetworkTopology({ networks }: { networks: NetworkInfo[] }) {
       {networks.map((net, idx) => (
         <div
           key={net.id}
-          className="glass border border-white/5 rounded-xl p-4 hover:border-white/10 transition-all duration-300 group animate-fade-in"
+          className={`${CARD} p-4 hover:border-white/10 transition-colors group animate-fade-in`}
           style={{ animationDelay: `${idx * 60}ms` }}
         >
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/15 transition-colors">
-              <Network size={14} className="text-cyan-400" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/15 transition-colors shrink-0">
+              <Network size={14} className="text-cyan-400" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-200 truncate">{net.name}</p>
+              <p className="text-xs font-semibold text-slate-200 truncate" title={net.name}>{net.name}</p>
             </div>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Driver</span>
-              <span className="text-[10px] font-mono text-slate-300">{net.driver}</span>
+              <span className="text-[11px] font-mono text-slate-300">{net.driver}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Scope</span>
-              <span className="text-[10px] font-mono text-slate-300">{net.scope}</span>
+              <span className="text-[11px] font-mono text-slate-300">{net.scope}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Containers</span>
@@ -665,8 +658,8 @@ function AlertsPanel({
           <CheckCircle size={20} className="text-emerald-400" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-emerald-400">All Clear</p>
-          <p className="text-[11px] text-slate-500">No alerts or issues detected</p>
+          <p className="text-sm font-semibold text-emerald-400">All clear</p>
+          <p className="text-xs text-slate-500">No alerts or issues detected</p>
         </div>
       </div>
     )
@@ -676,37 +669,38 @@ function AlertsPanel({
     critical: {
       border: 'border-rose-500/20',
       bg: 'bg-rose-500/[0.06]',
-      icon: <XCircle size={16} className="text-rose-400 shrink-0" />,
+      icon: <XCircle size={16} className="text-rose-400 shrink-0" aria-hidden />,
       titleColor: 'text-rose-300',
     },
     warning: {
       border: 'border-amber-500/20',
       bg: 'bg-amber-500/[0.06]',
-      icon: <AlertTriangle size={16} className="text-amber-400 shrink-0" />,
+      icon: <AlertTriangle size={16} className="text-amber-400 shrink-0" aria-hidden />,
       titleColor: 'text-amber-300',
     },
     info: {
       border: 'border-cyan-500/20',
       bg: 'bg-cyan-500/[0.06]',
-      icon: <Zap size={16} className="text-cyan-400 shrink-0" />,
+      icon: <Zap size={16} className="text-cyan-400 shrink-0" aria-hidden />,
       titleColor: 'text-cyan-300',
     },
   }
 
   return (
-    <div className="space-y-2.5 max-h-[400px] overflow-y-auto scrollbar-thin pr-1">
+    <div className="space-y-2.5 max-h-[400px] overflow-y-auto scrollbar-thin pr-1" role="list" aria-label="Active alerts">
       {alerts.map((alert, idx) => {
         const cfg = severityConfig[alert.severity]
         return (
           <div
             key={alert.id}
+            role="listitem"
             className={`flex items-start gap-3 rounded-xl border p-3.5 ${cfg.border} ${cfg.bg} animate-fade-in`}
             style={{ animationDelay: `${idx * 80}ms` }}
           >
             <div className="mt-0.5">{cfg.icon}</div>
             <div className="min-w-0 flex-1">
               <p className={`text-xs font-semibold ${cfg.titleColor}`}>{alert.title}</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">{alert.detail}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{alert.detail}</p>
             </div>
           </div>
         )
@@ -719,12 +713,46 @@ function AlertsPanel({
 // Server Control Card
 // =============================================================================
 
+/** Start / Stop / Restart for every stack. The tone of each tile is written out in full (no `bg-${color}` pieces) so the theme engine sees every class. */
+const CONTROLS = [
+  {
+    id: 'start' as const, label: 'Start all', icon: Play, desc: 'Start all stacks',
+    tile: 'hover:bg-emerald-500/15 hover:border-emerald-500/25',
+    well: 'bg-emerald-500/10 border-emerald-500/15 group-hover:bg-emerald-500/20',
+    iconColor: 'text-emerald-400',
+  },
+  {
+    id: 'stop' as const, label: 'Stop all', icon: Square, desc: 'Stop all stacks',
+    tile: 'hover:bg-rose-500/15 hover:border-rose-500/25',
+    well: 'bg-rose-500/10 border-rose-500/15 group-hover:bg-rose-500/20',
+    iconColor: 'text-rose-400',
+  },
+  {
+    id: 'restart' as const, label: 'Restart all', icon: RotateCw, desc: 'Restart all stacks',
+    tile: 'hover:bg-amber-500/15 hover:border-amber-500/25',
+    well: 'bg-amber-500/10 border-amber-500/15 group-hover:bg-amber-500/20',
+    iconColor: 'text-amber-400',
+  },
+]
+
 function ServerControlCard() {
+  const confirm = useConfirm()
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [lastResult, setLastResult] = useState<{ action: string; success: boolean; message: string } | null>(null)
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+    // stopping or restarting every stack takes the whole system with it (core infrastructure and the VMs' stacks too): ask first
+    if (action !== 'start') {
+      const ok = await confirm({
+        title: action === 'stop' ? 'Stop all stacks' : 'Restart all stacks',
+        message: action === 'stop'
+          ? 'Every stack stops — core infrastructure (Traefik, the sign-in, the web dashboard) and the stacks inside your VMs included. This page may stop answering until the stacks are started again.'
+          : 'Every stack restarts, one after the other — core infrastructure (Traefik, the sign-in, the web dashboard) and the stacks inside your VMs included. Services are down for a moment, and this page may stop answering meanwhile.',
+        confirmLabel: action === 'stop' ? 'Stop all stacks' : 'Restart all stacks',
+        danger: true,
+      })
+      if (!ok) return
+    }
     setActionLoading(action)
     setLastResult(null)
     try {
@@ -745,74 +773,31 @@ function ServerControlCard() {
     } finally {
       setActionLoading(null)
     }
-  }, [])
-
-  const toggleMaintenance = useCallback(() => {
-    setMaintenanceMode((prev) => !prev)
-    setLastResult({
-      action: 'maintenance',
-      success: true,
-      message: maintenanceMode ? 'Maintenance mode disabled' : 'Maintenance mode enabled — new connections will be paused',
-    })
-  }, [maintenanceMode])
-
-  const actions = [
-    {
-      id: 'start' as const,
-      label: 'Start All',
-      icon: Play,
-      color: 'emerald',
-      bgHover: 'hover:bg-emerald-500/15 hover:border-emerald-500/25',
-      iconColor: 'text-emerald-400',
-      desc: 'Start all stacks',
-    },
-    {
-      id: 'stop' as const,
-      label: 'Stop All',
-      icon: Square,
-      color: 'rose',
-      bgHover: 'hover:bg-rose-500/15 hover:border-rose-500/25',
-      iconColor: 'text-rose-400',
-      desc: 'Stop all stacks',
-    },
-    {
-      id: 'restart' as const,
-      label: 'Restart All',
-      icon: RotateCw,
-      color: 'amber',
-      bgHover: 'hover:bg-amber-500/15 hover:border-amber-500/25',
-      iconColor: 'text-amber-400',
-      desc: 'Restart all stacks',
-    },
-  ]
+  }, [confirm])
 
   return (
     <div className="space-y-4">
       {/* Action buttons row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {actions.map((action) => {
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        {CONTROLS.map((action) => {
           const Icon = action.icon
           const isLoading = actionLoading === action.id
           const isDisabled = actionLoading !== null
 
           return (
             <button
+              type="button"
               key={action.id}
               onClick={() => handleAction(action.id)}
               disabled={isDisabled}
               className={`
-                group relative flex flex-col items-center gap-2.5 rounded-xl p-5
+                group relative flex flex-col items-center gap-2 sm:gap-2.5 rounded-xl p-3 sm:p-5
                 bg-white/[0.03] border border-white/5
-                ${action.bgHover}
-                transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
+                ${action.tile}
+                transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS_RING}
               `}
             >
-              <div className={`
-                w-11 h-11 rounded-xl flex items-center justify-center
-                bg-${action.color}-500/10 border border-${action.color}-500/15
-                group-hover:bg-${action.color}-500/20 group-hover:scale-110
-                transition-all duration-300
-              `}>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${action.well} transition-colors duration-300`}>
                 {isLoading ? (
                   <Loader2 size={20} className={`${action.iconColor} animate-spin`} />
                 ) : (
@@ -821,54 +806,16 @@ function ServerControlCard() {
               </div>
               <div className="text-center">
                 <p className="text-xs font-semibold text-slate-200">{action.label}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{action.desc}</p>
+                <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5">{action.desc}</p>
               </div>
             </button>
           )
         })}
-
-        {/* Maintenance Mode Toggle */}
-        <button
-          onClick={toggleMaintenance}
-          disabled={actionLoading !== null}
-          className={`
-            group relative flex flex-col items-center gap-2.5 rounded-xl p-5
-            border transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
-            ${maintenanceMode
-              ? 'bg-violet-500/10 border-violet-500/25 ring-1 ring-violet-500/20'
-              : 'bg-white/[0.03] border-white/5 hover:bg-violet-500/10 hover:border-violet-500/25'
-            }
-          `}
-        >
-          <div className={`
-            w-11 h-11 rounded-xl flex items-center justify-center
-            transition-all duration-300
-            ${maintenanceMode
-              ? 'bg-violet-500/20 border border-violet-500/25 scale-110'
-              : 'bg-violet-500/10 border border-violet-500/15 group-hover:bg-violet-500/20 group-hover:scale-110'
-            }
-          `}>
-            <Wrench size={20} className={`text-violet-400 ${maintenanceMode ? 'animate-pulse' : ''}`} />
-          </div>
-          <div className="text-center">
-            <p className="text-xs font-semibold text-slate-200">Maintenance</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              {maintenanceMode ? 'Mode active' : 'Toggle mode'}
-            </p>
-          </div>
-          {/* Active indicator */}
-          {maintenanceMode && (
-            <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
-              <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-50" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-400" />
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Result message */}
       {lastResult && (
-        <div className={`
+        <div role="status" className={`
           flex items-center gap-3 rounded-xl px-4 py-3 border animate-fade-in
           ${lastResult.success
             ? 'bg-emerald-500/[0.06] border-emerald-500/20'
@@ -876,9 +823,9 @@ function ServerControlCard() {
           }
         `}>
           {lastResult.success ? (
-            <CheckCircle size={15} className="text-emerald-400 shrink-0" />
+            <CheckCircle size={15} className="text-emerald-400 shrink-0" aria-hidden />
           ) : (
-            <XCircle size={15} className="text-rose-400 shrink-0" />
+            <XCircle size={15} className="text-rose-400 shrink-0" aria-hidden />
           )}
           <p className={`text-xs font-medium ${lastResult.success ? 'text-emerald-300' : 'text-rose-300'}`}>
             {lastResult.message}
@@ -984,6 +931,7 @@ async function performServerReset(resetCompose: boolean): Promise<{ success: boo
 }
 
 function FactoryResetCard() {
+  const uid = useId()
   const [activeMode, setActiveMode] = useState<'none' | 'app' | 'full'>('none')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [confirmText, setConfirmText] = useState('')
@@ -1058,28 +1006,24 @@ function FactoryResetCard() {
   // ── Idle state: show both buttons ──
   if (activeMode === 'none') {
     return (
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* App-only reset */}
         <div className="flex items-start gap-4 p-4 rounded-xl bg-amber-500/[0.04] border border-amber-500/10">
           <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-            <RefreshCw size={16} className="text-amber-400" />
+            <RefreshCw size={16} className="text-amber-400" aria-hidden />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-amber-300">Reset App Settings</p>
-            <p className="text-[10px] text-amber-400/60 mt-1 leading-relaxed">
-              Clears everything this browser remembers about DCS — the saved session and API token, connection profiles, theme, dashboard layout cache and preferences — and returns to the login screen. <span className="text-amber-300/70">Nothing on the server changes: users, stacks, containers, compose files and configuration all stay.</span>
+            <p className="text-sm font-semibold text-amber-300">Reset app settings</p>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Clears everything this browser remembers about DCS — the saved session and API token, connection profiles, theme, dashboard layout cache and preferences — and returns to the login screen. <span className="text-slate-200">Nothing on the server changes: users, stacks, containers, compose files and configuration all stay.</span>
             </p>
             <button
+              type="button"
               onClick={() => setActiveMode('app')}
-              className="
-                mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium
-                bg-amber-500/10 border border-amber-500/20 text-amber-400
-                hover:bg-amber-500/20 hover:border-amber-500/30
-                transition-all duration-200
-              "
+              className={`${BTN_TOOLBAR} mt-3 bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 ${FOCUS_RING}`}
             >
-              <RefreshCw size={13} />
-              Reset App
+              <RefreshCw size={14} />
+              Reset app
             </button>
           </div>
         </div>
@@ -1087,24 +1031,20 @@ function FactoryResetCard() {
         {/* Full server + app reset */}
         <div className="flex items-start gap-4 p-4 rounded-xl bg-rose-500/[0.04] border border-rose-500/10">
           <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center shrink-0 mt-0.5">
-            <Trash2 size={16} className="text-rose-400" />
+            <Trash2 size={16} className="text-rose-400" aria-hidden />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-rose-300">Full Server Reset</p>
-            <p className="text-[10px] text-rose-400/60 mt-1 leading-relaxed">
-              Everything in App Reset, <span className="text-rose-300 font-medium">plus</span> the server forgets every API user, token, invite and session, its setup-complete flag, and the root <span className="font-mono">.env</span> goes back to the bundled defaults — the Setup Wizard runs again on the next connection. <span className="text-rose-300/70">Stacks, containers, images, compose files, secrets, plugins, schedules and metrics are kept</span> unless you also choose to wipe the stacks below.
+            <p className="text-sm font-semibold text-rose-300">Full server reset</p>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Everything in Reset app, <span className="text-rose-300 font-medium">plus</span> the server forgets every API user, token, invite and session, its setup-complete flag, and the root <span className="font-mono">.env</span> goes back to the bundled defaults — the {pageLabel('setup')} runs again on the next connection. <span className="text-slate-200">Stacks, containers, images, compose files, secrets, plugins, schedules and metrics are kept</span> unless you also choose to wipe the stacks below.
             </p>
             <button
+              type="button"
               onClick={() => setActiveMode('full')}
-              className="
-                mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-medium
-                bg-rose-500/10 border border-rose-500/20 text-rose-400
-                hover:bg-rose-500/20 hover:border-rose-500/30
-                transition-all duration-200
-              "
+              className={`${BTN_TOOLBAR} ${TONE_DANGER} mt-3 ${FOCUS_RING}`}
             >
-              <Trash2 size={13} />
-              Full Reset
+              <Trash2 size={14} />
+              Full reset
             </button>
           </div>
         </div>
@@ -1121,39 +1061,39 @@ function FactoryResetCard() {
         banner: 'bg-rose-500/[0.06] border-rose-500/15',
         icon: 'text-rose-400',
         title: 'text-rose-300',
-        desc: 'text-rose-400/70',
+        desc: 'text-slate-400',
         keyword: 'text-rose-300',
         inputFocus: 'focus:border-rose-500/50 focus:ring-rose-500/25',
         confirmMatch: 'border-rose-500/50 focus:border-rose-500/50 focus:ring-rose-500/25',
-        button: 'bg-rose-500 hover:bg-rose-400 shadow-rose-500/20',
+        button: BTN_SHEET_DANGER,
       }
     : {
         banner: 'bg-amber-500/[0.06] border-amber-500/15',
         icon: 'text-amber-400',
         title: 'text-amber-300',
-        desc: 'text-amber-400/70',
+        desc: 'text-slate-400',
         keyword: 'text-amber-300',
         inputFocus: 'focus:border-amber-500/50 focus:ring-amber-500/25',
         confirmMatch: 'border-amber-500/50 focus:border-amber-500/50 focus:ring-amber-500/25',
-        button: 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20',
+        button: `${BTN_SHEET} font-semibold text-slate-900 bg-amber-500 hover:bg-amber-400`,
       }
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className={`flex items-start gap-3 rounded-xl ${styles.banner} border px-4 py-3`}>
-        <AlertTriangle size={15} className={`${styles.icon} shrink-0 mt-0.5`} />
+        <AlertTriangle size={15} className={`${styles.icon} shrink-0 mt-0.5`} aria-hidden />
         <div>
-          <p className={`text-xs font-semibold ${styles.title}`}>
-            {isFullReset ? 'Confirm Full Server Reset' : 'Confirm App Reset'}
+          <p className={`text-sm font-semibold ${styles.title}`}>
+            {isFullReset ? 'Confirm full server reset' : 'Confirm app reset'}
           </p>
-          <p className={`text-[10px] ${styles.desc} mt-0.5`}>
+          <p className={`text-xs ${styles.desc} mt-0.5`}>
             Enter your current password and type{' '}
             <span className={`font-mono font-bold ${styles.keyword}`}>{confirmKeyword}</span> to confirm.
             {isFullReset && (
-              <span className="block mt-1 text-rose-400/60">
+              <span className="block mt-1 text-slate-400">
                 {resetCompose
-                  ? 'Users, sessions, .env, every stack except core infrastructure and all their data will be gone. The Setup Wizard runs again afterwards.'
-                  : 'Users, sessions and the root .env are reset; stacks and containers keep running. The Setup Wizard runs again afterwards.'}
+                  ? `Users, sessions, .env, every stack except core infrastructure and all their data will be gone. The ${pageLabel('setup')} runs again afterwards.`
+                  : `Users, sessions and the root .env are reset; stacks and containers keep running. The ${pageLabel('setup')} runs again afterwards.`}
               </span>
             )}
           </p>
@@ -1162,39 +1102,41 @@ function FactoryResetCard() {
 
       <div className="space-y-3">
         <div>
-          <label className="block text-[10px] font-medium text-slate-500 mb-1">Current Password</label>
+          <label htmlFor={`${uid}-pw`} className="block text-xs font-medium text-slate-400 mb-1">Current password</label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" aria-hidden />
             <input
+              id={`${uid}-pw`}
               type="password"
               value={confirmPassword}
               onChange={(e) => { setConfirmPassword(e.target.value); setResetError(null) }}
               placeholder="Enter your password"
               autoComplete="current-password"
               className={`
-                w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-xs text-slate-200 placeholder-slate-600
-                focus:outline-none ${styles.inputFocus}
-                transition-all
+                w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
+                text-sm text-slate-200 placeholder-slate-600
+                focus:outline-none focus:ring-1 ${styles.inputFocus}
+                transition-colors
               `}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-[10px] font-medium text-slate-500 mb-1">
+          <label htmlFor={`${uid}-kw`} className="block text-xs font-medium text-slate-400 mb-1">
             Type {confirmKeyword} to confirm
           </label>
           <input
+            id={`${uid}-kw`}
             type="text"
             value={confirmText}
             onChange={(e) => { setConfirmText(e.target.value); setResetError(null) }}
             placeholder={confirmKeyword}
             autoComplete="off"
             className={`
-              w-full px-3 py-2 bg-white/5 border rounded-lg
-              text-xs text-slate-200 placeholder-slate-600 font-mono
-              focus:outline-none focus:ring-1 transition-all
+              w-full px-3 py-2.5 bg-white/5 border rounded-lg
+              text-sm text-slate-200 placeholder-slate-600 font-mono
+              focus:outline-none focus:ring-1 transition-colors
               ${confirmText === confirmKeyword
                 ? styles.confirmMatch
                 : 'border-white/10 focus:border-white/20 focus:ring-white/10'
@@ -1206,43 +1148,37 @@ function FactoryResetCard() {
 
       {/* Compose reset toggle (full reset only) */}
       {isFullReset && (
-        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
+        <div className={`${CARD} p-3`}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-medium text-rose-300">Also wipe the stacks and their data</p>
+            <p className="text-xs font-medium text-rose-300">Also wipe the stacks and their data</p>
             <Switch color="rose" aria-label="Also wipe the stacks and their data" checked={resetCompose} onChange={() => setResetCompose(!resetCompose)} className="shrink-0" />
           </div>
-          <div>
-            <p className="text-[10px] text-slate-500 leading-relaxed mt-1">
-              Stops and removes every DCS stack except core infrastructure (the dashboard keeps running), deletes their App-Data, named volumes and images, removes user-created stacks and templates, installed plugins, secrets, snapshots, metrics, automations and the DNS records DCS created, then restores the bundled compose files. Other containers on this host are never touched.
-            </p>
-          </div>
+          <p className="text-xs text-slate-500 leading-relaxed mt-1">
+            Stops and removes every DCS stack except core infrastructure (the dashboard keeps running), deletes their App-Data, named volumes and images, removes user-created stacks and templates, installed plugins, secrets, snapshots, metrics, automations and the DNS records DCS created, then restores the bundled compose files. Other containers on this host are never touched.
+          </p>
         </div>
       )}
 
       {resetError && (
-        <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
-          <XCircle size={13} className="text-rose-400 shrink-0" />
-          <p className="text-[11px] text-rose-300">{resetError}</p>
+        <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
+          <XCircle size={13} className="text-rose-400 shrink-0" aria-hidden />
+          <p className="text-xs text-rose-300">{resetError}</p>
         </div>
       )}
 
       {serverResetResult && (
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-          <CheckCircle size={13} className="text-emerald-400 shrink-0" />
-          <p className="text-[11px] text-emerald-300">{serverResetResult}</p>
+        <div role="status" className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+          <CheckCircle size={13} className="text-emerald-400 shrink-0" aria-hidden />
+          <p className="text-xs text-emerald-300">{serverResetResult}</p>
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         <button
+          type="button"
           onClick={isFullReset ? handleFullReset : handleAppReset}
           disabled={!canReset || resetting || (countdown !== null && countdown > 0)}
-          className={`
-            flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold
-            ${styles.button} text-white shadow-lg
-            transition-all duration-200 press
-            disabled:opacity-50 disabled:cursor-not-allowed
-          `}
+          className={`${styles.button} disabled:cursor-not-allowed ${FOCUS_RING}`}
         >
           {resetting ? (
             <Loader2 size={14} className="animate-spin" />
@@ -1254,17 +1190,18 @@ function FactoryResetCard() {
             <RefreshCw size={14} />
           )}
           {resetting
-            ? 'Resetting...'
+            ? 'Resetting…'
             : countdown !== null && countdown > 0
-              ? `Confirm in ${countdown}s...`
+              ? `Confirm in ${countdown}s…`
               : isFullReset
-                ? 'Confirm Full Reset'
-                : 'Confirm App Reset'
+                ? 'Confirm full reset'
+                : 'Confirm app reset'
           }
         </button>
         <button
+          type="button"
           onClick={cancelConfirm}
-          className="px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
+          className={`${BTN_SHEET_QUIET} ${FOCUS_RING}`}
         >
           Cancel
         </button>
@@ -1283,32 +1220,17 @@ function DisconnectedHero() {
   const isConnecting = connectionStatus === 'connecting'
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[55vh] relative">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/3 left-1/3 w-56 h-56 rounded-full bg-emerald-500/[0.03] blur-3xl animate-breathe" />
-        <div className="absolute bottom-1/3 right-1/3 w-64 h-64 rounded-full bg-cyan-500/[0.03] blur-3xl animate-breathe" style={{ animationDelay: '3s' }} />
-      </div>
-      <div className="relative mb-6">
-        <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center">
-          <Shield size={32} className="text-slate-500" />
-        </div>
-      </div>
-      <h3 className="text-lg font-semibold text-slate-300 mb-2">
-        {isConnecting ? 'Connecting...' : 'Diagnostics Unavailable'}
-      </h3>
-      <p className="text-sm text-slate-500 text-center max-w-xs mb-5">
-        Connect to your Docker API to access system diagnostics.
-      </p>
-      {!isConnecting && (
-        <button
-          onClick={() => connect()}
-          className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Server size={15} />
+    <EmptyState
+      icon={<Shield size={32} />}
+      title={isConnecting ? 'Connecting…' : 'Diagnostics unavailable'}
+      hint="Connect to your Docker API to see the system diagnostics."
+      action={!isConnecting ? (
+        <button type="button" onClick={() => connect()} className={`${BTN_TOOLBAR} ${TONE_OK} ${FOCUS_RING}`}>
+          <Server size={14} />
           Connect
         </button>
-      )}
-    </div>
+      ) : undefined}
+    />
   )
 }
 
@@ -1477,61 +1399,45 @@ export default function Diagnostics() {
   const showDisconnected = !isConnected && hasNoData
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-4 md:space-y-5">
       <DisconnectedBanner />
       {/* ── Page header ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between animate-fade-in">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-rose-500/20 border border-white/5">
-            <Shield className="w-6 h-6 text-violet-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Diagnostics</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Deep-insight system health, resource usage, and alerts</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {isConnected && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
-              <span className="relative flex h-2 w-2">
+      <PageHeader
+        page="diagnostics"
+        badge={isConnected ? (
+          <Badge
+            color="emerald"
+            leftSection={
+              <span className="relative flex h-1.5 w-1.5" aria-hidden>
                 <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
               </span>
-              <span className="text-xs font-medium text-emerald-400">Live</span>
-            </div>
-          )}
-          {isConnected && (
-            <button
-              onClick={refreshAll}
-              disabled={isLoading}
-              className="
-                flex items-center gap-1.5 rounded-lg px-3 py-2
-                text-xs font-medium text-slate-300
-                bg-white/5 border border-white/10
-                hover:bg-white/10 hover:border-white/15
-                disabled:opacity-50 transition-all duration-200
-              "
-            >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-              Refresh All
-            </button>
-          )}
-        </div>
-      </div>
+            }
+          >
+            Live
+          </Badge>
+        ) : undefined}
+        actions={isConnected ? (
+          <button type="button" onClick={refreshAll} disabled={isLoading} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            Refresh all
+          </button>
+        ) : undefined}
+      />
 
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
-        <div className="space-y-3 md:space-y-6 stagger-children">
+        <div className="space-y-4 md:space-y-5 stagger-children">
 
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 1: Health Score + Resource Gauges                     */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5">
 
             {/* Health Score Ring */}
             <div className="lg:col-span-4">
-              <div className="glass border border-white/5 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center h-full relative overflow-hidden">
+              <div className={`${CARD} p-4 md:p-6 flex flex-col items-center justify-center h-full relative overflow-hidden`}>
                 {/* Ambient glow behind ring */}
                 <div className="absolute inset-0 pointer-events-none">
                   <div
@@ -1545,7 +1451,7 @@ export default function Diagnostics() {
                     }}
                   />
                 </div>
-                <SectionHeader icon={<Shield size={14} />} title="System Health Score" />
+                <SectionHeader icon={<Shield size={14} />} title="System health score" />
                 <HealthScoreRing score={healthScore} />
                 {healthScoreData?.grade && (
                   <div className="flex items-center gap-3 mt-3">
@@ -1558,7 +1464,7 @@ export default function Diagnostics() {
                           return (
                             <div key={key} className="text-center">
                               <p className={`text-xs font-bold tabular-nums ${color}`}>{f.score}</p>
-                              <p className="text-[8px] text-slate-500 uppercase tracking-wider">{key}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wider">{key}</p>
                             </div>
                           )
                         })}
@@ -1573,12 +1479,12 @@ export default function Diagnostics() {
             </div>
 
             {/* Resource Gauges + Server Control */}
-            <div className="lg:col-span-8 flex flex-col gap-3 md:gap-6">
-              <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-                <SectionHeader icon={<Activity size={14} />} title="Resource Gauges" />
+            <div className="lg:col-span-8 flex flex-col gap-4 md:gap-5">
+              <div className={`${CARD} p-4 md:p-6`}>
+                <SectionHeader icon={<Activity size={14} />} title="Resource gauges" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
                   <SemiGauge
-                    label="CPU Load"
+                    label="CPU load"
                     value={cpuLoadPct}
                     icon={<Cpu size={12} />}
                   />
@@ -1594,7 +1500,7 @@ export default function Diagnostics() {
                     mode="health"
                   />
                   <SemiGauge
-                    label="Image Health"
+                    label="Image health"
                     value={imageHealthPct}
                     icon={<HardDrive size={12} />}
                     mode="health"
@@ -1602,14 +1508,14 @@ export default function Diagnostics() {
                 </div>
               </div>
               {isAdmin && (
-                <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-                  <SectionHeader icon={<Power size={14} />} title="Server Control" />
+                <div className={`${CARD} p-4 md:p-6`}>
+                  <SectionHeader icon={<Power size={14} />} title="Server control" />
                   <ServerControlCard />
                 </div>
               )}
               {isAdmin && (
-                <div className="glass border border-rose-500/10 rounded-xl p-4 md:p-6">
-                  <SectionHeader icon={<Trash2 size={14} />} title="Factory Reset" />
+                <div className={`${CARD} !border-rose-500/10 p-4 md:p-6`}>
+                  <SectionHeader icon={<Trash2 size={14} />} title="Factory reset" />
                   <FactoryResetCard />
                 </div>
               )}
@@ -1619,17 +1525,17 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 2: Container Matrix + Image Freshness                */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
 
             {/* Container Health Matrix */}
-            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-              <SectionHeader icon={<Box size={14} />} title="Container Health Matrix" />
+            <div className={`${CARD} p-4 md:p-6`}>
+              <SectionHeader icon={<Box size={14} />} title="Container health matrix" />
               <ContainerHealthMatrix containers={containers} />
             </div>
 
             {/* Image Freshness Breakdown */}
-            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-              <SectionHeader icon={<HardDrive size={14} />} title="Image Freshness" />
+            <div className={`${CARD} p-4 md:p-6`}>
+              <SectionHeader icon={<HardDrive size={14} />} title="Image freshness" />
               <ImageFreshnessBar images={images} />
             </div>
           </div>
@@ -1637,34 +1543,34 @@ export default function Diagnostics() {
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 3: Port Map + Event Chart                            */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
 
             {/* Port Allocation Map */}
-            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-              <SectionHeader icon={<TrendingUp size={14} />} title="Port Allocation Map" />
+            <div className={`${CARD} p-4 md:p-6`}>
+              <SectionHeader icon={<TrendingUp size={14} />} title="Port allocation map" />
               <PortAllocationMap containers={containers} />
             </div>
 
             {/* Event Frequency */}
-            <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-              <SectionHeader icon={<BarChart3 size={14} />} title="Event Frequency" />
+            <div className={`${CARD} p-4 md:p-6`}>
+              <SectionHeader icon={<BarChart3 size={14} />} title="Event frequency" />
               <EventFrequencyChart events={events} />
             </div>
           </div>
 
           {/* ══════════════════════════════════════════════════════════ */}
-          {/* ROW 4: Network Topology                                  */}
+          {/* ROW 4: Networks                                          */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-            <SectionHeader icon={<Network size={14} />} title="Network Topology" />
-            <NetworkTopology networks={networks} />
+          <div className={`${CARD} p-4 md:p-6`}>
+            <SectionHeader icon={<Network size={14} />} title="Networks" />
+            <NetworkSummary networks={networks} />
           </div>
 
           {/* ══════════════════════════════════════════════════════════ */}
           {/* ROW 5: Alerts Panel                                      */}
           {/* ══════════════════════════════════════════════════════════ */}
-          <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
-            <SectionHeader icon={<AlertTriangle size={14} />} title="Active Alerts" />
+          <div className={`${CARD} p-4 md:p-6`}>
+            <SectionHeader icon={<AlertTriangle size={14} />} title="Active alerts" />
             <AlertsPanel
               containers={containers}
               images={images}

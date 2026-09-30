@@ -1,6 +1,8 @@
 // =============================================================================
-// Topology — Hierarchical Network Map: Stacks → Containers → Networks
-// Beautiful 3-tier tree layout with gradient wires and glassmorphism cards
+// Topology — the map of stacks → containers → networks: a three-tier tree with
+// wires, drawn as SVG (zoom, pan, fullscreen) and exported as a PNG. The chrome
+// around the map is the dashboard's; the map keeps its own colours for the
+// tiers and the networks, and takes its text and card colours from the theme.
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -14,6 +16,7 @@ import {
   Box,
   X,
   Layers,
+  WifiOff,
   ExternalLink, Download, Copy, Expand, Shrink, Link2,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
@@ -24,12 +27,17 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { fetchTopologyOn } from '../api/fleetScoped'
 import type {
   TopologyResponse, TopologyNode, TopologyNetwork,
 } from '../../shared/types'
-import { LoadingState, ErrorState } from '../components/common/PageState'
+import { LoadingState, ErrorState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { BTN_TOOLBAR_QUIET, BTN_ICON, BTN_ICON_SM, TONE_GHOST } from '../lib/ui'
+import { CARD, FOCUS_RING } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,7 +69,17 @@ const HEALTH_R = 4
 // Zoom
 const MIN_ZOOM = 0.15
 const MAX_ZOOM = 3
-const ZOOM_STEP = 0.15
+
+// The map's text and card colours come from the theme (the --dcs-* variables the theme engine sets for the look in
+// use); the fallback after each comma is the dark look, which is also what the PNG export draws — an exported SVG
+// has no stylesheet, so it takes the fallbacks. Tier and network colours are the map's own.
+const INK = { fill: 'var(--dcs-text, #e2e8f0)' }
+const INK_STRONG = { fill: 'var(--dcs-text, #f8fafc)' }
+const INK_INFO = { fill: 'var(--dcs-info, #67e8f9)' }
+const INK_STACK = { fill: 'color-mix(in srgb, #8b5cf6 55%, var(--dcs-text, #e2e8f0))' }
+const DOT = { fill: 'var(--dcs-text-muted, #ffffff)' }
+/** the soft shadow under a card: black on the dark look (where it hardly shows), the look's own border colour on a light one */
+const SHADOW = { fill: 'var(--dcs-border, #000000)' }
 
 // ---------------------------------------------------------------------------
 // Color helpers
@@ -284,28 +302,28 @@ function DetailPanel({
       onClick={onClose}
     >
       <div
-        className="w-full md:w-96 md:h-full md:max-h-screen bg-slate-900/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-white/10 shadow-2xl shadow-black/40 animate-slide-up md:animate-fade-in overflow-y-auto scrollbar-thin"
+        className="w-full md:w-96 md:h-full md:max-h-screen max-h-[85vh] glass rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-white/10 shadow-2xl shadow-black/40 animate-slide-up md:animate-fade-in overflow-y-auto scrollbar-thin"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/5">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="flex items-center justify-center w-9 h-9 rounded-xl ring-1 shrink-0"
               style={{ backgroundColor: `${stroke}15`, borderColor: `${stroke}30` }}
             >
-              <Box size={16} style={{ color: stroke }} />
+              <Box size={16} style={{ color: stroke }} aria-hidden />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-slate-100 truncate font-mono">
+              <h2 className="text-sm font-bold text-slate-100 truncate font-mono">
                 {node.id}
-              </h3>
-              <p className="text-[10px] text-slate-500">Container Details</p>
+              </h2>
+              <p className="text-[11px] text-slate-500">Container details</p>
             </div>
           </div>
-          <button aria-label="Close"
+          <button type="button" aria-label="Close"
             onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all shrink-0"
+            className={`${BTN_ICON} text-slate-400 hover:text-slate-200 hover:bg-white/5 ${FOCUS_RING}`}
           >
             <X size={16} />
           </button>
@@ -314,39 +332,39 @@ function DetailPanel({
         {/* Body */}
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+            <div className={`${CARD} p-3.5`}>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">State</p>
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stroke }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stroke }} aria-hidden />
                 <span className="text-sm font-medium text-slate-200 capitalize">{node.state}</span>
               </div>
             </div>
-            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+            <div className={`${CARD} p-3.5`}>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Health</p>
               <span className="text-sm font-medium text-slate-200 capitalize">{node.health || 'N/A'}</span>
             </div>
           </div>
 
-          <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+          <div className={`${CARD} p-3.5`}>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Image</p>
             <p className="text-xs text-slate-300 font-mono break-all">{node.image}</p>
           </div>
 
           {node.stack && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+            <div className={`${CARD} p-3.5`}>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Stack</p>
               <p className="text-sm text-slate-200">{node.stack}</p>
             </div>
           )}
 
           {node.ports && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+            <div className={`${CARD} p-3.5`}>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ports</p>
               <div className="space-y-1.5">
                 {node.ports.split(' ').filter(Boolean).map((p) => {
                   const link = parsePortLink(p, hostname)
                   return (
-                    <div key={p} className="flex items-center justify-between">
+                    <div key={p} className="flex items-center justify-between gap-2">
                       <span className="text-xs text-slate-300 font-mono break-all">{p}</span>
                       {link && (
                         <a
@@ -354,9 +372,9 @@ function DetailPanel({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-md text-[10px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors shrink-0"
+                          className={`inline-flex items-center gap-1 ml-2 px-2 py-1 rounded-md text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors shrink-0 ${FOCUS_RING}`}
                         >
-                          <ExternalLink size={10} />
+                          <ExternalLink size={10} aria-hidden />
                           {link.label}
                         </a>
                       )}
@@ -368,20 +386,20 @@ function DetailPanel({
           )}
 
           {node.ip_addresses && node.ip_addresses.length > 0 && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+            <div className={`${CARD} p-3.5`}>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
-                IP Addresses ({node.ip_addresses.length})
+                IP addresses ({node.ip_addresses.length})
               </p>
               <div className="space-y-1">
                 {node.ip_addresses.map((entry) => {
                   const c = netColor(entry.network, netNames)
                   return (
-                    <div key={entry.network} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} />
-                        {entry.network}
+                    <div key={entry.network} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1.5 min-w-0">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} aria-hidden />
+                        <span className="truncate">{entry.network}</span>
                       </span>
-                      <span className="text-xs text-cyan-400 font-mono">{entry.ip}</span>
+                      <span className="text-xs text-cyan-400 font-mono shrink-0">{entry.ip}</span>
                     </div>
                   )
                 })}
@@ -389,7 +407,7 @@ function DetailPanel({
             </div>
           )}
 
-          <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+          <div className={`${CARD} p-3.5`}>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
               Networks ({node.networks.length})
             </p>
@@ -402,7 +420,7 @@ function DetailPanel({
                     className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-mono border"
                     style={{ backgroundColor: `${c}12`, borderColor: `${c}25`, color: c }}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} />
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c }} aria-hidden />
                     {net}
                   </span>
                 )
@@ -460,19 +478,6 @@ export default function Topology() {
   // a node of another server has no place on the new map
   useEffect(() => { setSelectedNode(null) }, [scopeMember])
 
-  // Escape key closes detail panel
-  useEffect(() => {
-    if (!selectedNode) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      const tag = (e.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      setSelectedNode(null)
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [selectedNode])
-
   // Stable network name list for coloring
   const netNames = useMemo(
     () => (topoData?.networks ?? []).map((n) => n.name),
@@ -518,6 +523,22 @@ export default function Topology() {
     setZoom(fitZoom)
     setPan({ x: (rect.width - layout.w * fitZoom) / 2, y: (rect.height - layout.h * fitZoom) / 2 })
   }, [layout])
+
+  // A container the keyboard reached may lie outside the visible part of the map: the map pans to it
+  // (a clipped box would otherwise scroll to its focused child and leave the map where it was)
+  const revealNode = useCallback((x: number, y: number) => {
+    const el = containerRef.current
+    if (!el) return
+    el.scrollLeft = 0
+    el.scrollTop = 0
+    const box = el.getBoundingClientRect()
+    const px = pan.x + x * zoom
+    const py = pan.y + y * zoom
+    const margin = 70
+    const dx = px < margin ? margin - px : px > box.width - margin ? box.width - margin - px : 0
+    const dy = py < margin ? margin - py : py > box.height - margin ? box.height - margin - py : 0
+    if (dx || dy) setPan({ x: pan.x + dx, y: pan.y + dy })
+  }, [pan, zoom])
 
   // --- Fullscreen: the map fills the screen, then re-fits ---
   const toggleFullscreen = useCallback(() => {
@@ -737,108 +758,98 @@ export default function Topology() {
 
   const hasHighlight = highlightedStacks.size > 0 || highlightedContainers.size > 0 || highlightedNetworks.size > 0
 
-  // --- Disconnected ---
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <Network size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to view network topology</p>
-      </div>
-    )
-  }
-
   // --- Render ---
   const isEmpty = !topoData || topoData.nodes.length === 0
+  const scopeVmid = scopeMembers.find((m) => m.id === scopeMember)?.vmid
+
+  // the line under the name: the page's own (the registry's) unless it shows one part of a fleet
+  const subtitle = scopeMember
+    ? `Stacks, containers and networks inside the VM ${memberName}`
+    : scope === 'all' && hasFleet
+      ? 'The hub\'s own map — every VM has its own network, one chip away'
+      : undefined
+
+  const tools = [
+    { fn: handleZoomIn, icon: ZoomIn, title: 'Zoom in', disabled: false },
+    { fn: handleZoomOut, icon: ZoomOut, title: 'Zoom out', disabled: false },
+    { fn: handleReset, icon: Maximize2, title: 'Fit to view', disabled: false },
+    { fn: () => void exportImage('download'), icon: Download, title: 'Save as PNG', disabled: exporting || !layout },
+    { fn: () => void exportImage('copy'), icon: Copy, title: 'Copy image to clipboard', disabled: exporting || !layout },
+    { fn: toggleFullscreen, icon: isFullscreen ? Shrink : Expand, title: isFullscreen ? 'Leave fullscreen' : 'Fullscreen', disabled: !layout },
+  ]
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
       {/* Detail panel */}
       {selectedNode && (
         <DetailPanel node={selectedNode} netNames={netNames} onClose={() => setSelectedNode(null)} />
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400 shrink-0">
-            <Network size={20} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold"><span className="text-gradient">Network Topology</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}{hasFleet && !scopeMember && <span className="ml-2 text-sm font-medium text-emerald-200/90">· Hub</span>}</h2>
-            <p className="text-xs text-slate-500">
-              {scopeMember
-                ? `Stacks, containers and networks inside the VM ${memberName}`
-                : scope === 'all' && hasFleet
-                  ? 'The hub\'s own map — every VM has its own network, one chip away'
-                  : 'Hierarchical view of stacks, containers, and network connections'}
-            </p>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Map of" busy={loading && !!topoData} /></div>}
-          </div>
-        </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
-      </div>
+      <PageHeader
+        page="topology"
+        badge={hasFleet ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeVmid} /> : undefined}
+        subtitle={subtitle}
+        actions={isConnected ? (
+          <button type="button" onClick={refresh} disabled={loading} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        ) : undefined}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Map of" busy={loading && !!topoData} />}
+      </PageHeader>
 
+      {!isConnected ? (
+        <EmptyState icon={<WifiOff size={26} />} title="Connect to a server to see the topology map" />
+      ) : (
+      <>
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {[
-          { icon: Layers, label: 'Stacks', value: layout?.stacks.length ?? 0, color: 'text-violet-400' },
-          { icon: Box, label: 'Containers', value: totalContainers, color: 'text-emerald-400' },
-          { icon: Network, label: 'Networks', value: totalNetworks, color: 'text-cyan-400' },
-          { icon: Link2, label: 'Links', value: totalEdges, color: 'text-amber-400' },
+          { icon: Layers, label: 'Stacks', value: layout?.stacks.length ?? 0 },
+          { icon: Box, label: 'Containers', value: totalContainers },
+          { icon: Network, label: 'Networks', value: totalNetworks },
+          { icon: Link2, label: 'Links', value: totalEdges },
         ].map((s) => (
-          <div key={s.label} className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-4">
+          <div key={s.label} className={`${CARD} hover:border-white/10 transition-colors p-3 md:p-4`}>
             <div className="flex items-center gap-1.5 mb-1">
-              <s.icon size={13} className={s.color} />
-              <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider">{s.label}</span>
+              <s.icon size={13} className="text-cyan-400" aria-hidden />
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">{s.label}</span>
             </div>
-            <p className="text-lg md:text-2xl font-bold text-slate-100">{s.value}</p>
+            <p className="text-lg md:text-2xl font-bold text-slate-100 tabular-nums">{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Canvas card */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3 md:p-6">
+      <div className={`${CARD} p-3 md:p-6`}>
         {/* Toolbar */}
-        <div className="flex items-center justify-between mb-3 md:mb-4">
+        <div className="flex items-center justify-between gap-2 mb-3 md:mb-4">
           <div className="flex items-center gap-2 min-w-0">
-            <Network size={15} className="text-cyan-400" />
-            <h3 className="text-xs md:text-sm font-semibold text-slate-300">Topology Map</h3>
-            <span className="text-[10px] text-slate-500 ml-1">{Math.round(zoom * 100)}%</span>
+            <Network size={15} className="text-cyan-400 shrink-0" aria-hidden />
+            <h2 className="text-xs md:text-sm font-semibold text-slate-300 whitespace-nowrap">Topology map</h2>
+            <span className="hidden sm:inline text-[11px] text-slate-500 ml-1 tabular-nums" aria-label={`Zoom ${Math.round(zoom * 100)} percent`}>{Math.round(zoom * 100)}%</span>
             {(hoveredContainer || hoveredNetwork || hoveredStack) && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-mono text-cyan-300 truncate max-w-[220px] animate-fade-in">
+              <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[11px] font-mono text-cyan-300 truncate max-w-[220px] animate-fade-in" aria-hidden>
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
                 {hoveredContainer || hoveredNetwork || hoveredStack}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-0.5">
-            {[
-              { fn: handleZoomIn, icon: ZoomIn, title: 'Zoom in', disabled: false },
-              { fn: handleZoomOut, icon: ZoomOut, title: 'Zoom out', disabled: false },
-              { fn: handleReset, icon: Maximize2, title: 'Fit to view', disabled: false },
-              { fn: () => void exportImage('download'), icon: Download, title: 'Save as PNG', disabled: exporting || !layout },
-              { fn: () => void exportImage('copy'), icon: Copy, title: 'Copy image to clipboard', disabled: exporting || !layout },
-              { fn: toggleFullscreen, icon: isFullscreen ? Shrink : Expand, title: isFullscreen ? 'Leave fullscreen' : 'Fullscreen', disabled: !layout },
-            ].map((btn) => (
-              <button
-                key={btn.title}
-                onClick={btn.fn}
-                disabled={btn.disabled}
-                className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all disabled:opacity-40"
-                title={btn.title}
-              >
-                <btn.icon size={14} />
-              </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {tools.map((btn) => (
+              <Hint key={btn.title} label={btn.title}>
+                <button
+                  type="button"
+                  onClick={btn.fn}
+                  disabled={btn.disabled}
+                  aria-label={btn.title}
+                  className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING}`}
+                >
+                  <btn.icon size={14} />
+                </button>
+              </Hint>
             ))}
           </div>
         </div>
@@ -849,15 +860,15 @@ export default function Topology() {
         ) : error && !topoData ? (
           <ErrorState title="Could not load the topology" error={error} onRetry={refresh} />
         ) : isEmpty ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-            <Network size={40} className="text-slate-500 mb-4" />
-            <p className="text-sm text-slate-400 mb-1">No containers running</p>
-            <p className="text-xs text-slate-500">Start some stacks to see the network topology.</p>
-          </div>
+          <EmptyState
+            icon={<Network size={36} />}
+            title="No containers running"
+            hint="Start some stacks and the map of their networks appears here."
+          />
         ) : layout ? (
           <div
             ref={containerRef}
-            className={`relative overflow-hidden rounded-lg border border-white/[0.03] ${isFullscreen ? 'bg-[#0b1220]' : 'bg-slate-950/50'}`}
+            className={`relative overflow-hidden rounded-lg border border-white/[0.03] ${isFullscreen ? 'bg-slate-950' : 'bg-slate-950/50'}`}
             style={{
               height: isFullscreen ? '100vh' : 'clamp(300px, 55vh, 640px)',
               cursor: isPanning ? 'grabbing' : 'grab',
@@ -871,14 +882,14 @@ export default function Topology() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <svg ref={svgRef} width="100%" height="100%" className="select-none" style={{ overflow: 'visible' }}>
+            <svg ref={svgRef} width="100%" height="100%" className="select-none" style={{ overflow: 'visible' }} role="group" aria-label={`Topology map: ${layout.stacks.length} stack${layout.stacks.length === 1 ? '' : 's'}, ${totalContainers} container${totalContainers === 1 ? '' : 's'}, ${totalNetworks} network${totalNetworks === 1 ? '' : 's'}`}>
               <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
 
                 {/* =========== SVG DEFS =========== */}
                 <defs>
                   {/* Dot grid pattern */}
                   <pattern id="dotGrid" width="28" height="28" patternUnits="userSpaceOnUse">
-                    <circle cx="14" cy="14" r="0.6" fill="white" opacity="0.035" />
+                    <circle cx="14" cy="14" r="0.8" fill="white" opacity="0.07" style={DOT} />
                   </pattern>
 
                   {/* Network color gradients (for wires) */}
@@ -1074,6 +1085,7 @@ export default function Topology() {
                         rx={STACK_RX}
                         fill="black"
                         fillOpacity={0.25}
+                        style={SHADOW}
                       />
                       {/* Background */}
                       <rect
@@ -1112,6 +1124,7 @@ export default function Topology() {
                         y={s.y + STACK_H / 2 - 2}
                         dominantBaseline="central"
                         fill={isStandalone ? '#94a3b8' : '#c4b5fd'}
+                        style={isStandalone ? undefined : INK_STACK}
                         fontSize={12}
                         fontWeight={700}
                         fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
@@ -1136,6 +1149,7 @@ export default function Topology() {
                         textAnchor="middle"
                         dominantBaseline="central"
                         fill={isStandalone ? '#94a3b8' : '#a78bfa'}
+                        style={isStandalone ? undefined : INK_STACK}
                         fontSize={10}
                         fontWeight={700}
                       >
@@ -1156,9 +1170,16 @@ export default function Topology() {
                     <g
                       key={`c-${c.node.id}`}
                       data-node="true"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Container ${c.node.id}, ${c.node.state || 'unknown'}${c.node.health && c.node.health !== 'none' ? `, ${c.node.health}` : ''}. Open its details`}
                       style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
                       opacity={dim ? 0.35 : 1}
                       onClick={(e) => { e.stopPropagation(); setSelectedNode(c.node) }}
+                      // Enter or Space presses it like a button: a click, so the dialog that opens knows what to give the focus back to
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } }}
+                      onFocus={() => { setHoveredContainer(c.node.id); revealNode(c.x, c.y + CONTAINER_H / 2) }}
+                      onBlur={() => setHoveredContainer(null)}
                       onMouseEnter={() => setHoveredContainer(c.node.id)}
                       onMouseLeave={() => setHoveredContainer(null)}
                     >
@@ -1213,6 +1234,7 @@ export default function Topology() {
                         rx={CONTAINER_RX}
                         fill="black"
                         fillOpacity={0.3}
+                        style={SHADOW}
                       />
 
                       {/* Background */}
@@ -1245,6 +1267,7 @@ export default function Topology() {
                         y={c.y + CONTAINER_H / 2 - 5}
                         dominantBaseline="central"
                         fill={isHigh ? '#f8fafc' : '#e2e8f0'}
+                        style={isHigh ? INK_STRONG : INK}
                         fontSize={11}
                         fontWeight={600}
                         fontFamily="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace"
@@ -1258,7 +1281,8 @@ export default function Topology() {
                         y={c.y + CONTAINER_H / 2 + 9}
                         dominantBaseline="central"
                         fill={c.node.ip_addresses?.length ? '#67e8f9' : '#64748b'}
-                        fontSize={8}
+                        style={c.node.ip_addresses?.length ? INK_INFO : undefined}
+                        fontSize={9}
                         fontFamily={c.node.ip_addresses?.length ? 'ui-monospace, SFMono-Regular, monospace' : 'ui-sans-serif, system-ui, sans-serif'}
                         fillOpacity={c.node.ip_addresses?.length ? 0.7 : 1}
                       >
@@ -1323,6 +1347,7 @@ export default function Topology() {
                         rx={NETWORK_RX}
                         fill="black"
                         fillOpacity={0.2}
+                        style={SHADOW}
                       />
 
                       {/* Pill background */}
@@ -1368,9 +1393,9 @@ export default function Topology() {
                           y={n.y + NETWORK_H / 2 + 9}
                           dominantBaseline="central"
                           fill={n.color}
-                          fontSize={8}
+                          fontSize={9}
                           fontFamily="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace"
-                          opacity={0.4}
+                          opacity={0.7}
                         >
                           {n.network.subnet}
                         </text>
@@ -1383,9 +1408,9 @@ export default function Topology() {
                         textAnchor="end"
                         dominantBaseline="central"
                         fill={n.color}
-                        fontSize={7}
+                        fontSize={8}
                         fontFamily="ui-sans-serif, system-ui, sans-serif"
-                        opacity={0.35}
+                        opacity={0.65}
                       >
                         {n.network.driver}
                       </text>
@@ -1401,10 +1426,10 @@ export default function Topology() {
                       x={PAD}
                       y={layout.stacks[0].y - 8}
                       fill="#8b5cf6"
-                      fontSize={8}
+                      fontSize={10}
                       fontWeight={700}
                       letterSpacing={2.5}
-                      opacity={0.35}
+                      opacity={0.8}
                       fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                     >
                       STACKS
@@ -1412,7 +1437,7 @@ export default function Topology() {
                     <line
                       x1={PAD}
                       y1={layout.stacks[0].y - 3}
-                      x2={PAD + 44}
+                      x2={PAD + 56}
                       y2={layout.stacks[0].y - 3}
                       stroke="#8b5cf6"
                       strokeWidth={1}
@@ -1427,10 +1452,10 @@ export default function Topology() {
                           x={PAD}
                           y={layout.containers[0].y - 8}
                           fill="#10b981"
-                          fontSize={8}
+                          fontSize={10}
                           fontWeight={700}
                           letterSpacing={2.5}
-                          opacity={0.35}
+                          opacity={0.8}
                           fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                         >
                           CONTAINERS
@@ -1438,7 +1463,7 @@ export default function Topology() {
                         <line
                           x1={PAD}
                           y1={layout.containers[0].y - 3}
-                          x2={PAD + 66}
+                          x2={PAD + 84}
                           y2={layout.containers[0].y - 3}
                           stroke="#10b981"
                           strokeWidth={1}
@@ -1455,10 +1480,10 @@ export default function Topology() {
                           x={PAD}
                           y={layout.connectedNetworkY - 8}
                           fill="#06b6d4"
-                          fontSize={8}
+                          fontSize={10}
                           fontWeight={700}
                           letterSpacing={2.5}
-                          opacity={0.35}
+                          opacity={0.8}
                           fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                         >
                           NETWORKS
@@ -1466,7 +1491,7 @@ export default function Topology() {
                         <line
                           x1={PAD}
                           y1={layout.connectedNetworkY - 3}
-                          x2={PAD + 55}
+                          x2={PAD + 70}
                           y2={layout.connectedNetworkY - 3}
                           stroke="#06b6d4"
                           strokeWidth={1}
@@ -1483,10 +1508,10 @@ export default function Topology() {
                           x={PAD}
                           y={layout.unusedNetworkY - 8}
                           fill="#64748b"
-                          fontSize={8}
+                          fontSize={10}
                           fontWeight={700}
                           letterSpacing={2.5}
-                          opacity={0.3}
+                          opacity={0.8}
                           fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
                         >
                           UNUSED NETWORKS
@@ -1494,7 +1519,7 @@ export default function Topology() {
                         <line
                           x1={PAD}
                           y1={layout.unusedNetworkY - 3}
-                          x2={PAD + 96}
+                          x2={PAD + 122}
                           y2={layout.unusedNetworkY - 3}
                           stroke="#64748b"
                           strokeWidth={1}
@@ -1514,16 +1539,16 @@ export default function Topology() {
         {/* Legend */}
         {!isEmpty && layout && (
           <div className="mt-3 md:mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 md:gap-x-4 md:gap-y-2">
-            <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider mr-1">Networks:</span>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider mr-1">Networks</span>
             {layout.networks.map((n) => (
               <div key={n.network.name} className="flex items-center gap-1.5 rounded-full bg-white/[0.03] border border-white/5 px-2 py-0.5 hover:border-white/10 transition-colors">
-                <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shrink-0" style={{ backgroundColor: n.color }} />
-                <span className="text-[10px] md:text-[11px] text-slate-400 font-mono">{n.network.name}</span>
-                <span className="text-[9px] md:text-[10px] text-slate-500">({n.network.container_count})</span>
+                <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shrink-0" style={{ backgroundColor: n.color }} aria-hidden />
+                <span className="text-[11px] text-slate-400 font-mono">{n.network.name}</span>
+                <span className="text-[10px] text-slate-500">({n.network.container_count})</span>
               </div>
             ))}
 
-            <span className="text-[9px] md:text-[10px] text-slate-500 uppercase tracking-wider ml-2 md:ml-4 mr-1">Health:</span>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider ml-2 md:ml-4 mr-1">Health</span>
             {[
               { label: 'Healthy', color: '#10b981' },
               { label: 'Running', color: '#06b6d4' },
@@ -1531,13 +1556,15 @@ export default function Topology() {
               { label: 'Stopped', color: '#ef4444' },
             ].map((h) => (
               <div key={h.label} className="flex items-center gap-1 rounded-full bg-white/[0.03] border border-white/5 px-2 py-0.5">
-                <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} />
-                <span className="text-[9px] md:text-[10px] text-slate-500">{h.label}</span>
+                <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} aria-hidden />
+                <span className="text-[10px] text-slate-500">{h.label}</span>
               </div>
             ))}
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

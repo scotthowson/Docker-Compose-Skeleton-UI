@@ -1,9 +1,12 @@
 // =============================================================================
-// Networks — Full network management with creation, deletion, topology
+// Networks — Docker networks: the cards, what is connected to each, create,
+// rebuild (Docker cannot change a network in place), connect and disconnect.
+// On a hub: the hub's networks, a VM's, or both in one list.
 // =============================================================================
 
-import { useState, useEffect, useMemo, type ReactNode, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, type ReactNode, useCallback, useRef, useId } from 'react'
 import { createPortal } from 'react-dom'
+import { Badge } from '@mantine/core'
 import {
   Network, RefreshCw, Plus, Trash2, X, Check,
   Globe, Lock, AlertCircle, Loader2, Unplug, Plug, Eye,
@@ -14,8 +17,8 @@ import {
   fetchNetworks, fetchNetworkDetail,
   createNetwork, deleteNetwork, recreateNetwork,
   connectToNetwork, disconnectFromNetwork,
-  fetchContainers,
 } from '../api/endpoints'
+import { fetchContainersScoped } from '../api/fleetScopedOps'
 import { useNetworkStore } from '../stores/networkStore'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
@@ -29,8 +32,16 @@ import type {
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { CopyButton } from '../components/common/CopyButton'
 import { useToast } from '../components/common/Toast'
-import { LoadingState, ErrorState } from '../components/common/PageState'
+import { useConfirm } from '../components/common/ConfirmDialog'
+import { LoadingState, ErrorState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM,
+  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_DANGER,
+} from '../lib/ui'
+import { CARD, SEARCH_FIELD, FIELD, FOCUS_RING, REVEAL } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,7 +58,8 @@ const CIDR_RE = /^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$|^[0-9a-fA-F:]+\/\d{1,3}$/
 const IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$/
 const LABEL_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const isComposeLabel = (key: string) => key.startsWith('com.docker.compose.')
-const FIELD = 'w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all'
+/** the round X that closes a dialog */
+const CLOSE_BTN = `${BTN_ICON} text-slate-400 hover:text-slate-200 hover:bg-white/5 ${FOCUS_RING}`
 
 function OptionToggle({ on, onToggle, icon, label, hint }: {
   on: boolean
@@ -57,13 +69,13 @@ function OptionToggle({ on, onToggle, icon, label, hint }: {
   hint: string
 }) {
   return (
-    <button type="button" onClick={onToggle} className="flex items-start gap-3 text-left w-full group">
-      <span className={`mt-0.5 flex items-center justify-center w-5 h-5 rounded border transition-all shrink-0 ${on ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 group-hover:border-white/30'}`}>
+    <button type="button" role="checkbox" aria-checked={on} onClick={onToggle} className={`flex items-start gap-3 text-left w-full group rounded-lg ${FOCUS_RING}`}>
+      <span className={`mt-0.5 flex items-center justify-center w-5 h-5 rounded border transition-colors shrink-0 ${on ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 group-hover:border-white/30'}`}>
         {on && <Check size={12} className="text-white" strokeWidth={3} />}
       </span>
       <span className="min-w-0">
         <span className="flex items-center gap-1.5 text-xs text-slate-300">{icon}{label}</span>
-        <span className="block text-[10px] text-slate-500 leading-snug">{hint}</span>
+        <span className="block text-[11px] text-slate-500 leading-snug">{hint}</span>
       </span>
     </button>
   )
@@ -90,12 +102,7 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
+  const uid = useId()
   const composeProject = initial?.compose_project || initial?.labels?.['com.docker.compose.project'] || ''
   const memberCount = initial?.containers.length ?? 0
 
@@ -156,23 +163,21 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
   }
 
   return createPortal(
-    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <div className={`flex items-center justify-center w-9 h-9 rounded-xl border ${editing ? 'bg-cyan-500/10 border-cyan-500/10' : 'bg-emerald-500/10 border-emerald-500/10'}`}>
-              {editing ? <Pencil size={16} className="text-cyan-400" /> : <Network size={18} className="text-emerald-400" />}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-100">{editing ? 'Edit network' : 'Create Docker Network'}</h3>
-              <p className="text-[10px] text-slate-500">{editing ? `${initial?.name} is rebuilt with the settings below` : 'Configure a new isolated network'}</p>
-            </div>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto scrollbar-thin glass rounded-2xl p-5 sm:p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-3 mb-5">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${editing ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+            {editing ? <Pencil size={18} className="text-cyan-400" /> : <Network size={18} className="text-emerald-400" />}
           </div>
-          <button aria-label="Close" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={18} /></button>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-slate-100">{editing ? 'Edit network' : 'Create Docker network'}</h3>
+            <p className="text-sm text-slate-400 mt-0.5">{editing ? `${initial?.name} is rebuilt with the settings below` : 'Configure a new isolated network'}</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className={`${CLOSE_BTN} -mr-1 -mt-1`}><X size={16} /></button>
         </div>
 
         {editing && (
-          <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-3 text-[11px] text-amber-200/90 leading-relaxed">
+          <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-3 text-xs text-amber-200/90 leading-relaxed">
             <p className="font-semibold text-amber-300 mb-1">Docker cannot change a network in place.</p>
             <p>
               Saving disconnects {memberCount} container{memberCount === 1 ? '' : 's'}, removes the network, creates it again with these settings and reconnects them.
@@ -188,8 +193,9 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Network Name *</label>
+            <label htmlFor={`${uid}-name`} className="block text-xs font-medium text-slate-400 mb-1.5">Network name *</label>
             <input
+              id={`${uid}-name`}
               type="text"
               value={name}
               onChange={(e) => { setName(e.target.value); setError('') }}
@@ -202,38 +208,39 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Driver</label>
-            <div className="flex flex-wrap gap-2">
+            <span id={`${uid}-driver`} className="block text-xs font-medium text-slate-400 mb-1.5">Driver</span>
+            <div role="group" aria-labelledby={`${uid}-driver`} className="flex flex-wrap gap-2">
               {DRIVERS.map((d) => (
                 <button
                   key={d}
                   type="button"
+                  aria-pressed={driver === d}
                   onClick={() => setDriver(d)}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium border transition-all ${driver === d ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/[0.12]'}`}
+                  className={`${BTN_TOOLBAR} ${FOCUS_RING} ${driver === d ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300' : TONE_QUIET}`}
                 >
                   {d}
                 </button>
               ))}
               {!(DRIVERS as readonly string[]).includes(driver) && (
-                <span className="rounded-lg px-3 py-2 text-xs font-medium border bg-emerald-500/15 border-emerald-500/30 text-emerald-400">{driver}</span>
+                <span className={`${BTN_TOOLBAR} bg-emerald-500/15 border border-emerald-500/30 text-emerald-300`}>{driver}</span>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Subnet <span className="text-slate-500">(optional)</span></label>
-              <input type="text" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="172.20.0.0/16" spellCheck={false} className={`${FIELD} font-mono`} />
+              <label htmlFor={`${uid}-subnet`} className="block text-xs font-medium text-slate-400 mb-1.5">Subnet <span className="text-slate-500">(optional)</span></label>
+              <input id={`${uid}-subnet`} type="text" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="172.20.0.0/16" spellCheck={false} className={`${FIELD} font-mono`} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Gateway <span className="text-slate-500">(optional)</span></label>
-              <input type="text" value={gateway} onChange={(e) => setGateway(e.target.value)} placeholder="172.20.0.1" spellCheck={false} className={`${FIELD} font-mono`} />
+              <label htmlFor={`${uid}-gateway`} className="block text-xs font-medium text-slate-400 mb-1.5">Gateway <span className="text-slate-500">(optional)</span></label>
+              <input id={`${uid}-gateway`} type="text" value={gateway} onChange={(e) => setGateway(e.target.value)} placeholder="172.20.0.1" spellCheck={false} className={`${FIELD} font-mono`} />
             </div>
           </div>
 
           <OptionToggle on={internal} onToggle={() => setInternal(!internal)} icon={<Lock size={12} className="text-slate-500" />} label="Internal network" hint="No route to the outside world; containers on it only reach each other" />
 
-          <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors">
+          <button type="button" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((v) => !v)} className={`flex h-8 items-center gap-1.5 rounded-lg px-1 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors ${FOCUS_RING}`}>
             <ChevronDown size={12} className={`transition-transform duration-200 ${showAdvanced ? '' : '-rotate-90'}`} />
             Advanced
           </button>
@@ -241,27 +248,29 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
           {showAdvanced && (
             <div className="space-y-4 animate-fade-in rounded-lg border border-white/5 bg-white/[0.02] p-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">IP range <span className="text-slate-500">(optional)</span></label>
-                <input type="text" value={ipRange} onChange={(e) => setIpRange(e.target.value)} placeholder="172.20.5.0/24" spellCheck={false} className={`${FIELD} font-mono`} />
-                <p className="text-[10px] text-slate-500 mt-1">Containers get addresses from this part of the subnet only</p>
+                <label htmlFor={`${uid}-range`} className="block text-xs font-medium text-slate-400 mb-1.5">IP range <span className="text-slate-500">(optional)</span></label>
+                <input id={`${uid}-range`} type="text" value={ipRange} onChange={(e) => setIpRange(e.target.value)} placeholder="172.20.5.0/24" spellCheck={false} className={`${FIELD} font-mono`} />
+                <p className="text-[11px] text-slate-500 mt-1">Containers get addresses from this part of the subnet only</p>
               </div>
               <OptionToggle on={attachable} onToggle={() => setAttachable(!attachable)} icon={<Link2 size={12} className="text-slate-500" />} label="Attachable" hint="Standalone containers may join with docker network connect (overlay networks need this)" />
               <OptionToggle on={ipv6} onToggle={() => setIpv6(!ipv6)} icon={<Globe size={12} className="text-slate-500" />} label="IPv6" hint="Enable IPv6 addressing on the network" />
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400"><Tag size={12} className="text-slate-500" />Labels</label>
-                  <button type="button" onClick={() => setLabels((prev) => [...prev, { key: '', value: '' }])} className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"><Plus size={11} />Add label</button>
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400"><Tag size={12} className="text-slate-500" />Labels</span>
+                  <button type="button" onClick={() => setLabels((prev) => [...prev, { key: '', value: '' }])} className={`${BTN_CARD} ${TONE_OK} ${FOCUS_RING}`}><Plus size={12} />Add label</button>
                 </div>
                 {labels.length === 0 ? (
-                  <p className="text-[10px] text-slate-500">No labels{editing && Object.keys(initial?.labels ?? {}).some(isComposeLabel) ? ' of your own; the Compose ownership labels are kept' : ''}</p>
+                  <p className="text-[11px] text-slate-500">No labels{editing && Object.keys(initial?.labels ?? {}).some(isComposeLabel) ? ' of your own; the Compose ownership labels are kept' : ''}</p>
                 ) : (
                   <div className="space-y-1.5">
                     {labels.map((l, i) => (
                       <div key={i} className="flex items-center gap-1.5">
-                        <input type="text" value={l.key} onChange={(e) => setLabels((prev) => prev.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))} placeholder="key" spellCheck={false} className={`${FIELD} font-mono !py-1.5 !text-xs`} />
-                        <span className="text-slate-600">=</span>
-                        <input type="text" value={l.value} onChange={(e) => setLabels((prev) => prev.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} placeholder="value" spellCheck={false} className={`${FIELD} font-mono !py-1.5 !text-xs`} />
-                        <button type="button" onClick={() => setLabels((prev) => prev.filter((_, j) => j !== i))} className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Remove label"><X size={12} /></button>
+                        <input aria-label={`Label ${i + 1} key`} type="text" value={l.key} onChange={(e) => setLabels((prev) => prev.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))} placeholder="key" spellCheck={false} className={`${FIELD} font-mono !py-1.5 !text-xs`} />
+                        <span className="text-slate-500">=</span>
+                        <input aria-label={`Label ${i + 1} value`} type="text" value={l.value} onChange={(e) => setLabels((prev) => prev.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} placeholder="value" spellCheck={false} className={`${FIELD} font-mono !py-1.5 !text-xs`} />
+                        <Hint label="Remove label">
+                          <button type="button" aria-label={`Remove label ${i + 1}`} onClick={() => setLabels((prev) => prev.filter((_, j) => j !== i))} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER} ${FOCUS_RING}`}><X size={12} /></button>
+                        </Hint>
                       </div>
                     ))}
                   </div>
@@ -271,31 +280,32 @@ function NetworkFormModal({ initial, onClose, onSaved }: {
           )}
 
           {problems.length > 0 && (
-            <ul className="space-y-1 text-[11px] text-amber-300/90">
+            <ul className="space-y-1 text-xs text-amber-300/90">
               {problems.map((p) => <li key={p} className="flex items-start gap-1.5"><AlertCircle size={12} className="mt-0.5 shrink-0" />{p}</li>)}
             </ul>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+            <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
               <AlertCircle size={14} className="text-rose-400 shrink-0" />
               <p className="text-xs text-rose-300">{error}</p>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg text-sm text-slate-400 hover:text-slate-200 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-3 mt-6">
+          <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} sm:flex-1 ${FOCUS_RING}`}>
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSave}
             disabled={!isValid || saving || !changed}
             title={editing && !changed ? 'Nothing changed yet' : undefined}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${editing ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/25' : 'bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/25'}`}
+            className={`${BTN_SHEET_PRIMARY} sm:flex-1 disabled:cursor-not-allowed ${FOCUS_RING}`}
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : editing ? <RefreshCw size={14} /> : <Plus size={14} />}
-            {saving ? (editing ? 'Rebuilding…' : 'Creating…') : editing ? 'Rebuild network' : 'Create Network'}
+            {saving ? (editing ? 'Rebuilding…' : 'Creating…') : editing ? 'Rebuild network' : 'Create network'}
           </button>
         </div>
       </div>
@@ -332,39 +342,32 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
   const isBuiltIn = BUILTIN_NETWORKS.includes(network.name)
   const canEdit = isAdmin && !isBuiltIn
 
-  // Escape to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
+  // the server the network lives on: the card's own (Everywhere lists the hub's and every VM's), else the one chosen above
+  const { member: scopeMember } = useFleetScope()
+  const netMember = network.member ?? scopeMember
 
   useEffect(() => {
     let mounted = true
     setLoading(true)
-    fetchNetworkDetail(network.name)
+    fetchNetworkDetail(network.name, netMember)
       .then((d) => { if (mounted) setDetail(d) })
       .catch(() => { if (mounted) setError('Failed to load details') })
       .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }
-  }, [network.name])
+  }, [network.name, netMember])
 
-  // Candidates for the connect control
+  // Candidates for the connect control: the containers of that same server (a hub's own list also carries its VMs' — those are not its to connect)
   useEffect(() => {
     if (!canEdit) return
     let mounted = true
-    fetchContainers()
-      .then((r) => { if (mounted) setAllContainers(r.containers.map((c) => c.name).sort()) })
+    fetchContainersScoped(netMember)
+      .then((r) => { if (mounted) setAllContainers(r.containers.filter((c) => netMember || !c.member).map((c) => c.name).sort()) })
       .catch(() => { /* the control just stays empty */ })
     return () => { mounted = false }
-  }, [canEdit])
+  }, [canEdit, netMember])
 
   const connectable = allContainers.filter((n) => !detail?.containers.some((c) => c.name === n))
 
-  const { member: scopeMember } = useFleetScope()
-  const netMember = network.member ?? scopeMember
   const handleDisconnect = async (containerName: string) => {
     setDisconnecting(containerName)
     setError('')
@@ -397,43 +400,44 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
 
   const labelEntries = Object.entries(detail?.labels ?? {})
   const prop = (label: string, value: ReactNode) => (
-    <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4 min-w-0">
+    <div className={`${CARD} p-4 min-w-0`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">{label}</p>
       {value}
     </div>
   )
 
   return createPortal(
-    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-thin bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in"
+        className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto scrollbar-thin glass rounded-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-white/5">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 sm:px-8 sm:py-6 border-b border-white/5">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`flex items-center justify-center w-11 h-11 rounded-xl ring-1 shrink-0 ${
+            <div className={`hidden sm:flex items-center justify-center w-11 h-11 rounded-xl ring-1 shrink-0 ${
               isBuiltIn ? 'bg-slate-500/10 ring-slate-500/20' : 'bg-cyan-500/10 ring-cyan-500/20'
             }`}>
-              {detail?.internal ? <Lock size={20} className="text-amber-400" /> : <Network size={20} className={isBuiltIn ? 'text-slate-400' : 'text-cyan-400'} />}
+              {detail?.internal ? <Lock size={20} className="text-cyan-400" /> : <Network size={20} className={isBuiltIn ? 'text-slate-400' : 'text-cyan-400'} />}
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg font-bold text-slate-100 font-mono truncate">{network.name}</h2>
+              <h2 className="text-lg font-bold text-slate-100 font-mono break-all sm:break-normal sm:truncate">{network.name}</h2>
               <p className="text-xs text-slate-500 font-mono">{network.id.slice(0, 12)}{detail?.compose_project ? ` · ${detail.compose_project} stack` : isBuiltIn ? ' · built-in' : ''}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {canEdit && detail && (
               <button
+                type="button"
                 onClick={() => onEdit(detail)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all"
+                className={`${BTN_CARD_QUIET} ${FOCUS_RING}`}
                 title="Change driver, subnet, gateway, labels… (the network is rebuilt)"
               >
-                <Pencil size={11} />
+                <Pencil size={12} />
                 Edit
               </button>
             )}
-            <button aria-label="Close" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
+            <button type="button" aria-label="Close" onClick={onClose} className={CLOSE_BTN}>
               <X size={18} />
             </button>
           </div>
@@ -442,20 +446,20 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
         {loading ? (
           <LoadingState label="Inspecting the network…" />
         ) : !detail ? (
-          <div className="p-8">
-            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+          <div className="p-5 sm:p-8">
+            <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">
               <AlertCircle size={16} className="text-rose-400" />
               <p className="text-sm text-rose-300">{error || 'Failed to load details'}</p>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:divide-x divide-white/[0.06]">
-            {/* Left column — Network Properties */}
-            <div className="p-8 space-y-5">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Network Properties</h3>
+            {/* Left column — Network properties */}
+            <div className="p-5 sm:p-8 space-y-5">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Network properties</h3>
 
               <div className="grid grid-cols-2 gap-4">
-                {prop('Driver', <span className="inline-flex rounded-full bg-cyan-500/15 px-3 py-1 text-xs font-semibold text-cyan-400">{detail.driver}</span>)}
+                {prop('Driver', <Badge color="cyan">{detail.driver}</Badge>)}
                 {prop('Scope', <p className="text-sm font-medium text-slate-200">{detail.scope}</p>)}
                 {prop('Subnet', <p className="text-sm text-slate-200 font-mono break-all">{detail.subnet || 'Auto-assigned'}</p>)}
                 {prop('Gateway', <p className="text-sm text-slate-200 font-mono break-all">{detail.gateway || 'Auto-assigned'}</p>)}
@@ -467,21 +471,21 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
 
               {/* Internal badge */}
               {detail.internal && (
-                <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
-                  <Lock size={14} className="text-amber-400" />
-                  <span className="text-xs text-amber-300 font-medium">Internal network — no external connectivity</span>
+                <div className="flex items-center gap-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-4 py-3">
+                  <Lock size={14} className="text-cyan-400" />
+                  <span className="text-xs text-cyan-300 font-medium">Internal network — no external connectivity</span>
                 </div>
               )}
 
               {/* Labels */}
               {labelEntries.length > 0 && (
-                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+                <div className={`${CARD} p-4`}>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Tag size={10} />Labels</p>
                   <div className="space-y-1">
                     {labelEntries.map(([k, v]) => (
                       <div key={k} className={`flex items-baseline gap-2 text-[11px] font-mono ${isComposeLabel(k) ? 'text-slate-500' : 'text-slate-300'}`}>
                         <span className="truncate" title={k}>{k}</span>
-                        <span className="text-slate-600">=</span>
+                        <span className="text-slate-500">=</span>
                         <span className="truncate" title={v}>{v}</span>
                       </div>
                     ))}
@@ -490,53 +494,55 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
               )}
 
               {/* Full ID */}
-              <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Full Network ID</p>
+              <div className={`${CARD} p-4`}>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Full network ID</p>
                 <p className="text-xs text-slate-300 font-mono break-all">{detail.id}</p>
               </div>
             </div>
 
-            {/* Right column — Connected Containers */}
-            <div className="p-8">
+            {/* Right column — Connected containers */}
+            <div className="p-5 sm:p-8">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Plug size={12} className="text-slate-500" />
-                Connected Containers ({detail.containers.length})
+                Connected containers ({detail.containers.length})
               </h3>
 
               {detail.containers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Unplug size={28} className="text-slate-500 mb-3" />
-                  <p className="text-sm text-slate-500">No containers connected</p>
-                  {!canEdit && <p className="text-xs text-slate-500 mt-1">Connect containers to this network from a stack's compose file</p>}
-                </div>
+                <EmptyState
+                  compact
+                  icon={<Unplug size={28} />}
+                  title="No containers connected"
+                  hint={!canEdit ? 'Connect containers to this network from a stack\'s compose file' : undefined}
+                />
               ) : (
                 <div className="space-y-2">
                   {detail.containers.map((c) => (
                     <div
                       key={c.id}
-                      className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3.5 hover:bg-white/5 transition-colors"
+                      className={`${CARD} flex items-center justify-between gap-2 px-4 py-3 hover:bg-white/5 transition-colors`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" aria-hidden />
                         <div className="min-w-0">
                           <p className="text-sm text-slate-200 font-mono truncate">{c.name}</p>
                           <span className="inline-flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</span>
+                            <span className="text-[11px] text-slate-500 font-mono">{c.ipv4 || 'No IP assigned'}</span>
                             {c.ipv4 && <CopyButton text={c.ipv4} size={10} />}
                           </span>
                         </div>
                       </div>
                       {canEdit && (
                         <button
+                          type="button"
                           onClick={() => handleDisconnect(c.name)}
                           disabled={disconnecting === c.name}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-all disabled:opacity-50"
-                          title="Disconnect from network"
+                          aria-label={`Disconnect ${c.name} from ${network.name}`}
+                          className={`${BTN_CARD} ${TONE_DANGER} ${FOCUS_RING}`}
                         >
                           {disconnecting === c.name ? (
-                            <Loader2 size={11} className="animate-spin" />
+                            <Loader2 size={12} className="animate-spin" />
                           ) : (
-                            <Unplug size={11} />
+                            <Unplug size={12} />
                           )}
                           Disconnect
                         </button>
@@ -555,26 +561,27 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
                       value={connectTarget}
                       onChange={(e) => setConnectTarget(e.target.value)}
                       disabled={connectable.length === 0}
-                      className="flex-1 min-w-0 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 disabled:opacity-60"
+                      className={`${FIELD} flex-1 min-w-0 !px-3 !py-2 !text-xs disabled:opacity-60`}
                     >
                       <option value="">{connectable.length ? 'Choose a container…' : 'Every container is already connected'}</option>
                       {connectable.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
                     <button
+                      type="button"
                       onClick={handleConnect}
                       disabled={!connectTarget || connecting}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-all"
+                      className={`${BTN_TOOLBAR} ${TONE_OK} shrink-0 ${FOCUS_RING}`}
                     >
-                      {connecting ? <Loader2 size={11} className="animate-spin" /> : <Plug size={11} />}
+                      {connecting ? <Loader2 size={14} className="animate-spin" /> : <Plug size={14} />}
                       Connect
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1.5">Takes effect right away; a stack's next <span className="font-mono">up</span> only keeps connections its compose file declares.</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5">Takes effect right away; a stack's next <span className="font-mono">up</span> only keeps connections its compose file declares.</p>
                 </div>
               )}
 
               {error && (
-                <div className="mt-4 flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+                <div role="alert" className="mt-4 flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3">
                   <AlertCircle size={14} className="text-rose-400 shrink-0" />
                   <p className="text-xs text-rose-300">{error}</p>
                 </div>
@@ -582,84 +589,6 @@ function NetworkDetailPanel({ network, onClose, onRefresh, onEdit, isAdmin }: {
             </div>
           </div>
         )}
-      </div>
-    </ModalOverlay>,
-    document.body,
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Delete Confirmation Modal
-// ---------------------------------------------------------------------------
-
-function DeleteConfirmModal({ name, onClose, onConfirm }: {
-  name: string
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState('')
-
-  // Escape to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  const { scope: fleetScope, member: scopeMember } = useFleetScope()
-  const handleDelete = async () => {
-    if (fleetScope === 'all') { setError('Everywhere is a view: pick the hub or one VM above, then delete it there'); return }
-    setDeleting(true)
-    setError('')
-    try {
-      await deleteNetwork(name, scopeMember)
-      onConfirm()
-      onClose()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to delete network')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  return createPortal(
-    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
-            <Trash2 size={18} className="text-rose-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-100">Delete Network</h3>
-            <p className="text-[10px] text-slate-500">This action cannot be undone</p>
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-400 mb-4">
-          Are you sure you want to delete <span className="font-mono text-slate-200">{name}</span>?
-        </p>
-
-        {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5 mb-4">
-            <AlertCircle size={14} className="text-rose-400 shrink-0" />
-            <p className="text-xs text-rose-300">{error}</p>
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
-            Cancel
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white bg-rose-500 hover:bg-rose-400 shadow-lg shadow-rose-500/25 disabled:opacity-50 transition-all"
-          >
-            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            {deleting ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
       </div>
     </ModalOverlay>,
     document.body,
@@ -682,7 +611,7 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
   return (
     <div
       className={`
-        group glass glass-hover cursor-pointer overflow-hidden transition-all duration-300
+        group ${CARD} hover:border-white/10 cursor-pointer overflow-hidden transition-colors
         border-l-2 ${
           isBuiltIn ? 'border-l-slate-600/50' :
           containerCount > 0 ? 'border-l-emerald-500/70' : 'border-l-cyan-500/50'
@@ -690,64 +619,62 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
       `}
       onClick={onInspect}
     >
-      <div className="relative p-5">
+      <div className="relative p-4 sm:p-5">
         {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1 min-w-0 mr-3">
-            <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               {net.driver === 'host' ? (
-                <Globe size={14} className="text-amber-400 shrink-0" />
+                <Globe size={14} className="text-cyan-400 shrink-0" aria-hidden />
               ) : net.name === 'none' ? (
-                <Unplug size={14} className="text-slate-500 shrink-0" />
+                <Unplug size={14} className="text-slate-500 shrink-0" aria-hidden />
               ) : (
-                <Network size={14} className={isBuiltIn ? 'text-slate-400' : 'text-cyan-400'} />
+                <Network size={14} className={`shrink-0 ${isBuiltIn ? 'text-slate-400' : 'text-cyan-400'}`} aria-hidden />
               )}
-              <h3 className="text-sm font-semibold text-slate-100 truncate group-hover:text-white transition-colors font-mono">
+              <h3 className="text-sm font-semibold text-slate-100 truncate group-hover:text-white transition-colors font-mono min-w-0">
                 {net.name}
               </h3>
               {net.member !== undefined && <VmCapsule member={net.member} name={net.member_name} vmid={net.vmid} size="xs" />}
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-mono truncate">{net.id.slice(0, 12)}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {!isBuiltIn && isAdmin && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete() }}
-                className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                title="Delete network"
-              >
-                <Trash2 size={12} />
-              </button>
+              <Hint label="Delete network">
+                <button
+                  type="button"
+                  aria-label={`Delete the network ${net.name}`}
+                  onClick={(e) => { e.stopPropagation(); onDelete() }}
+                  className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER} ${REVEAL} ${FOCUS_RING}`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </Hint>
             )}
-            <button
-              onClick={(e) => { e.stopPropagation(); onInspect() }}
-              className="p-1.5 rounded-md text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 opacity-0 group-hover:opacity-100 transition-all"
-              title="Inspect"
-            >
-              <Eye size={12} />
-            </button>
+            <Hint label="Inspect">
+              <button
+                type="button"
+                aria-label={`Inspect ${net.name}`}
+                onClick={(e) => { e.stopPropagation(); onInspect() }}
+                className={`${BTN_ICON_SM} ${TONE_GHOST} ${REVEAL} ${FOCUS_RING}`}
+              >
+                <Eye size={12} />
+              </button>
+            </Hint>
           </div>
         </div>
 
-        {/* Driver + Scope tags */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="inline-flex rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-400">
-            {net.driver}
-          </span>
-          <span className="inline-flex rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-            {net.scope}
-          </span>
-          {isBuiltIn && (
-            <span className="inline-flex rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-medium text-slate-400">
-              built-in
-            </span>
-          )}
+        {/* Driver + scope tags */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <Badge color="cyan">{net.driver}</Badge>
+          <Badge color="slate">{net.scope}</Badge>
+          {isBuiltIn && <Badge color="slate">built-in</Badge>}
         </div>
 
         {/* Connected containers */}
         <div className="pt-3 border-t border-white/5">
           <div className="flex items-center gap-1.5 mb-2">
-            <Plug size={11} className="text-slate-500" />
+            <Plug size={11} className="text-slate-500" aria-hidden />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">
               {containerCount} container{containerCount !== 1 ? 's' : ''}
             </span>
@@ -757,21 +684,58 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
               {net.containers.slice(0, 5).map((c) => (
                 <span
                   key={c}
-                  className="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-300 border border-white/5"
+                  className="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-[11px] font-mono text-slate-300 border border-white/5"
                 >
-                  <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                  <span className="w-1 h-1 rounded-full bg-emerald-400" aria-hidden />
                   {c}
                 </span>
               ))}
               {containerCount > 5 && (
-                <span className="text-[10px] text-slate-500">+{containerCount - 5} more</span>
+                <span className="text-[11px] text-slate-500">+{containerCount - 5} more</span>
               )}
             </div>
           ) : (
-            <p className="text-[10px] text-slate-500 italic">No containers connected</p>
+            <p className="text-[11px] text-slate-500 italic">No containers connected</p>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** a card's shape while the list loads */
+function NetworkCardSkeleton() {
+  return (
+    <div className={`${CARD} border-l-2 border-l-slate-600/40 p-4 sm:p-5`} aria-hidden>
+      <div className="flex items-center gap-2">
+        <div className="skeleton h-3.5 w-3.5 rounded" />
+        <div className="skeleton h-4 w-32 rounded" />
+        <div className="skeleton h-[18px] w-10 rounded-full" />
+      </div>
+      <div className="skeleton h-3 w-24 rounded mt-2" />
+      <div className="flex gap-1.5 mt-3">
+        <div className="skeleton h-[18px] w-14 rounded-full" />
+        <div className="skeleton h-[18px] w-12 rounded-full" />
+      </div>
+      <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+        <div className="skeleton h-3 w-24 rounded" />
+        <div className="flex gap-1"><div className="skeleton h-5 w-16 rounded-md" /><div className="skeleton h-5 w-20 rounded-md" /></div>
+      </div>
+    </div>
+  )
+}
+
+/** one of the three counts above the list */
+function StatTile({ icon, label, short, value }: { icon: ReactNode; label: string; /** the label on a phone, where three tiles share a row */ short?: string; value: number }) {
+  return (
+    <div className={`${CARD} hover:border-white/10 transition-colors p-3 sm:p-4`}>
+      <div className="flex items-center gap-2 mb-1.5">
+        {icon}
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider truncate">
+          {short ? <><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span></> : label}
+        </span>
+      </div>
+      <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{value}</p>
     </div>
   )
 }
@@ -780,14 +744,21 @@ function NetworkCard({ net, onInspect, onDelete, isAdmin }: {
 // Main Component
 // ---------------------------------------------------------------------------
 
+type SortKey = 'name' | 'driver' | 'containers'
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'driver', label: 'Driver' },
+  { key: 'containers', label: 'Containers' },
+]
+
 export default function Networks() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [inspectNetwork, setInspectNetwork] = useState<NetworkInfo | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<NetworkDetail | null>(null)
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const [searchQuery, setSearchQuery] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'driver' | 'containers'>('name')
+  const [sortBy, setSortBy] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
 
   const userRole = useAuthStore((s) => s.userRole)
@@ -838,8 +809,36 @@ export default function Networks() {
   const userNetworks = networks.filter((n) => !BUILTIN_NETWORKS.includes(n.name))
   const totalContainers = networks.reduce((sum, n) => sum + n.containers.length, 0)
 
+  // Delete: ask first, then do it — the same question every page asks with
+  const requestDelete = useCallback(async (name: string) => {
+    if (scope === 'all') {
+      addToast({ type: 'warning', message: 'Everywhere is a view: pick the hub or one VM above, then delete the network there' })
+      return
+    }
+    const where = scopeMember ? ` on the VM ${memberName}` : ''
+    const ok = await confirm({
+      title: 'Delete network',
+      message: `Delete the network ${name}${where}? This cannot be undone.`,
+      confirmLabel: 'Delete network',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await deleteNetwork(name, scopeMember)
+      addToast({ type: 'success', message: `Network ${name} deleted` })
+      refreshNetworks()
+    } catch (err: unknown) {
+      addToast({ type: 'error', message: `Could not delete ${name}: ${err instanceof Error ? err.message : 'Failed to delete network'}`, duration: 6000 })
+    }
+  }, [scope, scopeMember, memberName, confirm, addToast, refreshNetworks])
+
+  const chooseSort = (key: SortKey) => {
+    if (sortBy === key) setSortAsc(!sortAsc)
+    else { setSortBy(key); setSortAsc(true) }
+  }
+
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
       {/* Modals */}
       {showCreateModal && (
@@ -864,130 +863,97 @@ export default function Networks() {
           isAdmin={isAdmin}
         />
       )}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          name={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={refreshNetworks}
-        />
-      )}
 
-      {/* Page header — the actions wrap under the title on a phone instead of running off it */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10 flex items-center justify-center shrink-0">
-            <Network className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Networks</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={networksLoading && !!networksData} /></div>}
-            <p className="text-sm text-slate-400">
-              Docker network topology and container connections
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        page="networks"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        actions={<>
           {isAdmin && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
-            >
+            <button type="button" onClick={() => setShowCreateModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK} ${FOCUS_RING}`}>
               <Plus size={14} />
-              New Network
+              New network
             </button>
           )}
-          <button
-            onClick={refreshNetworks}
-            disabled={networksLoading}
-            className="
-              flex items-center gap-2 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-          >
+          <button type="button" onClick={refreshNetworks} disabled={networksLoading} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
             <RefreshCw size={14} className={networksLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={networksLoading && !!networksData} />}
+      </PageHeader>
 
       {/* Stats row — 3 columns */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Network size={14} className="text-cyan-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Total Networks</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-100">{networks.length}</p>
-        </div>
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Plus size={14} className="text-emerald-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">User Networks</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-100">{userNetworks.length}</p>
-        </div>
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Plug size={14} className="text-amber-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Connections</span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-100">{totalContainers}</p>
-        </div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <StatTile icon={<Network size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Total networks" short="Total" value={networks.length} />
+        <StatTile icon={<Plus size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Custom networks" short="Custom" value={userNetworks.length} />
+        <StatTile icon={<Plug size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Connections" short="Links" value={totalContainers} />
       </div>
 
-      {/* Search + Sort bar */}
-      <div className="flex items-center gap-3">
+      {/* Search + sort bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search networks..."
-            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15 transition-all"
+            aria-label="Search networks"
+            placeholder="Search by network, driver or container…"
+            className={SEARCH_FIELD}
           />
+          {searchQuery && (
+            <Hint label="Clear the search">
+              <button type="button" aria-label="Clear the search" onClick={() => setSearchQuery('')} className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1.5 top-1/2 -translate-y-1/2`}>
+                <X size={14} />
+              </button>
+            </Hint>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          {(['name', 'driver', 'containers'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => {
-                if (sortBy === s) setSortAsc(!sortAsc)
-                else { setSortBy(s); setSortAsc(true) }
-              }}
-              className={`
-                flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
-                ${sortBy === s
-                  ? 'bg-white/[0.06] border-white/10 text-slate-200'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
-                }
-              `}
-            >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-              {sortBy === s && (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
-            </button>
-          ))}
+        <div role="group" aria-label="Sort the networks" className="flex items-center gap-1 shrink-0">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1" aria-hidden>Sort</span>
+          {SORTS.map(({ key, label }) => {
+            const active = sortBy === key
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                aria-label={active ? `${label}, ${sortAsc ? 'ascending' : 'descending'}` : label}
+                onClick={() => chooseSort(key)}
+                className={`${BTN_TOOLBAR} ${FOCUS_RING} border ${active ? 'bg-white/[0.06] border-white/10 text-slate-200' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                {label}
+                {active && (sortAsc ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />)}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Network cards */}
       {networksLoading && networks.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[180px] border border-white/[0.03]" />
-          ))}
+        <div role="status" aria-label="Reading the networks" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[0, 1, 2, 3].map((i) => <NetworkCardSkeleton key={i} />)}
         </div>
       ) : networksError && !networksData ? (
         <ErrorState title="Failed to load networks" error={networksError} onRetry={refreshNetworks} />
       ) : filteredNetworks.length === 0 ? (
-        <div className="glass rounded-xl p-12 text-center">
-          <Network size={32} className="text-slate-500 mx-auto mb-3" />
-          <p className="text-sm text-slate-400">
-            {searchQuery ? 'No networks match your search' : 'No networks found'}
+        <div className={`${CARD} px-6 py-10 text-center`}>
+          <Network size={26} className="mx-auto text-slate-500" aria-hidden />
+          <p className="mt-2 text-sm text-slate-300">{searchQuery ? 'No network matches' : 'No networks found'}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {searchQuery
+              ? `None of the ${networks.length} network${networks.length === 1 ? '' : 's'} has “${searchQuery.trim()}” in its name, driver or containers.`
+              : isAdmin
+                ? 'Docker creates its built-in networks on its own. Use New network to make one, or deploy a stack that declares its own.'
+                : 'Docker networks appear here once a stack creates one.'}
           </p>
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING} mx-auto mt-4`}>
+              <X size={14} /> Clear the search
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
@@ -996,7 +962,7 @@ export default function Networks() {
               key={`${net.member ?? ''}|${net.id}`}
               net={net}
               onInspect={() => setInspectNetwork(net)}
-              onDelete={() => setDeleteTarget(net.name)}
+              onDelete={() => requestDelete(net.name)}
               isAdmin={isAdmin}
             />
           ))}

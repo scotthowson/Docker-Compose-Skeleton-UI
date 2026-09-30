@@ -1,17 +1,22 @@
 // =============================================================================
-// EventFeed — Live SSE event feed with filtering, auto-scroll, and connection
-// status indicator. On a hub the fleet chips choose what the stream carries:
+// Live Events — the server's live event stream (Server-Sent Events): Docker
+// events, metrics, log lines and health scores as they happen, with filtering
+// and auto-scroll. On a hub the fleet chips choose what the stream carries:
 // the hub's own docker events, every VM's too, or one VM's.
 // =============================================================================
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Radio, Trash2, Pause, Play, ArrowDown } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Badge, SegmentedControl } from '@mantine/core'
+import { Radio, Trash2, ArrowDown, ArrowDownToLine } from 'lucide-react'
 import { sseClient, fleetTagOf, type SSEMessage, type SSEEventType, type FleetTag } from '../lib/sse'
-import { useConnectionStore } from '../stores/connectionStore'
 import { useFleetScope, type ScopeMember } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { EmptyState } from '../components/common/PageState'
+import PageHeader from '../components/common/PageHeader'
+import { BTN_TOOLBAR, TONE_QUIET } from '../lib/ui'
+import { CARD, CARD_HOVER, FOCUS_RING } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -23,33 +28,19 @@ type FilterKey = SSEEventType | 'all'
 
 const FILTER_TABS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'docker-event', label: 'Docker Events' },
+  { key: 'docker-event', label: 'Docker events' },
   { key: 'metrics', label: 'Metrics' },
   { key: 'log-line', label: 'Logs' },
   { key: 'health-score', label: 'Health' },
 ]
 
-const TYPE_COLORS: Record<SSEEventType, { badge: string; dot: string }> = {
-  'docker-event': {
-    badge: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
-    dot: 'bg-cyan-400',
-  },
-  metrics: {
-    badge: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
-    dot: 'bg-emerald-400',
-  },
-  'log-line': {
-    badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
-    dot: 'bg-amber-400',
-  },
-  'health-score': {
-    badge: 'bg-violet-500/15 text-violet-400 border border-violet-500/30',
-    dot: 'bg-violet-400',
-  },
-  keepalive: {
-    badge: 'bg-slate-500/15 text-slate-400 border border-slate-500/30',
-    dot: 'bg-slate-400',
-  },
+/** Docker events are the ones to watch (cyan); the rest is a steady stream, told apart by its label (slate) */
+const TYPE_COLOR: Record<SSEEventType, 'cyan' | 'slate'> = {
+  'docker-event': 'cyan',
+  metrics: 'slate',
+  'log-line': 'slate',
+  'health-score': 'slate',
+  keepalive: 'slate',
 }
 
 /** An event as the feed keeps it: the message plus where it happened (fleet view only) */
@@ -103,7 +94,6 @@ function tagFor(event: SSEMessage, scope: string, members: ScopeMember[]): Fleet
 // ---------------------------------------------------------------------------
 
 export default function EventFeed() {
-  const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { scope, setScope, members, hasFleet, memberName } = useFleetScope()
 
   const [events, setEvents] = useState<FeedEvent[]>([])
@@ -112,7 +102,6 @@ export default function EventFeed() {
   const [sseConnected, setSSEConnected] = useState(() => sseClient.isConnected())
 
   const feedRef = useRef<HTMLDivElement>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
   // read when an event arrives (the listener below is subscribed once)
   const scopeRef = useRef(scope)
   const membersRef = useRef(members)
@@ -147,12 +136,17 @@ export default function EventFeed() {
     }
   }, [])
 
+  // The feed scrolls, not the page: scrollIntoView on a marker at its end would scroll every scrollable
+  // ancestor too, and pull the page's own header out of view each time an event arrives.
+  const scrollFeedToEnd = useCallback((smooth = true) => {
+    const feed = feedRef.current
+    if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }, [])
+
   // ---- Auto-scroll ----
   useEffect(() => {
-    if (autoScroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [events, autoScroll])
+    if (autoScroll) scrollFeedToEnd()
+  }, [events, autoScroll, scrollFeedToEnd])
 
   // ---- Handlers ----
   const clearEvents = useCallback(() => setEvents([]), [])
@@ -160,104 +154,78 @@ export default function EventFeed() {
 
   const filtered = filter === 'all' ? events : events.filter((e) => e.type === filter)
 
+  // the page's own line (constants/pageTitles) unless it shows part of a fleet
   const subtitle = scope === 'all'
     ? `Docker events from the hub and its ${members.length} VM${members.length === 1 ? '' : 's'}, live`
     : scope !== 'hub'
       ? `Docker events from the VM ${memberName}, live`
-      : 'Real-time server events via SSE'
+      : undefined
   const waiting = scope === 'all'
-    ? 'Waiting for events from the hub and its VMs...'
+    ? 'Waiting for events from the hub and its VMs…'
     : scope !== 'hub'
-      ? `Waiting for events from the VM ${memberName}...`
-      : 'Waiting for server events...'
+      ? `Waiting for events from the VM ${memberName}…`
+      : 'Waiting for server events…'
 
   // ---- Render ----
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
 
       {/* ---- Header ---- */}
-      <div className="space-y-2">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0">
-            <Radio size={20} className="text-cyan-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Live Event Feed</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">{subtitle}</p>
-          </div>
+      <PageHeader
+        page="event-feed"
+        subtitle={subtitle}
+        badge={
+          <Badge
+            color={sseConnected ? 'emerald' : 'rose'}
+            leftSection={<span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} aria-hidden />}
+          >
+            {sseConnected ? 'Connected' : 'Disconnected'}
+          </Badge>
+        }
+        actions={<>
+          <button
+            type="button"
+            onClick={toggleAutoScroll}
+            aria-pressed={autoScroll}
+            className={`${BTN_TOOLBAR} ${FOCUS_RING} ${autoScroll ? 'bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/25' : TONE_QUIET}`}
+          >
+            <ArrowDownToLine size={14} />
+            Auto-scroll
+          </button>
+          <button type="button" onClick={clearEvents} className={`${BTN_TOOLBAR} ${TONE_QUIET} ${FOCUS_RING}`}>
+            <Trash2 size={14} />
+            Clear
+          </button>
+        </>}
+      >
+        {/* Fleet scope: under the line on a desktop, one swipeable row on a phone */}
+        {hasFleet && <FleetScopeChips scope={scope} members={members} onChange={setScope} />}
+      </PageHeader>
 
-          {/* Connection indicator */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                sseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
-              }`}
-            />
-            <span className="text-xs font-medium text-slate-300">
-              {sseConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-        </div>
-        {/* Fleet scope: under the title on a desktop, one swipeable row on a phone */}
-        {hasFleet && <div className="sm:pl-14"><FleetScopeChips scope={scope} members={members} onChange={setScope} /></div>}
-      </div>
-
-      {/* ---- Toolbar ---- */}
-      <div className="glass rounded-xl p-4 border border-white/5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Filter tabs */}
-          <div className="flex flex-wrap items-center gap-2">
-            {FILTER_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setFilter(tab.key)}
-                className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                  filter === tab.key
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
-                    : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-slate-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleAutoScroll}
-              className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/10 hover:bg-white/10 text-slate-400 hover:text-slate-300 transition-colors flex items-center gap-1.5"
-              title={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
-            >
-              {autoScroll ? <Pause size={13} /> : <Play size={13} />}
-              {autoScroll ? 'Pause' : 'Resume'}
-            </button>
-            <button
-              onClick={clearEvents}
-              className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/10 hover:bg-white/10 text-slate-400 hover:text-slate-300 transition-colors flex items-center gap-1.5"
-            >
-              <Trash2 size={13} />
-              Clear
-            </button>
-          </div>
-        </div>
+      {/* ---- Filter ---- */}
+      <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+        <SegmentedControl
+          aria-label="Type of event"
+          value={filter}
+          onChange={(v) => setFilter(v as FilterKey)}
+          data={FILTER_TABS.map((tab) => ({ value: tab.key, label: tab.label }))}
+        />
       </div>
 
       {/* ---- Event count ---- */}
-      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+      <div className="flex items-center justify-between text-xs text-slate-500 px-1 -mt-1" role="status">
         <span>
           {filtered.length} event{filtered.length !== 1 ? 's' : ''}
           {filter !== 'all' && ` (${events.length} total)`}
         </span>
         {!autoScroll && filtered.length > 0 && (
           <button
-            onClick={() => {
-              bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-            }}
-            className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors"
+            type="button"
+            onClick={() => scrollFeedToEnd()}
+            className={`flex h-8 items-center gap-1 rounded-lg px-2 text-cyan-400 hover:text-cyan-300 hover:bg-white/5 transition-colors ${FOCUS_RING}`}
           >
-            <ArrowDown size={12} />
+            <ArrowDown size={12} aria-hidden />
             Jump to latest
           </button>
         )}
@@ -266,35 +234,32 @@ export default function EventFeed() {
       {/* ---- Feed ---- */}
       <div
         ref={feedRef}
-        className="glass rounded-xl border border-white/5 p-4 max-h-[calc(100vh-340px)] overflow-y-auto scrollbar-thin space-y-2"
+        role="log"
+        aria-label="Live events"
+        aria-live="off"
+        className={`${CARD} p-3 sm:p-4 max-h-[calc(100vh-340px)] min-h-[16rem] overflow-y-auto scrollbar-thin space-y-2`}
       >
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-            <Radio size={32} className="mb-3 opacity-40" />
-            <p className="text-sm">No events yet</p>
-            <p className="text-xs mt-1 text-slate-500">
-              {sseConnected ? waiting : 'SSE is disconnected — events will appear once reconnected'}
-            </p>
-          </div>
+          <EmptyState
+            icon={<Radio size={30} />}
+            title="No events yet"
+            hint={sseConnected ? waiting : 'The live connection is down — events will appear once it is back.'}
+          />
         ) : (
           filtered.map((event, idx) => {
-            const colors = TYPE_COLORS[event.type] ?? TYPE_COLORS['docker-event']
             const tag = event.tag
             return (
               <div
                 key={`${event.timestamp}-${idx}`}
-                className="glass rounded-xl border border-white/5 p-4 hover:border-white/10 transition-colors"
+                className={`${CARD_HOVER} p-3 sm:p-4`}
               >
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <span className="text-xs text-slate-500 font-mono tabular-nums">
                     {formatTimestamp(event.timestamp)}
                   </span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${colors.badge}`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+                  <Badge color={TYPE_COLOR[event.type] ?? 'cyan'}>
                     {event.type}
-                  </span>
+                  </Badge>
                   {tag && (
                     <VmCapsule member={tag.member} name={tag.member_name} vmid={tag.vmid} size="xs" onClick={() => setScope(tag.member ?? 'hub')} />
                   )}
@@ -306,7 +271,6 @@ export default function EventFeed() {
             )
           })
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   )

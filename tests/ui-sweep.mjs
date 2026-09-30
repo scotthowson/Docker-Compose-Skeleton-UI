@@ -83,11 +83,12 @@ const OPENERS = {
   containers: ['Batch Select'],
   images: ['Batch mode', 'Image Library', 'Docker Hub Search', /^(All|Current|Aging|Stale)\d+$/],
   health: ['OK', 'Bad', 'Off', 'On demand'],
-  networks: ['New Network', 'Name', 'Driver', 'Containers', 'Inspect'],
-  volumes: ['Batch Select', 'Name', 'Size'],
-  logs: ['Stats', 'Logs', 'Archives', 'Live', 'Auto'],
+  networks: ['New network', /^Name\b/, 'Driver', 'Containers', /^Inspect /],
+  volumes: ['Batch select', 'Name', 'Size'],
+  logs: ['Log statistics', 'Auto-scroll'],
   settings: ['User Profile', 'Server Connection', 'Appearance', 'Application Preferences', 'Keyboard Shortcuts', 'Disk Configuration', 'Notification Preferences', 'Alert Thresholds'],
-  bookmarks: ['Add Bookmark', 'Pinned', 'Page', 'Stack', 'Container', 'Custom'],
+  activity: [/^SERVER AUDIT LOG/],
+  bookmarks: ['Add bookmark'],
   maintenance: ['Guide'],
   environment: ['Root .env', 'Stack .env', 'Editor'],
   backup: ['Guide'],
@@ -101,13 +102,13 @@ const OPENERS = {
   secrets: ['Usage Guide', 'Add Secret', 'Where is this secret used?'],
   schedules: ['New Schedule'],
   plugins: ['Plugin details', 'Card Studio'],
-  'event-feed': ['Docker Events', 'Metrics', 'Logs', 'Health'],
+  'event-feed': ['Auto-scroll'],
   export: ['SELECT ALL'],
   dns: [/^Routes \(\d+\)$/, 'DNS records'],
   proxmox: ['New VM stack', 'Link VMs', 'Join code', 'Add member', 'media-vm', 'networking-security', 'dns', 'Manage media-vm', /^\d+ containers · \d+ running$/, 'Link…'],
 }
 // the ones among them that switch something on that a later run would inherit: clicked a second time
-const TWICE = /^(Batch Select|Batch mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/i
+const TWICE = /^(Batch Select|Batch select|Batch Mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/i
 const MAX_CLICKS = 24
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

@@ -1,9 +1,11 @@
 // =============================================================================
-// Volumes — Docker volume management with search, sort, delete & batch ops
+// Volumes — Docker volumes: search, sort (the column headers), delete one, or
+// several at once in batch mode. On a hub: the hub's volumes, a VM's, or both.
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useId, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Badge } from '@mantine/core'
 import {
   HardDrive,
   Search,
@@ -11,30 +13,36 @@ import {
   Loader2,
   AlertTriangle,
   Database,
-  ChevronUp,
-  ChevronDown,
   RefreshCw,
   X,
-  AlertCircle,
   FolderOpen,
-  CheckSquare,
-  Square,
+  Check,
   CheckCircle2,
   XCircle,
   ListChecks,
+  Weight,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { fetchVolumes, deleteVolume } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import type { VolumeInfo, VolumeListResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { LoadingState, ErrorState } from '../components/common/PageState'
+import { LoadingState, ErrorState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import SortableTh from '../components/common/SortableTh'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_DANGER,
+  TONE_DANGER, TONE_GHOST, TONE_GHOST_DANGER, TONE_QUIET,
+} from '../lib/ui'
+import { CARD, SEARCH_FIELD, FIELD, FOCUS_RING, REVEAL } from '../lib/pageKit'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,156 +78,21 @@ interface BatchResult {
 // Skeleton Rows
 // ---------------------------------------------------------------------------
 
-function SkeletonRow() {
+function SkeletonRow({ batch, admin }: { batch: boolean; admin: boolean }) {
   return (
-    <tr className="border-b border-white/[0.03]">
-      <td className="px-5 py-4">
-        <div className="h-4 w-48 bg-white/[0.06] rounded-md animate-pulse" />
-      </td>
-      <td className="px-5 py-4">
-        <div className="h-5 w-16 bg-white/[0.06] rounded-full animate-pulse" />
-      </td>
-      <td className="px-5 py-4">
-        <div className="h-4 w-64 bg-white/[0.06] rounded-md animate-pulse" />
-      </td>
-      <td className="px-5 py-4 text-right">
-        <div className="h-4 w-16 bg-white/[0.06] rounded-md animate-pulse ml-auto" />
-      </td>
-      <td className="px-5 py-4 text-right">
-        <div className="h-6 w-6 bg-white/[0.06] rounded-md animate-pulse ml-auto" />
-      </td>
+    <tr className="border-b border-white/[0.03]" aria-hidden>
+      {batch && <td className="px-3 py-3.5"><div className="skeleton h-5 w-5 rounded mx-auto" /></td>}
+      <td className="px-3 py-3.5"><div className="skeleton h-4 w-44 max-w-full rounded" /></td>
+      <td className="px-3 py-3.5 hidden sm:table-cell"><div className="skeleton h-[18px] w-14 rounded-full" /></td>
+      <td className="px-3 py-3.5 hidden md:table-cell"><div className="skeleton h-4 w-64 rounded" /></td>
+      <td className="px-3 py-3.5 text-right"><div className="skeleton h-4 w-14 rounded ml-auto" /></td>
+      {admin && <td className="px-3 py-3.5"><div className="skeleton h-7 w-7 rounded-lg ml-auto" /></td>}
     </tr>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Delete Confirmation Modal
-// ---------------------------------------------------------------------------
-
-function DeleteConfirmModal({
-  volumeName,
-  onClose,
-  onConfirm,
-}: {
-  volumeName: string
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState('')
-  const { addToast } = useToast()
-
-  const { scope: fleetScope, member: scopeMember } = useFleetScope()
-  const handleDelete = async () => {
-    if (deleting) return
-    if (fleetScope === 'all') { setError('Everywhere is a view: pick the hub or one VM above, then delete it there'); return }
-    setDeleting(true)
-    setError('')
-    try {
-      await deleteVolume(volumeName, scopeMember)
-      addToast({
-        type: 'success',
-        message: `Volume "${volumeName}" deleted successfully`,
-      })
-      onConfirm()
-      onClose()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to delete volume'
-      setError(message)
-      addToast({
-        type: 'error',
-        message: `Failed to delete "${volumeName}": ${message}`,
-        duration: 6000,
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  return createPortal(
-    <ModalOverlay onClose={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-md mx-4 glass p-6 animate-scale-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
-            <AlertTriangle size={18} className="text-rose-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-100">Delete Volume</h3>
-            <p className="text-[10px] text-slate-500">This action cannot be undone</p>
-          </div>
-        </div>
-
-        {/* Warning message */}
-        <div className="rounded-lg bg-rose-500/5 border border-rose-500/10 p-4 mb-4">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Are you sure you want to permanently delete the volume{' '}
-            <span className="font-mono text-slate-200 bg-white/[0.06] px-1.5 py-0.5 rounded">
-              {volumeName}
-            </span>
-            ?
-          </p>
-          <p className="text-xs text-rose-400/80 mt-2 flex items-center gap-1.5">
-            <AlertTriangle size={11} className="shrink-0" />
-            All data stored in this volume will be permanently lost.
-          </p>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5 mb-4">
-            <AlertCircle size={14} className="text-rose-400 shrink-0" />
-            <p className="text-xs text-rose-300">{error}</p>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="
-              flex-1 py-2.5 rounded-lg text-sm text-slate-400
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:text-slate-200
-              transition-all duration-200
-            "
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="
-              flex-1 flex items-center justify-center gap-2
-              py-2.5 rounded-lg text-sm font-semibold text-white
-              bg-rose-500 hover:bg-rose-400
-              shadow-lg shadow-rose-500/25
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200 press
-            "
-          >
-            {deleting ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Trash2 size={14} />
-            )}
-            {deleting ? 'Deleting...' : 'Delete Volume'}
-          </button>
-        </div>
-      </div>
-    </ModalOverlay>,
-    document.body,
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Batch Delete Confirmation Modal
+// Batch Delete Confirmation Modal — several volumes at once: type their number to go on
 // ---------------------------------------------------------------------------
 
 function BatchDeleteConfirmModal({
@@ -233,80 +106,61 @@ function BatchDeleteConfirmModal({
 }) {
   const [confirmText, setConfirmText] = useState('')
   const expected = String(count)
+  const uid = useId()
 
   return createPortal(
     <ModalOverlay onClose={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md mx-4 glass p-6 animate-scale-in"
+        className="relative w-full max-w-md glass rounded-2xl border-rose-500/20 p-5 sm:p-6 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
-            <AlertTriangle size={18} className="text-rose-400" />
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/20 shrink-0">
+            <AlertTriangle size={20} className="text-rose-400" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-100">Batch Delete Volumes</h3>
-            <p className="text-[10px] text-slate-500">This action cannot be undone</p>
-          </div>
+          <h3 className="text-base font-semibold text-slate-100">Delete {count} volume{count !== 1 ? 's' : ''}</h3>
         </div>
 
         {/* Warning message */}
-        <div className="rounded-lg bg-rose-500/5 border border-rose-500/10 p-4 mb-4">
-          <p className="text-xs text-slate-400 leading-relaxed">
+        <div className="rounded-lg bg-rose-500/5 border border-rose-500/15 p-4 mb-4">
+          <p className="text-sm text-slate-300 leading-relaxed">
             You are about to permanently delete{' '}
             <span className="font-semibold text-rose-400">{count}</span>{' '}
-            volume{count !== 1 ? 's' : ''}. All data stored in these volumes will be lost.
+            volume{count !== 1 ? 's' : ''}. All data stored in {count !== 1 ? 'these volumes' : 'this volume'} will be lost. This cannot be undone.
           </p>
-          <p className="text-xs text-slate-500 mt-3">
-            Type <span className="font-mono text-slate-300 bg-white/[0.06] px-1.5 py-0.5 rounded">{expected}</span> to confirm:
-          </p>
+          <label htmlFor={`${uid}-confirm`} className="block text-xs text-slate-400 mt-3">
+            Type <span className="font-mono text-slate-200 bg-white/[0.06] px-1.5 py-0.5 rounded">{expected}</span> to confirm
+          </label>
           <input
+            id={`${uid}-confirm`}
             type="text"
+            inputMode="numeric"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder={expected}
-            className="
-              mt-2 w-full px-3 py-2
-              bg-white/[0.03] border border-white/10 rounded-lg
-              text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-rose-500/30 focus:ring-1 focus:ring-rose-500/15
-              transition-all duration-200
-            "
+            autoComplete="off"
+            className={`${FIELD} mt-2 !py-2 focus:!border-rose-500/50 focus:!ring-rose-500/25`}
             autoFocus
           />
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="
-              flex-1 py-2.5 rounded-lg text-sm text-slate-400
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:text-slate-200
-              transition-all duration-200
-            "
-          >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-3">
+          <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} sm:flex-1 ${FOCUS_RING}`}>
             Cancel
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={confirmText !== expected}
-            className="
-              flex-1 flex items-center justify-center gap-2
-              py-2.5 rounded-lg text-sm font-semibold text-white
-              bg-rose-500 hover:bg-rose-400
-              shadow-lg shadow-rose-500/25
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200 press
-            "
+            className={`${BTN_SHEET_DANGER} sm:flex-1 disabled:cursor-not-allowed ${FOCUS_RING}`}
           >
             <Trash2 size={14} />
-            Delete {count} Volume{count !== 1 ? 's' : ''}
+            Delete {count} volume{count !== 1 ? 's' : ''}
           </button>
         </div>
       </div>
@@ -319,16 +173,29 @@ function BatchDeleteConfirmModal({
 // Main Component
 // ---------------------------------------------------------------------------
 
+/** one of the four counts above the table */
+function StatTile({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className={`${CARD} hover:border-white/10 transition-colors p-3 sm:p-4 min-w-0`}>
+      <div className="flex items-center gap-2 mb-1.5">
+        {icon}
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider truncate">{label}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export default function Volumes() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortAsc, setSortAsc] = useState(true)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Batch state
   const [batchMode, setBatchMode] = useState(false)
@@ -336,17 +203,6 @@ export default function Volumes() {
   const [batchLoading, setBatchLoading] = useState(false)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [batchResults, setBatchResults] = useState<BatchResult[] | null>(null)
-
-  // Close topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (batchConfirmOpen) { setBatchConfirmOpen(false); return }
-      if (deleteTarget) { setDeleteTarget(null); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [batchConfirmOpen, deleteTarget])
 
   // Poll volumes data
   const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
@@ -429,10 +285,29 @@ export default function Volumes() {
     [sortField, sortAsc],
   )
 
-  // Handle delete confirmation
-  const handleDeleteConfirmed = useCallback(() => {
-    refresh()
-  }, [refresh])
+  // Delete one volume: ask first, then do it — the same question every page asks with
+  const requestDelete = useCallback(async (volumeName: string) => {
+    if (scope === 'all') {
+      addToast({ type: 'warning', message: 'Everywhere is a view: pick the hub or one VM above, then delete the volume there' })
+      return
+    }
+    const where = scopeMember ? ` on the VM ${memberName}` : ''
+    const ok = await confirm({
+      title: 'Delete volume',
+      message: `Permanently delete the volume ${volumeName}${where}? All data stored in it will be lost. This cannot be undone.`,
+      confirmLabel: 'Delete volume',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await deleteVolume(volumeName, scopeMember)
+      addToast({ type: 'success', message: `Volume "${volumeName}" deleted successfully` })
+      refresh()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete volume'
+      addToast({ type: 'error', message: `Failed to delete "${volumeName}": ${message}`, duration: 6000 })
+    }
+  }, [scope, scopeMember, memberName, confirm, addToast, refresh])
 
   // -------------------------------------------------------------------------
   // Batch operations
@@ -503,16 +378,6 @@ export default function Volumes() {
     refresh()
   }, [selectedVolumes, addToast, refresh])
 
-  // Sort indicator component
-  const SortIndicator = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return null
-    return sortAsc ? (
-      <ChevronUp size={12} className="text-emerald-400" />
-    ) : (
-      <ChevronDown size={12} className="text-emerald-400" />
-    )
-  }
-
   // Not connected state
   if (!isConnected) {
     return (
@@ -520,17 +385,13 @@ export default function Volumes() {
     )
   }
 
+  const allSelected = filteredVolumes.length > 0 && selectedVolumes.size === filteredVolumes.length
+  // the table's columns: [select] name · driver · mountpoint · size · [delete]
+  const colCount = (batchMode ? 1 : 0) + 4 + (isAdmin ? 1 : 0)
+
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Delete confirmation modal */}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          volumeName={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={handleDeleteConfirmed}
-        />
-      )}
 
       {/* Batch delete confirmation modal */}
       {batchConfirmOpen && (
@@ -541,99 +402,67 @@ export default function Volumes() {
         />
       )}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Page Header                                                       */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
-            <HardDrive className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">
-              <span className="text-gradient">Volumes</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}
-            </h2>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!volumesData} /></div>}
-            <p className="text-sm text-slate-400">
-              Manage Docker volume storage and persistent data
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="volumes"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        actions={<>
           {isAdmin && (
             <button
+              type="button"
               onClick={toggleBatchMode}
-              className={`
-                flex items-center gap-1.5 rounded-lg px-3 py-2
-                text-xs font-medium transition-all duration-200 border
-                ${batchMode
-                  ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
-                  : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
-                }
-              `}
+              aria-pressed={batchMode}
+              className={`${BTN_TOOLBAR} ${FOCUS_RING} ${batchMode ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
             >
               <ListChecks size={14} />
-              {batchMode ? 'Exit Batch' : 'Batch Select'}
+              {batchMode ? 'Exit batch' : 'Batch select'}
             </button>
           )}
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="
-              flex items-center gap-1.5 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-          >
+          <button type="button" onClick={refresh} disabled={loading} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!volumesData} />}
+      </PageHeader>
 
       {/* ----------------------------------------------------------------- */}
       {/* Batch Action Bar                                                  */}
       {/* ----------------------------------------------------------------- */}
       {batchMode && (
-        <div className="flex items-center justify-between bg-amber-500/5 border border-amber-500/15 rounded-xl px-5 py-3 animate-fade-in">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-amber-400">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 animate-fade-in">
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <span className="text-xs font-semibold text-cyan-400 mr-2" role="status">
               {selectedVolumes.size} selected
             </span>
-            <div className="h-4 w-px bg-white/10" />
             <button
+              type="button"
               onClick={selectAll}
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className={`h-8 px-2 rounded-lg text-xs text-slate-400 hover:text-cyan-400 hover:bg-white/5 transition-colors ${FOCUS_RING}`}
             >
-              Select All ({filteredVolumes.length})
+              Select all ({filteredVolumes.length})
             </button>
+            <span className="text-white/10" aria-hidden>|</span>
             <button
+              type="button"
               onClick={clearSelection}
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className={`h-8 px-2 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors ${FOCUS_RING}`}
             >
               Clear
             </button>
           </div>
           <button
+            type="button"
             onClick={() => setBatchConfirmOpen(true)}
             disabled={selectedVolumes.size === 0 || batchLoading}
-            className="
-              flex items-center gap-2 rounded-lg px-3 py-2
-              text-sm font-semibold text-white
-              bg-rose-500 hover:bg-rose-400
-              shadow-lg shadow-rose-500/25
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200 press
-            "
+            className={`${BTN_TOOLBAR} ${TONE_DANGER} ${FOCUS_RING}`}
           >
             {batchLoading ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Trash2 size={14} />
             )}
-            {batchLoading ? 'Deleting...' : 'Delete Selected'}
+            {batchLoading ? 'Deleting…' : 'Delete selected'}
           </button>
         </div>
       )}
@@ -642,15 +471,17 @@ export default function Volumes() {
       {/* Batch Results Panel                                               */}
       {/* ----------------------------------------------------------------- */}
       {batchResults && batchResults.length > 0 && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 animate-fade-in">
+        <div className={`${CARD} p-4 sm:p-5 animate-fade-in`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <ListChecks size={16} className="text-amber-400" />
-              Batch Delete Results
+              <ListChecks size={16} className="text-cyan-400" />
+              Delete results
             </h3>
-            <button aria-label="Close"
+            <button
+              type="button"
+              aria-label="Close the results"
               onClick={() => setBatchResults(null)}
-              className="text-slate-500 hover:text-slate-300 transition-colors"
+              className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING}`}
             >
               <X size={14} />
             </button>
@@ -668,15 +499,15 @@ export default function Volumes() {
                 `}
               >
                 {result.success ? (
-                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" aria-hidden />
                 ) : (
-                  <XCircle size={14} className="text-rose-400 shrink-0" />
+                  <XCircle size={14} className="text-rose-400 shrink-0" aria-hidden />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-mono text-slate-200 truncate" title={result.name}>
                     {result.name}
                   </p>
-                  <p className={`text-[10px] ${result.success ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>
+                  <p className={`text-[11px] ${result.success ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
                     {result.message}
                   </p>
                 </div>
@@ -689,62 +520,29 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       {/* Summary Stat Cards                                                */}
       {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-children">
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Database size={14} className="text-cyan-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Total Volumes
-            </span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-100">
-            {hasLoaded ? volumes.length : '--'}
-          </p>
-        </div>
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <HardDrive size={14} className="text-emerald-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Total Storage
-            </span>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-100">
-            {hasLoaded ? formatBytes(totalSize) : '--'}
-          </p>
-        </div>
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <FolderOpen size={14} className="text-violet-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Drivers
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-xl md:text-2xl font-bold text-slate-100">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 stagger-children">
+        <StatTile icon={<Database size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Total volumes">
+          <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{hasLoaded ? volumes.length : '--'}</p>
+        </StatTile>
+        <StatTile icon={<HardDrive size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Total storage">
+          <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{hasLoaded ? formatBytes(totalSize) : '--'}</p>
+        </StatTile>
+        <StatTile icon={<FolderOpen size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Drivers">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">
               {hasLoaded ? Object.keys(driverCounts).length : '--'}
             </p>
             {hasLoaded && Object.keys(driverCounts).length > 0 && (
               <div className="flex gap-1 flex-wrap">
                 {Object.entries(driverCounts).map(([driver, count]) => (
-                  <span
-                    key={driver}
-                    className="inline-flex rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-400"
-                  >
-                    {driver} ({count})
-                  </span>
+                  <Badge key={driver} color="cyan">{driver} ({count})</Badge>
                 ))}
               </div>
             )}
           </div>
-        </div>
-        <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle size={14} className="text-amber-400" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Largest
-            </span>
-          </div>
-          <p className="text-lg font-bold text-slate-100 truncate" title={largestVolume?.name}>
+        </StatTile>
+        <StatTile icon={<Weight size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Largest">
+          <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums truncate" title={largestVolume?.name}>
             {hasLoaded
               ? largestVolume
                 ? formatBytes(largestVolume.size_bytes)
@@ -753,72 +551,51 @@ export default function Volumes() {
           </p>
           {largestVolume && (
             <p
-              className="text-[10px] text-slate-500 font-mono truncate mt-0.5"
+              className="text-[11px] text-slate-500 font-mono truncate mt-0.5"
               title={largestVolume.name}
             >
               {largestVolume.name}
             </p>
           )}
-        </div>
+        </StatTile>
       </div>
 
       {/* ----------------------------------------------------------------- */}
-      {/* Search + Sort Controls                                            */}
+      {/* Search                                                            */}
       {/* ----------------------------------------------------------------- */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search volumes by name, driver, or mountpoint..."
-            className="
-              w-full pl-9 pr-4 py-2.5
-              bg-white/[0.03] border border-white/5 rounded-lg
-              text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/15
-              transition-all duration-200
-            "
-          />
-          {searchQuery && (
-            <button aria-label="Clear the search"
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+          aria-hidden
+        />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search volumes"
+          placeholder="Search by name, driver or mountpoint…"
+          className={SEARCH_FIELD}
+        />
+        {searchQuery && (
+          <Hint label="Clear the search">
+            <button
+              type="button"
+              aria-label="Clear the search"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+              className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1.5 top-1/2 -translate-y-1/2`}
             >
               <X size={14} />
             </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {(['name', 'size'] as const).map((field) => (
-            <button
-              key={field}
-              onClick={() => handleSort(field)}
-              className={`
-                flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium border transition-all
-                ${
-                  sortField === field
-                    ? 'bg-white/[0.06] border-white/10 text-slate-200'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                }
-              `}
-            >
-              {field.charAt(0).toUpperCase() + field.slice(1)}
-              <SortIndicator field={field} />
-            </button>
-          ))}
-        </div>
+          </Hint>
+        )}
       </div>
 
       {/* ----------------------------------------------------------------- */}
       {/* Search results count                                              */}
       {/* ----------------------------------------------------------------- */}
       {searchQuery && hasLoaded && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" role="status">
           <span className="text-xs text-slate-500">
             {filteredVolumes.length} result{filteredVolumes.length !== 1 ? 's' : ''} for{' '}
             <span className="text-slate-400">"{searchQuery}"</span>
@@ -829,19 +606,19 @@ export default function Volumes() {
       {/* ----------------------------------------------------------------- */}
       {/* Volumes Table                                                     */}
       {/* ----------------------------------------------------------------- */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
+      <div className={`${CARD} overflow-hidden`}>
         {/* Table header bar */}
-        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-            <HardDrive size={16} className="text-cyan-400" />
-            Docker Volumes
-          </h3>
+        <div className="px-4 sm:px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <HardDrive size={16} className="text-cyan-400" aria-hidden />
+            Docker volumes
+          </h2>
           <div className="flex items-center gap-1.5">
-            <Database size={11} className="text-slate-500" />
-            <span className="text-[10px] text-slate-500">
+            <Database size={11} className="text-slate-500" aria-hidden />
+            <span className="text-[11px] text-slate-500">
               {hasLoaded
-                ? `${filteredVolumes.length} volume${filteredVolumes.length !== 1 ? 's' : ''} \u00B7 ${formatBytes(totalSize)} total`
-                : 'Loading...'}
+                ? `${filteredVolumes.length} volume${filteredVolumes.length !== 1 ? 's' : ''} · ${formatBytes(totalSize)} total`
+                : 'Loading…'}
             </span>
           </div>
         </div>
@@ -852,65 +629,59 @@ export default function Volumes() {
               <tr className="border-b border-white/5">
                 {/* Batch checkbox column */}
                 {batchMode && (
-                  <th className="text-center px-3 py-3 w-10">
+                  <th scope="col" className="text-center px-3 w-12">
                     <button
-                      onClick={selectedVolumes.size === filteredVolumes.length ? clearSelection : selectAll}
-                      aria-label={selectedVolumes.size === filteredVolumes.length && filteredVolumes.length > 0 ? 'Clear the selection' : 'Select all'}
-                      className="text-slate-500 hover:text-emerald-400 transition-colors"
+                      type="button"
+                      role="checkbox"
+                      aria-checked={allSelected}
+                      onClick={allSelected ? clearSelection : selectAll}
+                      aria-label={allSelected ? 'Clear the selection' : 'Select all'}
+                      className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg ${FOCUS_RING}`}
                     >
-                      {selectedVolumes.size === filteredVolumes.length && filteredVolumes.length > 0 ? (
-                        <CheckSquare size={15} className="text-emerald-400" />
-                      ) : (
-                        <Square size={15} />
-                      )}
+                      <span className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${allSelected ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 hover:border-white/40'}`}>
+                        {allSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                      </span>
                     </button>
                   </th>
                 )}
-                <th
-                  className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors select-none"
-                  onClick={() => handleSort('name')}
-                >
-                  <span className="flex items-center gap-1">
-                    Name
-                    <SortIndicator field="name" />
-                  </span>
-                </th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <SortableTh
+                  label="Name"
+                  active={sortField === 'name'}
+                  direction={sortAsc ? 'asc' : 'desc'}
+                  onSort={() => handleSort('name')}
+                />
+                <th scope="col" className="hidden sm:table-cell text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Driver
                 </th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th scope="col" className="hidden md:table-cell text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Mountpoint
                 </th>
-                <th
-                  className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors select-none"
-                  onClick={() => handleSort('size')}
-                >
-                  <span className="flex items-center justify-end gap-1">
-                    Size
-                    <SortIndicator field="size" />
-                  </span>
-                </th>
-                <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider w-16">
-                  Actions
-                </th>
+                <SortableTh
+                  label="Size"
+                  align="right"
+                  active={sortField === 'size'}
+                  direction={sortAsc ? 'asc' : 'desc'}
+                  onSort={() => handleSort('size')}
+                />
+                {isAdmin && (
+                  <th scope="col" className="w-12 px-3 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="stagger-children">
               {/* Loading skeleton */}
               {!hasLoaded && loading && (
                 <>
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
+                  {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} batch={batchMode} admin={isAdmin} />)}
                 </>
               )}
 
               {/* The poll failed before anything loaded */}
               {!hasLoaded && !loading && error && (
                 <tr>
-                  <td colSpan={batchMode ? 6 : 5} className="px-5 py-6">
+                  <td colSpan={colCount} className="px-5 py-6">
                     <ErrorState title="Failed to load volumes" error={error} onRetry={refresh} />
                   </td>
                 </tr>
@@ -919,46 +690,20 @@ export default function Volumes() {
               {/* Empty state */}
               {hasLoaded && filteredVolumes.length === 0 && (
                 <tr>
-                  <td colSpan={batchMode ? 6 : 5} className="px-5 py-16">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl" />
-                        <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/5 glow-cyan">
-                          <Database
-                            size={28}
-                            className="text-cyan-400/60"
-                            strokeWidth={1.5}
-                          />
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-medium text-slate-400">
-                          {searchQuery
-                            ? 'No volumes match your search'
-                            : 'No named volumes here — DCS stacks keep their data in App-Data folders next to each compose file'}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
-                          {searchQuery
-                            ? 'Try adjusting your search query or clearing the filter.'
-                            : 'Docker volumes provide persistent storage for container data. They will appear here automatically when your stacks create named volumes.'}
-                        </p>
-                      </div>
-                      {searchQuery && (
-                        <button
-                          onClick={() => setSearchQuery('')}
-                          className="
-                            flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                            text-xs font-medium text-emerald-400
-                            bg-emerald-500/10 border border-emerald-500/20
-                            hover:bg-emerald-500/20
-                            transition-all duration-200
-                          "
-                        >
-                          <X size={12} />
-                          Clear search
+                  <td colSpan={colCount} className="px-5">
+                    <EmptyState
+                      icon={<Database size={28} strokeWidth={1.5} />}
+                      title={searchQuery ? 'No volumes match your search' : 'No named volumes here'}
+                      hint={searchQuery
+                        ? 'Try another name, driver or mountpoint.'
+                        : 'DCS stacks keep their data in App-Data folders next to each compose file. Docker volumes appear here when a stack creates one.'}
+                      action={searchQuery ? (
+                        <button type="button" onClick={() => setSearchQuery('')} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
+                          <X size={14} />
+                          Clear the search
                         </button>
-                      )}
-                    </div>
+                      ) : undefined}
+                    />
                   </td>
                 </tr>
               )}
@@ -982,49 +727,63 @@ export default function Volumes() {
                     >
                       {/* Batch checkbox */}
                       {batchMode && (
-                        <td className="text-center px-3 py-3.5">
-                          {isSelected ? (
-                            <CheckSquare size={15} className="text-emerald-400 mx-auto" />
-                          ) : (
-                            <Square size={15} className="text-slate-500 mx-auto" />
-                          )}
+                        <td className="text-center px-3 py-2">
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={isSelected}
+                            aria-label={`Select ${vol.name}`}
+                            onClick={(ev) => { ev.stopPropagation(); toggleVolumeSelection(vol.name) }}
+                            className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg ${FOCUS_RING}`}
+                          >
+                            <span className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 hover:border-white/40'}`}>
+                              {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                            </span>
+                          </button>
                         </td>
                       )}
 
-                      {/* Name */}
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2.5">
+                      {/* Name (on a phone the mountpoint sits under it) */}
+                      <td className="px-3 py-3 w-full max-w-0 sm:w-auto sm:max-w-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
-                            <Database size={13} className="text-cyan-400" />
+                            <Database size={13} className="text-cyan-400" aria-hidden />
                           </div>
-                          <span className="font-mono text-xs text-slate-200 truncate max-w-[240px]" title={vol.name}>
-                            {vol.name}
-                          </span>
-                          {vol.member !== undefined && <VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" />}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono text-xs text-slate-200 truncate sm:max-w-[240px]" title={vol.name}>
+                                {vol.name}
+                              </span>
+                              {vol.member !== undefined && <span className="hidden sm:inline-flex"><VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" /></span>}
+                            </div>
+                            {/* a phone has no room beside the name: the VM, the driver and the mountpoint go under it */}
+                            {vol.member !== undefined && <div className="sm:hidden mt-1"><VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" /></div>}
+                            <p className="md:hidden text-[11px] text-slate-500 font-mono truncate mt-0.5" title={vol.mountpoint}>
+                              <span className="sm:hidden">{vol.driver} · </span>{vol.mountpoint}
+                            </p>
+                          </div>
                         </div>
                       </td>
 
                       {/* Driver */}
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
-                          {vol.driver}
-                        </span>
+                      <td className="hidden sm:table-cell px-3 py-3">
+                        <Badge color="cyan">{vol.driver}</Badge>
                       </td>
 
                       {/* Mountpoint */}
                       <td
-                        className="px-5 py-3.5 text-slate-400 text-xs font-mono truncate max-w-[300px]"
+                        className="hidden md:table-cell px-3 py-3 text-slate-400 text-xs font-mono truncate max-w-[300px]"
                         title={vol.mountpoint}
                       >
                         {vol.mountpoint}
                       </td>
 
                       {/* Size */}
-                      <td className="px-5 py-3.5 text-right">
+                      <td className="px-3 py-3 text-right">
                         <span
-                          className={`text-xs font-mono font-medium ${
+                          className={`text-xs font-mono font-medium tabular-nums ${
                             vol.size_bytes > 1073741824
-                              ? 'text-amber-400'
+                              ? 'text-slate-100'
                               : vol.size_bytes > 104857600
                                 ? 'text-slate-200'
                                 : 'text-slate-400'
@@ -1035,23 +794,22 @@ export default function Volumes() {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-5 py-3.5 text-right">
-                        {!batchMode && isAdmin && (
-                          <button
-                            onClick={() => setDeleteTarget(vol.name)}
-                            className="
-                              p-1.5 rounded-md
-                              text-slate-500 hover:text-rose-400 hover:bg-rose-500/10
-                              opacity-0 group-hover:opacity-100
-                              transition-all duration-200
-                            "
-                            title="Delete volume"
-                            aria-label="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </td>
+                      {isAdmin && (
+                        <td className="px-3 py-2 text-right">
+                          {!batchMode && (
+                            <Hint label="Delete volume">
+                              <button
+                                type="button"
+                                onClick={() => requestDelete(vol.name)}
+                                className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER} ${REVEAL} ${FOCUS_RING} ml-auto`}
+                                aria-label={`Delete the volume ${vol.name}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </Hint>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
