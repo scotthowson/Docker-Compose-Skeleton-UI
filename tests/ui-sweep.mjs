@@ -107,7 +107,7 @@ const OPENERS = {
   proxmox: ['New VM stack', 'Link VMs', 'Join code', 'Add member', 'media-vm', 'networking-security', 'dns', 'Manage media-vm', /^\d+ containers · \d+ running$/, 'Link…'],
 }
 // the ones among them that switch something on that a later run would inherit: clicked a second time
-const TWICE = /^(Batch Select|Batch mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/
+const TWICE = /^(Batch Select|Batch mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/i
 const MAX_CLICKS = 24
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -270,7 +270,7 @@ async function safeTargets(page, pageId) {
   const openerSpec = (OPENERS[pageId] ?? []).map((o) => (o instanceof RegExp ? { re: o.source } : { exact: o }))
   return page.evaluate((spec, safeSrc, destructiveSrc) => {
     const SAFE = new RegExp(safeSrc, 'i'), DESTRUCTIVE = new RegExp(destructiveSrc, 'i')
-    const openers = { includes: (n) => spec.some((s) => (s.exact !== undefined ? s.exact === n : new RegExp(s.re).test(n))) }
+    const openers = { includes: (n) => spec.some((s) => (s.exact !== undefined ? s.exact.toLowerCase() === n.toLowerCase() : new RegExp(s.re).test(n))) }
     const visible = (el) => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && !el.closest('[aria-hidden="true"]')
     const name = (el) => (el.getAttribute('aria-label') || el.innerText || el.getAttribute('title') || '').trim().replace(/\s+/g, ' ')
     const found = []
