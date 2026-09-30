@@ -17,13 +17,17 @@ import { fetchHomarrIntegration, saveHomarrKey, removeHomarrKey, syncHomarrRoute
 import { ApiError } from '../../api/client'
 import { useConfirm } from '../common/ConfirmDialog'
 import { useToast } from '../common/Toast'
+import Hint from '../common/Hint'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, TONE_OK, TONE_DANGER } from '../../lib/ui'
+import { FOCUS_RING } from '../../lib/fieldStyles'
 import type { ProxmoxStatus } from '../../../shared/types'
 
 function CopyChip({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false)
   return (
-    <button onClick={() => { navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500) }).catch(() => {}) }}
-      className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5">
+    <button type="button" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500) }).catch(() => {}) }}
+      className={BTN_CARD_QUIET}>
       {done ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />} {done ? 'Copied' : label}
     </button>
   )
@@ -46,11 +50,11 @@ export function ProxmoxTestPanel({ url, tokenId, tokenSecret, verifyTls, secretS
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-[11px] text-slate-400">
           Tests the values above without saving them (a secret you typed is used; an empty one means the saved secret).
-          {secretSource === 'secret' && onOpenSecrets && <> The saved secret lives in the secret store — <button type="button" onClick={onOpenSecrets} className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">manage it on the Secrets page</button>.</>}
+          {secretSource === 'secret' && onOpenSecrets && <> The saved secret lives in the secret store — <button type="button" onClick={onOpenSecrets} className={`h-auto rounded text-emerald-400 hover:text-emerald-300 underline underline-offset-2 ${FOCUS_RING}`}>manage it on the {pageLabel('secrets')} page</button>.</>}
           {secretSource === 'env' && <span className="text-amber-300/90"> The saved secret sits in .env; save it once more to move it to the secret store.</span>}
         </div>
-        <button onClick={run} disabled={busy} className="h-9 px-3 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 disabled:opacity-50 flex items-center gap-1.5">
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />} Test connection
+        <button type="button" onClick={run} disabled={busy} className={BTN_TOOLBAR_QUIET}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />} Test connection
         </button>
       </div>
       {err && <div className="mt-2 text-xs text-rose-300 flex items-center gap-1.5"><XCircle size={13} /> {err}</div>}
@@ -102,7 +106,7 @@ export function TraefikFeedPanel({ enabled }: { enabled: boolean }) {
           <div className="flex items-center gap-2 flex-wrap">
             <code className="text-[11px] font-mono text-slate-300 bg-black/30 rounded-lg px-2 py-1 break-all">{f.token}</code>
             <CopyChip text={f.token} label="Copy token" />
-            <button onClick={rotate} disabled={rotating} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 disabled:opacity-50">
+            <button type="button" onClick={rotate} disabled={rotating} className={BTN_CARD_QUIET}>
               <RefreshCw size={12} className={rotating ? 'animate-spin' : ''} /> Rotate
             </button>
           </div>
@@ -213,7 +217,6 @@ export function HomarrPanel({ onOpenSecrets }: { onOpenSecrets?: () => void }) {
   const where = s.active
     ? [s.url, s.port && !s.url.endsWith(`:${s.port}`) ? `port ${s.port}` : '', s.has_api_key && s.boards !== undefined ? `${s.boards} board${s.boards === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')
     : ''
-  const btn = 'h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-300 hover:bg-white/10 disabled:opacity-50 flex items-center gap-1.5'
   return (
     <div className="mt-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -239,33 +242,35 @@ export function HomarrPanel({ onOpenSecrets }: { onOpenSecrets?: () => void }) {
                 autoComplete="off"
                 spellCheck={false}
                 aria-label="Homarr API key"
-                className="w-full h-9 pl-3 pr-9 rounded-lg bg-black/30 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 placeholder:font-sans focus:outline-none focus:border-orange-500/40"
+                className="w-full h-9 pl-3 pr-10 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 placeholder:font-sans focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
               />
-              <button type="button" onClick={() => setShowKey((v) => !v)} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-500 hover:text-slate-300" aria-label={showKey ? 'Hide the key' : 'Show the key'}>
-                {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
+              <Hint label={showKey ? 'Hide the key' : 'Show the key'}>
+                <button type="button" onClick={() => setShowKey((v) => !v)} className={`absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-7 sm:w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-300 ${FOCUS_RING}`} aria-label={showKey ? 'Hide the key' : 'Show the key'}>
+                  {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </Hint>
             </div>
-            <button type="submit" disabled={saving || !key.trim()} className="h-9 px-3 rounded-lg bg-orange-500/15 text-orange-200 border border-orange-500/25 text-xs font-medium hover:bg-orange-500/25 disabled:opacity-50 flex items-center gap-1.5">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />} Save &amp; test
+            <button type="submit" disabled={saving || !key.trim()} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />} Save and test
             </button>
             {s.has_api_key && (
-              <button type="button" onClick={remove} disabled={removing} className={btn}>
-                {removing ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Remove key
+              <button type="button" onClick={remove} disabled={removing} className={`${BTN_TOOLBAR} ${TONE_DANGER}`}>
+                {removing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Remove key
               </button>
             )}
-            <button type="button" onClick={sync} disabled={syncing} title="Register every routed service — the hub's own and the VMs' — that Homarr does not have yet" className={btn}>
-              <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} /> Sync routes now
+            <button type="button" onClick={sync} disabled={syncing} title="Register every routed service — the hub's own and the VMs' — that Homarr does not have yet" className={BTN_TOOLBAR_QUIET}>
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> Sync routes now
             </button>
           </form>
           <div className="text-[11px] text-slate-500">
             {s.has_api_key
-              ? <>The key is kept as the secret <code className="font-mono text-slate-400">HOMARR_API_KEY</code>{onOpenSecrets && <> (<button type="button" onClick={onOpenSecrets} className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">Secrets page</button>)</>}. A deploy with "Add to Homarr" creates the app and a tile on the home board.</>
+              ? <>The key is kept as the secret <code className="font-mono text-slate-400">HOMARR_API_KEY</code>{onOpenSecrets && <> (<button type="button" onClick={onOpenSecrets} className={`h-auto rounded text-emerald-400 hover:text-emerald-300 underline underline-offset-2 ${FOCUS_RING}`}>{pageLabel('secrets')} page</button>)</>}. A deploy with "Add to Homarr" creates the app and a tile on the home board.</>
               : <>Without a key a deploy with "Add to Homarr" only adds the app to Homarr's library — you drag it onto a board yourself.</>}
           </div>
           <ol className="text-[11px] text-slate-500 space-y-0.5 list-decimal pl-4 marker:text-slate-600">
             <li>In Homarr open your avatar → Manage → Tools → API keys → Create.</li>
             <li>Copy the key once — Homarr shows it only at that moment.</li>
-            <li>Paste it here and press Save &amp; test.</li>
+            <li>Paste it here and press Save and test.</li>
           </ol>
         </>
       )}
