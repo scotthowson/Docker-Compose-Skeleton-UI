@@ -4,12 +4,16 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
-  Play, Pause, Search, Download, Trash2, X,
-  ArrowDown, Filter, Loader2, RefreshCw,
+  Pause, Search, Download, Trash2, X,
+  ArrowDown, Filter, RefreshCw,
   AlertTriangle, AlertCircle, Info, Bug,
 } from 'lucide-react'
 import { fetchContainerLogsLiveOn, fetchAppLogsLiveOn } from '../../api/fleetScoped'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { LoadingState, EmptyState } from '../common/PageState'
+import Hint from '../common/Hint'
+import { BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM, TONE_QUIET } from '../../lib/ui'
+import { CARD, FOCUS_RING } from '../../lib/pageKit'
 import type { LogStreamEntry, LiveLogsResponse } from '../../../shared/types'
 import type { RowMember } from '../../../shared/fleetScoped'
 
@@ -266,23 +270,27 @@ export default function LiveLogViewer({
   // Render
   // -------------------------------------------------------------------------
 
+  const LEVEL_NAME: Record<LogLevel, string> = { error: 'errors', warn: 'warnings', info: 'info lines', debug: 'debug lines', unknown: 'other lines' }
+
   return (
-    <div className="flex flex-col h-full bg-slate-900/60 backdrop-blur-md border border-white/[0.05] rounded-xl overflow-hidden">
+    <div className={`${CARD} relative flex flex-col h-full overflow-hidden`}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 sm:px-4 py-2.5 border-b border-white/5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Live toggle */}
           <button
+            type="button"
             onClick={() => setIsLive(!isLive)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+            aria-pressed={isLive}
+            className={`${BTN_CARD} border ${FOCUS_RING} ${
               isLive
-                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
-                : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/25'
+                : 'bg-white/[0.03] text-slate-400 border-white/10 hover:bg-white/5'
             }`}
           >
             {isLive ? (
               <>
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2 w-2" aria-hidden>
                   <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-50 animate-ping" style={{ animationDuration: '2s' }} />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                 </span>
@@ -290,115 +298,137 @@ export default function LiveLogViewer({
               </>
             ) : (
               <>
-                <Pause size={12} />
+                <Pause size={12} aria-hidden />
                 Paused
               </>
             )}
           </button>
 
           {/* Level filter badges */}
-          <div className="flex items-center gap-1 ml-2">
-            {levelCounts.error > 0 && (
-              <button
-                onClick={() => setLevelFilter(levelFilter === 'error' ? 'all' : 'error')}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-all ${
-                  levelFilter === 'error'
-                    ? 'bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/30'
-                    : 'bg-rose-500/10 text-rose-400/70 hover:bg-rose-500/15'
-                }`}
-              >
-                <AlertCircle size={10} />
-                {levelCounts.error}
-              </button>
-            )}
-            {levelCounts.warn > 0 && (
-              <button
-                onClick={() => setLevelFilter(levelFilter === 'warn' ? 'all' : 'warn')}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-all ${
-                  levelFilter === 'warn'
-                    ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30'
-                    : 'bg-amber-500/10 text-amber-400/70 hover:bg-amber-500/15'
-                }`}
-              >
-                <AlertTriangle size={10} />
-                {levelCounts.warn}
-              </button>
-            )}
-          </div>
+          {levelCounts.error > 0 && (
+            <button
+              type="button"
+              aria-pressed={levelFilter === 'error'}
+              aria-label={`Show only errors (${levelCounts.error})`}
+              onClick={() => setLevelFilter(levelFilter === 'error' ? 'all' : 'error')}
+              className={`${BTN_CARD} font-semibold ${FOCUS_RING} ${
+                levelFilter === 'error'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  : 'bg-rose-500/10 text-rose-300/80 border border-rose-500/15 hover:bg-rose-500/15'
+              }`}
+            >
+              <AlertCircle size={11} aria-hidden />
+              {levelCounts.error}
+            </button>
+          )}
+          {levelCounts.warn > 0 && (
+            <button
+              type="button"
+              aria-pressed={levelFilter === 'warn'}
+              aria-label={`Show only warnings (${levelCounts.warn})`}
+              onClick={() => setLevelFilter(levelFilter === 'warn' ? 'all' : 'warn')}
+              className={`${BTN_CARD} font-semibold ${FOCUS_RING} ${
+                levelFilter === 'warn'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  : 'bg-amber-500/10 text-amber-300/80 border border-amber-500/15 hover:bg-amber-500/15'
+              }`}
+            >
+              <AlertTriangle size={11} aria-hidden />
+              {levelCounts.warn}
+            </button>
+          )}
 
           {/* Line count */}
-          <span className="text-[10px] text-slate-500 ml-2 tabular-nums">
+          <span className="text-[11px] text-slate-500 tabular-nums" role="status">
             {filteredLines.length} / {lines.length} lines
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           {/* Search */}
-          <div className="relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+          <div className="relative flex-1 sm:flex-none">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter..."
-              className="w-40 pl-7 pr-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:w-56 transition-all"
+              aria-label="Filter the lines"
+              placeholder="Filter…"
+              className="w-full sm:w-40 sm:focus:w-56 h-8 pl-8 pr-8 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-all"
             />
             {search && (
-              <button aria-label="Clear the search"
-                onClick={() => setSearch('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-              >
-                <X size={10} />
-              </button>
+              <Hint label="Clear the filter">
+                <button
+                  type="button"
+                  aria-label="Clear the filter"
+                  onClick={() => setSearch('')}
+                  className={`absolute right-0.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-slate-300 ${FOCUS_RING}`}
+                >
+                  <X size={12} />
+                </button>
+              </Hint>
             )}
           </div>
 
           {/* Filter dropdown */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-1.5 rounded-lg border transition-all ${
-              levelFilter !== 'all'
-                ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
-                : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
-            }`}
-            title="Level filter"
-          >
-            <Filter size={13} />
-          </button>
+          <Hint label="Level filter">
+            <button
+              type="button"
+              aria-label="Level filter"
+              aria-expanded={showFilters}
+              onClick={() => setShowFilters(!showFilters)}
+              className={`${BTN_ICON_SM} border ${FOCUS_RING} ${
+                levelFilter !== 'all'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                  : TONE_QUIET
+              }`}
+            >
+              <Filter size={13} />
+            </button>
+          </Hint>
 
           {/* Export */}
-          <button
-            onClick={handleExport}
-            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/5 hover:bg-white/5 hover:text-slate-400 transition-all"
-            title="Export logs"
-          >
-            <Download size={13} />
-          </button>
+          <Hint label="Export the lines">
+            <button
+              type="button"
+              aria-label="Export the lines"
+              onClick={handleExport}
+              className={`${BTN_ICON_SM} ${TONE_QUIET} ${FOCUS_RING}`}
+            >
+              <Download size={13} />
+            </button>
+          </Hint>
 
           {/* Clear */}
-          <button
-            onClick={handleClear}
-            className="p-1.5 rounded-lg bg-white/[0.03] text-slate-500 border border-white/5 hover:bg-white/5 hover:text-rose-400 transition-all"
-            title="Clear buffer"
-          >
-            <Trash2 size={13} />
-          </button>
+          <Hint label="Clear the buffer">
+            <button
+              type="button"
+              aria-label="Clear the buffer"
+              onClick={handleClear}
+              className={`${BTN_ICON_SM} ${TONE_QUIET} hover:text-rose-300 ${FOCUS_RING}`}
+            >
+              <Trash2 size={13} />
+            </button>
+          </Hint>
         </div>
       </div>
 
       {/* Level filter dropdown */}
       {showFilters && (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-white/5 bg-white/[0.03]">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider mr-2">Level:</span>
+        <div className="flex flex-wrap items-center gap-1.5 px-3 sm:px-4 py-2 border-b border-white/5 bg-white/[0.03]">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider mr-2">Level</span>
           {(['all', 'error', 'warn', 'info', 'debug'] as const).map((level) => (
             <button
+              type="button"
               key={level}
+              aria-pressed={levelFilter === level}
               onClick={() => { setLevelFilter(level); setShowFilters(false) }}
-              className={`px-2 py-1 rounded text-[10px] font-medium border transition-all ${
+              className={`${BTN_CARD} font-medium ${FOCUS_RING} ${
                 levelFilter === level
-                  ? 'bg-white/[0.08] text-slate-200 border-white/10'
-                  : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-slate-100 border border-white/15'
+                  : 'bg-white/[0.03] text-slate-400 border border-white/10 hover:bg-white/5'
               }`}
+              title={level === 'all' ? undefined : `Only ${LEVEL_NAME[level]}`}
             >
               {level === 'all' ? 'All' : level.toUpperCase()}
             </button>
@@ -412,19 +442,14 @@ export default function LiveLogViewer({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto scrollbar-thin font-mono text-[11px] leading-relaxed"
       >
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin text-slate-500" />
-          </div>
-        )}
+        {loading && <LoadingState compact label="Reading the log…" />}
 
         {!loading && filteredLines.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 gap-2">
-            <RefreshCw size={18} className="text-slate-700" />
-            <p className="text-xs text-slate-500">
-              {search || levelFilter !== 'all' ? 'No lines match your filter' : 'Waiting for log output...'}
-            </p>
-          </div>
+          <EmptyState
+            compact
+            icon={<RefreshCw size={22} />}
+            title={search || levelFilter !== 'all' ? 'No lines match your filter' : 'Waiting for log output…'}
+          />
         )}
 
         {filteredLines.map((entry, idx) => {
@@ -433,7 +458,7 @@ export default function LiveLogViewer({
           return (
             <div
               key={`${entry.timestamp}-${idx}`}
-              className={`flex items-start gap-2 px-4 py-0.5 hover:bg-white/[0.03] ${cfg.bg} transition-colors`}
+              className={`flex items-start gap-2 px-3 sm:px-4 py-0.5 hover:bg-white/[0.03] ${cfg.bg} transition-colors`}
             >
               {/* Timestamp */}
               {entry.timestamp && (
@@ -446,7 +471,7 @@ export default function LiveLogViewer({
               {cfg.label && (
                 <span className={`shrink-0 flex items-center gap-0.5 ${cfg.color} select-none w-12`}>
                   {cfg.icon}
-                  <span className="text-[9px] font-bold">{cfg.label}</span>
+                  <span className="text-[10px] font-bold">{cfg.label}</span>
                 </span>
               )}
 
@@ -463,11 +488,12 @@ export default function LiveLogViewer({
       {!autoScroll && (
         <div className="absolute bottom-4 right-4">
           <button
+            type="button"
             onClick={scrollToBottom}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 text-slate-300 border border-white/10 shadow-lg hover:bg-slate-700/90 transition-all animate-fade-in"
+            className={`${BTN_CARD_QUIET} !h-9 bg-slate-800/90 shadow-lg animate-fade-in ${FOCUS_RING}`}
           >
-            <ArrowDown size={14} />
-            <span className="text-[11px] font-medium">Scroll to bottom</span>
+            <ArrowDown size={14} aria-hidden />
+            Scroll to bottom
           </button>
         </div>
       )}
