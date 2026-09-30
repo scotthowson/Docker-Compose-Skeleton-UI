@@ -97,6 +97,14 @@ function stateBadge(state: string) {
 
 type Tab = 'containers' | 'services' | 'logs'
 
+/** a container's ports as chips: an IPv6 binding that mirrors an IPv4 one (":::3001->…" beside "0.0.0.0:3001->…") is one port, not two */
+function portChips(ports: string): string[] {
+  const all = ports.split(',').map((p) => p.trim()).filter(Boolean)
+  const v6 = (p: string) => p.startsWith(':::') || p.startsWith('[::]')
+  const hostPort = (p: string) => p.split('->')[0].match(/:(\d+)$/)?.[1] ?? p
+  return all.filter((p) => !v6(p) || !all.some((o) => o !== p && !v6(o) && hostPort(o) === hostPort(p)))
+}
+
 export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick, isAdmin = false, stack = null }: Props) {
   // a VM stack: the VM is the stack — its power is part of the stack's controls
   const isVm = stack?.placement === 'vm'
@@ -702,13 +710,13 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
                   <td className="px-3 py-3">
                     {c.ports ? (
                       <div className="flex flex-wrap gap-1">
-                        {c.ports.split(',').map((port) => (
+                        {portChips(c.ports).map((port) => (
                           <span
-                            key={port.trim()}
+                            key={port}
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400 font-mono ring-1 ring-cyan-500/20"
                           >
                             <Network className="w-2.5 h-2.5" />
-                            {port.trim()}
+                            {port}
                           </span>
                         ))}
                       </div>

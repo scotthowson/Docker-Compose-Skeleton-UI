@@ -134,8 +134,6 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
 
   const stateKey = container.state.toLowerCase()
   const sv = STATE_VARIANTS[stateKey] ?? DEFAULT_STATE_VARIANT
-  const healthKey = container.health.toLowerCase()
-  const hv = HEALTH_VARIANTS[healthKey] ?? DEFAULT_HEALTH_VARIANT
 
   const { cpuPct, memPct, has: hasUsage } = rowUsage(container, stats)
   const isRunning = stateKey === 'running'

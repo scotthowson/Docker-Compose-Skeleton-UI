@@ -57,7 +57,6 @@ const Images: React.FC = () => {
   const [batchMode, setBatchMode] = useState(false)
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
   const [batchLoading, setBatchLoading] = useState(false)
-  const [batchResults, setBatchResults] = useState<Array<{ id: string; success: boolean; message: string }> | null>(null)
   const { addToast } = useToast()
   const confirm = useConfirm()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
@@ -217,7 +216,6 @@ const Images: React.FC = () => {
     setBatchMode(prev => {
       if (prev) {
         setSelectedImages(new Set())
-        setBatchResults(null)
       }
       return !prev
     })
@@ -250,7 +248,6 @@ const Images: React.FC = () => {
       danger: true,
     }))) return
     setBatchLoading(true)
-    setBatchResults(null)
 
     const results: Array<{ id: string; success: boolean; message: string }> = []
 
@@ -264,7 +261,6 @@ const Images: React.FC = () => {
       }
     }
 
-    setBatchResults(results)
     setBatchLoading(false)
 
     const successCount = results.filter(r => r.success).length

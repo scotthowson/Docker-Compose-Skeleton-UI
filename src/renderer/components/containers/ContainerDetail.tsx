@@ -3,7 +3,7 @@
 // =============================================================================
 
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
-import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcessesResponse, ContainerProcess } from '../../../shared/types'
+import { ContainerInfo, ContainerDetail as ContainerDetailType, ContainerStats, ContainerProcess } from '../../../shared/types'
 import { useContainerStore, selectStatsHistory } from '../../stores/containerStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
@@ -16,7 +16,6 @@ import {
   execContainerCommandOn,
   renameContainerOn,
   updateContainerEnvOn,
-  setContainerSablierOn,
 } from '../../api/fleetScoped'
 import type { RowMember } from '../../../shared/fleetScoped'
 import VmCapsule from '../fleet/VmCapsule'
@@ -59,7 +58,6 @@ import {
   Box,
   Clock,
   Globe,
-  FolderOpen,
   Variable,
   Info,
   Activity,
@@ -138,15 +136,6 @@ function parseEnvString(envStr: string): Array<{ key: string; value: string }> {
         value: line.slice(idx + 1).trim(),
       }
     })
-}
-
-/** Parse mounts string (newline or comma-separated). */
-function parseMounts(mountStr: string): string[] {
-  if (!mountStr || mountStr === '--') return []
-  return mountStr
-    .split(/[\n,]/)
-    .map((m) => m.trim())
-    .filter(Boolean)
 }
 
 /** Parse networks string (newline or comma-separated). */
@@ -551,6 +540,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const mountedRef = useRef(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // leaving the rename field without renaming puts the keyboard back on the pencil that opened it
+  const cancelRename = useCallback(() => {
+    setRenaming(false)
+    setRenameValue(containerName)
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-rename-open]')?.focus())
+  }, [containerName])
+
   // leaving the detail for the list puts the keyboard back on this container's row (the list's desktop table or its phone cards, whichever is on screen)
   useEffect(() => () => {
     requestAnimationFrame(() => {
@@ -862,7 +858,6 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
   // Derived data
   const envEntries = detail ? parseEnvString(detail.environment) : []
-  const mounts = detail ? parseMounts(detail.mounts) : []
   const networks = detail ? parseNetworks(detail.networks) : []
   const portMappings = parsePortMappings(containerInfo.ports)
   const mountEntries = detail ? parseMountEntries(detail.mounts) : []
@@ -919,7 +914,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleRename()
-                  if (e.key === 'Escape') { e.stopPropagation(); setRenaming(false); setRenameValue(containerName) }
+                  if (e.key === 'Escape') { e.stopPropagation(); cancelRename() }
                 }}
                 className="px-2 py-1 text-base md:text-lg font-bold text-slate-100 bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0 flex-1"
               />
@@ -929,7 +924,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 </button>
               </Hint>
               <Hint label="Cancel">
-                <button aria-label="Cancel" onClick={() => { setRenaming(false); setRenameValue(containerName) }} className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}>
+                <button aria-label="Cancel" onClick={cancelRename} className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}>
                   <X size={16} />
                 </button>
               </Hint>
@@ -940,6 +935,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               <Hint label="Rename the container">
                 <button
                   onClick={() => setRenaming(true)}
+                  data-rename-open
                   aria-label="Rename the container"
                   className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}
                 >

@@ -5,7 +5,7 @@
 // like a first install. Shows exactly what will go before asking for the name.
 // =============================================================================
 
-import React, { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bomb, Loader2, FolderX, Database, ShieldCheck, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { fetchContainerResetPreviewOn, resetContainerOn } from '../../api/fleetScoped'

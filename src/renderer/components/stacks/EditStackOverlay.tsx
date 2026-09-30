@@ -325,16 +325,6 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
     return map
   }, [composeDiagnostics])
 
-  const envLintMap = useMemo(() => {
-    const map = new Map<number, typeof envDiagnostics>()
-    for (const d of envDiagnostics) {
-      const arr = map.get(d.line) || []
-      arr.push(d)
-      map.set(d.line, arr)
-    }
-    return map
-  }, [envDiagnostics])
-
   // Compose history
   const [composeVersions, setComposeVersions] = useState<ComposeVersion[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -605,7 +595,6 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
 
       // Also run client-side lint for port conflicts and other warnings
       const lintIssues = composeDiagnostics.filter(d => d.severity === 'error' || d.severity === 'warning')
-      const portConflicts = composeDiagnostics.filter(d => d.rule === 'port-conflict')
       const lintErrors = composeDiagnostics.filter(d => d.severity === 'error')
 
       if (res.valid && lintErrors.length > 0) {
