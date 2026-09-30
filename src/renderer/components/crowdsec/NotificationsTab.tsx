@@ -413,7 +413,7 @@ function Editor({ data, refresh, refreshFailed }: { data: CrowdSecNotifyResponse
   const changes = describeChanges(patch, form.mode === 'custom' && urlTyped !== '' ? ['Webhook address'] : [])
   const rows = useMemo(() => (dirty && review ? changeRows(base, settingsNow, urlSend) : []), [dirty, review, base, settingsNow, urlSend])
   const previewPanel = (bare = false) => (
-    <PreviewPanel bare={bare} payload={previewPayload} loading={askServer && pv.loading && !clientProblem} problem={previewProblem} approximate={!askServer} samples={samples} sample={sampleNow} onSample={setSample}
+    <PreviewPanel bare={bare} payload={previewPayload} loading={askServer && pv.loading && !clientProblem} problem={previewProblem} approximate={!askServer} editable={isAdmin} samples={samples} sample={sampleNow} onSample={setSample}
       dark={dark} onDark={setDark} isAdmin={isAdmin} testBlocked={testBlocked} testing={testing} onTest={sendTest} includeMention={includeMention} onIncludeMention={setIncludeMention}
       hasMention={mentionTag(settingsNow.mention) !== ''} test={lastTest ? { ...lastTest } : null} testWebhook={test?.webhook} unsaved={dirty}
       lastApply={server.status.last_apply} deliveryErrors={server.status.delivery_errors} />

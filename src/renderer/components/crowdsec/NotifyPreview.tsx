@@ -19,6 +19,8 @@ export interface PreviewPanelProps {
   /** why the settings on the page cannot be drawn (the server's own words) */
   problem: string | null
   approximate: boolean
+  /** the person can change the settings (the preview then follows what is typed); a viewer only reads */
+  editable?: boolean
   samples: string[]
   sample: string
   onSample: (s: string) => void
@@ -61,7 +63,7 @@ export default function PreviewPanel(p: PreviewPanelProps) {
 
       {p.approximate
         ? <Notice tone="info" icon={Info}>This is drawn here from example values, so it is close but not exact. An administrator sees the message exactly as the server builds it.</Notice>
-        : <p className="text-xs text-slate-500 leading-relaxed">Drawn by the server, so it is what CrowdSec sends. It updates as you type.</p>}
+        : <p className="text-xs text-slate-500 leading-relaxed">Drawn by the server, so it is what CrowdSec sends.{p.editable === false ? '' : ' It updates as you type.'}</p>}
 
       {p.approximate ? null : (
         <div>
