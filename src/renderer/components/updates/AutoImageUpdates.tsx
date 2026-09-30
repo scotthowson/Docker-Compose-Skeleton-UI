@@ -41,13 +41,13 @@ function ago(iso?: string | null): string {
   return `${Math.floor(s / 86400)} d ago`
 }
 
-export default function AutoImageUpdates({ scope, members, recreateDefault }: { scope: FleetScope; members: ScopeMember[]; recreateDefault: boolean }) {
+export default function AutoImageUpdates({ scope, members }: { scope: FleetScope; members: ScopeMember[] }) {
   const { addToast } = useToast()
   const [list, setList] = useState<Schedule[] | null>(null)
   const [silent, setSilent] = useState<string[]>([])   // servers that did not answer the schedule list
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [recreateNew, setRecreateNew] = useState(recreateDefault)
+  const [recreateNew, setRecreateNew] = useState(true)   // a new schedule pulls and recreates unless told otherwise
 
   // every server the choice above reaches: null = the hub, otherwise a VM
   const targets = useMemo<(string | null)[]>(() => (scope === 'all' ? [null, ...members.map((m) => m.id)] : [scopeMember(scope)]), [scope, members])

@@ -9,7 +9,6 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { Switch } from '@mantine/core'
 import {
   Download,
   RefreshCw,
@@ -481,14 +480,7 @@ export default function Updates() {
   const [registryChecking, setRegistryChecking] = useState(false)
   const [updatingImages, setUpdatingImages] = useState<Set<string>>(new Set())
   const [bulkUpdating, setBulkUpdating] = useState(false)
-  // Recreate the Compose services right after a pull. Off = pull only: the
-  // containers keep running on the old image until someone recreates them.
-  const [recreate, setRecreate] = useState<boolean>(() => {
-    try { return localStorage.getItem('updates.recreate') !== 'false' } catch { return true }
-  })
-  useEffect(() => {
-    try { localStorage.setItem('updates.recreate', recreate ? 'true' : 'false') } catch { /* storage unavailable */ }
-  }, [recreate])
+  // A manual update pulls the newer image AND recreates the Compose services that run the old copy. (The unattended runs have their own choice, in Automatic image updates.)
   // Outcome of the last bulk run per image, shown in the row until the next registry check
   const [bulkResults, setBulkResults] = useState<Record<string, 'done' | 'failed'>>({})
 
@@ -550,12 +542,12 @@ export default function Updates() {
   const bulkTargets = useMemo(() => {
     const seen = new Set<string>()
     const out: ImageUpdateInfo[] = []
-    for (const img of [...updatableImages, ...staleImages, ...(recreate ? outdatedImages : [])]) {
+    for (const img of [...updatableImages, ...staleImages, ...outdatedImages]) {
       const k = rowKey(img)
       if (!seen.has(k)) { seen.add(k); out.push(img) }
     }
     return out
-  }, [updatableImages, staleImages, outdatedImages, recreate])
+  }, [updatableImages, staleImages, outdatedImages])
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null)
 
   // ---- Check registry for updates (slow POST): everywhere at once, or one DCS ----
@@ -600,7 +592,7 @@ export default function Updates() {
       if (updatingImages.has(key)) return
       setUpdatingImages((prev) => new Set(prev).add(key))
       try {
-        const result = await updateImage(img.image, { recreate }, member)
+        const result = await updateImage(img.image, { recreate: true }, member)
         if (result.success) {
           const parts: string[] = []
           if (result.containers_restarted.length > 0) parts.push(`recreated ${result.containers_restarted.join(', ')}`)
@@ -608,7 +600,7 @@ export default function Updates() {
           if (result.containers_skipped?.length) parts.push(`${result.containers_skipped.join(', ')} skipped (not Compose-managed)`)
           const tail = parts.length
             ? ` — ${parts.join('; ')}`
-            : recreate ? ' — no running container was on an older copy' : ' — containers keep running on the old image until they are recreated'
+            : ' — no running container was on an older copy'
           addToast({
             type: result.containers_failed?.length ? 'warning' : 'success',
             message: `Pulled ${img.image}${where}${tail}`,
@@ -632,7 +624,7 @@ export default function Updates() {
         })
       }
     },
-    [updatingImages, addToast, refresh, recreate, imgScope, scopeMember],
+    [updatingImages, addToast, refresh, imgScope, scopeMember],
   )
 
   // ---- Update every image with a confirmed update or a stale age, each on its own DCS ----
@@ -651,7 +643,7 @@ export default function Updates() {
       const key = rowKey(img)
       setBulkProgress({ done: i, total: bulkTargets.length, current: key })
       try {
-        const result = await updateImage(img.image, { recreate }, img.member ?? scopeMember)
+        const result = await updateImage(img.image, { recreate: true }, img.member ?? scopeMember)
         if (result.success) {
           successCount++
           restarted.push(...result.containers_restarted)
@@ -674,8 +666,7 @@ export default function Updates() {
       if (restarted.length) parts.push(`recreated ${restarted.join(', ')}`)
       if (failedContainers.length) parts.push(`${failedContainers.join(', ')} did not come back up`)
       if (skipped.length) parts.push(`${skipped.length} not Compose-managed, left running`)
-      if (!recreate) parts.push('containers keep running on the old image until they are recreated')
-      else if (restarted.length === 0 && failedContainers.length === 0) parts.push('no running container was on an older copy')
+      if (restarted.length === 0 && failedContainers.length === 0) parts.push('no running container was on an older copy')
       addToast({
         type: failedContainers.length ? 'warning' : 'success',
         message: `Pulled ${successCount} image${successCount !== 1 ? 's' : ''}${imgScope === 'all' ? ' across the fleet' : scopeName ? ` on ${scopeName}` : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}${parts.length ? ` — ${parts.join('; ')}` : ''}`,
@@ -691,7 +682,7 @@ export default function Updates() {
 
     refresh()
     setBulkUpdating(false)
-  }, [bulkUpdating, bulkTargets, addToast, refresh, recreate, imgScope, scopeMember, scopeName])
+  }, [bulkUpdating, bulkTargets, addToast, refresh, imgScope, scopeMember, scopeName])
 
   // ---- Disconnected ----
   if (!isConnected) {
@@ -1193,18 +1184,9 @@ export default function Updates() {
           title="Docker images"
           sub={imgScope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
           actions={<>
-            {/* What happens after a pull */}
-            {isAdmin && (
-              <Hint label="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them.">
-                <div className="flex items-center h-[34px] px-3 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:text-slate-200 hover:border-white/15 transition-colors">
-                  <Switch size="xs" checked={recreate} onChange={(e) => setRecreate(e.currentTarget.checked)} label="Recreate containers" styles={{ label: { fontSize: 11, paddingInlineStart: 8 } }} />
-                </div>
-              </Hint>
-            )}
-
             {/* Update all — prioritizes images with confirmed registry updates */}
             {isAdmin && bulkTargets.length > 0 && (
-              <Hint label={recreate ? 'Pulls each image and recreates the Compose services that use it' : 'Pulls each image; the containers are not recreated'}>
+              <Hint label="Pulls each image and recreates the Compose services that use it">
                 <button type="button" onClick={handleUpdateAllStale} disabled={bulkUpdating} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
                   {bulkUpdating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                   {bulkProgress
@@ -1251,9 +1233,9 @@ export default function Updates() {
                 {outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0)} container{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? '' : 's'} still run{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? 's' : ''} an older copy of {outdatedImages.length === 1 ? 'an image' : `${outdatedImages.length} images`} that was pulled since (an update that only pulled, or one from an earlier version that did not recreate them). Update recreates them on the current copy.
               </span>
               {isAdmin && (
-                <Hint label={recreate ? 'Recreate the Compose services on the current copy of their image' : 'Turn on "Recreate containers" first'}>
+                <Hint label="Recreate the Compose services on the current copy of their image">
                   <span className="inline-flex shrink-0">
-                    <button type="button" onClick={handleUpdateAllStale} disabled={bulkUpdating || !recreate} className={`${BTN_CARD} ${TONE_ATTN} disabled:cursor-not-allowed`}>
+                    <button type="button" onClick={handleUpdateAllStale} disabled={bulkUpdating} className={`${BTN_CARD} ${TONE_ATTN} disabled:cursor-not-allowed`}>
                       Recreate now
                     </button>
                   </span>
@@ -1261,7 +1243,7 @@ export default function Updates() {
               )}
             </div>
           )}
-          {isAdmin && <AutoImageUpdates scope={imgScope} members={scopeMembers} recreateDefault={recreate} />}
+          {isAdmin && <AutoImageUpdates scope={imgScope} members={scopeMembers} />}
         </div>
 
         {/* ---- Summary stat cards ---- */}
@@ -1389,11 +1371,11 @@ export default function Updates() {
                           ? 'bg-white/[0.03] border border-white/5 text-slate-500 cursor-default'
                           : TONE_OK
                     const rowHint = needsRecreate
-                      ? (recreate ? `${oldCopy.join(', ')} still run${oldCopy.length === 1 ? 's' : ''} an older copy of this image — recreate ${oldCopy.length === 1 ? 'it' : 'them'} on the current one` : 'Turn on "Recreate containers" to move the containers onto the current copy')
+                      ? `${oldCopy.join(', ')} still run${oldCopy.length === 1 ? 's' : ''} an older copy of this image — recreate ${oldCopy.length === 1 ? 'it' : 'them'} on the current one`
                       : img.update_available === true
-                        ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated')
+                        ? 'A newer digest is published — pull it and recreate the containers'
                         : img.staleness === 'stale'
-                          ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated')
+                          ? 'Pull the tag again and recreate the containers'
                           : 'Nothing newer is known for this tag'
                     return (
                       <tr
@@ -1467,7 +1449,7 @@ export default function Updates() {
                             {img.update_available === true && <Pill tone="cyan" icon={<ArrowUpCircle size={10} />}>Update</Pill>}
                             {img.update_available === false && <Pill tone="slate" icon={<CheckCircle size={10} />}>Latest</Pill>}
                             {bulkState === 'done' && !isUpdating && (
-                              <Pill tone="emerald" icon={<CheckCircle size={10} />} title={recreate ? 'Pulled and recreated in this run' : 'Pulled in this run (containers not recreated)'}>Updated</Pill>
+                              <Pill tone="emerald" icon={<CheckCircle size={10} />} title="Pulled and recreated in this run">Updated</Pill>
                             )}
                             {bulkState === 'failed' && !isUpdating && <Pill tone="rose">Failed</Pill>}
                             {queued && <Pill tone="slate">Queued</Pill>}
