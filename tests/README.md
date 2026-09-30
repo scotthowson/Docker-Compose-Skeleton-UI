@@ -23,3 +23,11 @@ tests/lab/lab.sh stop
 the AIO checkout named by `AIO` (read-only) into `LAB` (default `/tmp/dcs-ui-lab`); its APIs never reach a
 Docker daemon — `tests/lab/bin/docker` answers the read-only calls from a fixed set of containers and refuses
 every call that would change something. The lab's throwaway admin is `lab` / `Lab-Only-Pass-123`.
+
+`tests/signin-plain-password.mjs` is a second, small check against the same lab: an admin hands out a password with no uppercase letter and no number (the server asks for 8
+characters), and the person must sign in with it on a device that has never seen them and on a second one, while a wrong password is still refused. Before 4.0.2 the app held the
+local copy of such an account to the rules of choosing a password and refused the first sign-in.
+
+```bash
+PUPPETEER_DIR=/tmp/dcs-ui-sweep node tests/signin-plain-password.mjs
+```

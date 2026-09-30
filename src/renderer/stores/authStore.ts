@@ -414,15 +414,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false
     }
 
-    if (password.length < 8) {
-      set({ error: 'Password must be at least 8 characters' })
-      return false
-    }
+    // The rules below are for a person CHOOSING a password (the first admin, an invite). `overwrite` is how the sign-in asks for the local
+    // copy of an account the server has just accepted (a new device, another server, a changed password), and the invite page after the server
+    // took the invite: the server decides what a password may be (8 characters; an admin can hand out a plain one), and this copy only
+    // serves the app lock. Holding it to a stricter rule locked such a person out of their first sign-in on every new device.
+    if (!opts?.overwrite) {
+      if (password.length < 8) {
+        set({ error: 'Password must be at least 8 characters' })
+        return false
+      }
 
-    // Password strength check
-    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      set({ error: 'Password must contain at least one uppercase letter and one number' })
-      return false
+      // Password strength check
+      if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        set({ error: 'Password must contain at least one uppercase letter and one number' })
+        return false
+      }
     }
 
     const accounts = await getAccounts()
