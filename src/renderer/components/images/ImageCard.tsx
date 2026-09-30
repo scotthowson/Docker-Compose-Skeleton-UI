@@ -6,6 +6,7 @@ import React from 'react'
 import { ImageInfo } from '../../../shared/types'
 import VmCapsule from '../fleet/VmCapsule'
 import { HardDrive, Tag, Clock, Hash, ArrowUpCircle, CheckCircle } from 'lucide-react'
+import { shortCreated, imageKey } from './imageFormat'
 
 // ---------------------------------------------------------------------------
 // Staleness styling
@@ -74,21 +75,45 @@ interface ImageCardProps {
   image: ImageInfo
   /** the fleet view: the card says where the image lives */
   showWhere?: boolean
+  /** batch mode: the card is a check box (click it, or its box) */
+  batchMode?: boolean
+  selected?: boolean
+  onToggle?: (key: string) => void
 }
 
-const ImageCard: React.FC<ImageCardProps> = ({ image, showWhere = false }) => {
+const ImageCard: React.FC<ImageCardProps> = ({ image, showWhere = false, batchMode = false, selected = false, onToggle }) => {
   const style = STALENESS_STYLES[image.staleness] ?? STALENESS_STYLES.unknown
   const pct = agePercent(image.age_days)
+  const picked = batchMode && selected
 
   return (
-    <div className="glass-subtle glass-hover p-4 flex flex-col gap-3">
+    <div
+      onClick={batchMode ? () => onToggle?.(imageKey(image)) : undefined}
+      className={`glass-subtle glass-hover p-4 flex flex-col gap-3 ${batchMode ? 'cursor-pointer' : ''} ${picked ? 'ring-1 ring-cyan-500/40 bg-cyan-500/[0.06]' : ''}`}
+    >
       {/* Header: repo:tag + staleness badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          {batchMode && (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={picked}
+              aria-label={`Select ${image.repository}:${image.tag}`}
+              onClick={(e) => { e.stopPropagation(); onToggle?.(imageKey(image)) }}
+              className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 transition-all ${picked ? 'bg-cyan-500 border-cyan-500' : 'bg-white/5 border-white/20 hover:border-white/40'}`}
+            >
+              {picked && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          )}
           <HardDrive className="h-4 w-4 text-cyan-400 flex-shrink-0" />
           <div className="min-w-0">
             {showWhere && <div className="mb-1"><VmCapsule member={image.member} name={image.member_name} vmid={image.vmid} size="xs" /></div>}
-            <p className="text-sm font-semibold text-white truncate" title={image.repository}>
+            <p className="text-sm font-semibold text-slate-100 truncate" title={image.repository}>
               {truncate(image.repository, 35)}
             </p>
             <div className="flex items-center gap-1 mt-0.5">
@@ -108,7 +133,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, showWhere = false }) => {
           {image.update_available === true && (
             <span title="Update available" className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400">
               <ArrowUpCircle size={9} />
-              New
+              Update
             </span>
           )}
           {image.update_available === false && (
@@ -153,7 +178,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, showWhere = false }) => {
         <div className="flex items-center gap-1">
           <Clock className="h-3 w-3 text-slate-500" />
           <span className="text-xs text-slate-500" title={image.created}>
-            {image.created}
+            {shortCreated(image.created)}
           </span>
         </div>
       </div>

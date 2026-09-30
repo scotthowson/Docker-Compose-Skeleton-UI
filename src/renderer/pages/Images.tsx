@@ -3,19 +3,22 @@
 // =============================================================================
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
 import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry, checkFleetImageRegistry } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
-
-/** a selection or row key: the image on its DCS (the hub's rows have no member) */
-export const imageKey = (i: { member?: string | null; id: string }) => `${i.member ?? ''}|${i.id}`
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import ImageList from '../components/images/ImageList'
 import ImageCard from '../components/images/ImageCard'
+import { imageKey } from '../components/images/imageFormat'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, TONE_QUIET, TONE_OK, TONE_DANGER } from '../lib/ui'
 import {
   HardDrive,
   CircleCheck,
@@ -33,7 +36,7 @@ import {
   X,
   Globe,
   RefreshCw,
-  Image,
+  PackageSearch,
   ArrowUpCircle,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
@@ -56,6 +59,7 @@ const Images: React.FC = () => {
   const [batchLoading, setBatchLoading] = useState(false)
   const [batchResults, setBatchResults] = useState<Array<{ id: string; success: boolean; message: string }> | null>(null)
   const { addToast } = useToast()
+  const confirm = useConfirm()
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
@@ -161,6 +165,12 @@ const Images: React.FC = () => {
   const handlePrune = useCallback(async () => {
     if (pruneLoading) return
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    if (!(await confirm({
+      title: 'Prune dangling images',
+      message: `Remove every dangling image (an untagged image that no container uses) ${scopeMember ? `on the VM ${memberName}` : 'on the hub'}? This cannot be undone.`,
+      confirmLabel: 'Prune',
+      danger: true,
+    }))) return
     setPruneLoading(true)
     try {
       const result = await runImagePrune(scopeMember)
@@ -183,7 +193,7 @@ const Images: React.FC = () => {
     } finally {
       setPruneLoading(false)
     }
-  }, [pruneLoading, addToast, handleFetch, scope, scopeMember])
+  }, [pruneLoading, addToast, confirm, handleFetch, scope, scopeMember, memberName])
 
   // Filter by search
   const filteredImages = useMemo(() => {
@@ -219,7 +229,7 @@ const Images: React.FC = () => {
   }, [])
 
   const handleSelectAll = useCallback(() => {
-    setSelectedImages(new Set(filteredImages.map(i => i.id)))
+    setSelectedImages(new Set(filteredImages.map(imageKey)))
   }, [filteredImages])
 
   const handleClearSelection = useCallback(() => {
@@ -228,6 +238,13 @@ const Images: React.FC = () => {
 
   const handleDeleteSelected = useCallback(async () => {
     if (selectedImages.size === 0 || batchLoading) return
+    const n = selectedImages.size
+    if (!(await confirm({
+      title: 'Delete images',
+      message: `Delete ${n} image${n !== 1 ? 's' : ''}? Docker refuses an image a container still uses; the rest cannot be brought back without pulling them again.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    }))) return
     setBatchLoading(true)
     setBatchResults(null)
 
@@ -255,7 +272,7 @@ const Images: React.FC = () => {
       addToast({ type: 'error', message: `${results.length - successCount} deletion${results.length - successCount !== 1 ? 's' : ''} failed`, duration: 5000 })
     }
     setSelectedImages(new Set())
-  }, [selectedImages, batchLoading, addToast, handleFetch])
+  }, [selectedImages, batchLoading, addToast, confirm, handleFetch])
 
   // Summary counts
   const counts = useMemo(() => {
@@ -267,150 +284,86 @@ const Images: React.FC = () => {
     return { total, current, aging, stale, updates }
   }, [images])
 
+  const selectedCount = selectedImages.size
+  const subtitle = scope === 'all'
+    ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}`
+    : scopeMember ? `The images inside the VM ${memberName}` : undefined
+  const openHubSearch = () => setActiveTab('search')
+
   return (
     <div className="h-full overflow-y-auto scrollbar-thin p-4 md:p-6">
       <DisconnectedBanner />
-      <div className="flex flex-col gap-5 animate-fade-in">
+      <div className="flex flex-col gap-4 md:gap-5 animate-fade-in">
         {/* ---- Header ---- */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-rose-500/20 border border-violet-500/10 flex items-center justify-center">
-              <Image className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Images</span></h1>
-              <p className="text-sm text-slate-400">
-                {scope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}` : scopeMember ? `The images inside the VM ${memberName}` : 'Track freshness — check registry for definitive update badges'}
-              </p>
-              {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Images on" busy={loading && images.length > 0} /></div>}
-            </div>
-          </div>
-
-          <div className="flex items-center flex-wrap gap-2 sm:gap-3">
-          {/* Check Registry */}
-          <button
-            onClick={handleCheckRegistry}
-            disabled={registryChecking || !isConnected}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-              registryChecking
-                ? 'bg-cyan-500/5 border-cyan-500/10 text-cyan-400/50 cursor-not-allowed'
-                : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/30 press'
-            } disabled:opacity-50`}
-            title="Compare local digests against upstream registries"
-          >
-            {registryChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            <span className="hidden sm:inline">{registryChecking ? 'Checking...' : 'Check Registry'}</span>
-          </button>
-
-          {/* Refresh */}
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          {/* Batch mode toggle — admin only (batch delete is destructive) */}
-          {isAdmin && (
-            <button
-              onClick={handleToggleBatch}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all duration-200 ${
-                batchMode
-                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                  : 'bg-white/5 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10'
-              }`}
-            >
-              <ListChecks className="h-3.5 w-3.5" />
-              {batchMode ? 'Exit Batch' : 'Batch Mode'}
+        <PageHeader
+          page="images"
+          subtitle={subtitle}
+          actions={<>
+            <Hint label="Compare the local digests with the upstream registries">
+              <button
+                onClick={handleCheckRegistry}
+                disabled={registryChecking || !isConnected}
+                aria-label={registryChecking ? 'Checking the registries' : 'Check registry'}
+                className={BTN_TOOLBAR_QUIET}
+              >
+                {registryChecking ? <Loader2 size={14} className="animate-spin" /> : <PackageSearch size={14} />}
+                <span className="hidden sm:inline">{registryChecking ? 'Checking…' : 'Check registry'}</span>
+              </button>
+            </Hint>
+            <button aria-label="Refresh" onClick={refresh} disabled={loading} className={BTN_TOOLBAR_QUIET}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
-          )}
-
-          {/* Prune dangling images */}
-          {isAdmin && (
-          <button
-            onClick={handlePrune}
-            disabled={pruneLoading}
-            className={`
-              flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
-              border backdrop-blur-sm transition-all duration-200
-              ${
-                pruneLoading
-                  ? 'bg-rose-500/5 border-rose-500/10 text-rose-400/50 cursor-not-allowed'
-                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 press'
-              }
-            `}
-          >
-            {pruneLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
+            {/* batch delete and prune are destructive: admins only */}
+            {isAdmin && (
+              <button
+                onClick={handleToggleBatch}
+                aria-label={batchMode ? 'Exit batch mode' : 'Batch mode'}
+                aria-pressed={batchMode}
+                className={`${BTN_TOOLBAR} ${batchMode ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+              >
+                <ListChecks size={14} />
+                <span className="hidden sm:inline">{batchMode ? 'Exit batch mode' : 'Batch mode'}</span>
+              </button>
             )}
-            Prune All Dangling
-          </button>
-          )}
+            {isAdmin && (
+              <Hint label="Remove the untagged images no container uses">
+                <button
+                  onClick={handlePrune}
+                  disabled={pruneLoading}
+                  aria-label="Prune dangling images"
+                  className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
+                >
+                  {pruneLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  <span className="hidden sm:inline">Prune dangling images</span>
+                </button>
+              </Hint>
+            )}
+            <SegmentedControl
+              aria-label="View"
+              value={viewMode}
+              onChange={(v) => setViewMode(v as 'table' | 'cards')}
+              data={[
+                { value: 'table', label: <Hint label="Table"><span className="flex items-center gap-1.5 py-0.5"><LayoutList size={14} aria-hidden /><span className="sr-only sm:not-sr-only">Table</span></span></Hint> },
+                { value: 'cards', label: <Hint label="Cards"><span className="flex items-center gap-1.5 py-0.5"><LayoutGrid size={14} aria-hidden /><span className="sr-only sm:not-sr-only">Cards</span></span></Hint> },
+              ]}
+            />
+          </>}
+        >
+          {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Images on" busy={loading && images.length > 0} />}
+        </PageHeader>
 
-          {/* View toggle */}
-          <div className="flex items-center gap-1 bg-white/5 border border-white/5 rounded-lg p-1 select-none">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`
-                flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
-                transition-all duration-200
-                ${
-                  viewMode === 'table'
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'text-slate-500 hover:text-slate-300'
-                }
-              `}
-            >
-              <LayoutList className="h-3.5 w-3.5" />
-              Table
-            </button>
-            <button
-              onClick={() => setViewMode('cards')}
-              className={`
-                flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
-                transition-all duration-200
-                ${
-                  viewMode === 'cards'
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'text-slate-500 hover:text-slate-300'
-                }
-              `}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Cards
-            </button>
-          </div>
-          </div>
-        </div>
-
-        {/* ---- Tab Toggle (Library / Docker Hub Search) ---- */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/5 self-start">
-          <button
-            onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              activeTab === 'library'
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-white/5 border border-transparent'
-            }`}
-          >
-            <HardDrive size={13} />
-            Image Library
-          </button>
-          <button
-            onClick={() => setActiveTab('search')}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              activeTab === 'search'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 shadow-sm'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-white/5 border border-transparent'
-            }`}
-          >
-            <Globe size={13} />
-            Docker Hub Search
-          </button>
+        {/* ---- Section: the library, or a search of Docker Hub; a phone swipes it sideways ---- */}
+        <div className="min-w-0 max-w-full self-start overflow-x-auto scrollbar-none">
+          <SegmentedControl
+            aria-label="Section"
+            value={activeTab}
+            onChange={(v) => setActiveTab(v as 'library' | 'search')}
+            data={[
+              { value: 'library', label: <span className="flex items-center gap-1.5"><HardDrive size={13} aria-hidden />Image library</span> },
+              { value: 'search', label: <span className="flex items-center gap-1.5"><Globe size={13} aria-hidden />Docker Hub search</span> },
+            ]}
+          />
         </div>
 
         {activeTab === 'library' && (
@@ -420,9 +373,10 @@ const Images: React.FC = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
           <input
             type="text"
+            aria-label="Search images"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search images by repository, tag, or ID..."
+            placeholder="Search images by repository, tag or ID…"
             className="
               w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
               bg-white/5 border border-white/10
@@ -440,36 +394,32 @@ const Images: React.FC = () => {
 
         {/* ---- Batch action bar ---- */}
         {batchMode && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
-            <span className="text-sm font-medium text-emerald-400">
-              {selectedImages.size} selected
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15 animate-fade-in">
+            <span className="text-xs font-semibold text-cyan-400">
+              {selectedCount} selected
             </span>
-            <div className="flex items-center gap-2 ml-auto">
-              <button onClick={handleSelectAll} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
-                Select All
-              </button>
-              <button onClick={handleClearSelection} className="px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
-                Clear
-              </button>
+            <div className="flex flex-wrap items-center gap-2 ml-auto">
+              <button onClick={handleSelectAll} className={BTN_CARD_QUIET}>Select all</button>
+              <button onClick={handleClearSelection} className={BTN_CARD_QUIET}>Clear</button>
               {isAdmin && (
-              <button
-                onClick={handleDeleteSelected}
-                disabled={selectedImages.size === 0 || batchLoading}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-rose-500 hover:bg-rose-400 shadow-lg shadow-rose-500/20 disabled:opacity-50 transition-all"
-              >
-                {batchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                Delete Selected
-              </button>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={selectedCount === 0 || batchLoading}
+                  className={`${BTN_CARD} ${TONE_DANGER}`}
+                >
+                  {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                  Delete selected
+                </button>
               )}
             </div>
           </div>
         )}
 
         {/* ---- Summary stat cards ---- */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-children">
+        <div className={`grid grid-cols-2 ${counts.updates > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-3 stagger-children`}>
           <SummaryCard
             icon={<HardDrive className="h-4 w-4 text-cyan-400" />}
-            label="Total Images"
+            label="Total images"
             value={counts.total}
             color="cyan"
           />
@@ -504,11 +454,15 @@ const Images: React.FC = () => {
         {/* ---- Content ---- */}
         {viewMode === 'table' ? (
           <ImageList
+            rows={filteredImages}
+            query={searchQuery.trim()}
+            onClearSearch={() => setSearchQuery('')}
             batchMode={batchMode}
             selectedImages={selectedImages}
             onToggleImage={handleToggleImage}
             showWhere={scope === 'all'}
             onPickWhere={(m) => setScope(m ?? 'hub')}
+            onSearchHub={openHubSearch}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -518,11 +472,21 @@ const Images: React.FC = () => {
                   icon={<HardDrive size={32} />}
                   title={searchQuery ? 'No images match your search.' : 'No images found.'}
                   hint={searchQuery ? 'Try another name or tag.' : 'Run a registry check to discover images, or pull one from Docker Hub.'}
+                  action={searchQuery
+                    ? <button type="button" onClick={() => setSearchQuery('')} className={BTN_TOOLBAR_QUIET}><X size={14} /> Clear the search</button>
+                    : <button type="button" onClick={openHubSearch} className={BTN_TOOLBAR_QUIET}><Search size={14} /> Search Docker Hub</button>}
                 />
               </div>
             ) : (
               filteredImages.map((image, idx) => (
-                <ImageCard key={`${imageKey(image)}-${idx}`} image={image} showWhere={scope === 'all'} />
+                <ImageCard
+                  key={`${imageKey(image)}-${idx}`}
+                  image={image}
+                  showWhere={scope === 'all'}
+                  batchMode={batchMode}
+                  selected={selectedImages.has(imageKey(image))}
+                  onToggle={handleToggleImage}
+                />
               ))
             )}
           </div>
@@ -534,30 +498,33 @@ const Images: React.FC = () => {
         {activeTab === 'search' && (
           <div className="space-y-4 animate-fade-in">
             {/* Search form */}
-            <form onSubmit={handleHubSearch} className="flex items-center gap-3">
+            <form onSubmit={handleHubSearch} className="flex items-stretch gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
                   type="text"
+                  aria-label="Search Docker Hub"
                   value={hubSearchQuery}
                   onChange={(e) => setHubSearchQuery(e.target.value)}
-                  placeholder="Search Docker Hub for images (e.g. nginx, postgres, redis)..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 focus:border-cyan-500/30 transition-all duration-200"
+                  placeholder="Search Docker Hub for images (for example nginx, postgres, redis)…"
+                  className="w-full pl-10 pr-9 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-all duration-200"
                 />
                 {hubSearchQuery && (
-                  <button aria-label="Clear the search"
-                    type="button"
-                    onClick={() => { setHubSearchQuery(''); setHubSearchResults([]); setHubSearched(false) }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
+                  <Hint label="Clear the search">
+                    <button aria-label="Clear the search"
+                      type="button"
+                      onClick={() => { setHubSearchQuery(''); setHubSearchResults([]); setHubSearched(false) }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </Hint>
                 )}
               </div>
               <button
                 type="submit"
                 disabled={hubSearchLoading || !hubSearchQuery.trim() || !isConnected}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 disabled:opacity-50 press"
+                className={`${BTN_TOOLBAR} ${TONE_OK} px-4`}
               >
                 {hubSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                 Search
@@ -569,22 +536,23 @@ const Images: React.FC = () => {
 
             {/* No results */}
             {!hubSearchLoading && hubSearched && hubSearchResults.length === 0 && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-12 flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                  <Search size={22} className="text-slate-500" />
-                </div>
-                <p className="text-sm text-slate-500">No images found for &quot;{hubSearchQuery}&quot;</p>
+              <div className="glass-subtle">
+                <EmptyState
+                  icon={<Search size={28} />}
+                  title={`No images found for “${hubSearchQuery}”`}
+                  hint="Try a shorter name, or the name of the project."
+                />
               </div>
             )}
 
             {/* Initial state */}
             {!hubSearchLoading && !hubSearched && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-12 flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                  <Globe size={22} className="text-cyan-500/60" />
-                </div>
-                <p className="text-sm text-slate-400">Search Docker Hub for container images</p>
-                <p className="text-xs text-slate-500">Find official and community images to pull</p>
+              <div className="glass-subtle">
+                <EmptyState
+                  icon={<Globe size={28} className="text-cyan-500/60" />}
+                  title="Search Docker Hub for container images"
+                  hint="Find official and community images to pull."
+                />
               </div>
             )}
 
@@ -592,12 +560,12 @@ const Images: React.FC = () => {
             {!hubSearchLoading && hubSearchResults.length > 0 && (
               <div className="space-y-2">
                 <div className="text-xs text-slate-500 mb-2">
-                  {hubSearchResults.length} result{hubSearchResults.length !== 1 ? 's' : ''} for &quot;{hubSearchQuery}&quot;
+                  {hubSearchResults.length} result{hubSearchResults.length !== 1 ? 's' : ''} for “{hubSearchQuery}”
                 </div>
                 {hubSearchResults.map((result, idx) => (
                   <div
                     key={`${result.name}-${idx}`}
-                    className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 hover:border-white/10 hover:bg-slate-900/80 transition-all duration-200 animate-fade-in"
+                    className="glass-subtle glass-hover p-4 animate-fade-in"
                     style={{ animationDelay: `${Math.min(idx * 40, 400)}ms` }}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -620,8 +588,8 @@ const Images: React.FC = () => {
                           {result.description || 'No description available'}
                         </p>
                         <div className="flex items-center gap-3 mt-2">
-                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-400">
-                            <Star size={10} />
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                            <Star size={10} className="text-amber-400" />
                             {result.stars.toLocaleString()}
                           </span>
                         </div>
@@ -630,12 +598,13 @@ const Images: React.FC = () => {
                       <button
                         onClick={() => handlePullImage(result.name)}
                         disabled={pullingImages.has(result.name) || !isConnected}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+                        aria-label={`Pull ${result.name}`}
+                        className={`${BTN_CARD} ${TONE_OK}`}
                       >
                         {pullingImages.has(result.name) ? (
-                          <Loader2 size={13} className="animate-spin" />
+                          <Loader2 size={12} className="animate-spin" />
                         ) : (
-                          <Download size={13} />
+                          <Download size={12} />
                         )}
                         Pull
                       </button>
@@ -671,11 +640,11 @@ const GLOW_MAP: Record<string, string> = {
 }
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ icon, label, value, color }) => (
-  <div className={`bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 ${GLOW_MAP[color] ?? ''}`}>
+  <div className={`glass-subtle p-3 md:p-4 flex items-center gap-3 ${GLOW_MAP[color] ?? ''}`}>
     <div className="flex-shrink-0">{icon}</div>
     <div>
-      <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className="text-xl font-bold text-white">{value}</p>
+      <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className="text-lg md:text-xl font-bold text-slate-100">{value}</p>
     </div>
   </div>
 )

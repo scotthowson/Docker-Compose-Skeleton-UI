@@ -1,21 +1,22 @@
 // =============================================================================
-// ImageList — Image table with filtering tabs and sortable columns
+// ImageList — Image table with a freshness filter and sortable columns
 // =============================================================================
 
 import React, { useState, useMemo } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import { ImageInfo } from '../../../shared/types'
 import VmCapsule from '../fleet/VmCapsule'
 import { EmptyState } from '../common/PageState'
-const imageKey = (i: ImageInfo) => `${i.member ?? ''}|${i.id}`
+import SortableTh from '../common/SortableTh'
+import { BTN_TOOLBAR_QUIET } from '../../lib/ui'
+import { sizeBytes, shortCreated, imageKey } from './imageFormat'
 import { useImageStore } from '../../stores/imageStore'
 import {
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   HardDrive,
   Tag,
   Database,
-  Loader2,
+  Search,
+  X,
   ArrowUpCircle,
   CheckCircle,
 } from 'lucide-react'
@@ -32,6 +33,11 @@ interface SortConfig {
   direction: SortDirection
 }
 
+/** what a column sorts by: a size by its bytes, everything else as it is */
+function sortValue(image: ImageInfo, key: SortKey): unknown {
+  return key === 'size' ? sizeBytes(image.size) : image[key]
+}
+
 function compareValues(a: unknown, b: unknown, direction: SortDirection): number {
   const mult = direction === 'asc' ? 1 : -1
 
@@ -45,7 +51,7 @@ function compareValues(a: unknown, b: unknown, direction: SortDirection): number
 }
 
 // ---------------------------------------------------------------------------
-// Filter tabs
+// Filter (freshness)
 // ---------------------------------------------------------------------------
 
 type FilterTab = 'all' | 'current' | 'aging' | 'stale'
@@ -56,13 +62,6 @@ const TABS: { key: FilterTab; label: string }[] = [
   { key: 'aging', label: 'Aging' },
   { key: 'stale', label: 'Stale' },
 ]
-
-const TAB_COLORS: Record<FilterTab, string> = {
-  all: 'text-cyan-400 border-cyan-400',
-  current: 'text-emerald-400 border-emerald-400',
-  aging: 'text-amber-400 border-amber-400',
-  stale: 'text-rose-400 border-rose-400',
-}
 
 // ---------------------------------------------------------------------------
 // Staleness badge styles
@@ -127,6 +126,11 @@ const COLUMNS: ColumnDef[] = [
 // ---------------------------------------------------------------------------
 
 interface ImageListProps {
+  /** the rows to list (the page's search already applied); the store's images when left out */
+  rows?: ImageInfo[]
+  /** what the search box says: a search that matched nothing names itself in the empty state */
+  query?: string
+  onClearSearch?: () => void
   batchMode?: boolean
   /** keys of the selected rows: member|id */
   selectedImages?: Set<string>
@@ -134,10 +138,13 @@ interface ImageListProps {
   /** the fleet view: every row says where it lives */
   showWhere?: boolean
   onPickWhere?: (member: string | null) => void
+  /** an empty library offers the Docker Hub search as its next step */
+  onSearchHub?: () => void
 }
 
-const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages, onToggleImage, showWhere = false, onPickWhere }) => {
-  const images = useImageStore((s) => s.images)
+const ImageList: React.FC<ImageListProps> = ({ rows, query = '', onClearSearch, batchMode = false, selectedImages, onToggleImage, showWhere = false, onPickWhere, onSearchHub }) => {
+  const storeImages = useImageStore((s) => s.images)
+  const images = rows ?? storeImages
   const loading = useImageStore((s) => s.loading)
 
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -152,7 +159,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
   // Sort
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) =>
-      compareValues(a[sort.key], b[sort.key], sort.direction),
+      compareValues(sortValue(a, sort.key), sortValue(b, sort.key), sort.direction),
     )
   }, [filtered, sort])
 
@@ -176,52 +183,22 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
     )
   }
 
-  // Sort indicator
-  const SortIcon: React.FC<{ columnKey: SortKey }> = ({ columnKey }) => {
-    if (sort.key !== columnKey) {
-      return <ChevronsUpDown className="h-3 w-3 text-slate-500" />
-    }
-    return sort.direction === 'asc' ? (
-      <ChevronUp className="h-3 w-3 text-emerald-400" />
-    ) : (
-      <ChevronDown className="h-3 w-3 text-emerald-400" />
-    )
-  }
-
   /** Truncate image ID for display. */
   const shortId = (id: string): string => (id.length > 19 ? id.slice(0, 19) : id)
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ---- Filter tabs ---- */}
-      <div className="flex items-center gap-1 border-b border-white/5 select-none overflow-x-auto scrollbar-none whitespace-nowrap">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`
-                shrink-0 px-3 py-1.5 text-xs font-medium transition-all duration-200
-                border-b-2 -mb-[1px]
-                ${
-                  isActive
-                    ? TAB_COLORS[tab.key]
-                    : 'text-slate-500 border-transparent hover:text-slate-300 hover:border-slate-700'
-                }
-              `}
-            >
-              {tab.label}
-              <span
-                className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-white/10' : 'bg-white/5'
-                }`}
-              >
-                {tabCounts[tab.key]}
-              </span>
-            </button>
-          )
-        })}
+      {/* ---- Freshness filter: one choice; a phone swipes it sideways ---- */}
+      <div className="min-w-0 max-w-full self-start overflow-x-auto scrollbar-none">
+        <SegmentedControl
+          aria-label="Show images that are"
+          value={activeTab}
+          onChange={(v) => setActiveTab(v as FilterTab)}
+          data={TABS.map((tab) => ({
+            value: tab.key,
+            label: <span className="flex items-center gap-1.5">{tab.label}<span className="tabular-nums text-[10px] opacity-60">{tabCounts[tab.key]}</span></span>,
+          }))}
+        />
       </div>
 
       {/* ---- Table ---- */}
@@ -231,23 +208,17 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
             <thead>
               <tr className="border-b border-white/5">
                 {batchMode && (
-                  <th className="px-4 py-3 w-10"><span className="sr-only">Select</span></th>
+                  <th className="px-3 py-3 w-10"><span className="sr-only">Select</span></th>
                 )}
                 {COLUMNS.map((col) => (
-                  <th
+                  <SortableTh
                     key={col.key}
-                    onClick={() => handleSort(col.key)}
-                    className={`
-                      px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400
-                      cursor-pointer select-none hover:text-slate-200 transition-colors
-                      ${col.align === 'center' ? 'text-center' : 'text-left'}
-                    `}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {col.label}
-                      <SortIcon columnKey={col.key} />
-                    </span>
-                  </th>
+                    label={col.label}
+                    active={sort.key === col.key}
+                    direction={sort.direction}
+                    onSort={() => handleSort(col.key)}
+                    align={col.align === 'center' ? 'center' : 'left'}
+                  />
                 ))}
               </tr>
             </thead>
@@ -267,8 +238,12 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                   <td colSpan={COLUMNS.length + (batchMode ? 1 : 0)}>
                     <EmptyState
                       icon={<HardDrive size={32} />}
-                      title={activeTab !== 'all' ? `No ${activeTab} images found.` : 'No images found.'}
-                      hint={activeTab !== 'all' ? 'Pick another tab to see the rest.' : 'Run a registry check to discover images, or pull one from Docker Hub.'}
+                      title={activeTab !== 'all' ? `No ${activeTab} images found.` : query ? 'No images match your search.' : 'No images found.'}
+                      hint={activeTab !== 'all' ? 'Pick another filter to see the rest.' : query ? 'Try another name, tag or ID.' : 'Run a registry check to discover images, or pull one from Docker Hub.'}
+                      action={activeTab !== 'all'
+                        ? <button type="button" onClick={() => setActiveTab('all')} className={BTN_TOOLBAR_QUIET}>Show all images</button>
+                        : query && onClearSearch ? <button type="button" onClick={onClearSearch} className={BTN_TOOLBAR_QUIET}><X size={14} /> Clear the search</button>
+                        : onSearchHub ? <button type="button" onClick={onSearchHub} className={BTN_TOOLBAR_QUIET}><Search size={14} /> Search Docker Hub</button> : undefined}
                     />
                   </td>
                 </tr>
@@ -276,6 +251,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                 sorted.map((image, idx) => {
                   const ss =
                     STALENESS_STYLES[image.staleness] ?? STALENESS_STYLES.unknown
+                  const rowSelected = batchMode && !!selectedImages?.has(imageKey(image))
 
                   return (
                     <tr
@@ -283,24 +259,24 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                       onClick={() => batchMode && onToggleImage?.(imageKey(image))}
                       className={`group border-b border-white/[0.03] hover:bg-white/5 transition-colors ${
                         batchMode ? 'cursor-pointer' : ''
-                      } ${batchMode && selectedImages?.has(imageKey(image)) ? 'bg-emerald-500/[0.06]' : ''}`}
+                      } ${rowSelected ? 'bg-cyan-500/[0.08]' : ''}`}
                     >
                       {/* Batch checkbox */}
                       {batchMode && (
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           <button
                             onClick={(e) => { e.stopPropagation(); onToggleImage?.(imageKey(image)) }}
                             role="checkbox"
-                            aria-checked={selectedImages?.has(imageKey(image)) ?? false}
+                            aria-checked={rowSelected}
                             aria-label={`Select ${image.repository}:${image.tag}`}
                             className={`flex items-center justify-center w-5 h-5 rounded border transition-all ${
-                              selectedImages?.has(imageKey(image))
-                                ? 'bg-emerald-500 border-emerald-500'
+                              rowSelected
+                                ? 'bg-cyan-500 border-cyan-500'
                                 : 'bg-white/5 border-white/20 hover:border-white/40'
                             }`}
                           >
-                            {selectedImages?.has(imageKey(image)) && (
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            {rowSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                               </svg>
                             )}
@@ -309,7 +285,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                       )}
 
                       {/* Repository */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
                           <Database className="h-4 w-4 text-slate-500 group-hover:text-cyan-400 transition-colors flex-shrink-0" />
                           <span
@@ -323,7 +299,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                       </td>
 
                       {/* Tag */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <span className="inline-flex items-center gap-1 text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">
                           <Tag className="h-3 w-3" />
                           {image.tag}
@@ -331,24 +307,24 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                       </td>
 
                       {/* ID */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <span className="text-xs font-mono text-slate-500" title={image.id}>
                           {shortId(image.id)}
                         </span>
                       </td>
 
                       {/* Created */}
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-slate-400">{image.created}</span>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-sm text-slate-400" title={image.created}>{shortCreated(image.created)}</span>
                       </td>
 
                       {/* Size */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm text-slate-400">{image.size}</span>
                       </td>
 
                       {/* Age (days) */}
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <span
                           className={`text-sm font-medium ${
                             image.age_days > 90
@@ -363,7 +339,7 @@ const ImageList: React.FC<ImageListProps> = ({ batchMode = false, selectedImages
                       </td>
 
                       {/* Staleness + Update/Latest */}
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${ss.bg} ${ss.text} ${ss.ring}`}
