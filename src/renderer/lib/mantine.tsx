@@ -91,6 +91,8 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
     '--dcs-option-hover': 'rgba(255, 255, 255, 0.06)',
     '--dcs-option-checked': '#6ee7b7',
     '--dcs-muted': '#64748b',
+    // a tooltip's text: the bubble is dark in every look, so its text is light in every look (a literal #e2e8f0 is rewritten to dark by the theme engine's light looks)
+    '--dcs-tip-fg': '#e2e8f0',
     '--dcs-seg-bg': 'rgba(255, 255, 255, 0.05)',
     '--dcs-seg-border': 'rgba(255, 255, 255, 0.1)',
     '--dcs-seg-label': '#94a3b8',
@@ -116,6 +118,7 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
     '--dcs-option-hover': '#f1f5f9',
     '--dcs-option-checked': '#047857',
     '--dcs-muted': '#64748b',
+    '--dcs-tip-fg': '#e2e8f0',
     '--dcs-seg-bg': 'rgba(241, 245, 249, 0.7)',
     '--dcs-seg-border': '#cbd5e1',
     '--dcs-seg-label': '#64748b',
@@ -157,7 +160,7 @@ const theme = createTheme({
     Tooltip: Tooltip.extend({
       defaultProps: { color: 'dark.7', withArrow: true, multiline: true, maw: 320, openDelay: 150, zIndex: LAYER + 10, transitionProps: { duration: 120 }, events: { hover: true, focus: true, touch: false } },
       styles: {
-        tooltip: { border: '1px solid rgba(148, 163, 184, 0.25)', color: '#e2e8f0', fontSize: 12, lineHeight: 1.45, padding: '6px 10px', boxShadow: '0 8px 24px rgba(2, 6, 23, 0.45)' },
+        tooltip: { border: '1px solid rgba(148, 163, 184, 0.25)', color: 'var(--dcs-tip-fg, #e2e8f0)', fontSize: 12, lineHeight: 1.45, padding: '6px 10px', boxShadow: '0 8px 24px rgba(2, 6, 23, 0.45)' },
         arrow: ARROW_BORDER,
       },
     }),

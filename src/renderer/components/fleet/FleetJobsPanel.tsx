@@ -1,6 +1,6 @@
 // =============================================================================
 // FleetJobsPanel — the VMs the hub is building (or built, or failed to build):
-// a summary with a progress ring, then one wide card per job — its name, size
+// a summary with a progress ring, then one wide card per job (the Proxmox page's compact cards wear its own card, the wizard's the glass one) — its name, size
 // and address, the nine steps as a segmented bar (hover a segment for the step),
 // what it is doing now. Open a card for the step checklist and the log; Retry
 // for a failed one, Dismiss for a finished one. Progress bars, rings and
@@ -145,7 +145,7 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
   const title = job.kind === 'bake' ? `DCS template for ${job.template_for ?? job.image_id}` : job.stack
   const os = job.image_kind === 'iso' ? `installer ${(job.iso ?? '').split('/').pop()}` : (job.image_id && job.image_id !== 'url' && job.image_id !== 'proxmox' ? job.image_id : job.image_file)
   return (
-    <div className={`glass-card rounded-2xl ${compact ? 'p-3.5' : 'p-4'} ${job.status === 'running' ? 'ring-1 ring-cyan-400/20' : ''}`}>
+    <div className={`${compact ? 'rounded-xl bg-white/[0.03] border border-white/5 p-3.5' : 'glass-card rounded-2xl p-4'} ${job.status === 'running' ? 'ring-1 ring-cyan-400/20' : ''}`}>
       <div className="flex items-start gap-3">
         <div className={`grid place-items-center shrink-0 rounded-xl border ${t.cls} ${compact ? 'w-9 h-9' : 'w-10 h-10'}`}>{statusIcon}</div>
         <div className="min-w-0 flex-1">
@@ -224,7 +224,7 @@ export function JobsSummary({ jobs, onChanged, compact = false, title = 'VMs bei
   const what = `${vmJobs.length} VM${vmJobs.length === 1 ? '' : 's'}${templateJobs.length ? ` and ${templateJobs.length === 1 ? 'a template' : `${templateJobs.length} templates`}` : ''}`
   const ringColor = failed.length && active === 0 ? C.failed : active === 0 ? C.done : C.running
   return (
-    <div className="glass-card rounded-2xl px-4 py-3.5 flex items-center gap-4 flex-wrap">
+    <div className={`${compact ? 'rounded-xl bg-white/[0.03] border border-white/5' : 'glass-card rounded-2xl'} px-4 py-3.5 flex items-center gap-4 flex-wrap`}>
       <RingProgress size={compact ? 58 : 64} thickness={6} roundCaps sections={[{ value: Math.max(pct, active > 0 ? 2 : 0), color: ringColor }]}
         label={<Text ta="center" fw={700} size="xs" c="dimmed" style={{ lineHeight: 1 }}>{pct}%</Text>} />
       <div className="min-w-0 flex-1 basis-56">

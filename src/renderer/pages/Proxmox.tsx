@@ -579,6 +579,8 @@ interface VmRowProps {
   onDetails: (vm: ProxmoxVm) => void
   /** open the stack on the Stacks page (edit: straight into its compose) */
   onOpen: (stack: string, edit: boolean) => void
+  /** the table shows its Node column only where there is more than one node to tell apart */
+  showNode?: boolean
 }
 
 /** the DCS chip a member row wears, in the fleet's violet: version, and the member's name when it differs from the guest's (offline: the guest is off, so the recorded version in grey; a member that does not answer, in rose) */
@@ -595,17 +597,19 @@ function DcsChip({ vm, member, live, offline = false }: { vm: ProxmoxVm; member:
 
 /** what the scan found in a guest that has no member yet, with the link button */
 /** amber where a DCS answers that nobody linked yet (a to-do); violet for the hub itself */
-function ScanLine({ vm, scan, onLink, isSelf = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; isSelf?: boolean }) {
-  if (isSelf) return <span className="text-violet-300 flex items-center gap-1.5 min-w-0 truncate"><Satellite size={11} className="shrink-0" /> This hub — the dashboard you are looking at runs here</span>
+function ScanLine({ vm, scan, onLink, isSelf = false, wrap = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; isSelf?: boolean; wrap?: boolean }) {
+  // a card's line truncates; a table cell wraps (its column would otherwise be as wide as the sentence)
+  const fit = wrap ? 'min-w-0' : 'min-w-0 truncate'
+  if (isSelf) return <span className={`text-violet-300 flex items-center gap-1.5 ${fit}`}><Satellite size={11} className="shrink-0" /> This hub — the dashboard you are looking at runs here</span>
   const found = scan?.dcs && !scan.member ? scan.dcs : null
   return found ? (
     <>
-      <span className="text-amber-200 flex items-center gap-1.5 min-w-0 truncate"><Radar size={11} className="shrink-0" /> DCS {found.version} answers at {found.ip}:{found.port}</span>
+      <span className={`text-amber-200 flex items-center gap-1.5 ${fit}`}><Radar size={11} className="shrink-0" /> DCS {found.version} answers at {found.ip}:{found.port}</span>
       <button type="button" onClick={() => onLink({ name: vm.name, url: found.url, vmid: vm.vmid, node: vm.node, type: vm.type })} className={`${BTN_CARD} ${TONE_ATTN} font-medium`}><Link2 size={12} /> Link</button>
     </>
   ) : (
     <>
-      <span className="text-slate-500 truncate">No DCS linked{scan && scan.ips.length === 0 ? ' · address unknown (no guest agent)' : ''}</span>
+      <span className={`text-slate-500 ${wrap ? '' : 'truncate'}`}>No DCS linked{scan && scan.ips.length === 0 ? ' · address unknown (no guest agent)' : ''}</span>
       <button type="button" onClick={() => onLink({ name: vm.name, vmid: vm.vmid, node: vm.node, type: vm.type })} className={BTN_CARD_QUIET}><Link2 size={12} /> Link…</button>
     </>
   )
@@ -755,12 +759,12 @@ function MiniMeter({ pct, text, note, hostView, onHostView }: { pct: number; tex
 }
 
 function VmTableRow(p: VmRowProps) {
-  const { vm, isAdmin, isHub, member, live, scan, pveUrl, onAction, onDeploy, onLink, onMemberMenu, onDetails } = p
+  const { vm, isAdmin, isHub, member, live, scan, pveUrl, onAction, onDeploy, onLink, onMemberMenu, onDetails, showNode = true } = p
   const acts = actionsFor(vm)
   const running = vm.status === 'running'
   const th = 'px-3 py-2 align-middle'
   return (
-    <tr className={`hover:bg-white/[0.02] transition-colors ${member ? 'bg-violet-500/[0.02]' : ''}`}>
+    <tr className={`hover:bg-white/[0.02] transition-colors ${member ? 'bg-violet-500/[0.03]' : ''}`}>
       <td className={th}>
         <div className="flex items-center gap-2 min-w-0">
           <StatusDot status={vm.status} />
@@ -769,23 +773,23 @@ function VmTableRow(p: VmRowProps) {
           {vm.intended && <span className="text-[10px] text-violet-300/90" title="DCS asked for the last change">by DCS</span>}
           {vm.lock && <span className="text-[10px] text-amber-400/80">locked</span>}
         </div>
+        {vm.tags.length > 0 && <div className="mt-1 flex items-center gap-1 pl-[1.125rem]"><TagChips tags={vm.tags} max={3} /></div>}
       </td>
       <td className={`${th} font-mono text-xs text-slate-400 tabular-nums`}>#{vm.vmid}</td>
       <td className={`${th} text-xs whitespace-nowrap`}><span className="capitalize text-slate-300">{vm.status}</span>{running && <span className="text-slate-500 tabular-nums"> · {fmtUptime(vm.uptime)}</span>}</td>
-      <td className={`${th} text-xs text-slate-400`}>{vm.node}</td>
+      {showNode && <td className={`${th} text-xs text-slate-400`}>{vm.node}</td>}
       <td className={th}><MiniMeter pct={running ? vm.cpu : 0} text={running ? `${fmtPct(vm.cpu)}%` : '—'} note={`${vm.maxcpu} vCPU`} /></td>
       <td className={th}><MiniMeter pct={running ? vm.mem_pct : 0} text={running ? `${fmtBytes(vm.mem)} / ${fmtBytes(vm.maxmem)}` : fmtBytes(vm.maxmem)} hostView={running && vm.mem_pct >= 95} onHostView={() => onDetails(vm)} /></td>
       <td className={`${th} text-[11px]`}>
         {member ? (
           <div className="flex items-center gap-2 flex-wrap">
             <DcsChip vm={vm} member={member} live={live} />
-            {live?.reachable ? <span className="text-slate-400 tabular-nums whitespace-nowrap">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span> : live ? <span className="text-rose-300/90">no answer</span> : <Loader2 size={11} className="animate-spin text-slate-500" />}
+            {live?.reachable ? <span className="text-slate-400 tabular-nums">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span> : live ? <span className="text-rose-300/90">no answer</span> : <Loader2 size={11} className="animate-spin text-slate-500" />}
           </div>
         ) : isHub && running && isAdmin ? (
-          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} isSelf={p.isSelf} /></div>
+          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} isSelf={p.isSelf} wrap /></div>
         ) : <span className="text-slate-600">—</span>}
       </td>
-      <td className={th}><div className="flex flex-wrap gap-1"><TagChips tags={vm.tags} /></div></td>
       <td className={th}>
         <div className="flex items-center justify-end gap-1">
           {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} small />)}
@@ -799,14 +803,14 @@ function VmTableRow(p: VmRowProps) {
   )
 }
 
-function VmTable({ rows, render }: { rows: ProxmoxVm[]; render: (vm: ProxmoxVm) => ReactNode }) {
+function VmTable({ rows, render, showNode = true }: { rows: ProxmoxVm[]; render: (vm: ProxmoxVm) => ReactNode; showNode?: boolean }) {
   const head = 'px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
   return (
     <div className={`${CARD} overflow-x-auto scrollbar-thin`}>
       <table className="w-full min-w-[68rem] text-left border-collapse">
         <thead>
           <tr className="border-b border-white/[0.06]">
-            {['Name', 'VMID', 'Status', 'Node', 'CPU', 'RAM', 'DCS', 'Tags'].map((h) => <th key={h} scope="col" className={head}>{h}</th>)}
+            {['Name', 'VMID', 'Status', ...(showNode ? ['Node'] : []), 'CPU', 'RAM', 'DCS'].map((h) => <th key={h} scope="col" className={head}>{h}</th>)}
             <th scope="col" className={`${head} text-right`}>Actions</th>
           </tr>
         </thead>
@@ -1077,6 +1081,7 @@ export default function Proxmox() {
   const scanByVm = useMemo(() => new Map((scan.data?.guests ?? []).map((g) => [g.vmid, g])), [scan.data])
   const unmapped = members.filter((m) => !m.vmid)
   const all = vms.data?.vms ?? []
+  const multiNode = (nodes.data?.nodes.length ?? 0) > 1
 
   const counts = useMemo<Record<Show, number>>(() => ({
     all: all.length,
@@ -1134,7 +1139,7 @@ export default function Proxmox() {
       vm, isAdmin, isHub: isHub || role === 'standalone', member: m, live: m ? liveById.get(m.id) : undefined, scan: scanByVm.get(vm.vmid), isSelf: !!pveSelf.data?.guest && pveSelf.data.guest.vmid === vm.vmid && pveSelf.data.guest.node === vm.node, busyKey, pveUrl,
       expanded: !!openCards[vm.vmid], onToggleExpand: () => toggleCard(vm.vmid),
       onAction: (v, a) => setPending({ vm: v, action: a }), onStackAction: stackAction, onDeploy: deployTo, onLink: (p) => setAdding(p), onMemberMenu: (mm) => setMenu(mm),
-      onDetails: (v) => setDetails({ node: v.node, type: v.type, vmid: v.vmid }), onOpen: openStack,
+      onDetails: (v) => setDetails({ node: v.node, type: v.type, vmid: v.vmid }), onOpen: openStack, showNode: multiNode,
     }
   }
 
@@ -1297,7 +1302,7 @@ export default function Proxmox() {
                 />
               </div>
             ) : view === 'table' ? (
-              <VmTable rows={list} render={(vm) => <VmTableRow key={`${vm.node}/${vm.type}/${vm.vmid}`} {...rowProps(vm)} />} />
+              <VmTable rows={list} showNode={multiNode} render={(vm) => <VmTableRow key={`${vm.node}/${vm.type}/${vm.vmid}`} {...rowProps(vm)} />} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 items-stretch">
                 {list.map((vm) => <VmCard key={`${vm.node}/${vm.type}/${vm.vmid}`} {...rowProps(vm)} />)}
