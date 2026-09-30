@@ -12,10 +12,11 @@ import {
   Clock,
   Copy,
   Check,
-  Shield,
   Lock,
   Loader2,
+  WifiOff,
 } from 'lucide-react'
+import { Badge } from '@mantine/core'
 import { execTerminalCommandAuth, terminalAuthVerify, terminalLogout } from '../api/endpoints'
 import { execMemberTerminalCommand, fetchMemberTerminal } from '../api/fleetScopedOps'
 import { useFleetScope } from '../hooks/useFleetScope'
@@ -24,8 +25,12 @@ import type { MemberTerminalStatus } from '../../shared/types'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import TerminalAuthGate from '../components/terminal/TerminalAuthGate'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { LoadingState } from '../components/common/PageState'
+import { EmptyState, LoadingState } from '../components/common/PageState'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { BTN_CARD, BTN_ICON_SM, BTN_TOOLBAR_QUIET, TONE_DANGER, TONE_GHOST, TONE_OK, TONE_QUIET, BTN_TOOLBAR } from '../lib/ui'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,17 +49,34 @@ interface CommandEntry {
 }
 
 // ---------------------------------------------------------------------------
-// ANSI color parser — converts basic ANSI escape codes to styled spans
+// Types
 // ---------------------------------------------------------------------------
 
-const ANSI_COLORS: Record<string, string> = {
-  '30': 'color:#64748b', '31': 'color:#f87171', '32': 'color:#4ade80',
-  '33': 'color:#fbbf24', '34': 'color:#60a5fa', '35': 'color:#c084fc',
-  '36': 'color:#22d3ee', '37': 'color:#e2e8f0',
-  '90': 'color:#94a3b8', '91': 'color:#fca5a5', '92': 'color:#86efac',
-  '93': 'color:#fde68a', '94': 'color:#93c5fd', '95': 'color:#d8b4fe',
-  '96': 'color:#67e8f9', '97': 'color:#f8fafc',
-  '1': 'font-weight:bold', '2': 'opacity:0.7', '4': 'text-decoration:underline',
+interface CommandEntry {
+  command: string
+  cwd: string
+  output: string
+  exitCode: number
+  success: boolean
+  timestamp: string
+  /** the prompt the command ran under: the hub's account and host, or the VM's */
+  user: string
+  host: string
+}
+
+// ---------------------------------------------------------------------------
+// ANSI color parser — converts basic ANSI escape codes to styled spans. The colours are
+// the dashboard's own classes, not hex values, so the output reads in every theme and look.
+// ---------------------------------------------------------------------------
+
+const ANSI_CLASSES: Record<string, string> = {
+  '30': 'text-slate-500', '31': 'text-rose-400', '32': 'text-emerald-400',
+  '33': 'text-amber-400', '34': 'text-blue-400', '35': 'text-violet-400',
+  '36': 'text-cyan-400', '37': 'text-slate-200',
+  '90': 'text-slate-400', '91': 'text-rose-300', '92': 'text-emerald-300',
+  '93': 'text-amber-300', '94': 'text-blue-300', '95': 'text-violet-300',
+  '96': 'text-cyan-300', '97': 'text-slate-100',
+  '1': 'font-bold', '2': 'opacity-70', '4': 'underline',
 }
 
 /** Escape HTML entities to prevent XSS from command output */
@@ -68,14 +90,22 @@ function escapeHtml(text: string): string {
 }
 
 function parseAnsi(text: string): string {
-  // SECURITY: Escape HTML FIRST to prevent XSS, then apply ANSI color spans
+  // SECURITY: Escape HTML FIRST to prevent XSS, then apply ANSI colour spans (the classes come from the table above)
   const safe = escapeHtml(text)
+  let open = 0
   // eslint-disable-next-line no-control-regex
-  return safe.replace(/\x1b\[([0-9;]*)m/g, (_match, codes: string) => {
-    if (!codes || codes === '0') return '</span>'
-    const styles = codes.split(';').map((c: string) => ANSI_COLORS[c]).filter(Boolean).join(';')
-    return styles ? `<span style="${styles}">` : ''
+  const html = safe.replace(/\x1b\[([0-9;]*)m/g, (_match, codes: string) => {
+    if (!codes || codes === '0') {
+      const close = '</span>'.repeat(open)
+      open = 0
+      return close
+    }
+    const classes = codes.split(';').map((c: string) => ANSI_CLASSES[c]).filter(Boolean).join(' ')
+    if (!classes) return ''
+    open++
+    return `<span class="${classes}">`
   })
+  return html + '</span>'.repeat(open)
 }
 
 // ---------------------------------------------------------------------------
@@ -422,11 +452,9 @@ export default function Terminal() {
   // Not connected
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
-        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/5">
-          <TerminalSquare size={28} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to use the terminal</p>
+      <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <PageHeader page="terminal" />
+        <EmptyState icon={<WifiOff size={28} />} title="Not connected" hint="Connect to a server to use the terminal." />
       </div>
     )
   }
@@ -434,26 +462,30 @@ export default function Terminal() {
   // Checking auth
   if (authChecking) {
     return (
-      <div className="flex flex-col items-center justify-center h-[70vh]">
-        <LoadingState label="Verifying terminal session…" />
+      <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <DisconnectedBanner />
+        <PageHeader page="terminal" />
+        <LoadingState label="Verifying the terminal session…" />
       </div>
     )
   }
 
-  // Not authenticated — show auth gate
+  // Not signed in — show the gate
   if (!authenticated) {
     return (
-      <div>
+      <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <DisconnectedBanner />
+        <PageHeader page="terminal" />
         {sessionExpired && (
-          <div className="flex items-center justify-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/15 max-w-md mx-auto">
-            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-            <span className="text-xs text-amber-300">Terminal session expired. Please re-authenticate.</span>
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 max-w-md mx-auto" role="alert">
+            <AlertTriangle size={14} className="text-amber-400 shrink-0" aria-hidden />
+            <span className="text-xs text-amber-300">The terminal session expired. Sign in again to continue.</span>
           </div>
         )}
         <TerminalAuthGate onAuthenticated={handleAuthenticated} />
         {hasFleet && (
-          <p className="text-center text-[10px] text-slate-600 -mt-2 px-4">
-            This one unlock also opens a shell inside every VM the hub built — pick the server above the terminal afterwards.
+          <p className="text-center text-[11px] text-slate-500 px-4">
+            This one sign-in also opens a shell inside every VM the hub built — pick the server above the terminal afterwards.
           </p>
         )}
       </div>
@@ -461,113 +493,83 @@ export default function Terminal() {
   }
 
   const displayCwd = shortenCwd(cwd, promptUser)
+  /** the prompt's user@host: emerald on this server, violet inside a VM */
+  const promptColor = (inVm: boolean) => (inVm ? 'text-violet-400' : 'text-emerald-500')
 
-  // Authenticated — show terminal
+  // Signed in — the terminal
   return (
-    <div className="flex flex-col h-[calc(100vh-10rem)] gap-3">
+    <div className="flex flex-col h-[calc(100vh-10rem)] min-h-[32rem] gap-4 md:gap-5">
       <DisconnectedBanner />
-      {/* Security banner with auth info */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/15 shrink-0">
-          <Shield size={16} className="text-emerald-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-emerald-300">Authenticated terminal session</p>
-          <p className="text-[11px] text-emerald-400/60">
-            Authenticated as <span className="font-mono font-semibold text-emerald-300">{terminalUser}</span> via Linux system credentials
-            {member && <> · shell inside the VM <span className="font-mono font-semibold text-amber-200">{memberName}</span></>}
-          </p>
-        </div>
-        <button
-          onClick={handleLock}
-          className="
-            flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
-            bg-slate-800/60 border border-white/5
-            text-slate-400 hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5
-            transition-all duration-150
-          "
-          title="Lock terminal (end session)"
-        >
-          <Lock size={12} />
-          Lock
-        </button>
-      </div>
+      <PageHeader
+        page="terminal"
+        badge={<>
+          {member && <VmCapsule member={member} name={memberName} vmid={scopeMembers.find((m) => m.id === member)?.vmid} />}
+          <Badge component="span" color="emerald" leftSection={<Lock size={10} />}>Unlocked</Badge>
+        </>}
+        subtitle={<>Signed in as <span className="font-mono text-slate-300">{terminalUser}</span> with a Linux account{member ? <> · shell inside the VM <span className="font-mono text-slate-300">{memberName}</span></> : null}</>}
+        actions={<>
+          <Hint label="Clear the screen (Ctrl+L)">
+            <button type="button" onClick={() => setEntries([])} aria-label="Clear the screen" className={BTN_TOOLBAR_QUIET}>
+              <Trash2 size={14} />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+          </Hint>
+          <Hint label="Lock the terminal and end the session">
+            <button type="button" onClick={handleLock} aria-label="Lock the terminal" className={`${BTN_TOOLBAR} ${TONE_DANGER}`}>
+              <Lock size={14} />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
+          </Hint>
+        </>}
+      >
+        {/* On a hub: the hub's shell or one inside a VM */}
+        {hasFleet && (
+          <div className="flex flex-col gap-2">
+            <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Shell on" everywhere={false} busy={vmChecking} />
+            {vmBlocked && vmStatus && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15" role="alert">
+                <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" aria-hidden />
+                <p className="text-[11px] text-amber-200/80">The hub cannot open a shell in <span className="font-mono">{memberName}</span>: {vmStatus.reason}</p>
+              </div>
+            )}
+            {member && vmStatus?.available && (
+              <p className="text-[11px] text-slate-500">
+                Commands run inside the VM as <span className="font-mono text-slate-400">{vmStatus.user}@{vmStatus.host}</span> over the hub's ssh key — each one a fresh shell with a 60 s limit, written to the hub's terminal audit log.
+              </p>
+            )}
+          </div>
+        )}
+      </PageHeader>
 
-      {/* On a hub: the hub's shell or one inside a VM */}
-      {hasFleet && (
-        <div className="flex flex-col gap-2">
-          <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Shell on" everywhere={false} busy={vmChecking} />
-          {vmBlocked && vmStatus && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15">
-              <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-200/80">The hub cannot open a shell in <span className="font-mono">{memberName}</span>: {vmStatus.reason}</p>
-            </div>
-          )}
-          {member && vmStatus?.available && (
-            <p className="text-[10px] text-slate-500">
-              Commands run inside the VM as <span className="font-mono text-slate-400">{vmStatus.user}@{vmStatus.host}</span> over the hub's ssh key — each one a fresh shell with a 60 s limit, written to the hub's terminal audit log.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Quick command buttons */}
+      {/* Quick commands */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mr-1">Quick:</span>
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mr-1">Quick commands</span>
         {quickCommands.map((qc) => (
-          <button
-            key={qc.cmd}
-            onClick={() => executeCommand(qc.cmd)}
-            title={qc.tip}
-            className="
-              px-2.5 py-1 rounded-lg text-[11px] font-mono
-              bg-slate-800/60 border border-white/5
-              text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20 hover:bg-emerald-500/5
-              transition-all duration-150
-            "
-          >
-            {qc.label}
-          </button>
+          <Hint key={qc.cmd} label={qc.tip}>
+            <button type="button" onClick={() => executeCommand(qc.cmd)} className={`${BTN_CARD} ${TONE_QUIET} font-mono`}>
+              {qc.label}
+            </button>
+          </Hint>
         ))}
-
-        {/* Clear screen button */}
-        <button
-          onClick={() => setEntries([])}
-          className="
-            ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px]
-            bg-slate-800/60 border border-white/5
-            text-slate-500 hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5
-            transition-all duration-150
-          "
-          title="Clear screen (Ctrl+L)"
-        >
-          <Trash2 size={11} />
-          Clear
-        </button>
       </div>
 
-      {/* Terminal output area */}
+      {/* Output */}
       <div
         ref={outputRef}
         onClick={() => inputRef.current?.focus()}
-        className="
-          flex-1 overflow-y-auto rounded-xl
-          bg-slate-950 border border-white/5
-          shadow-[inset_0_1px_0_0_rgba(16,185,129,0.06)]
-          font-mono text-sm
-          scrollbar-thin
-          cursor-text
-        "
+        role="log"
+        aria-label="Terminal output"
+        className="flex-1 min-h-0 overflow-y-auto rounded-xl bg-slate-950 border border-white/5 font-mono text-sm scrollbar-thin cursor-text"
       >
         {/* Welcome message when empty */}
         {entries.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-            <TerminalSquare size={32} strokeWidth={1.2} />
-            <p className="text-xs">Terminal ready. Type a command or use a quick button above.</p>
-            <p className="text-[10px] text-slate-800">
-              Use <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Up</kbd> / <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Down</kbd> for history
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 px-4 text-center">
+            <TerminalSquare size={32} strokeWidth={1.2} aria-hidden />
+            <p className="text-xs">Ready. Type a command below, or use a quick command above.</p>
+            <p className="text-[11px] text-slate-500">
+              <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[10px]">↑</kbd> / <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[10px]">↓</kbd> walk the history
               &nbsp;&middot;&nbsp;
-              <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] text-slate-500">Ctrl+L</kbd> to clear
+              <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[10px]">Ctrl+L</kbd> clears the screen
             </p>
           </div>
         )}
@@ -575,73 +577,52 @@ export default function Terminal() {
         {/* Command entries */}
         <div className="p-3 space-y-0">
           {entries.map((entry, idx) => (
-            <div key={`${entry.timestamp}-${idx}`} className="group animate-fade-in border-b border-white/[0.02] pb-1 mb-1">
+            <div key={`${entry.timestamp}-${idx}`} className="group animate-fade-in border-b border-white/[0.03] pb-1 mb-1">
               {/* Prompt + command */}
-              <div className="flex items-start gap-0">
-                <span className={`${entry.host !== hostname ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+              <div className="flex flex-wrap items-start gap-y-1">
+                <span className={`${promptColor(entry.host !== hostname)} select-none shrink-0`}>
                   {entry.user}@{entry.host}
                 </span>
                 <span className="text-slate-500 select-none">:</span>
                 <span className="text-cyan-400 select-none">{shortenCwd(entry.cwd, entry.user)}</span>
                 <span className="text-slate-500 select-none mx-1">$</span>
-                <span className="text-slate-200">{entry.command}</span>
+                <span className="text-slate-200 break-all min-w-0">{entry.command}</span>
 
-                {/* Exit code + copy button */}
-                <div className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  {/* Timestamp */}
-                  <span className="text-[9px] text-slate-500 flex items-center gap-1">
-                    <Clock size={8} />
+                {/* Time, exit code and copy: shown on hover or focus, always on a touch screen (under the command on a phone) */}
+                <div className="ml-auto pl-2 max-sm:basis-full max-sm:pl-0 max-sm:justify-end flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity shrink-0">
+                  <span className="text-[10px] text-slate-500 flex items-center gap-1 tabular-nums">
+                    <Clock size={9} aria-hidden />
                     {new Date(entry.timestamp).toLocaleTimeString()}
                   </span>
-
-                  {/* Exit code badge */}
-                  <span className={`
-                    text-[9px] px-1.5 py-0.5 rounded font-semibold tabular-nums
-                    ${entry.exitCode === 0
-                      ? 'bg-emerald-500/15 text-emerald-400'
-                      : 'bg-rose-500/15 text-rose-400'
-                    }
-                  `}>
-                    exit {entry.exitCode}
-                  </span>
-
-                  {/* Copy button */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleCopyOutput(idx) }}
-                    className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
-                    title="Copy output"
-                  >
-                    {copiedIndex === idx
-                      ? <Check size={11} className="text-emerald-400" />
-                      : <Copy size={11} />
-                    }
-                  </button>
+                  <Badge component="span" color={entry.exitCode === 0 ? 'emerald' : 'rose'}>exit {entry.exitCode}</Badge>
+                  <Hint label={copiedIndex === idx ? 'Copied' : 'Copy the output'}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleCopyOutput(idx) }} aria-label="Copy the output" className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                      {copiedIndex === idx ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    </button>
+                  </Hint>
                 </div>
               </div>
 
               {/* Output */}
               {entry.output && (
                 <pre
-                  className={`
-                    mt-0.5 whitespace-pre-wrap break-all text-[13px] leading-relaxed
-                    ${entry.success ? 'text-slate-400' : 'text-rose-300/80'}
-                  `}
+                  className={`mt-0.5 whitespace-pre-wrap break-all text-[13px] leading-relaxed ${entry.success ? 'text-slate-400' : 'text-rose-300/80'}`}
                   dangerouslySetInnerHTML={{ __html: parseAnsi(entry.output) }}
                 />
               )}
             </div>
           ))}
 
-          {/* Loading indicator — blinking cursor block */}
+          {/* Running: a blinking cursor block */}
           {loading && (
-            <div className="flex items-center gap-0 py-1">
-              <span className={`${member ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+            <div className="flex items-center gap-0 py-1" role="status" aria-label="Running the command">
+              <span className={`${promptColor(!!member)} select-none shrink-0`}>
                 {promptUser}@{promptHost}
               </span>
               <span className="text-slate-500 select-none">:</span>
               <span className="text-cyan-400 select-none">{displayCwd}</span>
               <span className="text-slate-500 select-none mx-1">$</span>
-              <span className="text-emerald-400 animate-pulse">&#9610;</span>
+              <span className="text-emerald-400 animate-pulse" aria-hidden>&#9610;</span>
             </div>
           )}
         </div>
@@ -649,66 +630,64 @@ export default function Terminal() {
 
       {/* Input bar */}
       <div className={`
-        flex items-center gap-0 rounded-xl bg-slate-950 border px-3 py-2.5 font-mono text-sm
-        transition-colors duration-200
-        ${loading ? 'border-emerald-500/20 shadow-[0_0_8px_0_rgba(16,185,129,0.06)]' : 'border-white/5 focus-within:border-emerald-500/30'}
+        flex items-center gap-0 rounded-xl bg-slate-950 border px-3 py-2 font-mono text-sm
+        transition-colors duration-200 focus-within:ring-2 focus-within:ring-emerald-500/30
+        ${loading ? 'border-emerald-500/30' : 'border-white/5 focus-within:border-emerald-500/50'}
       `}>
-        {/* Prompt prefix */}
-        <span className={`${member ? 'text-amber-400' : 'text-emerald-500'} select-none shrink-0`}>
+        <span className={`${promptColor(!!member)} select-none shrink-0 hidden sm:inline`}>
           {promptUser}@{promptHost}
         </span>
-        <span className="text-slate-500 select-none">:</span>
-        <span className="text-cyan-400 select-none">{displayCwd}</span>
+        <span className="text-slate-500 select-none hidden sm:inline">:</span>
+        <span className="text-cyan-400 select-none shrink-0 hidden sm:inline">{displayCwd}</span>
         <span className="text-slate-500 select-none mx-1">$</span>
 
         {/* Input — never disabled */}
         <input
           ref={inputRef}
           type="text"
+          aria-label="Command"
           value={commandInput}
           onChange={(e) => { setCommandInput(e.target.value); setHistoryIndex(-1) }}
           onKeyDown={handleKeyDown}
-          placeholder={loading ? 'Type next command (queued)...' : 'Type a command...'}
-          className="flex-1 bg-transparent text-slate-100 placeholder-slate-700 focus:outline-none"
+          placeholder={loading ? 'Type the next command (it is queued)…' : 'Type a command…'}
+          className="flex-1 min-w-0 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
           autoComplete="off"
           spellCheck={false}
         />
 
         {/* Queue indicator */}
         {queueLength > 0 && (
-          <span className="text-[10px] text-amber-400/70 mr-2 select-none whitespace-nowrap">
-            ({queueLength} queued)
+          <span className="text-[11px] text-cyan-400 mr-2 select-none whitespace-nowrap">
+            {queueLength} queued
           </span>
         )}
 
-        {/* Execute button — spinner when loading */}
-        <button
-          onClick={() => executeCommand()}
-          disabled={!commandInput.trim()}
-          className="
-            flex items-center justify-center w-7 h-7 rounded-lg ml-2
-            bg-emerald-500/15 text-emerald-400
-            hover:bg-emerald-500/25 hover:text-emerald-300
-            disabled:opacity-30 disabled:cursor-not-allowed
-            transition-all duration-150
-          "
-          title={loading ? 'Running... (command will be queued)' : 'Execute (Enter)'}
-        >
-          {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-        </button>
+        {/* Run — a spinner while a command runs */}
+        <Hint label={loading ? 'Running… the command will be queued' : 'Run the command (Enter)'}>
+          <button
+            type="button"
+            onClick={() => executeCommand()}
+            disabled={!commandInput.trim()}
+            aria-label="Run the command"
+            className={`${BTN_ICON_SM} ${TONE_OK} ml-2`}
+          >
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+          </button>
+        </Hint>
       </div>
 
-      {/* History count footer */}
+      {/* History */}
       {history.length > 0 && (
         <div className="flex items-center justify-between px-1">
-          <span className="text-[10px] text-slate-500">
-            {history.length} command{history.length !== 1 ? 's' : ''} in history
+          <span className="text-[11px] text-slate-500">
+            {history.length} command{history.length !== 1 ? 's' : ''} in the history
           </span>
           <button
+            type="button"
             onClick={() => { setHistory([]); localStorage.removeItem('terminal-history') }}
-            className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors"
+            className="text-[11px] text-slate-500 hover:text-rose-400 transition-colors px-2 py-1 -my-1 rounded-md"
           >
-            Clear history
+            Clear the history
           </button>
         </div>
       )}

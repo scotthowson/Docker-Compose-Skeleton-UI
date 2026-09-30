@@ -13,6 +13,7 @@ import { useHealthStore } from '../../stores/healthStore'
 import { useApiLink } from '../../hooks/useApiLink'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { pctTone } from './cardShared'
 
 // ---------------------------------------------------------------------------
 // AnimatedCounter — Smoothly animates between numeric values using rAF
@@ -154,10 +155,10 @@ const accentBgMap: Record<CardProps['accentColor'], string> = {
   rose: 'bg-rose-500/10 text-rose-400',
 }
 
-const trendIcons: Record<NonNullable<CardProps['trend']>, { symbol: string; color: string }> = {
-  up: { symbol: '\u2191', color: 'text-emerald-400' },
-  down: { symbol: '\u2193', color: 'text-rose-400' },
-  stable: { symbol: '\u2192', color: 'text-slate-400' },
+// an arrow says which way; its colour is the tile's verdict (cyan is information: a plain arrow)
+const trendSymbols: Record<NonNullable<CardProps['trend']>, string> = { up: '\u2191', down: '\u2193', stable: '\u2192' }
+const trendColors: Record<CardProps['accentColor'], string> = {
+  emerald: 'text-emerald-400', cyan: 'text-slate-400', amber: 'text-amber-400', rose: 'text-rose-400',
 }
 
 const sparkColorMap: Record<CardProps['accentColor'], string> = {
@@ -168,76 +169,72 @@ const sparkColorMap: Record<CardProps['accentColor'], string> = {
 }
 
 function StatCard({ icon, label, value, subtitle, accentColor, trend, loading, index = 0, onClick, pulse, sparkData, extraClassName }: CardProps) {
-  return (
-    <div
-      onClick={onClick}
-      className={`
-        relative overflow-hidden rounded-xl border-t-2 ${accentBorderMap[accentColor]}
-        border bg-slate-900/60 backdrop-blur-md
-        p-5 transition-all duration-300 hover:bg-slate-900/80 hover:border-white/10
-        hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5
-        animate-fade-in
-        ${onClick ? 'cursor-pointer' : ''}
-        ${pulse ? 'border-amber-500/30 animate-pulse' : 'border-white/5'}
-        ${extraClassName ?? ''}
-      `}
-      style={{ animationDelay: `${index * 60}ms` }}
-    >
+  const className = `
+    relative overflow-hidden rounded-xl border-t-2 ${accentBorderMap[accentColor]}
+    border bg-slate-900/60 backdrop-blur-md text-left
+    p-4 transition-all duration-300 hover:bg-slate-900/80 hover:border-white/10
+    hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5
+    animate-fade-in
+    ${onClick ? 'cursor-pointer' : ''}
+    ${pulse ? 'border-rose-500/30 animate-pulse' : 'border-white/5'}
+    ${extraClassName ?? ''}
+  `
+  const style = { animationDelay: `${index * 60}ms` }
+  const content = (
+    <>
       {loading ? (
-        <div className="animate-pulse">
-          <div className="flex items-start justify-between">
-            <div className="h-10 w-10 rounded-lg bg-slate-700/50" />
-            <div className="h-4 w-4 rounded bg-slate-700/30" />
+        <div role="status" aria-label={`Loading ${label}`}>
+          <div className="flex items-start justify-between" aria-hidden>
+            <div className="skeleton h-10 w-10" />
+            <div className="skeleton h-4 w-4" />
           </div>
-          <div className="mt-4">
-            <div className="h-3 w-20 rounded bg-slate-700/40" />
-            <div className="mt-2 h-7 w-14 rounded bg-slate-700/50" />
-            <div className="mt-1 h-2.5 w-28 rounded bg-slate-800/40" />
+          <div className="mt-4 space-y-2" aria-hidden>
+            <div className="skeleton h-3 w-24" />
+            <div className="skeleton h-7 w-16" />
+            <div className="skeleton h-2.5 w-28" />
           </div>
         </div>
       ) : (
         <>
-          <div className="flex items-start justify-between">
-            <div className={`rounded-lg p-2.5 ${accentBgMap[accentColor]}`}>
+          <span className="flex items-start justify-between">
+            <span className={`rounded-lg p-2.5 ${accentBgMap[accentColor]}`} aria-hidden>
               {icon}
-            </div>
+            </span>
             {trend && (
-              <span className={`text-sm font-medium ${trendIcons[trend].color}`}>
-                {trendIcons[trend].symbol}
+              <span className={`text-sm font-medium ${trendColors[accentColor]}`} aria-hidden>
+                {trendSymbols[trend]}
               </span>
             )}
-          </div>
-          <div className="mt-4">
-            <p className="text-sm font-medium text-slate-400">{label}</p>
-            <p className={`mt-1 text-lg md:text-2xl font-bold text-white tracking-tight tabular-nums ${accentColor === 'emerald' ? 'neon-emerald' : ''}`}>
-              {typeof value === 'number' ? (
-                <AnimatedCounter value={value} />
-              ) : (
-                value
-              )}
-            </p>
-            {subtitle && (
-              <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
-            )}
+          </span>
+          <span className="mt-4 block">
+            <span className="block text-sm font-medium text-slate-400">{label}</span>
+            <span className="mt-1 block text-lg md:text-2xl font-bold text-white tracking-tight tabular-nums">
+              {typeof value === 'number' ? <AnimatedCounter value={value} /> : value}
+            </span>
+            {subtitle && <span className="mt-0.5 block text-xs text-slate-500">{subtitle}</span>}
             {sparkData && sparkData.length >= 2 && (
-              <div className="mt-2">
+              <span className="mt-2 block" aria-hidden>
                 <Sparkline data={sparkData} color={sparkColorMap[accentColor]} />
-              </div>
+              </span>
             )}
-          </div>
+          </span>
         </>
       )}
 
       {/* Subtle gradient glow */}
-      <div className={`
+      <span className={`
         pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full opacity-10 blur-2xl
         ${accentColor === 'emerald' ? 'bg-emerald-500' : ''}
         ${accentColor === 'cyan' ? 'bg-cyan-500' : ''}
         ${accentColor === 'amber' ? 'bg-amber-500' : ''}
         ${accentColor === 'rose' ? 'bg-rose-500' : ''}
-      `} />
-    </div>
+      `} aria-hidden />
+    </>
   )
+  // a tile that leads to a page is a button (a keyboard reaches it); the others are plain boxes
+  return onClick
+    ? <button type="button" onClick={onClick} className={`${className} flex flex-col justify-start`} style={style}>{content}</button>
+    : <div className={className} style={style}>{content}</div>
 }
 
 export default function OverviewCards() {
@@ -249,11 +246,12 @@ export default function OverviewCards() {
   const link = useApiLink()
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
-  // Check disk usage for pulse warning
+  // The disk decides the images tile's colour: amber from 75 %, rose (and a pulse) from 90 %
   const diskPercent = status?.system.disk.percent
     ? parseInt(status.system.disk.percent.replace('%', ''), 10)
     : 0
-  const diskWarning = diskPercent >= 85
+  const diskTone = pctTone(diskPercent)
+  const diskWarning = diskTone !== 'ok'
 
   // Status data hasn't arrived yet — show loading skeletons for first 3 cards
   const statusLoading = !status
@@ -289,17 +287,11 @@ export default function OverviewCards() {
   // a report is a fact about the moment it was taken: while the API does not answer the card says that instead of the last verdict
   const hasReport = !!report && link.live
   const isDisconnected = !link.live
-  const healthStatus = hasReport
-    ? report.status
-    : isDisconnected
-      ? ('unknown' as const)
-      : ('loading' as const)
-
   const healthLabel = hasReport
     ? report.status === 'healthy' ? 'Healthy'
       : report.status === 'degraded' ? 'Degraded'
       : 'Critical'
-    : isDisconnected ? link.short : 'Checking...'
+    : isDisconnected ? link.short : 'Checking…'
 
   const healthAccent: CardProps['accentColor'] = hasReport
     ? report.status === 'healthy' ? 'emerald'
@@ -320,7 +312,7 @@ export default function OverviewCards() {
     <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <StatCard
         icon={<Layers className="h-5 w-5" />}
-        label="Total Stacks"
+        label="Total stacks"
         value={
           <span className="tabular-nums">
             <AnimatedCounter value={runningStacks} />
@@ -338,7 +330,7 @@ export default function OverviewCards() {
       />
       <StatCard
         icon={<Box className="h-5 w-5" />}
-        label="Running Containers"
+        label="Running containers"
         value={runningContainers}
         subtitle={`${totalContainers} total, ${stoppedContainers} stopped`}
         accentColor={stoppedContainers > 0 ? 'amber' : 'emerald'}
@@ -350,27 +342,26 @@ export default function OverviewCards() {
       />
       <StatCard
         icon={<HardDrive className="h-5 w-5" />}
-        label="Docker Images"
+        label="Docker images"
         value={imageCount}
         subtitle={diskWarning ? `Disk ${diskPercent}% used` : undefined}
-        accentColor={diskWarning ? 'amber' : 'cyan'}
+        accentColor={diskTone === 'problem' ? 'rose' : diskWarning ? 'amber' : 'cyan'}
         trend="stable"
         loading={statusLoading}
         index={2}
         onClick={() => setCurrentPage('images')}
-        pulse={diskWarning}
-        sparkData={metricHistory.cpu}
+        pulse={diskTone === 'problem'}
       />
       <StatCard
         icon={<HeartPulse className="h-5 w-5" />}
-        label="System Health"
+        label="System health"
         value={healthLabel}
         subtitle={
           hasReport
             ? `${report.summary.healthy} healthy, ${report.summary.unhealthy} unhealthy`
             : isDisconnected
               ? link.state === 'trouble' ? 'The API is not answering' : link.state === 'reconnecting' ? 'API reconnecting — health is unknown' : 'API not connected'
-              : 'Loading health data...'
+              : 'Loading health data…'
         }
         accentColor={healthAccent}
         trend={healthTrend}
@@ -378,7 +369,6 @@ export default function OverviewCards() {
         index={3}
         onClick={() => setCurrentPage('health')}
         sparkData={metricHistory.health}
-        extraClassName="gradient-border"
       />
     </div>
   )

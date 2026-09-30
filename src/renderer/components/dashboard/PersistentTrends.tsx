@@ -1,7 +1,11 @@
-import { TrendingUp, ServerOff, AlertCircle, RefreshCw } from 'lucide-react'
-import { useSettingsStore } from '../../stores/settingsStore'
+// =============================================================================
+// PersistentTrends — CPU, memory and disk over the last hour, three small charts
+// =============================================================================
+
+import { TrendingUp } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
 import type { MetricsTrendsResponse } from '../../../shared/types'
+import { Card, CardEmpty, CardError, CardLoading, CardOffline, METRIC_HEX, pctTone, TONE_TEXT } from './cardShared'
 
 function MiniChart({ points, color, height = 48 }: { points: number[]; color: string; height?: number }) {
   if (points.length < 2) return null
@@ -17,7 +21,7 @@ function MiniChart({ points, color, height = 48 }: { points: number[]; color: st
   const gradId = `grad-${color.replace('#', '')}`
 
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none" aria-hidden>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity={0.3} />
@@ -38,93 +42,39 @@ interface Props {
 
 export default function PersistentTrends({ data, error, onRetry }: Props) {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
-  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
-  if (!isConnected && !data) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
-        <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-500" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Trends</h3>
-        </div>
-        <p className="text-xs text-slate-500">Not connected</p>
-      </div>
-    )
-  }
+  if (!isConnected && !data) return <Card card="trends" dim><CardOffline /></Card>
+  if (!data && error) return <Card card="trends"><CardError title="Could not load the trends" error={error} onRetry={onRetry} /></Card>
+  if (!data) return <Card card="trends"><CardLoading label="Loading the trends…" variant="chart" /></Card>
 
-  if (isConnected && !data && error) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertCircle size={14} className="text-amber-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Trends</h3>
-        </div>
-        <p className="text-xs text-slate-500 mb-2">Unable to load trend data</p>
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            <RefreshCw size={10} />
-            Retry
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  if (isConnected && !data) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp size={14} className="text-cyan-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Trends</h3>
-        </div>
-        <div className="h-12 rounded bg-slate-800/40 animate-pulse" />
-      </div>
-    )
-  }
-
-  const pts = data!.points
-  const cpuPts = pts.map((p) => p.cpu_pct)
-  const memPts = pts.map((p) => p.mem_pct)
-  const diskPts = pts.map((p) => p.disk_pct)
+  const pts = data.points
+  const series = [
+    { label: 'CPU', values: pts.map((p) => p.cpu_pct), color: METRIC_HEX.cpu },
+    { label: 'Memory', values: pts.map((p) => p.mem_pct), color: METRIC_HEX.mem },
+    { label: 'Disk', values: pts.map((p) => p.disk_pct), color: METRIC_HEX.disk },
+  ]
 
   return (
-    <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
-      onClick={() => setCurrentPage('trends')}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp size={14} className="text-cyan-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Trends</h3>
+    <Card card="trends" meta={`${data.range} · ${pts.length} point${pts.length === 1 ? '' : 's'}`} open="trends">
+      {pts.length < 2 ? (
+        <CardEmpty icon={<TrendingUp size={22} />} title="Not enough history yet" hint="The charts fill in as the server records snapshots." />
+      ) : (
+        <div className="space-y-2">
+          {series.map((s) => {
+            const last = s.values[s.values.length - 1]
+            const tone = pctTone(last)
+            return (
+              <div key={s.label}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[11px] text-slate-500">{s.label}</span>
+                  <span className={`text-[11px] font-medium tabular-nums ${tone === 'ok' ? 'text-slate-300' : TONE_TEXT[tone]}`}>{last.toFixed(0)}%</span>
+                </div>
+                <MiniChart points={s.values} color={s.color} height={32} />
+              </div>
+            )
+          })}
         </div>
-        <span className="text-[10px] text-slate-500">{data!.range} — {pts.length} pts</span>
-      </div>
-      <div className="space-y-2">
-        <div>
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10px] text-slate-500">CPU</span>
-            <span className="text-[10px] text-emerald-400 font-medium">{cpuPts.length > 0 ? `${cpuPts[cpuPts.length - 1].toFixed(0)}%` : '\u2014'}</span>
-          </div>
-          <MiniChart points={cpuPts} color="#10b981" height={32} />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10px] text-slate-500">Memory</span>
-            <span className="text-[10px] text-cyan-400 font-medium">{memPts.length > 0 ? `${memPts[memPts.length - 1].toFixed(0)}%` : '\u2014'}</span>
-          </div>
-          <MiniChart points={memPts} color="#06b6d4" height={32} />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[10px] text-slate-500">Disk</span>
-            <span className="text-[10px] text-amber-400 font-medium">{diskPts.length > 0 ? `${diskPts[diskPts.length - 1].toFixed(0)}%` : '\u2014'}</span>
-          </div>
-          <MiniChart points={diskPts} color="#f59e0b" height={32} />
-        </div>
-      </div>
-    </div>
+      )}
+    </Card>
   )
 }

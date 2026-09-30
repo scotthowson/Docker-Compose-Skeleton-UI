@@ -2,8 +2,10 @@
 // PluginFrame — sandboxed plugin card frames with the API message bridge
 // =============================================================================
 
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
 import { apiClient } from '../../api/client'
+import { BTN_CARD_QUIET } from '../../lib/ui'
 
 // Injected ahead of every plugin card. The card runs sandboxed at a null
 // origin, so it can neither reach the API nor hold a session; instead any
@@ -11,11 +13,40 @@ import { apiClient } from '../../api/client'
 // performs the GET with the signed-in session and posts the JSON back.
 const PLUGIN_BRIDGE = `<script>(function(){var n=0,p={};window.addEventListener('message',function(e){var m=e.data;if(!m||m.type!=='dcs-api-response'||!p[m.id])return;var r=p[m.id];delete p[m.id];r({ok:!!m.ok,status:m.status||0,json:function(){return Promise.resolve(m.data)},text:function(){return Promise.resolve(JSON.stringify(m.data))}})});function bridge(path){return new Promise(function(res){var id=++n;p[id]=res;parent.postMessage({type:'dcs-api-request',id:id,path:path},'*')})}window.dcs={fetch:bridge};window.__DCS_TOKEN='';var f=window.fetch;window.fetch=function(u,o){var s=typeof u==='string'?u:(u&&u.url)||'';if(/^\\/(?!\\/)/.test(s))return bridge(s);return f.apply(this,arguments)};})();</script>`
 
+// The palette of the look in use, handed to every card as CSS variables (--dcs-text, --dcs-surface, --dcs-accent …): a card that
+// writes color: var(--dcs-text, #e2e8f0) follows the theme, dark or light; a card that hard-codes its colours stays as it was made.
+const THEME_VARS = ['--dcs-accent', '--dcs-accent-secondary', '--dcs-bg', '--dcs-surface', '--dcs-surface-raised', '--dcs-border', '--dcs-text', '--dcs-text-muted', '--dcs-success', '--dcs-warning', '--dcs-danger', '--dcs-info']
+const SAFE_COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,%/]+\))$/
+
+/** a <style> for the card's document: the look's variables and its colour scheme */
+function themeStyle(): string {
+  const root = document.documentElement
+  const cs = getComputedStyle(root)
+  const decl = THEME_VARS.map((v) => {
+    const val = cs.getPropertyValue(v).trim()
+    return SAFE_COLOR.test(val) ? `${v}:${val}` : ''
+  }).filter(Boolean)
+  decl.push(`color-scheme:${root.classList.contains('light') ? 'light' : 'dark'}`)
+  return `<style>:root{${decl.join(';')}}</style>`
+}
+
+/** counts up whenever the look changes (dark ↔ light, another theme), so a card is drawn again in the new palette */
+function useThemeKey(): number {
+  const [key, setKey] = useState(0)
+  useEffect(() => {
+    const observer = new MutationObserver(() => setKey((k) => k + 1))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+  return key
+}
+
 /** Plugin card iframe — fetches HTML from API and renders it from a blob URL */
 export function PluginCardFrame({ pluginName, cardName, title, refreshInterval = 0 }: { pluginName: string; cardName: string; title: string; refreshInterval?: number }) {
   const [src, setSrc] = useState<string>('')
   const [error, setError] = useState(false)
   const [tick, setTick] = useState(0)
+  const themeKey = useThemeKey()
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -25,13 +56,13 @@ export function PluginCardFrame({ pluginName, cardName, title, refreshInterval =
         if (cancelled) return
         // Blob URL has null origin — CSP of parent page does NOT apply
         // Scripts execute freely inside blob URL iframes
-        const blob = new Blob([PLUGIN_BRIDGE + res.html], { type: 'text/html' })
+        const blob = new Blob([PLUGIN_BRIDGE + themeStyle() + res.html], { type: 'text/html' })
         setSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
         setError(false)
       })
       .catch(() => { if (!cancelled) setError(true) })
     return () => { cancelled = true }
-  }, [pluginName, cardName, tick])
+  }, [pluginName, cardName, tick, themeKey])
 
   // Cards that declare a refresh interval are reloaded on that cadence
   useEffect(() => {
@@ -66,16 +97,19 @@ export function PluginCardFrame({ pluginName, cardName, title, refreshInterval =
 
   if (error) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to load card</span>
+      <div className="h-full flex flex-col items-center justify-center gap-2 p-4 text-center" role="alert">
+        <AlertCircle size={18} className="text-rose-400" aria-hidden />
+        <p className="text-sm text-slate-400">This card did not load</p>
+        <button type="button" onClick={() => { setError(false); setTick((n) => n + 1) }} className={BTN_CARD_QUIET}><RefreshCw size={12} /> Try again</button>
       </div>
     )
   }
 
   if (!src) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: '20px', height: '20px', border: '2px solid rgba(139,92,246,0.3)', borderTop: '2px solid #8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <div className="h-full p-4" role="status">
+        <span className="sr-only">Loading {title}…</span>
+        <div className="skeleton h-full w-full" aria-hidden />
       </div>
     )
   }
@@ -102,14 +136,15 @@ export function PluginCardFrame({ pluginName, cardName, title, refreshInterval =
  */
 export function HtmlCardFrame({ html, title }: { html: string; title: string }) {
   const [src, setSrc] = useState<string>('')
+  const themeKey = useThemeKey()
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    const blob = new Blob([PLUGIN_BRIDGE + html], { type: 'text/html' })
+    const blob = new Blob([PLUGIN_BRIDGE + themeStyle() + html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     setSrc(url)
     return () => URL.revokeObjectURL(url)
-  }, [html])
+  }, [html, themeKey])
 
   useEffect(() => {
     const onMessage = async (e: MessageEvent) => {

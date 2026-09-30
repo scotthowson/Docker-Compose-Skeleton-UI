@@ -6,6 +6,11 @@ import { useState, useRef, useEffect } from 'react'
 import { Switch } from '@mantine/core'
 import { Shield, User, Lock, Loader2, AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { terminalAuth } from '../../api/endpoints'
+import Hint from '../common/Hint'
+import { BTN_ICON_SM, BTN_SHEET_PRIMARY, TONE_GHOST } from '../../lib/ui'
+
+/** the gate's fields: the glass fill, an emerald ring of their own on focus */
+const FIELD = 'w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50 transition-all duration-200'
 
 interface Props {
   onAuthenticated: (token: string, username: string) => void
@@ -53,7 +58,7 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
         if (apiErr.status === 429) {
           setError('Too many failed attempts. Please try again in 15 minutes.')
         } else if (apiErr.status === 401) {
-          setError('Invalid Linux username or password.')
+          setError('Wrong Linux username or password.')
         } else {
           setError(apiErr.message || 'Authentication failed')
         }
@@ -66,151 +71,118 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] px-4">
+    <div className="flex flex-col items-center justify-center px-4 py-6">
       <div
         className={`
           w-full max-w-md transition-all duration-500 ease-out
           ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
         `}
       >
-        {/* Icon header */}
-        <div className="flex flex-col items-center mb-8">
-          <div className={`
-            flex items-center justify-center w-16 h-16 rounded-2xl mb-4
-            bg-emerald-500/10 border border-emerald-500/20
-            transition-all duration-700 ease-out
-            ${mounted ? 'scale-100 rotate-0' : 'scale-75 -rotate-12'}
-          `}>
-            <KeyRound size={28} className="text-emerald-400" strokeWidth={1.5} />
+        <form onSubmit={handleSubmit} className="glass-card p-5 md:p-6 space-y-5" aria-labelledby="terminal-gate-title">
+          <div className="flex items-start gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 shrink-0" aria-hidden>
+              <KeyRound size={18} className="text-slate-300" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="terminal-gate-title" className="text-base font-semibold text-slate-200">Sign in with a Linux account</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Enter the username and password of a Linux account on this server to open the terminal.</p>
+            </div>
           </div>
-          <h2 className="text-lg font-semibold text-slate-200">Linux System Authentication</h2>
-          <p className="text-xs text-slate-500 mt-1 text-center">
-            Enter your Linux account credentials to access the terminal
-          </p>
-        </div>
 
-        {/* Login card */}
-        <form
-          onSubmit={handleSubmit}
-          className="
-            bg-slate-900/60 backdrop-blur-xl border border-white/5
-            rounded-2xl p-6 space-y-5
-            shadow-xl shadow-black/20
-            gradient-border
-          "
-        >
-          {/* Security badge */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-            <Shield size={14} className="text-emerald-500/60 shrink-0" />
-            <span className="text-[11px] text-emerald-400/70">
-              Credentials are validated against the server's Linux system accounts
+          {/* What is checked */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/5 border border-cyan-500/15">
+            <Shield size={14} className="text-cyan-400 shrink-0" aria-hidden />
+            <span className="text-[11px] text-slate-400">
+              The credentials are checked against the server's Linux accounts
             </span>
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-rose-500/8 border border-rose-500/15 animate-fade-in">
-              <AlertCircle size={14} className="text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 animate-fade-in" role="alert">
+              <AlertCircle size={14} className="text-rose-400 shrink-0 mt-0.5" aria-hidden />
               <span className="text-xs text-rose-300">{error}</span>
             </div>
           )}
 
           {/* Username field */}
           <div className="space-y-1.5">
-            <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+            <label htmlFor="terminal-username" className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider">
               Username
             </label>
             <div className="relative">
-              <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
               <input
+                id="terminal-username"
                 ref={usernameRef}
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="linux username"
+                placeholder="Linux username"
                 disabled={loading}
                 autoComplete="username"
-                className="
-                  w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
-                  bg-slate-800/60 border border-white/5
-                  text-slate-200 placeholder-slate-600
-                  focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20
-                  disabled:opacity-50 transition-all duration-200
-                "
+                className={FIELD}
               />
             </div>
           </div>
 
           {/* Password field */}
           <div className="space-y-1.5">
-            <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+            <label htmlFor="terminal-password" className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider">
               Password
             </label>
             <div className="relative">
-              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
               <input
+                id="terminal-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="linux password"
+                placeholder="Linux password"
                 disabled={loading}
                 autoComplete="current-password"
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
-                className="
-                  w-full pl-10 pr-11 py-2.5 rounded-xl text-sm
-                  bg-slate-800/60 border border-white/5
-                  text-slate-200 placeholder-slate-600
-                  focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20
-                  disabled:opacity-50 transition-all duration-200
-                "
+                className={`${FIELD} !pr-11`}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
-                tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+              <Hint label={showPassword ? 'Hide the password' : 'Show the password'}>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className={`absolute right-1 top-1/2 -translate-y-1/2 ${BTN_ICON_SM} ${TONE_GHOST}`}
+                  aria-label={showPassword ? 'Hide the password' : 'Show the password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </Hint>
             </div>
           </div>
 
           {/* Remember toggle */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">Remember for this session</span>
-            <Switch size="sm" aria-label="Remember for this session" checked={rememberSession} onChange={() => setRememberSession(!rememberSession)} />
+          <div className="flex items-center justify-between gap-3">
+            <span id="terminal-remember" className="text-xs text-slate-400">Remember for this session</span>
+            <Switch size="sm" aria-labelledby="terminal-remember" checked={rememberSession} onChange={() => setRememberSession(!rememberSession)} />
           </div>
 
           {/* Submit button */}
-          <button
-            type="submit"
-            disabled={loading || !username.trim() || !password}
-            className="
-              w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium
-              bg-emerald-500/15 text-emerald-400 border border-emerald-500/20
-              hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
+          <button type="submit" disabled={loading || !username.trim() || !password} className={`${BTN_SHEET_PRIMARY} w-full`}>
             {loading ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
-                Authenticating...
+                <Loader2 size={16} className="animate-spin" />
+                Signing in…
               </>
             ) : (
               <>
-                <Shield size={15} />
-                Authenticate
+                <Lock size={16} />
+                Sign in
               </>
             )}
           </button>
         </form>
 
         {/* Footer hint */}
-        <p className="text-center text-[10px] text-slate-700 mt-4">
-          Terminal sessions expire after 4 hours. Close the browser tab to end immediately.
+        <p className="text-center text-[11px] text-slate-500 mt-4">
+          Terminal sessions expire after 4 hours. Close the browser tab to end one right away.
         </p>
       </div>
     </div>

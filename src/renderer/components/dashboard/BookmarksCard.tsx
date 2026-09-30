@@ -6,8 +6,10 @@ import React, { useEffect, useState } from 'react'
 import * as Icons from 'lucide-react'
 import { Bookmark, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_CARD, TONE_OK } from '../../lib/ui'
 import type { PageId } from '../../../shared/types'
-import { CardHeader, CardEmpty, ACCENTS } from './cardShared'
+import { Card, CardBody, CardEmpty, ACCENTS } from './cardShared'
 
 interface BookmarkItem {
   id: string
@@ -51,33 +53,32 @@ export default function BookmarksCard() {
   }
 
   return (
-    <div className="glass-card p-4 h-full flex flex-col">
-      <CardHeader
-        icon={<Bookmark size={15} />}
-        title="Bookmarks"
-        count={items.length || undefined}
-        right={<button onClick={() => setCurrentPage('bookmarks')} className="text-[10px] text-slate-500 hover:text-slate-200 transition-colors">Manage</button>}
-      />
+    <Card card="bookmarks" meta={items.length || undefined} open="bookmarks" clickable={false}>
       {items.length === 0 ? (
-        <CardEmpty icon={<Bookmark size={22} />} title="No bookmarks yet" hint="Save pages, stacks, containers and links on the Bookmarks page." action={<button onClick={() => setCurrentPage('bookmarks')} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">Open Bookmarks</button>} />
+        <CardEmpty
+          icon={<Bookmark size={22} />}
+          title="No bookmarks yet"
+          hint={`Save pages, stacks, containers and links on the ${pageLabel('bookmarks')} page.`}
+          action={<button type="button" onClick={() => setCurrentPage('bookmarks')} className={`${BTN_CARD} ${TONE_OK}`}>Open {pageLabel('bookmarks')}</button>}
+        />
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 grid grid-cols-2 gap-1.5 content-start">
+        <CardBody className="grid grid-cols-2 gap-1.5 content-start">
           {items.map((b) => {
             const acc = accentOf(b.color)
             const Icon = ((Icons as unknown as Record<string, React.ElementType>)[b.icon] ?? Bookmark) as React.ElementType
             return (
-              <button key={b.id} onClick={() => open(b)} className={`group flex items-center gap-2 rounded-lg px-2.5 py-2 border ${acc.ring} bg-white/[0.02] hover:bg-white/[0.05] text-left transition-colors`} title={b.notes || b.target}>
+              <button key={b.id} type="button" onClick={() => open(b)} className={`group flex items-center gap-2 rounded-lg px-2.5 py-2 border ${acc.ring} bg-white/[0.02] hover:bg-white/[0.05] text-left transition-colors`} title={b.notes || b.target}>
                 <span className={`flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${acc.bg} ${acc.text}`}><Icon size={14} /></span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-xs font-medium text-slate-200 truncate">{b.label}</span>
                   <span className="block text-[10px] text-slate-500 truncate">{b.type === 'custom' ? b.target.replace(/^https?:\/\//, '') : b.type}</span>
                 </span>
-                {b.type === 'custom' && <ExternalLink size={11} className="text-slate-600 group-hover:text-cyan-400 shrink-0" />}
+                {b.type === 'custom' && <ExternalLink size={11} className="text-slate-500 group-hover:text-cyan-400 shrink-0" aria-hidden />}
               </button>
             )
           })}
-        </div>
+        </CardBody>
       )}
-    </div>
+    </Card>
   )
 }

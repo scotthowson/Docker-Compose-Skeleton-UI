@@ -2,8 +2,9 @@
 // Dashboard — Advanced overview page with live data, disk mounts, quick actions
 // =============================================================================
 
-import React, { useRef, useEffect, useState } from 'react'
-import { WifiOff, Wifi, Loader2, Server, RefreshCw, ChevronDown, Settings2 } from 'lucide-react'
+import React, { useRef, useEffect } from 'react'
+import { WifiOff, Wifi, Loader2, Server, RefreshCw, Settings2 } from 'lucide-react'
+import { Badge } from '@mantine/core'
 import { usePolling } from '../hooks/usePolling'
 import { ApiError, ApiNetworkError } from '../api/client'
 import {
@@ -14,33 +15,22 @@ import {
   fetchAutomations, fetchMetricsTrends, crowdsecStatus,
 } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { useContainerStore } from '../stores/containerStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useLogStore } from '../stores/logStore'
-import OverviewCards from '../components/dashboard/OverviewCards'
-import HealthSummary from '../components/dashboard/HealthSummary'
-import ResourceChart from '../components/dashboard/ResourceChart'
 import type { ResourceHistoryPoint } from '../components/dashboard/ResourceChart'
-import RecentEvents from '../components/dashboard/RecentEvents'
-import DiskMonitor from '../components/dashboard/DiskMonitor'
-import QuickActions from '../components/dashboard/QuickActions'
-import ContainerOverview from '../components/dashboard/ContainerOverview'
-import ServerInfo from '../components/dashboard/ServerInfo'
-import StackStatusGrid from '../components/dashboard/StackStatusGrid'
-import ImageUpdateAlert from '../components/dashboard/ImageUpdateAlert'
-import BackupStatusCard from '../components/dashboard/BackupStatusCard'
-import TopResourceConsumers from '../components/dashboard/TopResourceConsumers'
-import LogHealthSummary from '../components/dashboard/LogHealthSummary'
-import MaintenanceSummary from '../components/dashboard/MaintenanceSummary'
-import NotificationStatus from '../components/dashboard/NotificationStatus'
-import ActiveAutomations from '../components/dashboard/ActiveAutomations'
-import PersistentTrends from '../components/dashboard/PersistentTrends'
 import DashboardGrid from '../components/dashboard/DashboardGrid'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useStackStore } from '../stores/stackStore'
 import { useToast } from '../components/common/Toast'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_SHEET_PRIMARY, BTN_TOOLBAR_QUIET } from '../lib/ui'
 import type { DiskInfo, HealthReport } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -59,14 +49,13 @@ function DisconnectedHero() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] relative">
       {/* Background ambient orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
         <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-emerald-500/[0.04] blur-3xl animate-breathe" />
         <div className="absolute bottom-1/4 right-1/4 w-72 h-72 rounded-full bg-cyan-500/[0.03] blur-3xl animate-breathe" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-violet-500/[0.02] blur-3xl animate-breathe" style={{ animationDelay: '4s' }} />
       </div>
 
       {/* Main illustration */}
-      <div className="relative mb-8 w-40 h-40 flex items-center justify-center">
+      <div className="relative mb-8 w-40 h-40 flex items-center justify-center" aria-hidden>
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-40 h-40 rounded-full border border-white/[0.03] animate-spin-slow" />
         </div>
@@ -78,19 +67,14 @@ function DisconnectedHero() {
             <div className="w-2 h-2 rounded-full bg-emerald-400/60" />
           </div>
         </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="animate-orbit-reverse">
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/40" />
-          </div>
-        </div>
         <div className="relative z-10 flex items-center justify-center w-24 h-24">
           <div className={`
             absolute inset-0 rounded-2xl
-            ${isConnecting ? 'bg-amber-500/10 border-amber-500/20' : isError ? 'bg-rose-500/10 border-rose-500/20' : 'bg-slate-500/10 border-slate-500/20'}
+            ${isConnecting ? 'bg-cyan-500/10 border-cyan-500/20' : isError ? 'bg-rose-500/10 border-rose-500/20' : 'bg-slate-500/10 border-slate-500/20'}
             border backdrop-blur-sm transition-colors duration-500
           `} />
           {isConnecting ? (
-            <Loader2 size={36} className="relative z-10 text-amber-400 animate-spin" />
+            <Loader2 size={36} className="relative z-10 text-cyan-400 animate-spin" />
           ) : isError ? (
             <WifiOff size={36} className="relative z-10 text-rose-400" />
           ) : (
@@ -100,18 +84,12 @@ function DisconnectedHero() {
       </div>
 
       <div className="text-center max-w-md animate-fade-in-up relative z-10">
-        <h2 className="text-2xl font-bold mb-2">
-          {isConnecting ? (
-            <span className="text-gradient-warm">Connecting...</span>
-          ) : isError ? (
-            <span className="text-rose-400">Connection Failed</span>
-          ) : (
-            <span className="text-slate-300">Waiting for Server</span>
-          )}
+        <h2 className={`text-2xl font-bold mb-2 ${isConnecting ? 'text-cyan-400' : isError ? 'text-rose-400' : 'text-slate-300'}`}>
+          {isConnecting ? 'Connecting…' : isError ? 'Connection failed' : 'Waiting for the server'}
         </h2>
         <p className="text-slate-500 text-sm leading-relaxed mb-6">
           {isConnecting
-            ? 'Establishing connection to the API server...'
+            ? 'Connecting to the API server…'
             : isError
               ? serverUrl === '/api'
                 ? <>Unable to reach the API server. Run <span className="font-mono text-slate-400">./setup.sh</span> or <span className="font-mono text-slate-400">./start.sh</span> on your host.</>
@@ -120,37 +98,17 @@ function DisconnectedHero() {
           }
         </p>
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div className={`
-            inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium
-            ${isConnecting ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-              : isError ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-              : 'bg-slate-500/10 border-slate-500/20 text-slate-400'}
-          `}>
-            <span className="relative flex h-2 w-2">
-              {isConnecting && <span className="absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-75" />}
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isConnecting ? 'bg-amber-400' : isError ? 'bg-rose-400' : 'bg-slate-500'}`} />
-            </span>
+          <Badge component="span" size="lg" color={isConnecting ? 'cyan' : isError ? 'rose' : 'slate'}>
             {isConnecting ? 'Connecting' : isError ? `Attempt ${reconnectAttempts}` : 'Disconnected'}
-          </div>
+          </Badge>
         </div>
         {(isError || connectionStatus === 'disconnected') && (
-          <button
-            onClick={() => connect()}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 press"
-          >
-            <RefreshCw size={14} />
-            Retry Connection
+          <button type="button" onClick={() => connect()} className={`${BTN_SHEET_PRIMARY} mx-auto`}>
+            <RefreshCw size={16} />
+            Retry connection
           </button>
         )}
       </div>
-
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.015]"
-        style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        }}
-      />
     </div>
   )
 }
@@ -164,6 +122,8 @@ export default function Dashboard() {
   const isConnected = connectionStatus === 'connected'
   const reportPollSuccess = useConnectionStore((s) => s.reportPollSuccess)
   const reportPollFailure = useConnectionStore((s) => s.reportPollFailure)
+  // the backup status is an admin's: the route answers 403 to anyone else, so only an admin asks
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
   const setSystemVersion = useSystemStore((s) => s.setVersion)
   const setSystemInfo = useSystemStore((s) => s.setSystem)
@@ -284,18 +244,18 @@ export default function Dashboard() {
         if (current === 'degraded' || current === 'critical') {
           addNotification({
             type: current === 'critical' ? 'error' : 'warning',
-            title: current === 'critical' ? 'System Health Critical' : 'System Health Degraded',
+            title: current === 'critical' ? 'System health critical' : 'System health degraded',
             message: `${healthReport.summary.unhealthy} of ${healthReport.summary.total} containers unhealthy`,
             persist: true,
-            action: { label: 'View Health', page: 'health' },
+            action: { label: `View ${pageLabel('health')}`, page: 'health' },
           })
         } else if (current === 'healthy' && (prev === 'degraded' || prev === 'critical')) {
           addNotification({
             type: 'success',
-            title: 'System Health Restored',
+            title: 'System health restored',
             message: `All ${healthReport.summary.total} containers are healthy`,
             persist: true,
-            action: { label: 'View Health', page: 'health' },
+            action: { label: `View ${pageLabel('health')}`, page: 'health' },
           })
         }
       }
@@ -377,9 +337,9 @@ export default function Dashboard() {
     onError: onPollError,
   })
 
-  // --- Poll /backups/status every 30s ---
+  // --- Poll /backups/status every 30s (admins only) ---
   const backupStatusPoll = usePolling(fetchBackupStatus, 30000, {
-    enabled: isConnected,
+    enabled: isConnected && isAdmin,
     onError: onPollError,
   })
 
@@ -431,44 +391,28 @@ export default function Dashboard() {
   const showDisconnected = !isConnected && !everConnected && hasNoData
 
   return (
-    <div className="space-y-3 md:space-y-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between animate-fade-in">
-        <div>
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient neon-emerald">Dashboard</span>
-          </h1>
-          <p className="mt-0.5 text-xs md:text-sm text-slate-500">
-            {systemStatus
-              ? <><span className="text-slate-400">{systemStatus.hostname}</span>{' \u2014 uptime '}{formatUptime(systemStatus.uptime_seconds)}</>
-              : 'Overview of your Docker environment'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isConnected && !dashLayout.editMode && (
-            <button
-              onClick={dashLayout.enterEditMode}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/20 transition-all"
-              title="Customize dashboard layout"
-            >
-              <Settings2 size={12} />
-              Edit
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
+      {/* the "never connected" screen below says it in full: the banner is for a link that drops later */}
+      {!showDisconnected && <DisconnectedBanner />}
+      <PageHeader
+        page="dashboard"
+        badge={isConnected ? <Badge component="span" color="emerald" leftSection={<Wifi size={11} />}>Live</Badge> : undefined}
+        subtitle={systemStatus
+          ? <><span className="text-slate-300">{systemStatus.hostname}</span>{' \u2014 uptime '}{formatUptime(systemStatus.uptime_seconds)}</>
+          : undefined}
+        actions={isConnected && !dashLayout.editMode ? (
+          <Hint label="Move, resize, add and hide the cards">
+            <button type="button" onClick={dashLayout.enterEditMode} className={`${BTN_TOOLBAR_QUIET} hidden sm:flex`}>
+              <Settings2 size={14} /> Edit dashboard
             </button>
-          )}
-          {isConnected && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
-              <Wifi size={13} className="text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-400">Live</span>
-            </div>
-          )}
-        </div>
-      </div>
+          </Hint>
+        ) : undefined}
+      />
 
       {showDisconnected ? (
         <DisconnectedHero />
       ) : (
         <>
-
           <DashboardGrid
             cards={dashLayout.allCards}
             editMode={dashLayout.editMode}
@@ -506,48 +450,6 @@ export default function Dashboard() {
           />
         </>
       )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// DashboardSection — collapsible row group
-// ---------------------------------------------------------------------------
-
-function DashboardSection({ label, storageKey, children }: {
-  label: string
-  storageKey: string
-  children: React.ReactNode
-}) {
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(`dash-section-${storageKey}`) === 'true' } catch { return false }
-  })
-
-  const toggle = () => {
-    const next = !collapsed
-    setCollapsed(next)
-    try { localStorage.setItem(`dash-section-${storageKey}`, String(next)) } catch {}
-  }
-
-  return (
-    <div>
-      <button
-        onClick={toggle}
-        className="flex items-center gap-2 mb-3 group cursor-pointer select-none press"
-      >
-        <ChevronDown
-          size={14}
-          className={`text-slate-500 group-hover:text-slate-400 transition-all duration-200 ${collapsed ? '-rotate-90' : ''}`}
-        />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 group-hover:text-slate-400 transition-colors">
-          {label}
-        </span>
-      </button>
-      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-        collapsed ? 'max-h-0 opacity-0' : 'max-h-[3000px] opacity-100'
-      }`}>
-        {children}
-      </div>
     </div>
   )
 }

@@ -1,7 +1,12 @@
-import { Layers, ServerOff, AlertCircle, RefreshCw } from 'lucide-react'
-import { useSettingsStore } from '../../stores/settingsStore'
+// =============================================================================
+// StackStatusGrid — every stack with its state, as a grid of small tiles
+// =============================================================================
+
+import { Layers } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
+import { pageLabel } from '../../constants/pageTitles'
 import type { StackInfo } from '../../../shared/types'
+import { Card, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
 
 interface Props {
   stacks: StackInfo[] | null
@@ -11,85 +16,31 @@ interface Props {
 
 export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
-  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
 
-  if (!isConnected && !stacks) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
-        <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-500" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Stacks</h3>
-        </div>
-        <p className="text-xs text-slate-500">Not connected</p>
-      </div>
-    )
-  }
-
-  if (isConnected && !stacks && error) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertCircle size={14} className="text-amber-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Stacks</h3>
-        </div>
-        <p className="text-xs text-slate-500 mb-2">Unable to load stack data</p>
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            <RefreshCw size={10} />
-            Retry
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  if (isConnected && !stacks) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <Layers size={14} className="text-violet-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Stacks</h3>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-14 rounded-lg bg-slate-800/40 animate-pulse" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  const list = stacks ?? []
+  if (!isConnected && !stacks) return <Card card="stack-grid" dim><CardOffline /></Card>
+  if (!stacks && error) return <Card card="stack-grid"><CardError title="Could not load the stacks" error={error} onRetry={onRetry} /></Card>
+  if (!stacks) return <Card card="stack-grid"><CardLoading label="Loading the stacks…" variant="tiles" rows={6} /></Card>
 
   return (
-    <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
-      onClick={() => setCurrentPage('stacks')}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Layers size={14} className="text-violet-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Stacks</h3>
+    <Card card="stack-grid" meta={`${stacks.length} total`} open="stacks">
+      {stacks.length === 0 ? (
+        <CardEmpty icon={<Layers size={22} />} title="No stacks yet" hint={`Deploy a template or create a stack on the ${pageLabel('stacks')} page.`} />
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 content-start">
+          {stacks.map((s) => (
+            <div
+              key={`${s.member ?? ''}|${s.name}`}
+              className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5 hover:bg-white/5 transition-colors flex items-center gap-2.5 min-h-[44px]"
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} aria-hidden />
+              <span className="text-xs font-medium text-slate-200 truncate flex-1">{s.name}</span>
+              <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
+                {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
+              </span>
+            </div>
+          ))}
         </div>
-        <span className="text-xs text-slate-500">{list.length} total</span>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
-        {list.map((s) => (
-          <div
-            key={`${s.member ?? ''}|${s.name}`}
-            className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5 hover:bg-white/5 transition-colors flex items-center gap-2.5 min-h-[44px]"
-          >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-            <span className="text-xs font-medium text-slate-200 truncate flex-1">{s.name}</span>
-            <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
-              {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+      )}
+    </Card>
   )
 }
