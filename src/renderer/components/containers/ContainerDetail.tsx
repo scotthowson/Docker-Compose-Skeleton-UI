@@ -551,6 +551,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
   const mountedRef = useRef(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // leaving the detail for the list puts the keyboard back on this container's row (the list's desktop table or its phone cards, whichever is on screen)
+  useEffect(() => () => {
+    requestAnimationFrame(() => {
+      const rows = document.querySelectorAll<HTMLElement>(`[data-container-open="${CSS.escape(containerName)}"]`)
+      Array.from(rows).find((el) => el.offsetParent !== null)?.focus()
+    })
+  }, [containerName])
+
   // Fetch full container detail (environment, mounts, networks)
   const fetchDetail = useCallback(async () => {
     setDetailLoading(true)

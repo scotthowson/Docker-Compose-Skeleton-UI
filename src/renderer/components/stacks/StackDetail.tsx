@@ -32,7 +32,7 @@ import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack,
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
-import { EmptyState, LoadingState } from '../common/PageState'
+import { EmptyState, ErrorState, LoadingState } from '../common/PageState'
 import Hint from '../common/Hint'
 import ModalOverlay from '../common/ModalOverlay'
 import { ComposeViewer } from './ComposeViewer'
@@ -121,6 +121,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [detail, setDetail] = useState<StackDetailType | null>(null)
   const [logs, setLogs] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [logsLoading, setLogsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('containers')
   const [showCompose, setShowCompose] = useState(false)
@@ -210,8 +211,10 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
     try {
       const data = await fetchStack(stackName)
       setDetail(data)
-    } catch {
-      // Keep previous detail on error
+      setLoadError(null)
+    } catch (err) {
+      // Keep previous detail on error; the message shows when there is none yet
+      setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -292,6 +295,22 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
             <div key={i} className="h-12 rounded bg-white/5 animate-pulse" />
           ))}
         </div>
+      </div>
+    )
+  }
+
+  // the first read failed: say so, with a way back and a way to try again
+  if (!detail && loadError) {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <h1 className="sr-only">{formatStackName(stackName)}</h1>
+        <Hint label={`Back to ${pageLabel('stacks')} (Esc)`}>
+          <button onClick={onBack} aria-label="Back" className={BTN_TOOLBAR_QUIET}>
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+        </Hint>
+        <ErrorState title={`Could not read ${stackName}`} error={loadError} onRetry={() => { setLoading(true); void loadDetail() }} />
       </div>
     )
   }

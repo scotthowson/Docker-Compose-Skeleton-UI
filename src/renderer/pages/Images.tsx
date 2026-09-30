@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ImageSearchResult } from '../../shared/types'
-import { LoadingState, EmptyState } from '../components/common/PageState'
+import { LoadingState, EmptyState, ErrorState } from '../components/common/PageState'
 
 const IMAGE_POLL_INTERVAL = 60_000
 
@@ -81,13 +81,17 @@ const Images: React.FC = () => {
   // Fetch images via the connection-aware polling hook
   const handleFetch = useCallback(async () => {
     setLoading(true)
-    const result = await fetchImages(scope)
-    setImages(result.images)
-    setLoading(false)
-    return result
+    try {
+      const result = await fetchImages(scope)
+      setImages(result.images)
+      return result
+    } finally {
+      // (a failed read must not leave the table waiting for ever)
+      setLoading(false)
+    }
   }, [setImages, setLoading, scope])
 
-  const { refresh } = useApi(handleFetch, IMAGE_POLL_INTERVAL, { enabled: isConnected })
+  const { refresh, error: fetchError } = useApi(handleFetch, IMAGE_POLL_INTERVAL, { enabled: isConnected })
   const scopeRef = useRef(scope)
   useEffect(() => { if (scopeRef.current !== scope) { scopeRef.current = scope; setSelectedImages(new Set()); refresh() } }, [scope, refresh])
 
@@ -469,7 +473,9 @@ const Images: React.FC = () => {
         </div>
 
         {/* ---- Content ---- */}
-        {viewMode === 'table' ? (
+        {fetchError && images.length === 0 ? (
+          <ErrorState title="Could not read the images" error={fetchError} onRetry={refresh} />
+        ) : viewMode === 'table' ? (
           <ImageList
             rows={filteredImages}
             query={searchQuery.trim()}

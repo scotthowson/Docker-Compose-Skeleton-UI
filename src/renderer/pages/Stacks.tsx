@@ -123,7 +123,7 @@ export default function Stacks() {
   const [batchTotal, setBatchTotal] = useState(0)
 
   // Poll stacks list every 5 seconds
-  const { data: stacksData, refresh } = useApi(fetchStacks, 5000, {
+  const { data: stacksData, loading: stacksLoading, error: stacksError, refresh } = useApi(fetchStacks, 5000, {
     enabled: isConnected,
   })
 
@@ -342,6 +342,8 @@ export default function Stacks() {
           onAction={handleAction}
           onSelect={(name) => setSelectedStackName(name)}
           onRefresh={refresh}
+          loading={stacksLoading && !stacksData}
+          error={stacksError}
           onEdit={handleEdit}
           onCreateStack={() => (hubMode ? setShowNewVm(true) : setShowCreateOverlay(true))}
           onCreateHubStack={() => setShowCreateOverlay(true)}

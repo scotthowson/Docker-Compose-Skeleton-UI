@@ -19,7 +19,7 @@ import { deleteStack, fetchStackCompose } from '../../api/endpoints'
 import { lintCompose, isComposeLinterEnabled } from '../../hooks/useComposeLinter'
 import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
-import { EmptyState } from '../common/PageState'
+import { EmptyState, ErrorState } from '../common/PageState'
 import ModalOverlay from '../common/ModalOverlay'
 import PageHeader from '../common/PageHeader'
 import Hint from '../common/Hint'
@@ -31,6 +31,10 @@ interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
   onSelect: (stackName: string) => void
   onRefresh: () => void
+  /** the first read of the list is under way */
+  loading?: boolean
+  /** the list could not be read (shown when there is nothing to show yet) */
+  error?: Error | null
   onEdit?: (stackName: string) => void
   onCreateStack?: () => void
   /** a hub: a stack on the hub itself (the New menu's second choice) */
@@ -144,8 +148,8 @@ function MenuButton({ ariaLabel, className, label, icon, width = 256, children }
 
 const MENU_ITEM = 'w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:opacity-50'
 
-export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
-  const { stacks, actionLoading, loading } = useStackStore()
+export default function StackList({ onAction, onSelect, onRefresh, loading = false, error = null, onEdit, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
+  const { stacks, actionLoading } = useStackStore()
   const confirm = useConfirm()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
@@ -278,6 +282,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   }, [onRefresh])
 
   const filtering = !!search || statusFilter !== 'all'
+  /** the list could not be read and there is nothing to count */
+  const unreadable = stacks.length === 0 && !!error
   const closeDelete = () => { setShowDeleteModal(null); setDeleteError(null) }
   const batchClass = batchMode ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET
 
@@ -332,7 +338,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       {/* Header: the stats, the state of the builds and the actions */}
       <PageHeader
         page="stacks"
-        badge={
+        badge={unreadable ? undefined : (
           <span className="text-sm text-slate-400">
             <span className="text-emerald-400 font-semibold">{runningCount} running</span>
             <span className="mx-1.5 text-slate-500">&middot;</span>
@@ -344,8 +350,8 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               </>
             )}
           </span>
-        }
-        subtitle={hubMode ? `${vmCount} VM${vmCount === 1 ? '' : 's'} · ${stacks.length - vmCount} on the hub` : undefined}
+        )}
+        subtitle={hubMode && !unreadable ? `${vmCount} VM${vmCount === 1 ? '' : 's'} · ${stacks.length - vmCount} on the hub` : undefined}
         actions={hubMode ? (
           // a hub keeps the header calm: New, a pill for builds in flight, and More
           <>
@@ -518,7 +524,9 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
       )}
 
       {/* Stack grid */}
-      {loading && stacks.length === 0 ? (
+      {unreadable ? (
+        <ErrorState title="Could not read the stacks" error={error} onRetry={onRefresh} />
+      ) : loading && stacks.length === 0 ? (
         <div role="status" aria-label="Reading the stacks" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[200px] border border-white/[0.03]" />

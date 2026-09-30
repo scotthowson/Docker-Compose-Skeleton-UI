@@ -371,6 +371,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
         {/* the whole card opens the container for a finger; this button is the way in for a keyboard */}
         <button
           type="button"
+          data-container-open={container.name}
           onClick={(e) => { e.stopPropagation(); onClick(container) }}
           className="min-w-0 flex-1 truncate rounded text-left text-[15px] font-semibold text-slate-200"
         >
@@ -457,6 +458,7 @@ function ContainerNameWithPopover({ container, formatUptime, onOpen }: { contain
       <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={handleLeave} className="text-sm font-medium flex items-center gap-1">
         <button
           type="button"
+          data-container-open={container.name}
           onClick={(e) => { e.stopPropagation(); onOpen() }}
           onFocus={handleEnter}
           onBlur={handleLeave}
