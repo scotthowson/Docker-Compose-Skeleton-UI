@@ -56,10 +56,10 @@ S
   rsvg-convert -w "$w" -h "$h" "$file.svg" -o "$file.png"
   echo "$file.png"
 }
-banner banner-dcs      "DCS"          "Docker Compose Skeleton"                        "Every stack on your server, one command away."             "start.sh deploy update backup"     ""                 "github.com/scotthowson/Docker-Compose-Skeleton-AIO"
+banner banner-dcs      "DCS"          "DCS Orchestrator"                              "Every stack on your server, one command away."             "start.sh deploy update backup"     ""                 "github.com/scotthowson/Docker-Compose-Skeleton-AIO"
 banner banner-commands "DCS Commands" "Slash commands for your server"                 "Status, health, deploys and restarts from Discord, confirmed."  "/status /health /deploy /restart"  "accent|$SLASH"    "Every reply has buttons · destructive actions ask first"
 banner banner-alerts   "DCS Alerts"   "Your server, in your channel"                   "Deploys, health, backups, disk space and updates as they happen." "deploys health backups updates" "amber|$BELL"      "One embed per event · cooldowns keep it quiet"
 banner banner-crowdsec "CrowdSec × DCS" "Bans at the proxy, explained in plain words"  "Who hit you, from where, how hard, and for how long."       "ssh-bf http-probing exploits"      "violet|$SHIELD"   "Threat intel links on every alert"
-banner banner-manager  "DCS Manager"  "The dashboard for Docker Compose Skeleton"      "Desktop, web and mobile · stacks, templates, health, everything." "stacks templates health topology" "accent|$CHECK"   "Linux · Windows · Android · any browser"
-banner social-aio      "DCS"          "Docker Compose Skeleton"                        "Every stack on your server, one command away."             "start.sh deploy update backup"     ""                 "A self-hosted framework with a bash API, templates and a dashboard" 1280 640
-banner social-ui       "DCS Manager"  "The dashboard for Docker Compose Skeleton"      "Desktop, web and mobile · stacks, templates, health, everything." "stacks templates health topology" "accent|$CHECK"   "Linux · Windows · Android · any browser" 1280 640
+banner banner-manager  "DCS Manager"  "The dashboard for DCS Orchestrator"      "Desktop, web and mobile · stacks, templates, health, everything." "stacks templates health topology" "accent|$CHECK"   "Linux · Windows · Android · any browser"
+banner social-aio      "DCS"          "DCS Orchestrator"                              "Every stack on your server, one command away."             "start.sh deploy update backup"     ""                 "A self-hosted framework with a bash API, templates and a dashboard" 1280 640
+banner social-ui       "DCS Manager"  "The dashboard for DCS Orchestrator"      "Desktop, web and mobile · stacks, templates, health, everything." "stacks templates health topology" "accent|$CHECK"   "Linux · Windows · Android · any browser" 1280 640

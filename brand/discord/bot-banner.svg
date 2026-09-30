@@ -37,7 +37,7 @@
   </g>
   <g font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#f8fafc">
     <text x="560" y="196" font-size="112" font-weight="800" letter-spacing="-4">DCS</text>
-    <text x="800" y="196" font-size="40" font-weight="500" fill="#94a3b8" letter-spacing="1">Docker Compose Skeleton</text>
+    <text x="800" y="196" font-size="40" font-weight="500" fill="#94a3b8" letter-spacing="1">DCS Orchestrator</text>
     <text x="562" y="262" font-size="34" font-weight="500" fill="#cbd5e1">Every stack on your server, one command away.</text>
   </g>
   <g transform="translate(562 300)" font-family="'JetBrains Mono', 'Fira Mono', Menlo, Consolas, monospace" font-size="24">

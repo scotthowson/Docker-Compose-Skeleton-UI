@@ -1,9 +1,9 @@
 # DCS Manager — Terms of Service
 
-_Last updated: 26 September 2026_
+_Last updated: 30 September 2026_
 
-These terms cover the use of DCS Manager (the desktop, web and mobile client) and Docker Compose
-Skeleton (the server-side framework), together "DCS". DCS is open-source software published under
+These terms cover the use of DCS Manager (the desktop, web and mobile client) and DCS Orchestrator
+(the server-side framework, formerly Docker Compose Skeleton), together "DCS". DCS is open-source software published under
 the license in each repository. By using it you agree to the following.
 
 ## 1. What DCS is

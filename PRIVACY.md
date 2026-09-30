@@ -1,9 +1,9 @@
 # DCS Manager — Privacy Policy
 
-_Last updated: 26 September 2026_
+_Last updated: 30 September 2026_
 
-DCS Manager is the desktop, web and mobile client for Docker Compose Skeleton (DCS), a self-hosted
-tool that manages Docker Compose stacks on a server you run yourself. This policy explains what
+DCS Manager is the desktop, web and mobile client for DCS Orchestrator (DCS, formerly Docker Compose
+Skeleton), a self-hosted tool that manages Docker Compose stacks on a server you run yourself. This policy explains what
 the software does with data. The short version: **everything stays between your device and your
 own server, and nothing is sent to the author.**
 

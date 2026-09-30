@@ -54,7 +54,7 @@
   <g transform="translate(210 148)"></g>
   <g font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#f8fafc">
     <text x="560" y="196" font-size="96" font-weight="800" letter-spacing="-3">DCS</text>
-    <text x="562" y="262" font-size="34" font-weight="500" fill="#cbd5e1">Docker Compose Skeleton</text>
+    <text x="562" y="262" font-size="34" font-weight="500" fill="#cbd5e1">DCS Orchestrator</text>
   </g>
   <g transform="translate(562 300)" font-family="'JetBrains Mono', 'Fira Mono', Menlo, Consolas, monospace" font-size="24"><rect x="0" y="0" width="150" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="24" y="34" fill="#a7f3d0">start.sh</text><rect x="166" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="190" y="34" fill="#a7f3d0">deploy</text><rect x="306" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="330" y="34" fill="#a7f3d0">update</text><rect x="446" y="0" width="124" height="52" rx="26" fill="#0b1220" stroke="url(#accent)" stroke-width="2"/><text x="470" y="34" fill="#a7f3d0">backup</text></g>
   <g transform="translate(562 386)" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" fill="#64748b"><text x="0" y="0">Every stack on your server, one command away.</text></g>
