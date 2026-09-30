@@ -163,7 +163,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
             aria-checked={!!batchSelected}
             aria-label={`Select ${container.name}`}
             onClick={(e) => { e.stopPropagation(); onClick(container) }}
-            className="rounded"
+            className="rounded p-1.5 -m-1.5"
           >
             {batchSelected
               ? <CheckSquare size={15} className="text-cyan-400" />
@@ -347,7 +347,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
             aria-checked={!!batchSelected}
             aria-label={`Select ${container.name}`}
             onClick={(e) => { e.stopPropagation(); onClick(container) }}
-            className="flex-shrink-0 rounded"
+            className="flex-shrink-0 rounded p-1.5 -m-1.5"
           >
             {batchSelected
               ? <CheckSquare size={16} className="text-cyan-400" />

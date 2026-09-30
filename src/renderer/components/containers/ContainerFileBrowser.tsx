@@ -276,7 +276,7 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
           bg-slate-900/95 backdrop-blur-2xl
           border border-white/10 rounded-2xl
           shadow-2xl shadow-black/50
-          flex flex-col
+          flex flex-col overflow-hidden
           animate-fade-in
         "
         role="dialog"
@@ -503,7 +503,7 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
                           disabled={isLast || loading}
                           aria-current={isLast ? 'location' : undefined}
                           className={`
-                            px-1.5 py-1 rounded text-xs font-mono flex-shrink-0
+                            min-w-7 px-1.5 py-1.5 rounded text-xs font-mono text-center flex-shrink-0
                             transition-colors duration-150
                             ${isLast
                               ? 'text-slate-200 font-semibold cursor-default'

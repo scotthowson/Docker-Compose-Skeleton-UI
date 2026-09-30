@@ -157,15 +157,17 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                   e.stopPropagation()
                   onToggleSelect?.(stack.name)
                 }}
-                className={`
-                  shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center
+                className="shrink-0 mt-0.5 flex items-center justify-center p-1.5 -m-1.5 rounded"
+              >
+                <span className={`
+                  w-5 h-5 rounded border-2 flex items-center justify-center
                   transition-all duration-200
                   ${isSelected
                     ? 'bg-cyan-500 border-cyan-500 text-white'
                     : 'border-slate-500/50 hover:border-slate-400 bg-transparent'}
-                `}
-              >
-                {isSelected && <Check size={12} strokeWidth={3} />}
+                `}>
+                  {isSelected && <Check size={12} strokeWidth={3} />}
+                </span>
               </button>
             )}
 
@@ -175,6 +177,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                 <h3 className="text-sm font-semibold truncate min-w-0">
                   <button
                     type="button"
+                    data-stack-open={stack.name}
                     onClick={(e) => { e.stopPropagation(); handleCardClick() }}
                     className="max-w-full truncate rounded text-left text-slate-100 group-hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                     aria-label={batchMode ? undefined : `Open ${annotation.label || formatStackName(stack.name)}`}

@@ -344,7 +344,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 )}
               </MenuButton>
             )}
-            <MenuButton ariaLabel="More actions" label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width="w-56" className={`${BTN_TOOLBAR} ${batchClass}`}>
+            <MenuButton ariaLabel={batchMode ? 'More actions, batch mode is on' : 'More actions'} label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width="w-56" className={`${BTN_TOOLBAR} ${batchClass}`}>
               {(close) => (
                 <>
                   {stoppedCount > 0 && (

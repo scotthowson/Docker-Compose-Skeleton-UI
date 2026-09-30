@@ -895,7 +895,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         {/* Top row: back + name + badges (badges drop to their own line on phones) */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
           <Hint label={`Back to ${pageLabel('containers')} (Esc)`}>
-            <button onClick={onBack} className={`${BTN_TOOLBAR_QUIET} flex-shrink-0`}>
+            <button onClick={onBack} aria-label="Back" className={`${BTN_TOOLBAR_QUIET} flex-shrink-0`}>
               <ArrowLeft size={14} />
               <span className="hidden sm:inline">Back</span>
               <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
@@ -1641,7 +1641,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             <button
               onClick={() => setEnvCollapsed(!envCollapsed)}
               aria-expanded={!envCollapsed}
-              className="flex items-center gap-2 w-full group"
+              className="flex items-center gap-2 w-full py-1.5 -my-1.5 group"
             >
               <Variable className="h-4 w-4 text-cyan-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
@@ -1750,7 +1750,12 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                               value={envDrafts[entry.key] ?? entry.value}
                               onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [entry.key]: e.target.value }))}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); setEnvEditingKey(null) }
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                  e.preventDefault()
+                                  setEnvEditingKey(null)
+                                  // the field goes away: the focus goes back to the pencil that opened it
+                                  requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-env-change="${CSS.escape(entry.key)}"]`)?.focus())
+                                }
                                 if (e.key === 'Escape') setEnvDrafts((prev) => { const next = { ...prev }; delete next[entry.key]; return next })
                               }}
                               onBlur={() => setEnvEditingKey(null)}
@@ -1779,7 +1784,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                             ) : (
                               <>
                                 <Hint label="Change the value">
-                                  <button onClick={() => setEnvEditingKey(entry.key)} className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Change the value of ${entry.key}`}>
+                                  <button onClick={() => setEnvEditingKey(entry.key)} data-env-change={entry.key} className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Change the value of ${entry.key}`}>
                                     <Pencil size={12} />
                                   </button>
                                 </Hint>

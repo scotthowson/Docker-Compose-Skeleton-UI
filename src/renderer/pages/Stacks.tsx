@@ -79,6 +79,13 @@ export default function Stacks() {
     }
   }, [navigationPayload])
 
+  // Back to the list: the keyboard lands on the stack that was open, not on the page
+  const closeDetail = useCallback(() => {
+    const name = selectedStackName
+    setSelectedStackName(null)
+    if (name) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-stack-open="${CSS.escape(name)}"]`)?.focus())
+  }, [selectedStackName])
+
   // Escape key returns from stack detail to list
   useEffect(() => {
     if (!selectedStackName) return
@@ -96,11 +103,11 @@ export default function Stacks() {
       )
       if (hasVisibleOverlay) return
       e.preventDefault()
-      setSelectedStackName(null)
+      closeDetail()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedStackName])
+  }, [selectedStackName, closeDetail])
 
   // Overlay states
   const [showCreateOverlay, setShowCreateOverlay] = useState(false)
@@ -320,7 +327,7 @@ export default function Stacks() {
       {selectedStackName && !batchMode ? (
         <StackDetail
           stackName={selectedStackName}
-          onBack={() => setSelectedStackName(null)}
+          onBack={closeDetail}
           onAction={handleAction}
           isActionLoading={actionLoading === selectedStackName}
           onContainerClick={(containerName) => {
@@ -382,12 +389,14 @@ export default function Stacks() {
       {/* Floating Batch Action Bar                                         */}
       {/* ----------------------------------------------------------------- */}
       {batchMode && selectedStacks.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up w-[calc(100%-2rem)] max-w-fit">
+        // the row centres the bar (a transform on the bar itself would be overwritten by its slide-up); on a phone it sits above the tab bar
+        <div className="fixed inset-x-0 bottom-20 md:bottom-6 z-40 flex justify-center px-4 pointer-events-none">
           <div
             role="toolbar"
             aria-label="Batch actions"
             className="
-              flex items-center flex-wrap gap-2 sm:gap-3 px-3 sm:px-5 py-3 rounded-2xl
+              pointer-events-auto animate-slide-up max-w-full
+              flex items-center flex-wrap justify-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 rounded-2xl
               bg-slate-900/80 backdrop-blur-xl border border-white/10
               shadow-2xl shadow-black/40
             "

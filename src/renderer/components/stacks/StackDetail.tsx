@@ -294,7 +294,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       {/* Back button + stack name */}
       <div className="flex items-center gap-3">
         <Hint label={`Back to ${pageLabel('stacks')} (Esc)`}>
-          <button onClick={onBack} className={`${BTN_TOOLBAR_QUIET} shrink-0`}>
+          <button onClick={onBack} aria-label="Back" className={`${BTN_TOOLBAR_QUIET} shrink-0`}>
             <ArrowLeft size={14} />
             <span className="hidden sm:inline">Back</span>
             <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
