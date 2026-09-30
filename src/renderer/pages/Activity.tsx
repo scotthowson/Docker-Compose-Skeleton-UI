@@ -1,15 +1,17 @@
 // =============================================================================
-// Activity — Gorgeous vertical timeline of Docker events with filtering
+// Activity — the Docker events of the server (or of the VMs), newest first on a
+// timeline grouped by day, filtered by type or name; and, folded away below,
+// the server's audit log.
 // =============================================================================
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { SegmentedControl } from '@mantine/core'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import { SegmentedControl, Badge } from '@mantine/core'
 import {
   Play, Square, Plus, Trash2, RefreshCw, Download,
   Box, Network, HardDrive, Database,
   Clock, Filter, Search, Activity as ActivityIcon,
-  Zap, WifiOff, Server, Loader2, X,
-  ChevronDown, ChevronRight, FileText, Shield, Rocket, Power,
+  Zap, WifiOff, Server, X,
+  ChevronDown, FileText, Shield, Rocket, Power,
   HeartPulse, Archive, ListFilter, AlertTriangle,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
@@ -19,8 +21,13 @@ import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { LoadingState, EmptyState } from '../components/common/PageState'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
 import { useLogStore } from '../stores/logStore'
 import { useToast } from '../components/common/Toast'
+import { BTN_TOOLBAR_QUIET, BTN_TOOLBAR, BTN_ICON_SM, TONE_OK, TONE_GHOST } from '../lib/ui'
+import { CARD, CARD_HOVER, SEARCH_FIELD, FOCUS_RING } from '../lib/pageKit'
 import type { EventEntry, EventsResponse, AuditEntry } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -132,19 +139,19 @@ function actionColors(action: string): {
   }
 }
 
-/** Type badge config */
-function typeBadge(type: string): { label: string; color: string; bg: string; border: string; icon: React.ReactNode } {
+/** Type badge: what kind of thing it happened to — a plain slate label, the action next to it carries the colour */
+function typeBadge(type: string): { label: string; icon: React.ReactNode } {
   switch (type) {
     case 'container':
-      return { label: 'container', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', icon: <Box size={10} /> }
+      return { label: 'container', icon: <Box size={10} aria-hidden /> }
     case 'network':
-      return { label: 'network', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', icon: <Network size={10} /> }
+      return { label: 'network', icon: <Network size={10} aria-hidden /> }
     case 'volume':
-      return { label: 'volume', color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', icon: <HardDrive size={10} /> }
+      return { label: 'volume', icon: <HardDrive size={10} aria-hidden /> }
     case 'image':
-      return { label: 'image', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: <Database size={10} /> }
+      return { label: 'image', icon: <Database size={10} aria-hidden /> }
     default:
-      return { label: type, color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20', icon: <Zap size={10} /> }
+      return { label: type, icon: <Zap size={10} aria-hidden /> }
   }
 }
 
@@ -202,43 +209,19 @@ function DisconnectedState() {
   const isConnecting = connectionStatus === 'connecting'
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] relative">
-      {/* Ambient glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/3 left-1/3 w-48 h-48 rounded-full bg-emerald-500/[0.03] blur-3xl animate-breathe" />
-        <div className="absolute bottom-1/3 right-1/3 w-56 h-56 rounded-full bg-cyan-500/[0.03] blur-3xl animate-breathe" style={{ animationDelay: '3s' }} />
-      </div>
-
-      <div className="relative mb-6">
-        <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center">
-          {isConnecting ? (
-            <Loader2 size={32} className="text-amber-400 animate-spin" />
-          ) : (
-            <WifiOff size={32} className="text-slate-500" />
-          )}
-        </div>
-      </div>
-
-      <h3 className="text-lg font-semibold text-slate-300 mb-2">
-        {isConnecting ? 'Connecting...' : 'No Activity Data'}
-      </h3>
-      <p className="text-sm text-slate-500 text-center max-w-xs mb-5">
-        {isConnecting
-          ? 'Establishing connection to the API server...'
-          : 'Connect to your Docker API server to see the activity timeline.'
-        }
-      </p>
-
-      {!isConnecting && (
-        <button
-          onClick={() => connect()}
-          className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Server size={15} />
+    <EmptyState
+      icon={isConnecting ? <RefreshCw size={32} className="animate-spin text-emerald-500/60" /> : <WifiOff size={32} />}
+      title={isConnecting ? 'Connecting…' : 'No activity data'}
+      hint={isConnecting
+        ? 'Establishing the connection to the API server…'
+        : 'Connect to your Docker API server to see the activity timeline.'}
+      action={!isConnecting ? (
+        <button type="button" onClick={() => connect()} className={`${BTN_TOOLBAR} ${TONE_OK} ${FOCUS_RING}`}>
+          <Server size={14} />
           Connect
         </button>
-      )}
-    </div>
+      ) : undefined}
+    />
   )
 }
 
@@ -257,23 +240,24 @@ function StatsBar({ events }: { events: EventEntry[] }) {
     return c
   }, [events])
 
+  // counts are information (cyan); errors are the one that can be a problem (rose, or slate at zero)
   const stats = [
-    { label: 'Total', value: events.length, color: 'text-slate-200', iconColor: 'text-emerald-400', icon: <ActivityIcon size={14} /> },
-    { label: 'Containers', value: counts.container, color: 'text-cyan-400', iconColor: 'text-cyan-400', icon: <Box size={14} /> },
-    { label: 'Networks', value: counts.network, color: 'text-amber-400', iconColor: 'text-amber-400', icon: <Network size={14} /> },
-    { label: 'Volumes', value: counts.volume, color: 'text-violet-400', iconColor: 'text-violet-400', icon: <HardDrive size={14} /> },
-    { label: 'Images', value: counts.image, color: 'text-emerald-400', iconColor: 'text-emerald-400', icon: <Database size={14} /> },
-    { label: 'Errors', value: counts.error, color: counts.error ? 'text-rose-400' : 'text-slate-400', iconColor: 'text-rose-400', icon: <AlertTriangle size={14} /> },
+    { label: 'Total', value: events.length, color: 'text-slate-100', iconColor: 'text-cyan-400', icon: <ActivityIcon size={14} aria-hidden /> },
+    { label: 'Containers', value: counts.container, color: 'text-slate-100', iconColor: 'text-cyan-400', icon: <Box size={14} aria-hidden /> },
+    { label: 'Networks', value: counts.network, color: 'text-slate-100', iconColor: 'text-cyan-400', icon: <Network size={14} aria-hidden /> },
+    { label: 'Volumes', value: counts.volume, color: 'text-slate-100', iconColor: 'text-cyan-400', icon: <HardDrive size={14} aria-hidden /> },
+    { label: 'Images', value: counts.image, color: 'text-slate-100', iconColor: 'text-cyan-400', icon: <Database size={14} aria-hidden /> },
+    { label: 'Errors', value: counts.error, color: counts.error ? 'text-rose-400' : 'text-slate-400', iconColor: counts.error ? 'text-rose-400' : 'text-slate-500', icon: <AlertTriangle size={14} aria-hidden /> },
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
       {stats.map((stat) => (
         <div
           key={stat.label}
-          className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 transition-all duration-200 hover:border-white/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20"
+          className={`${CARD_HOVER} px-4 py-3 flex items-center gap-3`}
         >
-          <div className={`${stat.iconColor} opacity-60`}>{stat.icon}</div>
+          <div className={`${stat.iconColor} opacity-70`}>{stat.icon}</div>
           <div className="min-w-0">
             <div className={`text-lg font-bold tabular-nums ${stat.color}`}>{stat.value}</div>
             <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">{stat.label}</div>
@@ -298,28 +282,22 @@ const TimelineCard = React.memo(function TimelineCard({ event, index, fresh }: {
       style={fresh ? { animationDelay: `${Math.min(index * 40, 400)}ms` } : undefined}
     >
       {/* Vertical connector line (hidden on last) */}
-      <div className="absolute left-[11px] top-6 bottom-0 w-px bg-gradient-to-b from-white/[0.08] to-transparent group-last:hidden" />
+      <div className="absolute left-[11px] top-6 bottom-0 w-px bg-gradient-to-b from-white/[0.08] to-transparent group-last:hidden" aria-hidden />
 
       {/* Timeline dot */}
-      <div className="absolute left-0 top-1 z-10">
+      <div className="absolute left-0 top-1 z-10" aria-hidden>
         <div className={`
           w-[23px] h-[23px] rounded-full border-2 border-slate-900
           flex items-center justify-center
           ${colors.bg} ${colors.glow}
-          transition-all duration-300 group-hover:scale-110
+          transition-transform duration-300 group-hover:scale-110
         `}>
           <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
         </div>
       </div>
 
       {/* Card */}
-      <div className="
-        bg-slate-900/60 backdrop-blur-md border border-white/5
-        rounded-xl p-4
-        hover:border-white/10 hover:bg-slate-900/80
-        transition-all duration-300
-        group-hover:translate-x-0.5
-      ">
+      <div className={`${CARD_HOVER} p-4 group-hover:translate-x-0.5 transition-transform duration-300`}>
         <div className="flex items-start justify-between gap-3">
           {/* Left content */}
           <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -329,7 +307,7 @@ const TimelineCard = React.memo(function TimelineCard({ event, index, fresh }: {
               ${colors.bg} ${colors.border} border
               flex items-center justify-center
               ${colors.icon}
-            `}>
+            `} aria-hidden>
               {actionIcon(event.action)}
             </div>
 
@@ -343,14 +321,7 @@ const TimelineCard = React.memo(function TimelineCard({ event, index, fresh }: {
                 `}>
                   {event.action}
                 </span>
-                <span className={`
-                  inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5
-                  text-[10px] font-medium
-                  ${badge.bg} ${badge.border} ${badge.color}
-                `}>
-                  {badge.icon}
-                  {badge.label}
-                </span>
+                <Badge color="slate" leftSection={badge.icon}>{badge.label}</Badge>
               </div>
 
               {/* Resource name */}
@@ -365,7 +336,7 @@ const TimelineCard = React.memo(function TimelineCard({ event, index, fresh }: {
             <div className="text-xs font-medium text-slate-400 tabular-nums">
               {relativeTime(event.timestamp)}
             </div>
-            <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
+            <div className="text-[11px] text-slate-500 tabular-nums mt-0.5">
               {absoluteTime(event.timestamp)}
             </div>
           </div>
@@ -383,7 +354,7 @@ function DayHeader({ label, count, collapsed, onToggle }: { label: string; count
   return (
     <div className="relative pl-10 pb-4 pt-2">
       {/* Dot on the timeline */}
-      <div className="absolute left-[7px] top-3 z-10">
+      <div className="absolute left-[7px] top-3 z-10" aria-hidden>
         <div className="w-[9px] h-[9px] rounded-full bg-gradient-to-br from-emerald-400 to-cyan-400 ring-2 ring-slate-950" />
       </div>
 
@@ -391,16 +362,17 @@ function DayHeader({ label, count, collapsed, onToggle }: { label: string; count
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="group/day flex items-center gap-3 w-full text-left"
+        className={`group/day flex items-center gap-3 w-full min-h-8 text-left rounded-lg ${FOCUS_RING}`}
         title={collapsed ? `Show ${label.toLowerCase()}` : `Hide ${label.toLowerCase()}`}
       >
         <span className="text-xs font-bold uppercase tracking-widest text-slate-400 group-hover/day:text-slate-200 transition-colors">
           {label}
         </span>
-        <span className="text-[10px] font-medium text-slate-600 tabular-nums">{count}</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
+        <span className="text-[11px] font-medium text-slate-500 tabular-nums">{count}</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" aria-hidden />
         <ChevronDown
           size={14}
+          aria-hidden
           className={`text-slate-500 group-hover/day:text-slate-300 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
         />
       </button>
@@ -412,17 +384,20 @@ function DayHeader({ label, count, collapsed, onToggle }: { label: string; count
 // Empty events state (connected but no events)
 // ---------------------------------------------------------------------------
 
-function EmptyEvents() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-      <div className="rounded-2xl bg-slate-800/40 p-5 mb-4">
-        <Clock className="h-8 w-8 text-slate-500" />
-      </div>
-      <p className="text-sm font-medium text-slate-400">No events yet</p>
-      <p className="text-xs text-slate-500 mt-1">
-        Docker events will appear here as activity occurs
-      </p>
-    </div>
+function EmptyEvents({ filtered, onClear }: { filtered: boolean; onClear: () => void }) {
+  return filtered ? (
+    <EmptyState
+      icon={<Clock size={30} />}
+      title="No events match"
+      hint="Pick another type, or clear the search."
+      action={<button type="button" onClick={onClear} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}><X size={14} /> Show all events</button>}
+    />
+  ) : (
+    <EmptyState
+      icon={<Clock size={30} />}
+      title="No events yet"
+      hint="Docker events will appear here as activity occurs."
+    />
   )
 }
 
@@ -580,48 +555,39 @@ export default function Activity() {
   // Determine UI state
   const hasNoData = events.length === 0
   const showDisconnected = !isConnected && hasNoData
+  const scopeVmid = scopeMembers.find((m) => m.id === scopeMember)?.vmid
+  const filtering = activeFilter !== 'all' || searchQuery.trim().length > 0
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-4 md:space-y-5">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex items-center justify-between animate-fade-in">
-        <div>
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">
-            <span className="text-gradient">Activity Timeline</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Real-time Docker events across all resources
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        page="activity"
+        badge={<>
+          {scopeMember && <VmCapsule member={scopeMember} name={memberName} vmid={scopeVmid} />}
           {isConnected && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-              </span>
-              <span className="text-xs font-medium text-emerald-400">Streaming</span>
-            </div>
-          )}
-          {isConnected && (
-            <button
-              onClick={eventsPoll.refresh}
-              disabled={eventsPoll.loading}
-              className="
-                flex items-center gap-1.5 rounded-lg px-3 py-2
-                text-xs font-medium text-slate-300
-                bg-white/5 border border-white/10
-                hover:bg-white/10 hover:border-white/15
-                disabled:opacity-50 transition-all duration-200
-              "
+            <Badge
+              color="emerald"
+              leftSection={
+                <span className="relative flex h-1.5 w-1.5" aria-hidden>
+                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+              }
             >
-              <RefreshCw size={14} className={eventsPoll.loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
+              Streaming
+            </Badge>
           )}
-        </div>
-      </div>
+        </>}
+        actions={isConnected ? (
+          <button type="button" onClick={eventsPoll.refresh} disabled={eventsPoll.loading} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
+            <RefreshCw size={14} className={eventsPoll.loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        ) : undefined}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={eventsPoll.loading && !hasNoData} />}
+      </PageHeader>
 
       {showDisconnected ? (
         <DisconnectedState />
@@ -635,7 +601,7 @@ export default function Activity() {
             {/* Type filter: one choice (the dashboard's segmented control); a phone swipes it sideways */}
             <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
               <SegmentedControl
-                aria-label="Show"
+                aria-label="Type of event"
                 value={activeFilter}
                 onChange={(v) => setActiveFilter(v as FilterType)}
                 data={FILTER_TABS.map((tab) => ({ value: tab.key, label: <span className="flex items-center gap-1.5">{tab.icon}{tab.label}</span> }))}
@@ -643,34 +609,33 @@ export default function Activity() {
             </div>
 
             {/* Search */}
-            <div className="relative flex-1 max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="relative flex-1 min-w-[12rem] max-w-xs">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
               <input
                 type="text"
-                placeholder="Filter by name..."
+                aria-label="Filter events by name"
+                placeholder="Filter by name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="
-                  w-full rounded-lg pl-9 pr-4 py-2
-                  text-sm text-slate-200 placeholder-slate-600
-                  bg-slate-900/60 border border-white/10
-                  focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-                  transition-all duration-200
-                "
+                className={SEARCH_FIELD}
               />
               {searchQuery && (
-                <button aria-label="Clear the search"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  <X size={13} />
-                </button>
+                <Hint label="Clear the search">
+                  <button
+                    type="button"
+                    aria-label="Clear the search"
+                    onClick={() => setSearchQuery('')}
+                    className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1.5 top-1/2 -translate-y-1/2`}
+                  >
+                    <X size={14} />
+                  </button>
+                </Hint>
               )}
             </div>
 
             {/* Result count */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-auto">
-              <Filter size={13} />
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-auto" role="status">
+              <Filter size={13} aria-hidden />
               <span>
                 {filteredEvents.length === events.length
                   ? `${events.length} events`
@@ -682,7 +647,7 @@ export default function Activity() {
 
           {/* Timeline */}
           {filteredEvents.length === 0 ? (
-            <EmptyEvents />
+            <EmptyEvents filtered={filtering && events.length > 0} onClear={() => { setActiveFilter('all'); setSearchQuery('') }} />
           ) : (
             <div className="relative animate-fade-in">
               {/* Main timeline line (gradient) */}
@@ -691,6 +656,7 @@ export default function Activity() {
                 style={{
                   background: 'linear-gradient(to bottom, rgba(52,211,153,0.3), rgba(34,211,238,0.15), transparent)',
                 }}
+                aria-hidden
               />
 
               {/* Grouped events */}
@@ -716,25 +682,28 @@ export default function Activity() {
               </div>
 
               {/* Bottom fade */}
-              <div className="h-8 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
+              <div className="h-8 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" aria-hidden />
             </div>
           )}
 
-          {/* ── Audit Log Section (Collapsible) ──────────────────────────── */}
+          {/* ── Audit log section (collapsible) ──────────────────────────── */}
           <div className="animate-fade-in">
             <button
+              type="button"
               onClick={() => setAuditExpanded(!auditExpanded)}
-              className="flex items-center gap-2 w-full text-left text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors mb-3"
+              aria-expanded={auditExpanded}
+              className={`flex items-center gap-2 w-full min-h-9 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors mb-2 rounded-lg ${FOCUS_RING}`}
             >
-              <FileText size={13} />
-              Server Audit Log
+              <FileText size={13} aria-hidden />
+              Server audit log
               {auditEntries.length > 0 && (
-                <span className="text-[10px] font-normal normal-case text-slate-500">
+                <span className="text-[11px] font-normal normal-case text-slate-500">
                   ({auditEntries.length} {auditEntries.length === 1 ? 'entry' : 'entries'})
                 </span>
               )}
               <ChevronDown
                 size={14}
+                aria-hidden
                 className={`ml-auto transition-transform duration-200 ${auditExpanded ? 'rotate-180' : ''}`}
               />
             </button>
@@ -744,61 +713,64 @@ export default function Activity() {
                 {/* Filter row */}
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Action type filter */}
-                  <div className="flex items-center gap-1.5">
-                    <ListFilter size={13} className="text-slate-500" />
-                    <select aria-label="Filter by action"
-                      value={auditActionFilter}
-                      onChange={(e) => setAuditActionFilter(e.target.value)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs bg-slate-900/60 border border-white/10 text-slate-300 focus:outline-none focus:border-emerald-500/40 transition-colors appearance-none cursor-pointer"
-                    >
-                      {auditActions.map((a) => (
-                        <option key={a} value={a} className="bg-slate-900 text-slate-200">
-                          {a === 'all' ? 'All Actions' : a}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="relative flex items-center gap-1.5">
+                    <ListFilter size={13} className="text-slate-500" aria-hidden />
+                    <div className="relative">
+                      <select aria-label="Filter by action"
+                        value={auditActionFilter}
+                        onChange={(e) => setAuditActionFilter(e.target.value)}
+                        className="rounded-lg h-9 pl-3 pr-8 text-xs bg-white/5 border border-white/10 text-slate-300 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30 transition-colors appearance-none cursor-pointer"
+                      >
+                        {auditActions.map((a) => (
+                          <option key={a} value={a} className="bg-slate-900 text-slate-200">
+                            {a === 'all' ? 'All actions' : a}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
+                    </div>
                   </div>
 
                   {/* Search */}
-                  <div className="relative flex-1 max-w-xs">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <div className="relative flex-1 min-w-[12rem] max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
                     <input
                       type="text"
-                      placeholder="Search audit log..."
+                      aria-label="Search the audit log"
+                      placeholder="Search the audit log…"
                       value={auditFilter}
                       onChange={(e) => setAuditFilter(e.target.value)}
-                      className="w-full rounded-lg pl-8 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-600 bg-slate-900/60 border border-white/10 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-200"
+                      className="w-full rounded-lg h-9 pl-9 pr-9 text-xs text-slate-200 placeholder-slate-500 bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-colors"
                     />
                     {auditFilter && (
-                      <button aria-label="Clear the filter"
-                        onClick={() => setAuditFilter('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                      >
-                        <X size={12} />
-                      </button>
+                      <Hint label="Clear the filter">
+                        <button
+                          type="button"
+                          aria-label="Clear the filter"
+                          onClick={() => setAuditFilter('')}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1 top-1/2 -translate-y-1/2`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </Hint>
                     )}
                   </div>
 
                   {/* Result count */}
-                  <span className="text-[10px] text-slate-500 ml-auto">
+                  <span className="text-[11px] text-slate-500 ml-auto" role="status">
                     {filteredAuditEntries.length} of {auditEntries.length}
                   </span>
                 </div>
 
                 {/* Loading */}
                 {auditLoading && auditEntries.length === 0 && (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 size={20} className="animate-spin text-slate-500" />
-                  </div>
+                  <LoadingState compact label="Loading the audit log…" />
                 )}
 
                 {/* Empty state */}
                 {!auditLoading && auditEntries.length === 0 && (
-                  <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-8 flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                      <FileText size={18} className="text-slate-500" />
-                    </div>
-                    <p className="text-sm text-slate-500">No audit entries found</p>
+                  <div className={CARD}>
+                    <EmptyState compact icon={<FileText size={22} />} title="No audit entries found" hint="Sign-ins, deploys, stack changes and configuration updates are written here." />
                   </div>
                 )}
 
@@ -809,6 +781,7 @@ export default function Activity() {
                     <div
                       className="absolute left-[11px] top-0 bottom-0 w-px"
                       style={{ background: 'linear-gradient(to bottom, rgba(139,92,246,0.3), rgba(34,211,238,0.15), transparent)' }}
+                      aria-hidden
                     />
 
                     <div className="relative space-y-0">
@@ -821,24 +794,24 @@ export default function Activity() {
                             style={{ animationDelay: `${Math.min(idx * 30, 400)}ms` }}
                           >
                             {/* Connector line */}
-                            <div className="absolute left-[11px] top-5 bottom-0 w-px bg-gradient-to-b from-white/[0.06] to-transparent group-last:hidden" />
+                            <div className="absolute left-[11px] top-5 bottom-0 w-px bg-gradient-to-b from-white/[0.06] to-transparent group-last:hidden" aria-hidden />
 
                             {/* Dot */}
-                            <div className="absolute left-0 top-1 z-10">
-                              <div className={`w-[23px] h-[23px] rounded-full border-2 border-slate-900 flex items-center justify-center ${colors.bg} transition-all duration-300 group-hover:scale-110`}>
+                            <div className="absolute left-0 top-1 z-10" aria-hidden>
+                              <div className={`w-[23px] h-[23px] rounded-full border-2 border-slate-900 flex items-center justify-center ${colors.bg} transition-transform duration-300 group-hover:scale-110`}>
                                 <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
                               </div>
                             </div>
 
                             {/* Card */}
-                            <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-3.5 hover:border-white/10 hover:bg-slate-900/80 transition-all duration-300 group-hover:translate-x-0.5">
+                            <div className={`${CARD_HOVER} p-3.5 group-hover:translate-x-0.5 transition-transform duration-300`}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg ${colors.bg} border ${colors.border} flex items-center justify-center ${colors.text}`}>
+                                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg ${colors.bg} border ${colors.border} flex items-center justify-center ${colors.text}`} aria-hidden>
                                     {auditActionIcon(entry.action)}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                                       <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${colors.bg} ${colors.border} ${colors.text}`}>
                                         {entry.action}
                                       </span>
@@ -850,7 +823,7 @@ export default function Activity() {
                                   </div>
                                 </div>
                                 <div className="flex-shrink-0 text-right">
-                                  <div className="text-[10px] text-slate-500 tabular-nums whitespace-nowrap">
+                                  <div className="text-[11px] text-slate-500 tabular-nums whitespace-nowrap">
                                     {formatAuditTimestamp(entry.timestamp)}
                                   </div>
                                 </div>
@@ -862,7 +835,7 @@ export default function Activity() {
                     </div>
 
                     {/* Bottom fade */}
-                    <div className="h-6 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
+                    <div className="h-6 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" aria-hidden />
                   </div>
                 )}
               </div>
