@@ -81,7 +81,7 @@ const OPENERS = {
   dashboard: ['CPU', 'MEM'],
   stacks: ['New stack', 'Priority', 'Name', 'Status', 'Containers'],
   containers: ['Batch Select'],
-  images: ['Batch Mode', 'Image Library', 'Docker Hub Search', /^(All|Current|Aging|Stale)\d+$/],
+  images: ['Batch mode', 'Image Library', 'Docker Hub Search', /^(All|Current|Aging|Stale)\d+$/],
   health: ['OK', 'Bad', 'Off', 'On demand'],
   networks: ['New Network', 'Name', 'Driver', 'Containers', 'Inspect'],
   volumes: ['Batch Select', 'Name', 'Size'],
@@ -107,7 +107,7 @@ const OPENERS = {
   proxmox: ['New VM stack', 'Link VMs', 'Join code', 'Add member', 'media-vm', 'networking-security', 'dns', 'Manage media-vm', /^\d+ containers · \d+ running$/, 'Link…'],
 }
 // the ones among them that switch something on that a later run would inherit: clicked a second time
-const TWICE = /^(Batch Select|Batch Mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/
+const TWICE = /^(Batch Select|Batch mode|Guide|Usage Guide|Live|Auto|User Profile|Server Connection|Appearance|Application Preferences|Keyboard Shortcuts|Disk Configuration|Notification Preferences|Alert Thresholds|NOTIFICATION HISTORY.*|WEBHOOKS.*|\d+ containers · \d+ running)$/
 const MAX_CLICKS = 24
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
