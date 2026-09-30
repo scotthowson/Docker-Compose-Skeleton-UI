@@ -61,14 +61,14 @@ export default function Login() {
   const settingsServerUrl = useSettingsStore((s) => s.serverUrl)
   const [serverUrl, setServerUrlLocal] = useState(settingsServerUrl || apiClient.getBaseUrl())
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
-  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
-    const reason = sessionStorage.getItem('logout-reason')
-    if (reason === 'session-expired') {
-      sessionStorage.removeItem('logout-reason')
-      return true
-    }
-    return false
-  })
+  // The reason is read without consuming it: App draws a dark frame between the dashboard and this screen, so
+  // this screen mounts twice (and twice in development, StrictMode), and the first mount used to take the reason
+  // away from the one that stays. It is forgotten when the screen goes away after having been on show.
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => sessionStorage.getItem('logout-reason') === 'session-expired')
+  useEffect(() => {
+    const shownAt = Date.now()
+    return () => { if (Date.now() - shownAt > 400) sessionStorage.removeItem('logout-reason') }
+  }, [])
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [connDetail, setConnDetail] = useState('')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
