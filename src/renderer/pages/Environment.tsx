@@ -125,7 +125,7 @@ function EnvTable({
                         sensitive && !isRevealed ? 'text-slate-500' : 'text-slate-200'
                       }`}
                     >
-                      {displayValue || <span className="text-slate-500 italic">(empty)</span>}
+                      {displayValue || (v.key ? <span className="text-slate-500 italic">(empty)</span> : null)}
                     </span>
                     {sensitive && (
                       <Hint label={isRevealed ? 'Hide the value' : 'Show the value'}>

@@ -609,7 +609,7 @@ export default function Config() {
         <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
           {/* Environment */}
           <GroupCard
-            icon={<Globe size={16} className="text-emerald-400" />}
+            icon={<Globe size={16} className="text-slate-400" />}
             title="Environment"
             description="Runtime environment and server identity"
 
@@ -662,7 +662,7 @@ export default function Config() {
 
           {/* Paths (read-only) */}
           <GroupCard
-            icon={<FolderOpen size={16} className="text-cyan-400" />}
+            icon={<FolderOpen size={16} className="text-slate-400" />}
             title="Paths"
             description="Server directory paths (read-only)"
 
@@ -675,7 +675,7 @@ export default function Config() {
 
           {/* Feature Flags */}
           <GroupCard
-            icon={<Zap size={16} className="text-amber-400" />}
+            icon={<Zap size={16} className="text-slate-400" />}
             title="Feature flags"
             description="Toggle framework features on or off"
 
@@ -726,7 +726,7 @@ export default function Config() {
 
           {/* Display & Colors */}
           <GroupCard
-            icon={<Palette size={16} className="text-violet-400" />}
+            icon={<Palette size={16} className="text-slate-400" />}
             title="Display & colors"
             description="Terminal output appearance settings"
 
@@ -780,7 +780,7 @@ export default function Config() {
 
           {/* Log Formatting */}
           <GroupCard
-            icon={<ScrollText size={16} className="text-cyan-400" />}
+            icon={<ScrollText size={16} className="text-slate-400" />}
             title="Log formatting"
             description="Customize log output format and metadata"
 
@@ -798,7 +798,7 @@ export default function Config() {
 
           {/* API Server */}
           <GroupCard
-            icon={<Server size={16} className="text-emerald-400" />}
+            icon={<Server size={16} className="text-slate-400" />}
             title="API server"
             description="REST API server settings"
 
@@ -859,7 +859,7 @@ export default function Config() {
 
           {/* Notifications */}
           <GroupCard
-            icon={<Bell size={16} className="text-amber-400" />}
+            icon={<Bell size={16} className="text-slate-400" />}
             title="Notifications"
             description="ntfy push notifications and the Discord webhook"
 
@@ -933,7 +933,7 @@ export default function Config() {
 
           {/* Security */}
           <GroupCard
-            icon={<Shield size={16} className="text-rose-400" />}
+            icon={<Shield size={16} className="text-slate-400" />}
             title="Security"
             description="Access control and safety settings"
 
@@ -950,7 +950,7 @@ export default function Config() {
 
           {/* ── Traefik / DNS ── */}
           <GroupCard
-            icon={<Network size={16} className="text-cyan-400" />}
+            icon={<Network size={16} className="text-slate-400" />}
             title="Traefik & DNS"
             description="Reverse proxy, ACME certificates, and dynamic DNS"
 
@@ -978,7 +978,7 @@ export default function Config() {
 
           {/* ── Proxmox ── */}
           <GroupCard
-            icon={<Server size={16} className="text-amber-400" />}
+            icon={<Server size={16} className="text-slate-400" />}
             title="Proxmox"
             description="Show and power the VMs and containers of a Proxmox host or cluster"
           >
@@ -992,7 +992,7 @@ export default function Config() {
 
           {/* ── Docker ── */}
           <GroupCard
-            icon={<Container size={16} className="text-cyan-400" />}
+            icon={<Container size={16} className="text-slate-400" />}
             title="Docker"
             description="Container engine and stack management"
 
@@ -1005,7 +1005,7 @@ export default function Config() {
 
           {/* ── Health & Monitoring ── */}
           <GroupCard
-            icon={<HeartPulse size={16} className="text-rose-400" />}
+            icon={<HeartPulse size={16} className="text-slate-400" />}
             title="Health & monitoring"
             description="Health checks and container prioritization"
 
@@ -1018,7 +1018,7 @@ export default function Config() {
 
           {/* ── Metrics & Features ── */}
           <GroupCard
-            icon={<Activity size={16} className="text-violet-400" />}
+            icon={<Activity size={16} className="text-slate-400" />}
             title="Metrics & features"
             description="Optional subsystems — metrics, scheduler, plugins, rollback"
 
@@ -1035,7 +1035,7 @@ export default function Config() {
 
           {/* ── Backup ── */}
           <GroupCard
-            icon={<HardDrive size={16} className="text-amber-400" />}
+            icon={<HardDrive size={16} className="text-slate-400" />}
             title="Backup"
             description="Automated backup source, destination, and retention"
 
@@ -1047,7 +1047,7 @@ export default function Config() {
 
           {/* ── Recovery bundle ── */}
           <GroupCard
-            icon={<LifeBuoy size={16} className="text-rose-300" />}
+            icon={<LifeBuoy size={16} className="text-slate-400" />}
             title="Recovery bundle"
             description={`One encrypted archive that rebuilds this install anywhere (the ${pageLabel('backup')} page creates it)`}
           >
@@ -1058,7 +1058,7 @@ export default function Config() {
 
           {/* ── Power (UPS) ── */}
           <GroupCard
-            icon={<BatteryCharging size={16} className="text-lime-400" />}
+            icon={<BatteryCharging size={16} className="text-slate-400" />}
             title="Power (UPS)"
             description="Watch a UPS, alert on battery, stop the stacks cleanly before it runs out"
           >
@@ -1077,7 +1077,7 @@ export default function Config() {
 
           {/* ── Unattended updates ── */}
           <GroupCard
-            icon={<ArrowUpCircle size={16} className="text-emerald-400" />}
+            icon={<ArrowUpCircle size={16} className="text-slate-400" />}
             title="Unattended updates"
             description="What a dcs-update schedule does after it applied a release"
           >

@@ -115,7 +115,7 @@ function CardTitle({ icon, children, count }: { icon: React.ReactNode; children:
 }
 
 // ---------------------------------------------------------------------------
-// User Management Page
+// Users page
 // ---------------------------------------------------------------------------
 
 export default function Users() {
