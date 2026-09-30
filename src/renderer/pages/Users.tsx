@@ -1,5 +1,5 @@
 // =============================================================================
-// Users — Admin user management page with invite codes and user listing
+// Users — the accounts that can sign in, invite codes, and the sessions open now
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
@@ -11,26 +11,28 @@ import {
   ShieldX,
   Copy,
   Check,
-  Trash2,
   Clock,
   Loader2,
   RefreshCw,
   Plus,
   AlertTriangle,
   KeyRound,
+  Bot,
 } from 'lucide-react'
-import { Bot } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
-import { Tooltip } from '../components/common/Tooltip'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, TONE_OK, TONE_DANGER, TONE_GHOST } from '../lib/ui'
 import {
   authListUsers, authListInvites, authCreateInvite, authCreateUser, authRevokeUser, authSetUserRole,
   authListSessions, authRevokeSession,
 } from '../api/endpoints'
 import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,6 +78,43 @@ function isExpired(dateStr: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Roles: one colour each, everywhere a role is drawn (the list, the sessions, the invites)
+// ---------------------------------------------------------------------------
+
+type Role = 'user' | 'admin' | 'bot'
+
+/** admin is information (cyan), a bot is its own kind (violet), a plain user is neutral (slate) */
+const ROLE_TONE: Record<string, { pill: string; avatar: string }> = {
+  admin: { pill: 'bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/20', avatar: 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/20' },
+  bot: { pill: 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20', avatar: 'bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/20' },
+  user: { pill: 'bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/25', avatar: 'bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/25' },
+}
+const roleTone = (role: string) => ROLE_TONE[role] ?? ROLE_TONE.user
+
+function RolePill({ role, className = '' }: { role: string; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${roleTone(role).pill} ${className}`}>
+      {role === 'admin' ? <Shield className="h-2.5 w-2.5" aria-hidden /> : role === 'bot' ? <Bot className="h-2.5 w-2.5" aria-hidden /> : <ShieldCheck className="h-2.5 w-2.5" aria-hidden />}
+      {role}
+    </span>
+  )
+}
+
+/** the fields of this page's forms */
+const FIELD = 'h-[34px] px-3 rounded-lg text-xs bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+
+/** the heading of a card on this page */
+function CardTitle({ icon, children, count }: { icon: React.ReactNode; children: React.ReactNode; count?: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <h2 className="text-sm font-semibold text-slate-200">{children}</h2>
+      {count !== undefined && <span className="text-xs text-slate-500 tabular-nums">({count})</span>}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // User Management Page
 // ---------------------------------------------------------------------------
 
@@ -83,6 +122,7 @@ export default function Users() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const currentUser = useAuthStore((s) => s.currentUser)
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const [users, setUsers] = useState<ApiUser[]>([])
   const [invites, setInvites] = useState<InviteCode[]>([])
@@ -91,9 +131,8 @@ export default function Users() {
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [newInviteRole, setNewInviteRole] = useState<'user' | 'admin'>('user')
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as 'user' | 'admin' | 'bot' })
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as Role })
   const [createLoading, setCreateLoading] = useState(false)
-  const [showConfirmRevoke, setShowConfirmRevoke] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [revokingSession, setRevokingSession] = useState<string | null>(null)
 
@@ -126,14 +165,14 @@ export default function Users() {
     try {
       const result = await authCreateInvite(newInviteRole)
       if (result.success) {
-        addToast({ type: 'success', message: `Invite code created! Role: ${newInviteRole}` })
+        addToast({ type: 'success', message: `Invite code created (${newInviteRole})` })
         fetchData()
       } else {
-        addToast({ type: 'error', message: 'Failed to create invite code' })
+        addToast({ type: 'error', message: 'Could not create the invite code' })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast({ type: 'error', message: `Failed to create invite: ${msg}`, duration: 6000 })
+      addToast({ type: 'error', message: `Could not create the invite: ${msg}`, duration: 6000 })
     } finally {
       setInviteLoading(false)
     }
@@ -157,8 +196,8 @@ export default function Users() {
     }
   }, [newUser, addToast, fetchData])
 
-  // Revoke user
-  const handleChangeRole = useCallback(async (username: string, role: 'user' | 'admin' | 'bot') => {
+  // Change a user's role
+  const handleChangeRole = useCallback(async (username: string, role: Role) => {
     try {
       const result = await authSetUserRole(username, role)
       addToast({ type: result.success ? 'success' : 'error', message: result.message || `${username} is now ${role}` })
@@ -169,6 +208,7 @@ export default function Users() {
     }
   }, [addToast, fetchData])
 
+  // Revoke user
   const handleRevokeUser = useCallback(async (username: string) => {
     setRevokeTarget(username)
     try {
@@ -177,16 +217,25 @@ export default function Users() {
         addToast({ type: 'success', message: `User "${username}" has been revoked.` })
         fetchData()
       } else {
-        addToast({ type: 'error', message: result.message || 'Failed to revoke user' })
+        addToast({ type: 'error', message: result.message || 'Could not revoke the user' })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast({ type: 'error', message: `Failed to revoke: ${msg}`, duration: 6000 })
+      addToast({ type: 'error', message: `Could not revoke the user: ${msg}`, duration: 6000 })
     } finally {
       setRevokeTarget(null)
-      setShowConfirmRevoke(null)
     }
   }, [addToast, fetchData])
+
+  const askRevokeUser = useCallback(async (username: string) => {
+    const ok = await confirm({
+      title: 'Revoke access?',
+      message: `Revoke access for ${username}? Their sessions end and they can no longer sign in.`,
+      confirmLabel: 'Revoke access',
+      danger: true,
+    })
+    if (ok) await handleRevokeUser(username)
+  }, [confirm, handleRevokeUser])
 
   const handleRevokeSession = useCallback(async (tokenPrefix: string) => {
     setRevokingSession(tokenPrefix)
@@ -196,10 +245,10 @@ export default function Users() {
         addToast({ type: 'success', message: `Session revoked (${result.revoked} token${result.revoked !== 1 ? 's' : ''})` })
         fetchData()
       } else {
-        addToast({ type: 'error', message: result.message || 'Failed to revoke session' })
+        addToast({ type: 'error', message: result.message || 'Could not revoke the session' })
       }
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to revoke' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not revoke the session' })
     } finally {
       setRevokingSession(null)
     }
@@ -209,7 +258,7 @@ export default function Users() {
   const handleCopyCode = useCallback((code: string) => {
     navigator.clipboard.writeText(code).then(() => {
       setCopiedCode(code)
-      addToast({ type: 'info', message: 'Invite code copied to clipboard!' })
+      addToast({ type: 'info', message: 'Invite code copied' })
       setTimeout(() => setCopiedCode(null), 2000)
     })
   }, [addToast])
@@ -225,97 +274,68 @@ export default function Users() {
   const usedInvites = invites.filter((i) => i.used)
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-white/5">
-            <UsersIcon className="w-6 h-6 text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">User Management</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Manage registered users and invite codes</p>
-          </div>
-        </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/5 hover:bg-white/10 transition-all disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        page="users"
+        actions={
+          <button type="button" onClick={fetchData} disabled={loading} aria-label="Refresh" className={BTN_TOOLBAR_QUIET}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        }
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 stagger-children">
         <SummaryCard
           icon={<UsersIcon className="h-5 w-5 text-emerald-400" />}
-          label="Registered Users"
+          label="Registered users"
           value={users.length}
-          color="emerald"
         />
         <SummaryCard
           icon={<KeyRound className="h-5 w-5 text-cyan-400" />}
-          label="Active Invites"
+          label="Active invites"
           value={activeInvites.length}
-          color="cyan"
         />
         <SummaryCard
-          icon={<ShieldCheck className="h-5 w-5 text-amber-400" />}
-          label="Admin Users"
+          icon={<ShieldCheck className="h-5 w-5 text-slate-300" />}
+          label="Admin users"
           value={users.filter((u) => u.role === 'admin').length}
-          color="amber"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
         {/* ---- Users List ---- */}
-        <div className="glass rounded-xl border border-white/5 p-5">
+        <section className="glass rounded-xl border border-white/5 p-5">
           <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <UsersIcon className="h-4 w-4 text-emerald-400" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Registered Users
-              </h2>
-              <span className="text-xs text-slate-500">({users.length})</span>
-            </div>
+            <CardTitle icon={<UsersIcon className="h-4 w-4 text-emerald-400" aria-hidden />} count={users.length}>Registered users</CardTitle>
           </div>
 
           {loading ? (
             <LoadingState compact label="Loading users…" />
           ) : users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <UsersIcon className="h-8 w-8 mb-3 text-slate-500" />
-              <p className="text-sm text-slate-400 font-medium">No users registered yet</p>
-              <p className="text-xs text-slate-500 mt-1">Create an invite code to get started</p>
-              <button
-                onClick={handleCreateInvite}
-                disabled={inviteLoading}
-                className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                Invite User
-              </button>
-            </div>
+            <EmptyState
+              compact
+              icon={<UsersIcon className="h-8 w-8" />}
+              title="No users registered yet"
+              hint="Create an invite code to get started"
+              action={
+                <button type="button" onClick={handleCreateInvite} disabled={inviteLoading} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                  <UserPlus size={14} />
+                  Invite user
+                </button>
+              }
+            />
           ) : (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
+            <ul className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
               {users.map((user) => (
-                <div
+                <li
                   key={user.username}
-                  className="flex items-center justify-between rounded-lg bg-white/[0.03] border border-white/[0.03] px-4 py-3 hover:bg-white/5 transition-colors"
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg bg-white/[0.03] border border-white/[0.03] px-4 py-3 hover:bg-white/5 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`
-                      w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold
-                      ${user.role === 'admin'
-                        ? 'bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-400 ring-1 ring-amber-500/20'
-                        : user.role === 'bot'
-                          ? 'bg-gradient-to-br from-violet-500/20 to-indigo-500/20 text-violet-300 ring-1 ring-violet-500/20'
-                          : 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-400 ring-1 ring-emerald-500/20'
-                      }
-                    `}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${roleTone(user.role).avatar}`}>
                       {user.avatar && user.avatar.length > 2 ? (
                         <img src={user.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
                       ) : user.avatar ? (
@@ -324,26 +344,15 @@ export default function Users() {
                         user.username[0]?.toUpperCase() ?? 'U'
                       )}
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
-                        {user.display_name ? <>{user.display_name} <span className="text-[11px] font-normal text-slate-500">{user.username}</span></> : user.username}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5 min-w-0">
+                        {user.display_name ? <>{user.display_name} <span className="text-[11px] font-normal text-slate-500 truncate">{user.username}</span></> : <span className="truncate">{user.username}</span>}
                         {user.status_emoji && <span className="text-xs" title={user.status_text || ''}>{decodeEmoji(user.status_emoji)}</span>}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`
-                          inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold
-                          ${user.role === 'admin'
-                            ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
-                            : user.role === 'bot'
-                              ? 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20'
-                              : 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
-                          }
-                        `}>
-                          {user.role === 'admin' ? <Shield className="h-2.5 w-2.5" /> : user.role === 'bot' ? <Bot className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
-                          {user.role}
-                        </span>
+                        <RolePill role={user.role} />
                         <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" />
+                          <Clock className="h-2.5 w-2.5" aria-hidden />
                           {timeAgo(user.created_at)}
                         </span>
                       </div>
@@ -352,139 +361,132 @@ export default function Users() {
 
                   {/* Role, changeable for everyone but yourself; a bot account runs day-to-day operations only and may keep several sessions */}
                   <div className="flex items-center gap-2">
-                  {user.username !== currentUser && (
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleChangeRole(user.username, e.target.value as 'user' | 'admin' | 'bot')}
-                      title="Change this account's role (signs its sessions out)"
-                      className="px-2 py-1 rounded-lg text-[11px] bg-white/5 border border-white/5 text-slate-400 hover:text-slate-200 focus:outline-none focus:border-emerald-500/30 cursor-pointer"
-                    >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                      <option value="bot">Bot</option>
-                    </select>
-                  )}
-                  {/* Revoke button — disabled for current user (cannot revoke own access) */}
-                  {user.username === currentUser ? (
-                    <Tooltip content="You cannot revoke your own account" position="bottom">
+                    {user.username !== currentUser && (
+                      <Hint label="Change this account's role (signs its sessions out)">
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleChangeRole(user.username, e.target.value as Role)}
+                          aria-label={`Role of ${user.username}`}
+                          className={`${FIELD} h-8 px-2 text-[11px] text-slate-300 hover:text-slate-100 cursor-pointer`}
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                          <option value="bot">Bot</option>
+                        </select>
+                      </Hint>
+                    )}
+                    {/* Revoke — not for yourself (you cannot revoke your own access) */}
+                    {user.username === currentUser ? (
+                      <Hint label="You cannot revoke your own account">
+                        <span className="inline-flex">
+                          <button type="button" disabled aria-label="Revoke (not available for your own account)" className={`${BTN_CARD} bg-white/[0.03] border border-white/5 text-slate-500 cursor-not-allowed`}>
+                            <ShieldX size={12} />
+                            Revoke
+                          </button>
+                        </span>
+                      </Hint>
+                    ) : (
                       <button
-                        disabled
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 bg-white/[0.03] border border-white/5 cursor-not-allowed"
+                        type="button"
+                        onClick={() => askRevokeUser(user.username)}
+                        disabled={revokeTarget === user.username}
+                        aria-label={`Revoke access for ${user.username}`}
+                        className={`${BTN_CARD} ${TONE_DANGER}`}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        {revokeTarget === user.username ? <Loader2 size={12} className="animate-spin" /> : <ShieldX size={12} />}
                         Revoke
                       </button>
-                    </Tooltip>
-                  ) : showConfirmRevoke === user.username ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleRevokeUser(user.username)}
-                        disabled={revokeTarget === user.username}
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-all disabled:opacity-50"
-                      >
-                        {revokeTarget === user.username ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirm'}
-                      </button>
-                      <button
-                        onClick={() => setShowConfirmRevoke(null)}
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-300 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowConfirmRevoke(user.username)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
-                      title="Revoke access"
-                    >
-                      <ShieldX className="h-3 w-3" />
-                      Revoke
-                    </button>
-                  )}
+                    )}
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </div>
+        </section>
 
         {/* ---- Create a user directly ---- */}
-        <div className="glass rounded-xl border border-white/5 p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <UserPlus className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Create User</h2>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">
+        <section className="glass rounded-xl border border-white/5 p-5">
+          <CardTitle icon={<UserPlus className="h-4 w-4 text-emerald-400" aria-hidden />}>Create user</CardTitle>
+          <p className="text-xs text-slate-500 mt-1 mb-4">
             An account you set up yourself, no invite code: for the Discord bot, an automation, or someone who should not register on their own. Bots need admin for the start, stop and update commands.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
-            <input
-              type="text"
-              value={newUser.username}
-              onChange={(e) => setNewUser((s) => ({ ...s, username: e.target.value }))}
-              placeholder="username (e.g. dcs-bot)"
-              autoComplete="off"
-              className="px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/30 font-mono"
-            />
-            <input
-              type="password"
-              value={newUser.password}
-              onChange={(e) => setNewUser((s) => ({ ...s, password: e.target.value }))}
-              placeholder="password (8+ characters)"
-              autoComplete="new-password"
-              className="px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/30"
-            />
-            <select aria-label="Role"
-              value={newUser.role}
-              onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as 'user' | 'admin' | 'bot' }))}
-              className="px-2 py-2 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-emerald-500/30"
-            >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-              <option value="bot">Bot</option>
-            </select>
-            <button
-              onClick={handleCreateUser}
-              disabled={createLoading || !newUser.username || !newUser.password}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
-            >
-              {createLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-              Create
-            </button>
-          </div>
-        </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleCreateUser() }}
+            className="space-y-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={newUser.username}
+                onChange={(e) => setNewUser((s) => ({ ...s, username: e.target.value }))}
+                aria-label="Username"
+                placeholder="Username, e.g. dcs-bot"
+                autoComplete="off"
+                className={`${FIELD} font-mono`}
+              />
+              <input
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser((s) => ({ ...s, password: e.target.value }))}
+                aria-label="Password"
+                placeholder="Password, 8+ characters"
+                autoComplete="new-password"
+                className={FIELD}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="new-user-role" className="text-xs text-slate-400">Role</label>
+              <select
+                id="new-user-role"
+                value={newUser.role}
+                onChange={(e) => setNewUser((s) => ({ ...s, role: e.target.value as Role }))}
+                className={`${FIELD} px-2 text-slate-300`}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="bot">Bot</option>
+              </select>
+              <span className="flex-1" />
+              <button
+                type="submit"
+                disabled={createLoading || !newUser.username || !newUser.password}
+                className={`${BTN_TOOLBAR} justify-center ${TONE_OK}`}
+              >
+                {createLoading ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                Create
+              </button>
+            </div>
+          </form>
+        </section>
 
         {/* ---- Invite Codes ---- */}
-        <div className="glass rounded-xl border border-white/5 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-cyan-400" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Invite Codes
-              </h2>
-            </div>
+        <section className="glass rounded-xl border border-white/5 p-5">
+          <div className="mb-5">
+            <CardTitle icon={<KeyRound className="h-4 w-4 text-cyan-400" aria-hidden />}>Invite codes</CardTitle>
           </div>
 
           {/* Create invite form */}
-          <div className="flex items-center gap-3 mb-5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
+          <div className="flex flex-wrap items-center gap-3 mb-5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
             <div className="flex-1 flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-cyan-400 flex-shrink-0" />
-              <span className="text-xs text-slate-400">Generate new invite as:</span>
-              <select aria-label="Generate new invite as"
+              <UserPlus className="h-4 w-4 text-cyan-400 flex-shrink-0" aria-hidden />
+              <label htmlFor="invite-role" className="text-xs text-slate-400">New invite for</label>
+              <select
+                id="invite-role"
                 value={newInviteRole}
                 onChange={(e) => setNewInviteRole(e.target.value as 'user' | 'admin')}
-                className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/5 text-slate-300 focus:outline-none focus:border-cyan-500/30"
+                className={`${FIELD} h-8 px-2 text-slate-300`}
               >
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
             <button
+              type="button"
               onClick={handleCreateInvite}
               disabled={inviteLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 transition-all disabled:opacity-50 press"
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {inviteLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              {inviteLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               Generate
             </button>
           </div>
@@ -521,19 +523,14 @@ export default function Users() {
                     className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white/[0.01] border border-white/[0.03] opacity-70"
                   >
                     <div className="flex items-center gap-2">
-                      <Check className="h-3 w-3 text-emerald-400" />
+                      <Check className="h-3 w-3 text-emerald-400" aria-hidden />
                       <code className="text-[11px] font-mono text-slate-500">{invite.code.slice(0, 8)}...</code>
-                      <span className={`
-                        px-1.5 py-0.5 rounded-full text-[9px] font-semibold
-                        ${invite.role === 'admin' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}
-                      `}>
-                        {invite.role}
-                      </span>
+                      <RolePill role={invite.role} />
                     </div>
                     <div className="flex items-center gap-2">
                       {invite.used_by && (
                         <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                          <UsersIcon className="h-2.5 w-2.5" />
+                          <UsersIcon className="h-2.5 w-2.5" aria-hidden />
                           {invite.used_by}
                         </span>
                       )}
@@ -545,63 +542,65 @@ export default function Users() {
           )}
 
           {invites.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <KeyRound className="h-8 w-8 mb-3 text-slate-500" />
-              <p className="text-sm text-slate-400 font-medium">No invite codes yet</p>
-              <p className="text-xs text-slate-500 mt-1">Generate an invite to allow new user registration</p>
-            </div>
+            <EmptyState
+              compact
+              icon={<KeyRound className="h-8 w-8" />}
+              title="No invite codes yet"
+              hint="Generate an invite to allow new user registration"
+            />
           )}
-        </div>
+        </section>
 
-        {/* ── Active Sessions ── */}
-        <div className="glass rounded-xl border border-white/5 overflow-hidden">
+        {/* ── Active sessions ── */}
+        <section className="glass rounded-xl border border-white/5 overflow-hidden">
           <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-amber-400" />
-              <h3 className="text-sm font-semibold text-slate-200">Active Sessions</h3>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5">{sessions.length}</span>
+              <KeyRound className="h-4 w-4 text-cyan-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">Active sessions</h2>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-500 border border-white/5 tabular-nums">{sessions.length}</span>
             </div>
           </div>
           <div className="p-4">
             {sessions.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-6">No active sessions</p>
+              <EmptyState compact title="No active sessions" />
             ) : (
-              <div className="space-y-2">
+              <ul className="space-y-2">
                 {sessions.map((s) => {
                   const hours = Math.floor(s.remaining_seconds / 3600)
                   const mins = Math.floor((s.remaining_seconds % 3600) / 60)
                   return (
-                    <div key={s.id} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] hover:border-white/5 px-4 py-3 transition-all">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/10 shrink-0">
-                        <Shield className="h-3.5 w-3.5 text-amber-400" />
+                    <li key={s.id} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] hover:border-white/5 px-4 py-3 transition-all">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 shrink-0">
+                        <Shield className="h-3.5 w-3.5 text-slate-400" aria-hidden />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-slate-200">{s.username}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${s.role === 'admin' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}`}>{s.role}</span>
+                          <RolePill role={s.role} />
                         </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[10px] text-slate-500">
                           <span className="font-mono">{s.id}</span>
                           <span>{s.ip}</span>
-                          <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{hours}h {mins}m left</span>
+                          <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" aria-hidden />{hours}h {mins}m left</span>
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => handleRevokeSession(s.id.replace('...', ''))}
                         disabled={revokingSession === s.id}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 bg-rose-500/10 border border-rose-500/15 hover:bg-rose-500/20 disabled:opacity-50 transition-all press shrink-0"
-                        title="Revoke this session"
+                        aria-label={`Revoke the session ${s.id} of ${s.username}`}
+                        className={`${BTN_CARD} ${TONE_DANGER}`}
                       >
-                        {revokingSession === s.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldX size={11} />}
+                        {revokingSession === s.id ? <Loader2 size={12} className="animate-spin" /> : <ShieldX size={12} />}
                         Revoke
                       </button>
-                    </div>
+                    </li>
                   )
                 })}
-              </div>
+              </ul>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )
@@ -611,23 +610,17 @@ export default function Users() {
 // Subcomponents
 // ---------------------------------------------------------------------------
 
-function SummaryCard({ icon, label, value, color }: {
+function SummaryCard({ icon, label, value }: {
   icon: React.ReactNode
   label: string
   value: number
-  color: string
 }) {
-  const glowMap: Record<string, string> = {
-    emerald: 'glow-emerald',
-    cyan: 'glow-cyan',
-    amber: 'glow-amber',
-  }
   return (
     <div className="glass rounded-xl border border-white/5 p-5 flex items-center gap-4">
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="flex-shrink-0" aria-hidden>{icon}</div>
       <div>
         <p className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-bold text-white">{value}</p>
+        <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
       </div>
     </div>
   )
@@ -642,47 +635,42 @@ function InviteCard({ invite, copiedCode, onCopy }: {
 
   return (
     <div className={`
-      flex items-center justify-between rounded-lg px-4 py-3 border transition-colors
+      flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg px-4 py-3 border transition-colors
       ${expired
         ? 'bg-rose-500/5 border-rose-500/10'
         : 'bg-white/[0.03] border-white/[0.03] hover:bg-white/5'
       }
     `}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <code className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded">
+        <code className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded truncate">
           {invite.code}
         </code>
-        <span className={`
-          px-2 py-0.5 rounded-full text-[10px] font-semibold
-          ${invite.role === 'admin'
-            ? 'bg-amber-500/10 text-amber-400'
-            : 'bg-emerald-500/10 text-emerald-400'
-          }
-        `}>
-          {invite.role}
-        </span>
+        <RolePill role={invite.role} />
         {expired && (
           <span className="flex items-center gap-1 text-[10px] text-rose-400">
-            <AlertTriangle className="h-2.5 w-2.5" />
+            <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
             Expired
           </span>
         )}
       </div>
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-slate-500 flex items-center gap-1">
-          <Clock className="h-2.5 w-2.5" />
+          <Clock className="h-2.5 w-2.5" aria-hidden />
           {formatDate(invite.expires_at)}
         </span>
-        <button
-          onClick={() => onCopy(invite.code)}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
-          title="Copy invite code"
-        >
-          {copiedCode === invite.code
-            ? <Check className="h-3.5 w-3.5 text-emerald-400" />
-            : <Copy className="h-3.5 w-3.5" />
-          }
-        </button>
+        <Hint label="Copy invite code">
+          <button
+            type="button"
+            onClick={() => onCopy(invite.code)}
+            aria-label={`Copy the invite code ${invite.code}`}
+            className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+          >
+            {copiedCode === invite.code
+              ? <Check size={12} className="text-emerald-400" />
+              : <Copy size={12} />
+            }
+          </button>
+        </Hint>
       </div>
     </div>
   )
