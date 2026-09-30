@@ -6,23 +6,16 @@
 // =============================================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Container, Loader2, Download, RefreshCw, AlertTriangle, CheckCircle, Copy, Check, KeyRound, ChevronDown, ChevronUp } from 'lucide-react'
+import { Container, Loader2, Download, RefreshCw, AlertTriangle, CheckCircle, KeyRound, ChevronDown, ChevronUp } from 'lucide-react'
 import { usePolling } from '../../hooks/usePolling'
 import { useToast } from '../common/Toast'
 import VmCapsule from '../fleet/VmCapsule'
+import { CopyChip } from '../fleet/fleetShared'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_CARD, BTN_CARD_QUIET, TONE_OK } from '../../lib/ui'
+import { Pill, Fact, CardIcon, StatusLine } from './updateBits'
 import { fetchDockerEngine, fetchDockerEngineStatus, updateDockerEngine, updateFleetDockerEngine, terminalAuth } from '../../api/endpoints'
 import type { DockerEngineInfo, DockerEngineFleet, DockerEngineStatus } from '../../../shared/types'
-
-function ago(v?: string | number | null): string {
-  if (!v) return ''
-  const ms = typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(v) || 0
-  if (!ms) return ''
-  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000))
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`
-  return `${Math.floor(s / 86400)} d ago`
-}
 
 const SOURCE_LABEL: Record<string, string> = {
   'docker-ce': "Docker's packages",
@@ -30,16 +23,6 @@ const SOURCE_LABEL: Record<string, string> = {
   'moby-engine': "Fedora's packages",
   'docker-arch': "Arch Linux's packages",
   unknown: 'not from a package',
-}
-
-function CopyChip({ text }: { text: string }) {
-  const [done, setDone] = useState(false)
-  return (
-    <button type="button" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500) }).catch(() => {}) }}
-      className="h-7 px-2 rounded-lg bg-white/5 border border-white/10 text-[10px] text-slate-300 hover:bg-white/10 flex items-center gap-1 shrink-0">
-      {done ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />} {done ? 'Copied' : 'Copy'}
-    </button>
-  )
 }
 
 export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean; isHub: boolean }) {
@@ -145,13 +128,11 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
   const warnSource = !!own && (own.apparmor_issue || own.source === 'docker.io')
 
   return (
-    <div className={`rounded-xl border p-5 transition-all duration-300 ${own?.upgradable || (fleet && fleet.upgradable_count > 0) ? 'bg-sky-500/[0.04] border-sky-500/15' : 'bg-white/[0.03] border-white/5'}`}>
+    <div className={`rounded-xl border p-5 transition-all duration-300 ${own?.upgradable || (fleet && fleet.upgradable_count > 0) ? 'bg-cyan-500/[0.05] border-cyan-500/15' : 'bg-white/[0.03] border-white/5'}`}>
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/15 flex items-center justify-center">
-          <Container size={16} className="text-sky-400" />
-        </div>
+        <CardIcon><Container size={16} /></CardIcon>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-200">Docker Engine</p>
+          <h3 className="text-sm font-semibold text-slate-200">Docker Engine</h3>
           <p className="text-[10px] text-slate-500 truncate">{own ? `${SOURCE_LABEL[own.source] ?? own.source}${own.package_manager && own.package_manager !== 'unknown' ? ` · ${own.package_manager}` : ''}` : 'the container runtime'}</p>
         </div>
       </div>
@@ -168,54 +149,49 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
               </span>
             </p>
           ) : (
-            <>
-              <div className="h-3 w-2/3 rounded bg-white/5 animate-pulse" />
-              <div className="h-3 w-1/2 rounded bg-white/5 animate-pulse" />
+            <div role="status" aria-label="Reading the engine" className="space-y-3">
+              <div className="skeleton h-3 w-2/3 rounded" aria-hidden />
+              <div className="skeleton h-3 w-1/2 rounded" aria-hidden />
               <p className="text-[10px] text-slate-500">Reading the engine…</p>
-            </>
+            </div>
           )}
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Installed</span>
-            <span className="text-xs font-mono text-slate-300">{own.version || 'not running'}</span>
-          </div>
+          <Fact label="Installed"><span className="text-xs font-mono text-slate-300">{own.version || 'not running'}</span></Fact>
           {own.upgradable && (
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
-              <span className="text-xs font-mono text-sky-300">{own.candidate}</span>
-            </div>
+            <Fact label="Available"><span className="text-xs font-mono text-cyan-300">{own.candidate}</span></Fact>
           )}
           {!own.upgradable && own.checking && (
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
+            <Fact label="Available">
               <span className="text-xs text-slate-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> asking the package source…</span>
-            </div>
+            </Fact>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Updates</span>
+          <Fact label="Updates">
             <span className="text-xs text-slate-300 text-right">{own.sudo_ready ? 'Unattended (passwordless sudo)' : 'With your Linux account'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
+          </Fact>
+          <Fact label="Status">
             {running ? (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20"><Loader2 size={10} className="animate-spin" /> Updating</span>
+              <Pill tone="cyan" icon={<Loader2 size={10} className="animate-spin" />}>Updating</Pill>
             ) : own.upgradable ? (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20"><Download size={10} /> Update available</span>
+              <Pill tone="cyan" icon={<Download size={10} />}>Update available</Pill>
             ) : own.version ? (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"><CheckCircle size={10} /> Current</span>
+              <Pill tone="emerald" icon={<CheckCircle size={10} />}>Current</Pill>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20"><AlertTriangle size={10} /> Not answering</span>
+              <Pill tone="rose" icon={<AlertTriangle size={10} />}>Not answering</Pill>
             )}
-          </div>
+          </Fact>
 
           {/* the one-line status, like the other cards: up to date · checked · last updated */}
-          <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] rounded-lg border px-2.5 py-1.5 ${uptodate ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : own.version ? 'text-sky-200 bg-sky-500/10 border-sky-500/20' : 'text-rose-300 bg-rose-500/10 border-rose-500/20'}`}>
-            <span className="font-medium">{uptodate ? (own.checking ? 'Engine running' : 'Engine up to date') : own.version ? `${own.candidate || 'A newer engine'} available` : 'Docker is not answering'}</span>
-            {checkedAt > 0 && <span className="text-current/70">· checked {ago(checkedAt)}</span>}
-            {last?.finished_at && last.status !== 'running' && <span className="text-current/70">· last updated {ago(last.finished_at)}{last.status === 'failed' ? ' (failed)' : ''}</span>}
-          </div>
+          <StatusLine
+            ok={uptodate}
+            okText={own.checking ? 'Engine running' : 'Engine up to date'}
+            warnText={own.version ? `${own.candidate || 'A newer engine'} available` : 'Docker is not answering'}
+            tone={own.version ? 'cyan' : 'rose'}
+            checkedAt={checkedAt || null}
+            updatedAt={last && last.status !== 'running' ? last.finished_at : null}
+            updatedLabel={last?.status === 'failed' ? 'Last update failed' : 'Last updated'}
+          />
 
           {warnSource && (
             <div className="rounded-lg bg-amber-500/[0.06] border border-amber-500/15 p-2.5 space-y-2">
@@ -223,7 +199,7 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
               {own.switch_command && (
                 <div className="flex items-center gap-2">
                   <code className="text-[10px] font-mono text-slate-300 bg-black/30 rounded px-2 py-1 truncate">{own.switch_command}</code>
-                  <CopyChip text={own.switch_command} />
+                  <CopyChip text={own.switch_command} label="Copy" />
                 </div>
               )}
             </div>
@@ -231,7 +207,7 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
 
           {last && last.status !== 'running' && last.status !== 'idle' && last.output && (
             <div>
-              <button type="button" onClick={() => setShowOutput((v) => !v)} className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1">
+              <button type="button" aria-expanded={showOutput} onClick={() => setShowOutput((v) => !v)} className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
                 {showOutput ? <ChevronUp size={11} /> : <ChevronDown size={11} />} Last update's output
               </button>
               {showOutput && <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-black/30 p-2.5 text-[10px] font-mono text-slate-400 whitespace-pre-wrap">{last.output}</pre>}
@@ -240,15 +216,15 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
 
           {showAuth && !own.sudo_ready && (
             <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 space-y-2">
-              <p className="text-[11px] text-slate-400 flex items-center gap-1.5"><KeyRound size={12} /> The API needs sudo for this: your Linux account (used once, like the OS updates on the System page)</p>
+              <p className="text-[11px] text-slate-400 flex items-center gap-1.5"><KeyRound size={12} /> The API needs sudo for this: your Linux account (used once, like the OS updates on the {pageLabel('system')} page)</p>
               <div className="flex flex-col sm:flex-row gap-2">
-                <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="Linux username" autoComplete="username"
-                  className="flex-1 min-w-0 rounded-lg bg-black/30 border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/40" />
-                <input value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" type="password" autoComplete="current-password" onKeyDown={(e) => { if (e.key === 'Enter') void startWithAccount() }}
-                  className="flex-1 min-w-0 rounded-lg bg-black/30 border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/40" />
+                <input value={user} onChange={(e) => setUser(e.target.value)} aria-label="Linux username" placeholder="Linux username" autoComplete="username"
+                  className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40" />
+                <input value={pw} onChange={(e) => setPw(e.target.value)} aria-label="Linux password" placeholder="Password" type="password" autoComplete="current-password" onKeyDown={(e) => { if (e.key === 'Enter') void startWithAccount() }}
+                  className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40" />
                 <button type="button" onClick={() => void startWithAccount()} disabled={busy || !user.trim() || !pw}
-                  className="px-3 py-2 rounded-lg text-xs font-medium bg-sky-500/15 text-sky-200 border border-sky-500/25 hover:bg-sky-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Update
+                  className={`${BTN_CARD} ${TONE_OK} justify-center`}>
+                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Update
                 </button>
               </div>
               {authErr && <p className="text-[11px] text-rose-300">{authErr}</p>}
@@ -258,45 +234,44 @@ export default function DockerEngineCard({ enabled, isHub }: { enabled: boolean;
           <div className="flex items-center gap-2 pt-1">
             {own.upgradable && !running && !showAuth && (
               <button type="button" onClick={() => (own.sudo_ready ? void start() : setShowAuth(true))} disabled={busy}
-                className="px-3 py-2 rounded-lg text-xs font-medium bg-sky-500/15 text-sky-200 border border-sky-500/25 hover:bg-sky-500/25 disabled:opacity-50 flex items-center gap-1.5">
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Update engine
+                className={`${BTN_CARD} ${TONE_OK}`}>
+                {busy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Update engine
               </button>
             )}
-            <button type="button" onClick={() => refresh()} disabled={loading}
-              className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 disabled:opacity-50 flex items-center gap-1.5">
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Check
+            <button type="button" onClick={() => refresh()} disabled={loading} className={BTN_CARD_QUIET}>
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Check
             </button>
           </div>
 
           {fleet && fleet.members.length > 1 && (
             <div className="pt-3 mt-1 border-t border-white/[0.06]">
-              <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider">
                   The VMs · {fleet.versions.length <= 1 ? 'one engine version everywhere' : `${fleet.versions.length} engine versions`}
                 </p>
                 {upgradableVms > 0 && (
                   <button type="button" onClick={() => void updateVms()} disabled={fleetBusy}
-                    className="px-3 py-2 rounded-lg text-xs font-medium bg-sky-500/15 text-sky-200 border border-sky-500/25 hover:bg-sky-500/25 disabled:opacity-50 flex items-center gap-1.5">
-                    {fleetBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Update {upgradableVms} VM{upgradableVms === 1 ? '' : 's'}
+                    className={`${BTN_CARD} ${TONE_OK}`}>
+                    {fleetBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Update {upgradableVms} VM{upgradableVms === 1 ? '' : 's'}
                   </button>
                 )}
               </div>
               <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
                 {fleet.members.filter((m) => m.id).map((m) => (
-                  <li key={m.id ?? 'hub'} className="flex items-center justify-between gap-2 text-[11px]">
+                  <li key={m.id ?? 'hub'} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[11px]">
                     <VmCapsule member={m.id} name={m.name} vmid={m.vmid} size="xs" />
-                    <span className="flex items-center gap-2 min-w-0">
+                    <span className="flex flex-wrap items-center gap-2 min-w-0">
                       {!m.reachable ? (
                         <span className="text-slate-500 truncate" title={m.error}>no answer</span>
                       ) : (
                         <>
                           <span className="font-mono text-slate-300">{m.version || '—'}</span>
                           {m.upgradable ? (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20 whitespace-nowrap">{m.candidate} available</span>
+                            <Pill tone="cyan">{m.candidate} available</Pill>
                           ) : m.source === 'docker.io' ? (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 whitespace-nowrap" title={m.note}>Debian's docker.io</span>
+                            <Pill tone="amber" title={m.note}>Debian's docker.io</Pill>
                           ) : (
-                            <span className="text-[10px] text-emerald-400/80 whitespace-nowrap">current</span>
+                            <Pill tone="emerald">Current</Pill>
                           )}
                         </>
                       )}
