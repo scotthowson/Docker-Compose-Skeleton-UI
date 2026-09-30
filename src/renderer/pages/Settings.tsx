@@ -1320,8 +1320,8 @@ function SecuritySettings() {
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
-                <Shield size={12} className="text-cyan-400" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 shrink-0">
+                <Shield size={12} className="text-emerald-400" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-200">Rate-limited sign-in</p>
@@ -1331,8 +1331,8 @@ function SecuritySettings() {
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/10 shrink-0">
-                <Key size={12} className="text-amber-400" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 shrink-0">
+                <Key size={12} className="text-emerald-400" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-200">Secure sessions</p>
@@ -2560,10 +2560,9 @@ function SettingsExportImport() {
 // SectionCard
 // ---------------------------------------------------------------------------
 
-function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCollapsed }: {
+function SectionCard({ icon, title, children, fullWidth, defaultCollapsed }: {
   icon: React.ReactNode
   title: string
-  accentColor: string
   children: React.ReactNode
   fullWidth?: boolean
   defaultCollapsed?: boolean
@@ -2737,7 +2736,6 @@ export default function Settings() {
         <SectionCard
           icon={<UserCircle size={16} className="accent-text" />}
           title="User profile"
-          accentColor="border-t-emerald-500"
         >
           <ProfileSettings />
         </SectionCard>
@@ -2746,7 +2744,6 @@ export default function Settings() {
           <SectionCard
             icon={<Server size={16} className="accent-text" />}
             title="Server connection"
-            accentColor="border-t-emerald-500"
           >
             <ConnectionForm />
             <div className="border-t border-white/[0.03] mt-4 pt-4">
@@ -2760,7 +2757,6 @@ export default function Settings() {
         <SectionCard
           icon={<Eye size={16} className="accent-text" />}
           title="Appearance"
-          accentColor="border-t-violet-500"
           fullWidth
         >
           <AppearanceSettings />
@@ -2770,7 +2766,6 @@ export default function Settings() {
         <SectionCard
           icon={<Timer size={16} className="accent-text" />}
           title="Application preferences"
-          accentColor="border-t-amber-500"
           fullWidth
         >
           <AppSettingsForm onDirtyChange={handleAppSettingsDirty} onRegisterSave={handleAppSettingsRegister} />
@@ -2782,7 +2777,6 @@ export default function Settings() {
           <SectionCard
             icon={<Keyboard size={16} className="accent-text" />}
             title="Keyboard shortcuts"
-            accentColor="border-t-violet-500"
           >
             <KeyboardShortcuts />
           </SectionCard>
@@ -2792,7 +2786,6 @@ export default function Settings() {
           <SectionCard
             icon={<HardDrive size={16} className="accent-text" />}
             title="Disk configuration"
-            accentColor="border-t-cyan-500"
           >
             <DiskLabelManager />
           </SectionCard>
@@ -2802,7 +2795,6 @@ export default function Settings() {
         <SectionCard
           icon={<Bell size={16} className="accent-text" />}
           title="Notification preferences"
-          accentColor="border-t-cyan-500"
         >
           <NotificationPreferencesSection />
         </SectionCard>
@@ -2811,7 +2803,6 @@ export default function Settings() {
           <SectionCard
             icon={<AlertTriangle size={16} className="text-amber-400" />}
             title="Alert thresholds"
-            accentColor="border-t-amber-500"
           >
             <AlertThresholdsEditor />
           </SectionCard>
@@ -2821,7 +2812,6 @@ export default function Settings() {
         <SectionCard
           icon={<LockKeyhole size={16} className="accent-text" />}
           title="Lock & session"
-          accentColor="border-t-amber-500"
         >
           <AutoLockSettings />
         </SectionCard>
@@ -2830,7 +2820,6 @@ export default function Settings() {
           <SectionCard
             icon={<Download size={16} className="accent-text" />}
             title="Backup & restore"
-            accentColor="border-t-cyan-500"
           >
             <ExportImportSettings />
             <div className="border-t border-white/[0.03] mt-4 pt-4">
@@ -2844,7 +2833,6 @@ export default function Settings() {
         <SectionCard
           icon={<Palette size={16} className="accent-text" />}
           title="Themes"
-          accentColor="border-t-emerald-500"
           fullWidth
         >
           <ThemesPanel />
@@ -2854,7 +2842,6 @@ export default function Settings() {
         {isAdmin && <SectionCard
           icon={<Palette size={16} className="accent-text" />}
           title="Custom CSS"
-          accentColor="border-t-violet-500"
           fullWidth
         >
           <div className="space-y-4">
@@ -2889,7 +2876,6 @@ export default function Settings() {
         <SectionCard
           icon={<Info size={16} className="accent-text" />}
           title="About"
-          accentColor="border-t-cyan-500"
         >
           <div className="space-y-0">
             {[
@@ -2902,7 +2888,7 @@ export default function Settings() {
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-white/[0.03] last:border-b-0">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{item.label}</span>
-                <span className="text-sm text-slate-200 font-mono truncate max-w-[200px]" title={typeof item.value === 'string' ? item.value : undefined}>
+                <span className="text-sm text-slate-200 font-mono truncate max-w-[65%]" title={typeof item.value === 'string' ? item.value : undefined}>
                   {item.value}
                 </span>
               </div>
@@ -2927,7 +2913,6 @@ export default function Settings() {
         <SectionCard
           icon={<Shield size={16} className="text-rose-400" />}
           title="Security & account"
-          accentColor="border-t-rose-500"
         >
           <SessionInfo />
           <SecuritySettings />
