@@ -14,6 +14,7 @@ import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetPr
 import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
 import { VmSizeControl } from './VmSizeControl'
 import { isMobile } from '../../hooks/useMobile'
+import { BTN_SHEET_PRIMARY, BTN_SHEET_QUIET } from '../../lib/ui'
 
 export interface VmSettings { node: string; storage: string; image_storage: string; bridge: string; cidr: number; gateway: string; dns: string; ip_start: string; /** what the VMs are built from: cat:<id> (catalogue), url, pve:<file> (imported already), iso:<volid> (installer, by hand) */ os: string; image_url: string; /** bake a DCS template first when the chosen image has none, then clone it for every VM */ bake: boolean }
 
@@ -42,13 +43,19 @@ export function osChoices(d: FleetProvisionDefaults | null): OsChoice[] {
   for (const tp of d?.images?.templates ?? []) {
     const base = catalogue.find((c) => c.id === tp.image_id)?.label.replace(/ — .*$/, '') ?? tp.image_id
     const baked = new Date(tp.baked_at * 1000).toLocaleDateString()
-    out.push({ value: `tpl:${tp.image_id}`, label: `${base} — DCS template VM ${tp.vmid}, baked ${baked}`, group: 'Baked DCS templates — cloned in about 40 s', name: shortName(base), hint: `VM ${tp.vmid} · ${baked}` })
+    out.push({ value: `tpl:${tp.image_id}`, label: `${base} — DCS template VM ${tp.vmid}, baked ${baked}`, group: 'Baked DCS templates — cloned in about half a minute', name: shortName(base), hint: `VM ${tp.vmid} · ${baked}` })
   }
   for (const c of catalogue.filter((c) => !c.prebuilt)) out.push({ value: `cat:${c.id}`, label: `${c.label}${c.family === 'dnf' ? ' · dnf' : ''}`, group: 'Cloud images — tools and Docker installed by the hub', name: shortName(c.label), hint: c.family })
   for (const i of d?.images?.on_proxmox?.imports ?? []) out.push({ value: `pve:${i.file}`, label: `${i.file} (${gbOf(i.size)}, on ${i.storage})`, group: 'On Proxmox already — cloud images', name: i.file, hint: `${gbOf(i.size)} · ${i.storage}` })
   for (const i of d?.images?.on_proxmox?.isos ?? []) out.push({ value: `iso:${i.volid}`, label: `${i.file} (${gbOf(i.size)}) — install by hand, then join`, group: 'On Proxmox already — installer ISOs', byHand: true, name: i.file, hint: `${gbOf(i.size)} · by hand` })
   out.push({ value: 'url', label: 'A cloud image from a URL…', group: 'Anything else', name: 'A cloud image from a URL…' })
   return out
+}
+/** how long a build takes, in the words the docs use: a VM built from a DCS image or cloned from a baked template about half a minute; a cloud image installs everything, a minute and a half (an installer ISO is done by hand: no time to give) */
+export function buildTimeNote(os: string, bake: boolean): string {
+  if (os.startsWith('iso:')) return 'You install the system in the Proxmox console'
+  if (os.startsWith('cat:dcs-') || os.startsWith('tpl:')) return 'The VM is ready in about half a minute'
+  return bake ? 'The first build bakes the template (about two minutes), then the VM is ready in about half a minute' : 'The VM is ready in a minute and a half'
 }
 export function osLabel(s: VmSettings | null, d: FleetProvisionDefaults | null): string {
   if (!s) return ''
@@ -157,11 +164,11 @@ export function VmSettingsFields({ value, onChange, defaults, disabled = false }
           <div className="mt-2.5 text-slate-300">
             <Switch
               size="sm"
-              color="amber"
+              color="violet"
               checked={value.bake}
               onChange={(e) => set('bake', e.currentTarget.checked ? 1 : 0)}
               disabled={disabled}
-              label="Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about 40 s instead of about 85 s, and the template stays for the next builds."
+              label="Bake a DCS template first (once, about two minutes), then clone it for every VM — a clone builds in about half a minute instead of a minute and a half, and the template stays for the next builds."
               styles={{ label: { fontSize: 11, lineHeight: 1.5 } }}
             />
           </div>
@@ -231,6 +238,7 @@ interface Props {
 }
 
 export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialStack = '' }: Props) {
+  const uid = useId()
   const [stack, setStack] = useState(initialStack)
   const [cores, setCores] = useState(defaults?.defaults.cores ?? 2)
   const [memGb, setMemGb] = useState(Math.round((defaults?.defaults.memory_mb ?? 4096) / 1024))
@@ -256,8 +264,8 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
       <div className="space-y-4">
         <HubFirewallNote fw={defaults?.hub_firewall} />
         <div>
-          <label className={labelCls}>Stack = VM name</label>
-          <input value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono sm:max-w-xs`} disabled={busy} />
+          <label htmlFor={`${uid}-stack`} className={labelCls}>Stack = VM name</label>
+          <input id={`${uid}-stack`} value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono sm:max-w-xs`} disabled={busy} />
         </div>
         <div>
           <p className={labelCls}>Size</p>
@@ -270,17 +278,17 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
           <VmSettingsFields value={settings} onChange={setSettings} defaults={defaults} disabled={busy} />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
             <div>
-              <label className={labelCls}>Address for this VM</label>
-              <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder={`next free from ${settings.ip_start || '…'}`} className={`${inputCls} font-mono`} disabled={busy} />
+              <label htmlFor={`${uid}-ip`} className={labelCls}>Address for this VM</label>
+              <input id={`${uid}-ip`} value={ip} onChange={(e) => setIp(e.target.value)} placeholder={`next free from ${settings.ip_start || '…'}`} className={`${inputCls} font-mono`} disabled={busy} />
             </div>
           </div>
         </div>
         <CapabilityNote caps={caps} />
-        <p className="text-[11px] text-slate-500">{osLabel(settings, defaults) || 'The image'}, imported once · user {defaults?.vm_user || 'dcs'} with the hub's ssh key · the VM's admin is {defaults?.admin_user || 'your account'} with a generated password kept in the hub's secret store · takes a few minutes; watch it on the card.</p>
-        {err && <p className="text-xs text-rose-300">{err}</p>}
+        <p className="text-[11px] text-slate-500">{osLabel(settings, defaults) || 'The image'}, imported once · user {defaults?.vm_user || 'dcs'} with the hub's ssh key · the VM's admin is {defaults?.admin_user || 'your account'} with a generated password kept in the hub's secret store · {buildTimeNote(settings.os, settings.bake)}; watch it on the card.</p>
+        {err && <p role="alert" className="text-xs text-rose-300">{err}</p>}
         <div className="flex gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className="flex-1 h-11 rounded-xl bg-white/5 text-slate-300 hover:bg-white/10 text-sm font-medium disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className="flex-1 h-11 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
+          <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+          <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Build the VM
           </button>
         </div>

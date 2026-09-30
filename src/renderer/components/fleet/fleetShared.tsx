@@ -1,13 +1,22 @@
 // =============================================================================
 // Small pieces the fleet UI shares: copy chips, time-ago, status chips, the
 // sheet that hosts forms on phones (bottom) and desktops (centred).
+//
+// The fleet's colour is violet — the hub, a VM, "this runs in a VM": its capsules,
+// its scope chips, the icon tile of its sheets, the focus and the chosen preset of
+// its forms. Amber stays for "needs attention" (a DCS install nobody linked, a
+// token that cannot create VMs, a build to finish by hand).
 // =============================================================================
 
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, Check, X, ShieldAlert } from 'lucide-react'
 import { useModalA11y } from '../../hooks/useModalA11y'
+import { BTN_CARD_QUIET, BTN_ICON } from '../../lib/ui'
 import type { HubFirewall } from '../../../shared/types'
+
+/** amber, kept for "needs attention" in the fleet's screens (a DCS install nobody linked yet, a member without its guest): a tinted action, the way TONE_OK is emerald */
+export const TONE_ATTN = 'bg-amber-500/10 border border-amber-500/25 text-amber-200 hover:bg-amber-500/20'
 
 export function ago(epoch: number): string {
   if (!epoch) return 'never'
@@ -27,7 +36,7 @@ export function CopyChip({ text, label, className = '' }: { text: string; label:
   const [done, setDone] = useState(false)
   return (
     <button type="button" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500) }).catch(() => {}) }}
-      className={`h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 shrink-0 ${className}`}>
+      className={`${BTN_CARD_QUIET} ${className}`}>
       {done ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />} {done ? 'Copied' : label}
     </button>
   )
@@ -56,10 +65,10 @@ export function HubFirewallNote({ fw }: { fw?: HubFirewall | null }) {
 }
 
 export const MATCH_LABEL: Record<string, string> = {
-  uuid: 'matched by the VM\'s SMBIOS uuid',
+  uuid: 'matched by the VM\'s SMBIOS UUID',
   ip: 'matched by address',
   name: 'matched by name',
-  provision: 'built by the hub — no guest matched yet (Test re-matches)',
+  provision: 'built by the hub — no guest matched yet (“Test the link” matches it)',
   manual: 'mapped by hand',
 }
 
@@ -73,12 +82,12 @@ export function Sheet({ title, subtitle, icon, onClose, children, wide = false }
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto scrollbar-thin glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up`} onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-start gap-3 mb-4">
-          {icon && <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 shrink-0">{icon}</div>}
+          {icon && <div className="p-2.5 rounded-xl bg-violet-500/15 text-violet-300 shrink-0">{icon}</div>}
           <div className="min-w-0 flex-1">
             <h3 id={titleId} className="text-base font-semibold text-slate-100">{title}</h3>
             {subtitle && <div className="text-sm text-slate-400 mt-0.5">{subtitle}</div>}
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5" aria-label="Close"><X size={16} /></button>
+          <button type="button" onClick={onClose} className={`${BTN_ICON} text-slate-500 hover:text-slate-200 hover:bg-white/10`} aria-label="Close"><X size={16} /></button>
         </div>
         {children}
       </div>
@@ -87,5 +96,6 @@ export function Sheet({ title, subtitle, icon, onClose, children, wide = false }
   )
 }
 
-export const inputCls = 'w-full h-10 px-3 rounded-lg bg-slate-800/50 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40'
+/** the fleet forms' native field: a slate fill, the fleet's violet on focus (dcs-fleet-field: lib/mantine-dcs.css keeps it violet in the light look too) */
+export const inputCls = 'dcs-fleet-field w-full h-10 px-3 rounded-lg bg-slate-800/50 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30'
 export const labelCls = 'block text-xs font-medium text-slate-400 mb-1'

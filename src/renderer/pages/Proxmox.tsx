@@ -26,6 +26,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { EmptyState } from '../components/common/PageState'
 import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxVm, fetchProxmoxTasks, proxmoxVmAction, proxmoxVmBalloon,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
@@ -37,7 +38,7 @@ import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
 import MemberSheet, { type MemberSheetPrefill } from '../components/fleet/MemberSheet'
-import { Sheet, MATCH_LABEL, hostOf } from '../components/fleet/fleetShared'
+import { Sheet, MATCH_LABEL, hostOf, TONE_ATTN, inputCls, labelCls } from '../components/fleet/fleetShared'
 import { FleetJobCard, JobsSummary, orderJobs } from '../components/fleet/FleetJobsPanel'
 import NewVmSheet, { CapabilityNote, settingsFromDefaults, loadVmSettings, osLabel } from '../components/fleet/NewVmSheet'
 import VmCapsule from '../components/fleet/VmCapsule'
@@ -45,7 +46,7 @@ import PageHeader from '../components/common/PageHeader'
 import { pageLabel } from '../constants/pageTitles'
 import {
   BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM, BTN_ICON_QUIET, BTN_ICON_SM_QUIET,
-  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, BTN_SHEET_DANGER,
+  BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, BTN_SHEET_DANGER,
   TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
 } from '../lib/ui'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -109,8 +110,9 @@ function StatusDot({ status, className = '' }: { status: string; className?: str
   const cls = status === 'running' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.6)]' : status === 'paused' || status === 'suspended' ? 'bg-amber-400' : 'bg-slate-500'
   return <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${cls} ${className}`} aria-label={status} />
 }
+/** a VM wears the fleet's violet, like every capsule of a VM; a container (LXC) is told apart in cyan */
 function TypeChip({ type }: { type: ProxmoxVm['type'] }) {
-  return <Badge component="span" color={type === 'qemu' ? 'cyan' : 'violet'}>{type === 'qemu' ? 'VM' : 'LXC'}</Badge>
+  return <Badge component="span" color={type === 'qemu' ? 'violet' : 'cyan'}>{type === 'qemu' ? 'VM' : 'LXC'}</Badge>
 }
 /** Proxmox tags as pills (the ones DCS wants in emerald); past `max`, a +N that names the rest */
 function TagChips({ tags, max, wanted = [] }: { tags: string[]; max?: number; wanted?: string[] }) {
@@ -225,7 +227,7 @@ function ConfirmSheet({ vm, action, onClose, onDone }: { vm: ProxmoxVm; action: 
 // The overview row: the nodes, this server, the DCS templates, the builds
 // -----------------------------------------------------------------------------
 
-/** one small square per guest on a node — green running, amber paused, grey off, ringed when a DCS member lives in it; a click finds it in the list */
+/** one small square per guest on a node — green running, amber paused, grey off, ringed in violet when a DCS member lives in it; a click finds it in the list */
 function GuestMap({ guests, memberVmids, onPick, loading = false }: { guests: ProxmoxVm[]; memberVmids: Set<number>; onPick: (vm: ProxmoxVm) => void; loading?: boolean }) {
   if (loading) return <span className="skeleton h-2.5 w-16 rounded" aria-label="Reading the guests" />
   if (guests.length === 0) return <span className="text-[10px] text-slate-600">no guests</span>
@@ -237,7 +239,7 @@ function GuestMap({ guests, memberVmids, onPick, loading = false }: { guests: Pr
         return (
           <Hint key={`${v.type}/${v.vmid}`} label={`${v.name} · #${v.vmid} · ${v.status}${member ? ' · runs a DCS member' : ''}`}>
             <button type="button" onClick={() => onPick(v)} aria-label={`${v.name}, ${v.status}`}
-              className={`w-2.5 h-2.5 rounded-[3px] transition-all hover:scale-125 ${tone} ${member ? 'ring-1 ring-amber-400/60' : ''}`} />
+              className={`w-2.5 h-2.5 rounded-[3px] transition-all hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${tone} ${member ? 'ring-1 ring-violet-400/60' : ''}`} />
           </Hint>
         )
       })}
@@ -297,8 +299,8 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf
       <CardHead icon={Home} title="This server" right={<VmCapsule />} />
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-semibold text-slate-100 truncate">{fleet?.server_name || fleet?.hostname || 'DCS'}</span>
-        {isHub && <Badge component="span" color="amber">hub</Badge>}
-        {role === 'member' && <Badge component="span" color="emerald">member</Badge>}
+        {isHub && <Badge component="span" color="violet">hub</Badge>}
+        {role === 'member' && <Badge component="span" color="violet">member</Badge>}
       </div>
       <p className="text-[11px] text-slate-500 mt-0.5 truncate">
         DCS {fleet?.version || '…'}{fleet?.hostname ? ` · ${fleet.hostname}` : ''}
@@ -340,7 +342,7 @@ function HubCard({ fleet, stacks, isHub, memberCount, onStacks, onStack, pveSelf
       </div>
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-600 leading-snug min-w-0">{isHub ? 'The hub keeps stacks like any member' : role === 'member' ? 'Managed from the hub' : ''}</span>
-        <button type="button" onClick={onStacks} className={BTN_CARD_QUIET}><Layers size={12} /> Stacks page</button>
+        <button type="button" onClick={onStacks} className={BTN_CARD_QUIET}><Layers size={12} /> {pageLabel('stacks')} page</button>
       </div>
     </div>
   )
@@ -361,7 +363,7 @@ function TemplatesCard({ templates, defaults, isAdmin, removing, onRemove, onBak
     <div className={`${CARD} p-4 h-full flex flex-col`}>
       <CardHead icon={Layers} title="DCS templates" right={<span className="text-[10px] text-slate-500 tabular-nums shrink-0">{templates.length} baked</span>} />
       {templates.length === 0 ? (
-        <p className="text-[11px] text-slate-500">No template yet. A VM cloned from a baked DCS template builds in about 25 s instead of 85 s — bake one from the New VM sheet.</p>
+        <p className="text-[11px] text-slate-500">No template yet. A VM cloned from a baked DCS template builds in about half a minute instead of a minute and a half — bake one from the New VM sheet.</p>
       ) : (
         <div className="divide-y divide-white/[0.04] -mt-1">
           {templates.map((t) => (
@@ -391,7 +393,7 @@ function TemplatesCard({ templates, defaults, isAdmin, removing, onRemove, onBak
         </div>
       )}
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-600 truncate">A clone builds in about 25 s</span>
+        <span className="text-[10px] text-slate-600 truncate">A clone builds in about half a minute</span>
         {isAdmin && <Hint label="Open the New VM sheet: pick a cloud image and turn on “Bake a DCS template first”"><button type="button" onClick={onBake} className={BTN_CARD_QUIET}><Rocket size={12} /> Bake one</button></Hint>}
       </div>
     </div>
@@ -417,7 +419,7 @@ function BuildsQuiet({ canBuild, onNew }: { canBuild: boolean; onNew: () => void
       <p className="text-[11px] text-slate-500 flex-1">Nothing is being built. A new VM stack is created on Proxmox, installed and joined by the hub without a hand on it; follow it here.</p>
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-600 truncate">Built one at a time</span>
-        {canBuild && <button type="button" onClick={onNew} className={`${BTN_CARD_QUIET} !bg-amber-500/10 !border-amber-500/25 !text-amber-200 hover:!bg-amber-500/20`}><Rocket size={12} /> New VM stack</button>}
+        {canBuild && <button type="button" onClick={onNew} className={`${BTN_CARD} ${TONE_OK}`}><Rocket size={12} /> New VM stack</button>}
       </div>
     </div>
   )
@@ -447,7 +449,7 @@ function CollapseButton({ onClick }: { onClick: () => void }) {
 }
 
 // The VM is the stack: a member that runs exactly one stack shows the containers running in it,
-// with start/stop/restart per container, Open (the VMs page), Edit compose and the stack's own controls.
+// with start/stop/restart per container, Open (the Stacks page), Edit compose and the stack's own controls.
 // onCollapse (the card): a chevron in the header folds the block back to its one line.
 function VmContainers({ member, live, stack, isAdmin, onStackAction, busyKey, onOpen, onCollapse }: { member: FleetMemberBase; live: FleetMemberLive; stack: StackInfo; isAdmin: boolean; onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void; busyKey: string; onOpen: (stack: string, edit: boolean) => void; onCollapse?: () => void }) {
   const { addToast } = useToast()
@@ -501,8 +503,8 @@ function VmContainers({ member, live, stack, isAdmin, onStackAction, busyKey, on
         </div>
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-t border-white/[0.04] flex-wrap">
-        <button type="button" onClick={() => onOpen(stack.name, false)} className="h-7 px-2 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Layers size={11} /> Open</button>
-        {isAdmin && <button type="button" onClick={() => onOpen(stack.name, true)} className="h-7 px-2 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5"><Pencil size={11} /> Edit compose</button>}
+        <button type="button" onClick={() => onOpen(stack.name, false)} className={BTN_CARD_QUIET}><Layers size={12} /> Open</button>
+        {isAdmin && <button type="button" onClick={() => onOpen(stack.name, true)} className={BTN_CARD_QUIET}><Pencil size={12} /> Edit compose</button>}
       </div>
     </div>
   )
@@ -575,13 +577,13 @@ interface VmRowProps {
   onLink: (p: MemberSheetPrefill) => void
   onMemberMenu: (m: FleetMemberBase) => void
   onDetails: (vm: ProxmoxVm) => void
-  /** open the stack on the VMs page (edit: straight into its compose) */
+  /** open the stack on the Stacks page (edit: straight into its compose) */
   onOpen: (stack: string, edit: boolean) => void
 }
 
-/** the DCS chip a member row wears: version, and the member's name when it differs from the guest's (offline: the guest is off, so the recorded version in grey) */
+/** the DCS chip a member row wears, in the fleet's violet: version, and the member's name when it differs from the guest's (offline: the guest is off, so the recorded version in grey; a member that does not answer, in rose) */
 function DcsChip({ vm, member, live, offline = false }: { vm: ProxmoxVm; member: FleetMemberBase; live?: FleetMemberLive; offline?: boolean }) {
-  const color = offline ? 'slate' : live && !live.reachable ? 'rose' : 'amber'
+  const color = offline ? 'slate' : live && !live.reachable ? 'rose' : 'violet'
   return (
     <Tooltip label={`${member.name} at ${member.url}${member.matched_by ? ` — ${MATCH_LABEL[member.matched_by]}` : ''}`}>
       <Badge component="span" color={color} leftSection={<Satellite size={10} />}>
@@ -592,19 +594,19 @@ function DcsChip({ vm, member, live, offline = false }: { vm: ProxmoxVm; member:
 }
 
 /** what the scan found in a guest that has no member yet, with the link button */
-function ScanLine({ vm, scan, onLink, small = false, isSelf = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; small?: boolean; isSelf?: boolean }) {
-  if (isSelf) return <span className="text-amber-200 flex items-center gap-1.5 min-w-0 truncate"><Satellite size={11} className="shrink-0" /> This hub — the dashboard you are looking at runs here</span>
+/** amber where a DCS answers that nobody linked yet (a to-do); violet for the hub itself */
+function ScanLine({ vm, scan, onLink, isSelf = false }: { vm: ProxmoxVm; scan?: FleetGuestScan; onLink: (p: MemberSheetPrefill) => void; isSelf?: boolean }) {
+  if (isSelf) return <span className="text-violet-300 flex items-center gap-1.5 min-w-0 truncate"><Satellite size={11} className="shrink-0" /> This hub — the dashboard you are looking at runs here</span>
   const found = scan?.dcs && !scan.member ? scan.dcs : null
-  const btn = small ? 'h-7 px-2 rounded-lg text-[11px]' : 'h-8 px-2.5 rounded-lg text-[11px]'
   return found ? (
     <>
       <span className="text-amber-200 flex items-center gap-1.5 min-w-0 truncate"><Radar size={11} className="shrink-0" /> DCS {found.version} answers at {found.ip}:{found.port}</span>
-      <button type="button" onClick={() => onLink({ name: vm.name, url: found.url, vmid: vm.vmid, node: vm.node, type: vm.type })} className={`${btn} bg-amber-500/15 text-amber-200 border border-amber-500/25 font-medium hover:bg-amber-500/25 flex items-center gap-1.5 shrink-0`}><Link2 size={12} /> Link</button>
+      <button type="button" onClick={() => onLink({ name: vm.name, url: found.url, vmid: vm.vmid, node: vm.node, type: vm.type })} className={`${BTN_CARD} ${TONE_ATTN} font-medium`}><Link2 size={12} /> Link</button>
     </>
   ) : (
     <>
       <span className="text-slate-500 truncate">No DCS linked{scan && scan.ips.length === 0 ? ' · address unknown (no guest agent)' : ''}</span>
-      <button type="button" onClick={() => onLink({ name: vm.name, vmid: vm.vmid, node: vm.node, type: vm.type })} className={`${btn} bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 flex items-center gap-1.5 shrink-0`}><Link2 size={12} /> Link…</button>
+      <button type="button" onClick={() => onLink({ name: vm.name, vmid: vm.vmid, node: vm.node, type: vm.type })} className={BTN_CARD_QUIET}><Link2 size={12} /> Link…</button>
     </>
   )
 }
@@ -662,15 +664,15 @@ function VmCard(p: VmRowProps) {
   const acts = actionsFor(vm)
   const running = vm.status === 'running'
   return (
-    <div className={`${CARD} p-3.5 h-full flex flex-col gap-2.5 min-w-0 ${member ? 'border-amber-500/15' : ''}`}>
+    <div className={`${CARD} p-3.5 h-full flex flex-col gap-2.5 min-w-0 ${member ? 'border-violet-500/15' : ''}`}>
       <div className="flex items-start gap-2.5">
         <StatusDot status={vm.status} className="mt-1.5" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 min-w-0">
-            <Hint label="Details, memory and ballooning"><button type="button" onClick={() => onDetails(vm)} className="font-semibold text-slate-100 truncate min-w-0 text-left hover:text-amber-200 transition-colors">{vm.name}</button></Hint>
+            <Hint label="Details, memory and ballooning"><button type="button" onClick={() => onDetails(vm)} className="font-semibold text-slate-100 truncate min-w-0 text-left hover:text-violet-200 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">{vm.name}</button></Hint>
             <TypeChip type={vm.type} />
             <span className="text-[11px] text-slate-500 font-mono shrink-0">#{vm.vmid}</span>
-            {vm.intended && <span className="text-[10px] text-emerald-400/80 shrink-0" title="DCS asked for the last change">by DCS</span>}
+            {vm.intended && <span className="text-[10px] text-violet-300/90 shrink-0" title="DCS asked for the last change">by DCS</span>}
             {vm.lock && <span className="text-[10px] text-amber-400/80 shrink-0">locked: {vm.lock}</span>}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-x-2 min-w-0 whitespace-nowrap">
@@ -706,7 +708,7 @@ function VmCard(p: VmRowProps) {
       <div className="mt-auto flex items-center gap-1.5 flex-wrap pt-0.5">
         {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled={a === 'start' || a === 'resume'} />)}
         <span className="flex-1" />
-        {member && isAdmin && <Hint label="Deploy a template into this VM"><button type="button" onClick={() => onDeploy(member)} aria-label="Deploy a template into this VM" className={`${BTN_ICON} border border-amber-500/25 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20`}><Rocket size={14} /></button></Hint>}
+        {member && isAdmin && <Hint label="Deploy a template into this VM"><button type="button" onClick={() => onDeploy(member)} aria-label="Deploy a template into this VM" className={`${BTN_ICON} ${TONE_OK}`}><Rocket size={14} /></button></Hint>}
         {/* the two outbound links stay in the details sheet on a phone, where the row would wrap */}
         {member && member.identity?.dashboard !== false && <Hint label="Its own dashboard (port 3000)"><a aria-label="Its own dashboard (port 3000)" href={member.url.replace(/:\d+$/, ':3000')} target="_blank" rel="noreferrer" className={`${BTN_ICON_QUIET} hidden sm:flex`}><LayoutDashboard size={14} /></a></Hint>}
         {pveUrl && <Hint label="Open in Proxmox"><a aria-label="Open in Proxmox" href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={`${BTN_ICON_QUIET} hidden sm:flex`}><ExternalLink size={14} /></a></Hint>}
@@ -730,6 +732,19 @@ function GuestCardSkeleton() {
   )
 }
 
+/** an overview card's shape while the nodes are read: its label row, a title, three meters, a note and its footer */
+function OverviewCardSkeleton() {
+  return (
+    <div className={`${CARD} p-4 min-h-[15rem] flex flex-col gap-3`} aria-hidden>
+      <div className="flex items-center justify-between"><div className="skeleton h-3 w-20 rounded" /><div className="skeleton h-3 w-14 rounded" /></div>
+      <div className="skeleton h-4 w-32 rounded" />
+      <div className="grid grid-cols-3 gap-3"><div className="skeleton h-9 rounded" /><div className="skeleton h-9 rounded" /><div className="skeleton h-9 rounded" /></div>
+      <div className="skeleton h-3 w-2/3 rounded" />
+      <div className="mt-auto skeleton h-3 w-1/2 rounded" />
+    </div>
+  )
+}
+
 function MiniMeter({ pct, text, note, hostView, onHostView }: { pct: number; text: string; note?: string; hostView?: boolean; onHostView?: () => void }) {
   return (
     <div className="min-w-[7rem]">
@@ -745,13 +760,13 @@ function VmTableRow(p: VmRowProps) {
   const running = vm.status === 'running'
   const th = 'px-3 py-2 align-middle'
   return (
-    <tr className={`hover:bg-white/[0.02] transition-colors ${member ? 'bg-amber-500/[0.02]' : ''}`}>
+    <tr className={`hover:bg-white/[0.02] transition-colors ${member ? 'bg-violet-500/[0.02]' : ''}`}>
       <td className={th}>
         <div className="flex items-center gap-2 min-w-0">
           <StatusDot status={vm.status} />
-          <Hint label="Details, memory and ballooning"><button type="button" onClick={() => onDetails(vm)} className="text-sm font-medium text-slate-100 hover:text-amber-200 truncate text-left transition-colors">{vm.name}</button></Hint>
+          <Hint label="Details, memory and ballooning"><button type="button" onClick={() => onDetails(vm)} className="text-sm font-medium text-slate-100 hover:text-violet-200 truncate text-left transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">{vm.name}</button></Hint>
           <TypeChip type={vm.type} />
-          {vm.intended && <span className="text-[10px] text-emerald-400/80" title="DCS asked for the last change">by DCS</span>}
+          {vm.intended && <span className="text-[10px] text-violet-300/90" title="DCS asked for the last change">by DCS</span>}
           {vm.lock && <span className="text-[10px] text-amber-400/80">locked</span>}
         </div>
       </td>
@@ -767,14 +782,14 @@ function VmTableRow(p: VmRowProps) {
             {live?.reachable ? <span className="text-slate-400 tabular-nums whitespace-nowrap">{live.stacks_total} stack{live.stacks_total === 1 ? '' : 's'} · {live.containers_running}/{live.containers_total} containers</span> : live ? <span className="text-rose-300/90">no answer</span> : <Loader2 size={11} className="animate-spin text-slate-500" />}
           </div>
         ) : isHub && running && isAdmin ? (
-          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} small isSelf={p.isSelf} /></div>
+          <div className="flex items-center gap-2 flex-wrap"><ScanLine vm={vm} scan={scan} onLink={onLink} isSelf={p.isSelf} /></div>
         ) : <span className="text-slate-600">—</span>}
       </td>
       <td className={th}><div className="flex flex-wrap gap-1"><TagChips tags={vm.tags} /></div></td>
       <td className={th}>
         <div className="flex items-center justify-end gap-1">
           {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} small />)}
-          {member && isAdmin && <Hint label="Deploy a template into this VM"><button aria-label="Deploy a template into this VM" type="button" onClick={() => onDeploy(member)} className={`${BTN_ICON_SM} border border-amber-500/25 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20`}><Rocket size={12} /></button></Hint>}
+          {member && isAdmin && <Hint label="Deploy a template into this VM"><button aria-label="Deploy a template into this VM" type="button" onClick={() => onDeploy(member)} className={`${BTN_ICON_SM} ${TONE_OK}`}><Rocket size={12} /></button></Hint>}
           {pveUrl && <Hint label="Open in Proxmox"><a aria-label="Open in Proxmox" href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_ICON_SM_QUIET}><ExternalLink size={12} /></a></Hint>}
           <Hint label="Details, memory and ballooning"><button aria-label="Details" type="button" onClick={() => onDetails(vm)} className={BTN_ICON_SM_QUIET}><Info size={12} /></button></Hint>
           {member && isAdmin && <Hint label={`Manage ${member.name}`}><button aria-label={`Manage ${member.name}`} type="button" onClick={() => onMemberMenu(member)} className={BTN_ICON_SM_QUIET}><MoreHorizontal size={12} /></button></Hint>}
@@ -791,7 +806,8 @@ function VmTable({ rows, render }: { rows: ProxmoxVm[]; render: (vm: ProxmoxVm) 
       <table className="w-full min-w-[68rem] text-left border-collapse">
         <thead>
           <tr className="border-b border-white/[0.06]">
-            <th className={head}>Name</th><th className={head}>VMID</th><th className={head}>Status</th><th className={head}>Node</th><th className={head}>CPU</th><th className={head}>RAM</th><th className={head}>DCS</th><th className={head}>Tags</th><th className={`${head} text-right`}>Actions</th>
+            {['Name', 'VMID', 'Status', 'Node', 'CPU', 'RAM', 'DCS', 'Tags'].map((h) => <th key={h} scope="col" className={head}>{h}</th>)}
+            <th scope="col" className={`${head} text-right`}>Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.04]">{rows.map(render)}</tbody>
@@ -883,7 +899,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
           ) : (
             <div className="mt-2 flex items-start gap-2 flex-wrap">
               <p className="text-[11px] text-amber-200/90 flex-1 min-w-[14rem] flex items-start gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-px" /><span>{running ? "Proxmox shows the host's view of this VM's memory — enable ballooning (takes effect at the next reboot)" : 'No balloon device is reported while the VM is off — enabling ballooning now takes effect at the next boot'}</span></p>
-              {isAdmin && <button type="button" onClick={enableBalloon} disabled={busy} className={`${BTN_CARD_QUIET} !bg-amber-500/10 !border-amber-500/25 !text-amber-200 hover:!bg-amber-500/20`}>{busy ? <Loader2 size={12} className="animate-spin" /> : <MemoryStick size={12} />} Enable ballooning</button>}
+              {isAdmin && <button type="button" onClick={enableBalloon} disabled={busy} className={`${BTN_CARD} ${TONE_ATTN}`}>{busy ? <Loader2 size={12} className="animate-spin" /> : <MemoryStick size={12} />} Enable ballooning</button>}
             </div>
           )}
         </div>
@@ -912,7 +928,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
         <div className="flex items-center gap-1.5 flex-wrap pt-1">
           {isAdmin && actionsFor(vm).map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled />)}
           <span className="flex-1" />
-          {pveUrl && <a href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={`${BTN_TOOLBAR_QUIET} h-9 sm:h-8`}><ExternalLink size={14} /> Open in Proxmox</a>}
+          {pveUrl && <a href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_TOOLBAR_QUIET}><ExternalLink size={14} /> Open in Proxmox</a>}
         </div>
       </div>
     </Sheet>
@@ -924,6 +940,11 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
   const confirm = useConfirm()
   const [busy, setBusy] = useState<'test' | 'remove' | ''>('')
   const [note, setNote] = useState('')
+  // destroying the VM asks for its name first, here in the sheet (a native prompt is not drawn by every window)
+  const [destroying, setDestroying] = useState(false)
+  const [typed, setTyped] = useState('')
+  const destroyRef = useRef<HTMLButtonElement>(null)
+  const cancelDestroy = () => { setDestroying(false); setTyped(''); requestAnimationFrame(() => destroyRef.current?.focus()) }
   const test = async () => {
     setBusy('test'); setNote('')
     try {
@@ -940,22 +961,35 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
     catch (e) { setNote(e instanceof Error ? e.message : 'Could not remove'); setBusy('') }
   }
   const destroy = async () => {
-    const typed = window.prompt(`Stop and destroy VM ${member.vmid} (${member.name}) on Proxmox, with its disks? Everything in it is lost. Type the stack name to confirm:`)
-    if (typed !== member.name) { if (typed !== null) setNote('The name did not match — nothing was destroyed'); return }
+    if (typed !== member.name) return
     setBusy('remove')
     try { await removeFleetMember(member.id, true); addToast({ type: 'success', message: `VM ${member.vmid} (${member.name}) destroyed` }); onChanged(); onClose() }
     catch (e) { setNote(e instanceof Error ? e.message : 'Could not destroy the VM'); setBusy('') }
   }
   const guest = vms.find((v) => v.vmid === member.vmid)
+  const canDestroy = !!member.vmid && member.type !== 'lxc'
   return (
     <Sheet title={member.name} subtitle={`${member.url} · account ${member.username}${guest ? ` · ${guest.type === 'qemu' ? 'VM' : 'LXC'} ${guest.vmid} ${guest.name}` : member.vmid ? ` · guest ${member.vmid}` : ' · no guest yet'}`} icon={<Satellite size={18} />} onClose={onClose}>
       <div className="space-y-2">
         <p className="text-[11px] text-slate-500">Added {new Date(member.added_at * 1000).toLocaleString()} by {member.added_by} ({member.source === 'join' ? 'joined with a code' : 'added by address'}) · last answered {member.last_seen ? ago(member.last_seen) : 'never'}{member.last_error ? ` · ${member.last_error}` : ''}</p>
         {note && <p className="text-xs text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">{note}</p>}
-        <button type="button" onClick={test} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
-        <button type="button" onClick={onEdit} disabled={!!busy} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 disabled:opacity-50"><Pencil size={15} /> Edit name, address, account or guest</button>
-        <button type="button" onClick={remove} disabled={!!busy} className="w-full h-11 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-200 hover:bg-rose-500/20 flex items-center justify-center gap-2 disabled:opacity-50">{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
-        {member.vmid && member.type !== 'lxc' && <button type="button" onClick={destroy} disabled={!!busy} className="w-full h-11 rounded-xl bg-rose-500/15 border border-rose-500/30 text-sm text-rose-200 hover:bg-rose-500/25 flex items-center justify-center gap-2 disabled:opacity-50"><Trash2 size={15} /> Stop and destroy the VM on Proxmox</button>}
+        <button type="button" onClick={test} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
+        <button type="button" onClick={onEdit} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}><Pencil size={15} /> Edit name, address, account or guest</button>
+        <button type="button" onClick={remove} disabled={!!busy} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}>{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
+        {canDestroy && <button ref={destroyRef} type="button" onClick={() => setDestroying(true)} disabled={!!busy || destroying} aria-expanded={destroying} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}><Trash2 size={15} /> Stop and destroy the VM on Proxmox</button>}
+        {canDestroy && destroying && (
+          <div role="group" aria-label="Confirm destroying the VM" className="rounded-xl border border-rose-500/25 bg-rose-500/[0.06] p-3 space-y-3 animate-fade-in">
+            <p className="text-xs text-rose-200">Stop and destroy VM {member.vmid} ({member.name}) on Proxmox, with its disks? Everything in it is lost.</p>
+            <div>
+              <label htmlFor="destroy-vm-name" className={labelCls}>Type the stack name <span className="font-mono text-slate-200">{member.name}</span> to confirm</label>
+              <input id="destroy-vm-name" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={member.name} autoComplete="off" spellCheck={false} autoFocus disabled={busy === 'remove'} className={`${inputCls} font-mono`} />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={cancelDestroy} disabled={busy === 'remove'} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+              <button type="button" onClick={() => void destroy()} disabled={typed !== member.name || busy === 'remove'} className={`${BTN_SHEET_DANGER} flex-1`}>{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Destroy the VM</button>
+            </div>
+          </div>
+        )}
       </div>
     </Sheet>
   )
@@ -1004,11 +1038,11 @@ export default function Proxmox() {
   const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && isAdmin && configured && reachable })
   const provDefaults = usePolling(fetchFleetProvisionDefaults, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
   const caps = usePolling(fetchProxmoxCapabilities, 60_000, { enabled: isConnected && isAdmin && configured && reachable })
-  // the baked DCS templates: a VM cloned from one builds in about 25 s
+  // the baked DCS templates: a VM cloned from one builds in about half a minute
   const templates = usePolling(fetchFleetTemplates, 60_000, { enabled: isConnected && isAdmin && configured && reachable && isHub })
   const [removingTemplate, setRemovingTemplate] = useState<number | null>(null)
   const removeTemplate = async (t: FleetTemplate) => {
-    if (!(await confirm({ title: 'Remove the template', message: `Remove the DCS template ${t.image_id} (VM ${t.vmid})? The next build from that image installs everything again (about 85 s) until a new one is baked.`, confirmLabel: 'Remove', danger: true }))) return
+    if (!(await confirm({ title: 'Remove the template', message: `Remove the DCS template ${t.image_id} (VM ${t.vmid})? The next build from that image installs everything again (a minute and a half) until a new one is baked.`, confirmLabel: 'Remove', danger: true }))) return
     setRemovingTemplate(t.vmid)
     try { await deleteFleetTemplate(t.vmid); addToast({ type: 'success', message: `Template ${t.image_id} removed` }); templates.refresh(); vms.refresh() }
     catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'The template could not be removed' }) }
@@ -1103,9 +1137,10 @@ export default function Proxmox() {
     }
   }
 
+  // the fleet's violet, as on every capsule: this server is the hub, or a member of one
   const roleChip = role === 'member'
-    ? <Badge component="span" color="emerald" leftSection={<Satellite size={10} />}>member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</Badge>
-    : isHub ? <Badge component="span" color="amber" leftSection={<Satellite size={10} />}>hub · {memberCount} member{memberCount === 1 ? '' : 's'}</Badge>
+    ? <Badge component="span" color="violet" leftSection={<Satellite size={10} />}>member of {fleet.data?.hub?.name || fleet.data?.hub?.url}</Badge>
+    : isHub ? <Badge component="span" color="violet" leftSection={<Satellite size={10} />}>hub · {memberCount} member{memberCount === 1 ? '' : 's'}</Badge>
     : null
 
   // the overview row: the cards that apply here, side by side; the builds take a full row of their own while any exist
@@ -1133,8 +1168,9 @@ export default function Proxmox() {
         actions={<>
           {isAdmin && configured && reachable && role !== 'member' && (
             <>
-              <button onClick={() => setNewVm('')} className={`${BTN_TOOLBAR} bg-amber-500/90 hover:bg-amber-400 text-slate-900 press`}><Rocket size={14} /> New VM stack</button>
-              <Hint label="Scan the guests for DCS installs and link them"><button aria-label="Link VMs" onClick={() => setSheet('link')} className={`${BTN_TOOLBAR} bg-amber-500/15 border border-amber-500/25 text-amber-200 hover:bg-amber-500/25`}><Radar size={14} /> <span className="hidden sm:inline">Link VMs</span></button></Hint>
+              {/* on a phone "New VM" (the name stays "New VM stack"): the six buttons then fit one row */}
+              <button aria-label="New VM stack" onClick={() => setNewVm('')} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Rocket size={14} /> <span>New VM<span className="hidden sm:inline"> stack</span></span></button>
+              <Hint label="Scan the guests for DCS installs and link them"><button aria-label="Link VMs" onClick={() => setSheet('link')} className={BTN_TOOLBAR_QUIET}><Radar size={14} /> <span className="hidden sm:inline">Link VMs</span></button></Hint>
               <Hint label="What a Docker VM runs to become a member"><button aria-label="Join code" onClick={() => setSheet('code')} className={BTN_TOOLBAR_QUIET}><KeyRound size={14} /> <span className="hidden sm:inline">Join code</span></button></Hint>
               <Hint label="A DCS on another VM, reached by address"><button aria-label="Add member" onClick={() => setAdding({})} className={BTN_TOOLBAR_QUIET}><Link2 size={14} /> <span className="hidden sm:inline">Add member</span></button></Hint>
             </>
@@ -1150,7 +1186,7 @@ export default function Proxmox() {
       )}
       {fleet.data?.pending_join && role !== 'member' && (
         <div className={`${CARD} p-4`}>
-          <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Satellite size={15} className="text-amber-400" /> setup.sh saved a join to {fleet.data.pending_join.hub_url}</p>
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Satellite size={15} className="text-violet-300" /> setup.sh saved a join to {fleet.data.pending_join.hub_url}</p>
           <p className="text-xs text-slate-400 mt-1 mb-3">It runs here, on the progress card.</p>
           <JoinHubPanel pending={fleet.data.pending_join} onJoined={() => refreshFleet()} />
         </div>
@@ -1159,15 +1195,15 @@ export default function Proxmox() {
       {s && !configured && (
         <div className="glass-card rounded-2xl p-6">
           <div className="text-center">
-            <Server size={36} className="mx-auto text-amber-400/70" />
+            <Server size={36} className="mx-auto text-slate-500" />
             <h2 className="mt-3 text-lg font-semibold text-slate-100">Link DCS to your Proxmox host</h2>
             <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto">On Proxmox open <b>Datacenter → Permissions → API Tokens</b>, add a token for a user (untick <i>Privilege Separation</i>, or give the token the roles <code>VM.Audit</code>, <code>VM.PowerMgmt</code> and <code>Sys.Audit</code> on <code>/</code>). Then enter the URL, token ID and secret in {pageLabel('config')} → Proxmox and press <i>Test connection</i>.</p>
-            {isAdmin && <button onClick={() => setCurrentPage('config')} className="mt-4 h-11 px-5 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold">Open {pageLabel('config')}</button>}
+            {isAdmin && <button onClick={() => setCurrentPage('config')} className={`${BTN_SHEET_PRIMARY} mt-4 mx-auto w-fit px-5`}>Open {pageLabel('config')}</button>}
             <p className="mt-3 text-[11px] text-slate-500">Full walkthrough: docs/PROXMOX.md in the DCS repository</p>
           </div>
           {isAdmin && role !== 'member' && (
             <div className="mt-6 pt-5 border-t border-white/5">
-              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2"><Satellite size={14} className="text-emerald-400" /> Or: this VM runs stacks under a hub</h3>
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2"><Satellite size={14} className="text-violet-300" /> Or: this VM runs stacks under a hub</h3>
               <p className="text-xs text-slate-400 mt-1 mb-3">The hub (the DCS linked to Proxmox) shows this server's stacks under its VM and deploys here. Enter the hub's address and a join code from its Proxmox page.</p>
               <JoinHubPanel onJoined={() => refreshFleet()} compact />
             </div>
@@ -1194,11 +1230,14 @@ export default function Proxmox() {
             <div className={`${CARD} p-4 border-amber-500/20`}><CapabilityNote caps={caps.data} /></div>
           )}
 
-          {/* the overview: nodes · this server · templates · builds, side by side */}
+          {/* the overview: nodes · this server · templates · builds, side by side (cards shaped like them while the nodes are read) */}
           {n > 0 && (
             <div className={`grid grid-cols-1 ${overviewGrid} gap-3`}>
               {overviewCards.map((c, i) => <div key={c.key} className={`min-w-0 ${n === 3 && i === 2 ? 'md:col-span-2 xl:col-span-1' : ''}`}>{c.node}</div>)}
             </div>
+          )}
+          {n === 0 && !nodes.data && !nodes.error && (
+            <div role="status" aria-label="Reading the nodes" className="grid grid-cols-1 md:grid-cols-2 gap-3">{[0, 1].map((i) => <OverviewCardSkeleton key={i} />)}</div>
           )}
           {hasJobs && jobs.data && <BuildsPanel jobs={jobs.data.jobs} onChanged={refreshFleet} />}
 
@@ -1213,12 +1252,11 @@ export default function Proxmox() {
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the guests" placeholder="Search name, id, node, tag, stack" className="h-9 pl-8 pr-3 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-full sm:w-72 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the guests" placeholder="Search name, id, node, tag, stack" className="h-9 pl-8 pr-3 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 w-full sm:w-72 focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/30" />
                 </div>
                 {/* a phone swipes the filters sideways; the counts show from sm up */}
                 <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
                   <SegmentedControl
-                    color="amber"
                     aria-label="Show"
                     value={show}
                     onChange={(v) => setShow(v as Show)}
@@ -1229,7 +1267,6 @@ export default function Proxmox() {
                   />
                 </div>
                 <SegmentedControl
-                  color="amber"
                   aria-label="View"
                   value={view}
                   onChange={(v) => changeView(v as View)}
@@ -1245,15 +1282,18 @@ export default function Proxmox() {
             ) : !vms.data ? (
               <div role="status" aria-label="Reading the guests" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <GuestCardSkeleton key={i} />)}</div>
             ) : list.length === 0 ? (
-              <div className={`${CARD} px-6 py-10 text-center`}>
-                <Box size={22} className="mx-auto text-slate-600" />
-                <p className="mt-2 text-sm text-slate-300">{all.length === 0 ? 'No guests on this Proxmox yet' : 'No guest matches'}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {all.length === 0
+              <div className={CARD}>
+                <EmptyState
+                  compact
+                  icon={<Box size={22} />}
+                  title={all.length === 0 ? 'No guests on this Proxmox yet' : 'No guest matches'}
+                  hint={all.length === 0
                     ? (canBuild ? 'New VM stack builds one; the VMs and containers made in Proxmox show here too.' : 'The VMs and containers made in Proxmox show here.')
                     : `${SHOW_LABEL[show]}${query.trim() ? ` · “${query.trim()}”` : ''} — none of the ${all.length} guest${all.length === 1 ? '' : 's'}`}
-                </p>
-                {showFilters && <button type="button" onClick={() => { setShow('all'); setQuery('') }} className={`${BTN_TOOLBAR_QUIET} mx-auto mt-4`}><X size={14} /> Clear the filters</button>}
+                  action={showFilters
+                    ? <button type="button" onClick={() => { setShow('all'); setQuery('') }} className={BTN_TOOLBAR_QUIET}><X size={14} /> Clear the filters</button>
+                    : all.length === 0 && canBuild ? <button type="button" onClick={() => setNewVm('')} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Rocket size={14} /> New VM stack</button> : undefined}
+                />
               </div>
             ) : view === 'table' ? (
               <VmTable rows={list} render={(vm) => <VmTableRow key={`${vm.node}/${vm.type}/${vm.vmid}`} {...rowProps(vm)} />} />
@@ -1274,9 +1314,9 @@ export default function Proxmox() {
                       <span className={`inline-block w-2 h-2 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-slate-200">{m.name} <span className="text-[11px] text-slate-500 font-mono">{m.url}</span></p>
-                        <p className="text-[11px] text-slate-500">{m.reachable ? `${m.stacks_total} stacks · ${m.containers_running}/${m.containers_total} containers` : m.error || 'no answer'} · the hub could not tell which guest this is</p>
+                        <p className="text-[11px] text-slate-500">{m.reachable ? `${m.stacks_total} stack${m.stacks_total === 1 ? '' : 's'} · ${m.containers_running}/${m.containers_total} containers` : m.error || 'no answer'} · the hub could not tell which guest this is</p>
                       </div>
-                      {isAdmin && <button type="button" onClick={() => setEditing(m)} className="h-9 sm:h-8 px-3 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 flex items-center gap-1.5"><Pencil size={12} /> Pick the guest</button>}
+                      {isAdmin && <button type="button" onClick={() => setEditing(m)} className={`${BTN_CARD} ${TONE_ATTN} font-medium`}><Pencil size={12} /> Pick the guest</button>}
                       {isAdmin && <Hint label={`Manage ${m.name}`}><button aria-label={`Manage ${m.name}`} type="button" onClick={() => setMenu(m)} className={BTN_ICON_QUIET}><MoreHorizontal size={14} /></button></Hint>}
                     </div>
                     <MemberStacks member={m} live={m} isAdmin={isAdmin} onStackAction={stackAction} busyKey={busyKey} />

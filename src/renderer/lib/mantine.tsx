@@ -95,10 +95,12 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
     '--dcs-seg-border': 'rgba(255, 255, 255, 0.1)',
     '--dcs-seg-label': '#94a3b8',
     '--dcs-seg-label-hover': '#e2e8f0',
-    // the Proxmox forms (variant="fleet"): their inputs' slate fill and amber focus
+    // the fleet's forms (variant="fleet"): a slate fill and the fleet's violet on focus. The focus pair has names
+    // of its own (--dcs-fleet-focus, not the --dcs-fleet-field-* the theme engine still writes): violet keeps its
+    // hue in every theme, as it does for the chips and capsules
     '--dcs-fleet-field-bg': 'rgba(30, 41, 59, 0.5)',
-    '--dcs-fleet-field-focus': 'rgba(245, 158, 11, 0.4)',
-    '--dcs-fleet-field-ring': 'rgba(245, 158, 11, 0.12)',
+    '--dcs-fleet-focus': 'rgba(139, 92, 246, 0.6)',
+    '--dcs-fleet-ring': 'rgba(139, 92, 246, 0.2)',
   },
   light: {
     ...tints('light'),
@@ -119,8 +121,8 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
     '--dcs-seg-label': '#64748b',
     '--dcs-seg-label-hover': '#0f172a',
     '--dcs-fleet-field-bg': '#f8fafc',
-    '--dcs-fleet-field-focus': '#059669',
-    '--dcs-fleet-field-ring': 'rgba(5, 150, 105, 0.2)',
+    '--dcs-fleet-focus': '#7c3aed',
+    '--dcs-fleet-ring': 'rgba(124, 58, 237, 0.2)',
   },
 })
 
@@ -160,8 +162,8 @@ const theme = createTheme({
       },
     }),
     // every field is the dashboard's input: 40 px, 14 px text, the glass fill, an emerald border on focus
-    // (size="xs": the 30 px, 12 px field of a toolbar or a card's corner); variant="fleet" is the Proxmox
-    // forms' input (a slate fill, amber on focus) for a field among theirs
+    // (size="xs": the 30 px, 12 px field of a toolbar or a card's corner); variant="fleet" is the fleet's
+    // forms' input (a slate fill, the fleet's violet on focus) for a field among theirs
     Input: Input.extend({
       defaultProps: { size: 'sm' },
       vars: (_theme, props) => {
@@ -171,13 +173,13 @@ const theme = createTheme({
           wrapper: {
             '--input-bg': fleet ? 'var(--dcs-fleet-field-bg)' : 'var(--dcs-field-bg)',
             '--input-bd': 'var(--dcs-field-border)',
-            '--input-bd-focus': fleet ? 'var(--dcs-fleet-field-focus)' : 'var(--dcs-field-focus)',
+            '--input-bd-focus': fleet ? 'var(--dcs-fleet-focus)' : 'var(--dcs-field-focus)',
             '--input-color': 'var(--dcs-field-color)',
             '--input-placeholder-color': 'var(--dcs-field-placeholder)',
             '--input-height': compact ? '30px' : '40px',
             '--input-fz': compact ? '12px' : '14px',
             '--input-radius': '8px',
-            ...(fleet ? { '--dcs-field-ring': 'var(--dcs-fleet-field-ring)' } : {}),
+            ...(fleet ? { '--dcs-field-ring': 'var(--dcs-fleet-ring)' } : {}),
           },
         }
       },

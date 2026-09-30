@@ -4,12 +4,14 @@
 // address, account, and the guest it is mapped to. Runs with the progress card.
 // =============================================================================
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link2, Loader2, PlugZap } from 'lucide-react'
 import { addFleetMember, updateFleetMember } from '../../api/endpoints'
 import type { FleetMember, FleetMemberBase, ProxmoxVm } from '../../../shared/types'
 import ProgressCard, { type ProgressLine, type ProgressState } from '../common/ProgressCard'
 import { Sheet, inputCls, labelCls, MATCH_LABEL } from './fleetShared'
+import { BTN_SHEET_PRIMARY, BTN_SHEET_QUIET } from '../../lib/ui'
+import { pageLabel } from '../../constants/pageTitles'
 
 const ADD_STEPS = [
   { label: 'Reach', hint: 'the member' },
@@ -37,6 +39,7 @@ interface Props {
 
 export default function MemberSheet({ member, prefill, vms = [], onClose, onSaved }: Props) {
   const editing = !!member
+  const uid = useId()
   const [name, setName] = useState(member?.name ?? prefill?.name ?? '')
   const [url, setUrl] = useState(member?.url ?? prefill?.url ?? 'http://')
   const [username, setUsername] = useState(member?.username ?? 'admin')
@@ -101,41 +104,41 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
     <Sheet title={editing ? `Edit ${member?.name}` : 'Add a member'} subtitle={editing ? 'Name, address, account and the guest this member runs in' : 'A DCS on another VM, reached by address with an account that exists there'} icon={<Link2 size={18} />} onClose={busy ? () => {} : onClose} wide>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className={labelCls}>Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="media-services" className={inputCls} disabled={busy} />
+          <label htmlFor={`${uid}-name`} className={labelCls}>Name</label>
+          <input id={`${uid}-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder="media-services" className={inputCls} disabled={busy} />
         </div>
         <div>
-          <label className={labelCls}>API address</label>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.50:9876" className={`${inputCls} font-mono`} disabled={busy} />
+          <label htmlFor={`${uid}-url`} className={labelCls}>API address</label>
+          <input id={`${uid}-url`} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.50:9876" className={`${inputCls} font-mono`} disabled={busy} />
         </div>
         <div>
-          <label className={labelCls}>Username on that server</label>
-          <input aria-label="Username on that server" value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} disabled={busy} autoComplete="off" />
+          <label htmlFor={`${uid}-user`} className={labelCls}>Username on that server</label>
+          <input id={`${uid}-user`} value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} disabled={busy} autoComplete="off" />
         </div>
         <div>
-          <label className={labelCls}>Password{editing ? ' (leave empty to keep)' : ''}</label>
-          <input aria-label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} disabled={busy} autoComplete="new-password" />
+          <label htmlFor={`${uid}-password`} className={labelCls}>Password{editing ? ' (leave empty to keep)' : ''}</label>
+          <input id={`${uid}-password`} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} disabled={busy} autoComplete="new-password" />
         </div>
         {vms.length > 0 && (
           <div className="sm:col-span-2">
-            <label className={labelCls}>Runs in</label>
-            <select aria-label="Runs in" value={vmKey} onChange={(e) => setVmKey(e.target.value)} className={inputCls} disabled={busy}>
+            <label htmlFor={`${uid}-guest`} className={labelCls}>Runs in</label>
+            <select id={`${uid}-guest`} value={vmKey} onChange={(e) => setVmKey(e.target.value)} className={inputCls} disabled={busy}>
               <option value="">{editing ? 'Keep the current guest' : 'Let the hub match the guest'}</option>
               {vms.map((v) => <option key={`${v.node}/${v.type}/${v.vmid}`} value={`${v.node}/${v.type}/${v.vmid}`}>{v.name} · {v.type === 'qemu' ? 'VM' : 'LXC'} {v.vmid} on {v.node}</option>)}
             </select>
           </div>
         )}
         <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={insecure} onChange={(e) => setInsecure(e.target.checked)} className="accent-amber-500" disabled={busy} />
+          <input type="checkbox" checked={insecure} onChange={(e) => setInsecure(e.target.checked)} className="accent-violet-500" disabled={busy} />
           The address uses https with a self-signed certificate
         </label>
       </div>
-      <p className="text-[11px] text-slate-500 mt-2">The password is kept in this hub's secret store. A VM can also join by itself with a join code (Members → Join code) — then no account is typed here.</p>
-      {err && <p className="text-xs text-rose-300 mt-2">{err}</p>}
+      <p className="text-[11px] text-slate-500 mt-2">The password is kept in this hub's secret store. A VM can also join by itself with a join code (the Join code button on the {pageLabel('proxmox')} page) — then no account is typed here.</p>
+      {err && <p role="alert" className="text-xs text-rose-300 mt-2">{err}</p>}
       {(state !== 'idle') && <ProgressCard steps={ADD_STEPS} current={current} state={state} status={status} lines={lines} className="mt-3" compact />}
       <div className="mt-4 flex gap-2">
-        <button type="button" onClick={onClose} disabled={busy} className="flex-1 h-11 rounded-xl bg-white/5 text-slate-300 hover:bg-white/10 text-sm font-medium disabled:opacity-50">{state === 'done' ? 'Close' : 'Cancel'}</button>
-        <button type="button" onClick={run} disabled={busy || state === 'done' || (!editing && !password)} className="flex-1 h-11 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-900 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
+        <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>{state === 'done' ? 'Close' : 'Cancel'}</button>
+        <button type="button" onClick={run} disabled={busy || state === 'done' || (!editing && !password)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
           {busy ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />} {editing ? 'Save' : 'Link this server'}
         </button>
       </div>
