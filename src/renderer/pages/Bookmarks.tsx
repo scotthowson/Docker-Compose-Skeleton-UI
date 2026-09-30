@@ -1,17 +1,24 @@
 // =============================================================================
-// Bookmarks — Pin favorite stacks, containers, pages for quick access
+// Bookmarks — pin pages, stacks and containers for quick access. They are kept
+// in this browser (localStorage); the page names come from the page registry.
 // =============================================================================
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useId } from 'react'
+import { Badge, SegmentedControl } from '@mantine/core'
 import {
-  Bookmark, Plus, Trash2, Star, ExternalLink, Layers,
+  Bookmark, Plus, Trash2, Star, Layers,
   Box, HardDrive, Network, HeartPulse, Monitor, Settings2,
-  ScrollText, Cog, LayoutDashboard, ChevronDown, GripVertical,
-  Tag, Clock, Search, X, Sparkles, FolderHeart,
+  ScrollText, Cog, LayoutDashboard,
+  Tag, Clock, Search, X, FolderHeart,
 } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
-import { useSystemStore } from '../stores/systemStore'
 import { pageLabel } from '../constants/pageTitles'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { EmptyState } from '../components/common/PageState'
+import { useConfirm } from '../components/common/ConfirmDialog'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON_SM, TONE_OK, TONE_QUIET, TONE_GHOST } from '../lib/ui'
+import { CARD, CARD_HOVER, SEARCH_FIELD, FIELD, FOCUS_RING, REVEAL } from '../lib/pageKit'
 import type { PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -68,15 +75,17 @@ const iconMap: Record<string, React.ElementType> = {
   tag: Tag,
 }
 
+// the colours a bookmark can wear: a choice the person makes (so all of them, amber included), the card's classes
+// written out in full for the theme engine and the swatch's own colour for the picker
 const colorOptions = [
-  { label: 'Emerald', value: 'emerald', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' },
-  { label: 'Cyan', value: 'cyan', class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25' },
-  { label: 'Amber', value: 'amber', class: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
-  { label: 'Rose', value: 'rose', class: 'bg-rose-500/15 text-rose-400 border-rose-500/25' },
-  { label: 'Violet', value: 'violet', class: 'bg-violet-500/15 text-violet-400 border-violet-500/25' },
-  { label: 'Blue', value: 'blue', class: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
-  { label: 'Pink', value: 'pink', class: 'bg-pink-500/15 text-pink-400 border-pink-500/25' },
-  { label: 'Orange', value: 'orange', class: 'bg-orange-500/15 text-orange-400 border-orange-500/25' },
+  { label: 'Emerald', value: 'emerald', hex: '#10b981', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' },
+  { label: 'Cyan', value: 'cyan', hex: '#06b6d4', class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25' },
+  { label: 'Amber', value: 'amber', hex: '#f59e0b', class: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
+  { label: 'Rose', value: 'rose', hex: '#f43f5e', class: 'bg-rose-500/15 text-rose-400 border-rose-500/25' },
+  { label: 'Violet', value: 'violet', hex: '#8b5cf6', class: 'bg-violet-500/15 text-violet-400 border-violet-500/25' },
+  { label: 'Blue', value: 'blue', hex: '#3b82f6', class: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
+  { label: 'Pink', value: 'pink', hex: '#ec4899', class: 'bg-pink-500/15 text-pink-400 border-pink-500/25' },
+  { label: 'Orange', value: 'orange', hex: '#f97316', class: 'bg-orange-500/15 text-orange-400 border-orange-500/25' },
 ]
 
 function getColorClass(color: string): string {
@@ -90,6 +99,8 @@ const pageTargets: { id: PageId; label: string }[] = (['dashboard', 'stacks', 'c
 // Add Bookmark Form
 // ---------------------------------------------------------------------------
 
+const TYPE_LABEL: Record<BookmarkItem['type'], string> = { page: 'Page', stack: 'Stack', container: 'Container', custom: 'Custom' }
+
 function AddBookmarkForm({ onAdd, onCancel }: {
   onAdd: (item: Omit<BookmarkItem, 'id' | 'createdAt'>) => void
   onCancel: () => void
@@ -99,6 +110,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
   const [target, setTarget] = useState('dashboard')
   const [color, setColor] = useState('emerald')
   const [notes, setNotes] = useState('')
+  const uid = useId()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,57 +125,53 @@ function AddBookmarkForm({ onAdd, onCancel }: {
     })
   }
 
+  const labelCls = 'block text-[11px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold'
+
   return (
-    <form onSubmit={handleSubmit} className="glass rounded-xl p-5 border-t-2 border-t-emerald-500 animate-fade-in">
-      <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-        <Plus size={14} className="text-emerald-400" />
-        Add Bookmark
-      </h3>
+    <form onSubmit={handleSubmit} className={`${CARD} p-4 sm:p-5 border-t-2 !border-t-emerald-500 animate-fade-in`} aria-labelledby={`${uid}-title`}>
+      <h2 id={`${uid}-title`} className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
+        <Plus size={14} className="text-emerald-400" aria-hidden />
+        Add bookmark
+      </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         {/* Type */}
         <div>
-          <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Type</label>
-          <div className="flex gap-1.5">
-            {(['page', 'stack', 'container', 'custom'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setType(t)}
-                className={`
-                  px-3 py-1.5 rounded-md text-[11px] font-medium border transition-all capitalize
-                  ${type === t
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                    : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'}
-                `}
-              >
-                {t}
-              </button>
-            ))}
+          <span id={`${uid}-type`} className={labelCls}>Type</span>
+          <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+            <SegmentedControl
+              aria-labelledby={`${uid}-type`}
+              value={type}
+              onChange={(v) => setType(v as BookmarkItem['type'])}
+              data={(['page', 'stack', 'container', 'custom'] as const).map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
+            />
           </div>
         </div>
 
         {/* Color */}
         <div>
-          <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Color</label>
-          <div className="flex gap-1.5 flex-wrap">
-            {colorOptions.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                className={`
-                  w-7 h-7 rounded-md border-2 transition-all
-                  bg-${c.value}-500/20
-                  ${color === c.value ? `border-${c.value}-400 ring-2 ring-${c.value}-500/20` : 'border-transparent'}
-                `}
-                style={{
-                  backgroundColor: `color-mix(in srgb, ${c.value === 'emerald' ? '#10b981' : c.value === 'cyan' ? '#06b6d4' : c.value === 'amber' ? '#f59e0b' : c.value === 'rose' ? '#f43f5e' : c.value === 'violet' ? '#8b5cf6' : c.value === 'blue' ? '#3b82f6' : c.value === 'pink' ? '#ec4899' : '#f97316'} 20%, transparent)`,
-                  borderColor: color === c.value ? (c.value === 'emerald' ? '#10b981' : c.value === 'cyan' ? '#06b6d4' : c.value === 'amber' ? '#f59e0b' : c.value === 'rose' ? '#f43f5e' : c.value === 'violet' ? '#8b5cf6' : c.value === 'blue' ? '#3b82f6' : c.value === 'pink' ? '#ec4899' : '#f97316') : 'transparent',
-                }}
-                title={c.label}
-              />
-            ))}
+          <span id={`${uid}-color`} className={labelCls}>Color</span>
+          <div role="radiogroup" aria-labelledby={`${uid}-color`} className="flex gap-1.5 flex-wrap">
+            {colorOptions.map((c) => {
+              const chosen = color === c.value
+              return (
+                <Hint key={c.value} label={c.label}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={chosen}
+                    aria-label={c.label}
+                    onClick={() => setColor(c.value)}
+                    className={`w-8 h-8 sm:w-7 sm:h-7 rounded-md border-2 transition-shadow ${FOCUS_RING}`}
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${c.hex} 22%, transparent)`,
+                      borderColor: chosen ? c.hex : 'transparent',
+                      boxShadow: chosen ? `0 0 0 2px color-mix(in srgb, ${c.hex} 25%, transparent)` : undefined,
+                    }}
+                  />
+                </Hint>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -171,27 +179,29 @@ function AddBookmarkForm({ onAdd, onCancel }: {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         {/* Label */}
         <div>
-          <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Label</label>
+          <label htmlFor={`${uid}-label`} className={labelCls}>Label</label>
           <input
+            id={`${uid}-label`}
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="My Bookmark"
+            placeholder="My bookmark"
             autoFocus
-            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+            className={FIELD}
           />
         </div>
 
         {/* Target */}
         <div>
-          <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">
-            {type === 'page' ? 'Page' : type === 'stack' ? 'Stack Name' : type === 'container' ? 'Container Name' : 'Reference'}
+          <label htmlFor={`${uid}-target`} className={labelCls}>
+            {type === 'page' ? 'Page' : type === 'stack' ? 'Stack name' : type === 'container' ? 'Container name' : 'Reference'}
           </label>
           {type === 'page' ? (
-            <select aria-label="Page"
+            <select
+              id={`${uid}-target`}
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50"
+              className={FIELD}
             >
               {pageTargets.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
@@ -199,11 +209,12 @@ function AddBookmarkForm({ onAdd, onCancel }: {
             </select>
           ) : (
             <input
+              id={`${uid}-target`}
               type="text"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              placeholder={type === 'stack' ? 'core-infrastructure' : type === 'container' ? 'nginx-proxy' : 'anything...'}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+              placeholder={type === 'stack' ? 'core-infrastructure' : type === 'container' ? 'nginx-proxy' : 'anything…'}
+              className={FIELD}
             />
           )}
         </div>
@@ -211,13 +222,14 @@ function AddBookmarkForm({ onAdd, onCancel }: {
 
       {/* Notes */}
       <div className="mb-4">
-        <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Notes (optional)</label>
+        <label htmlFor={`${uid}-notes`} className={labelCls}>Notes (optional)</label>
         <input
+          id={`${uid}-notes`}
           type="text"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Quick notes about this bookmark..."
-          className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+          placeholder="Quick notes about this bookmark…"
+          className={FIELD}
         />
       </div>
 
@@ -226,15 +238,15 @@ function AddBookmarkForm({ onAdd, onCancel }: {
         <button
           type="submit"
           disabled={!label.trim()}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all press"
+          className={`${BTN_TOOLBAR} ${TONE_OK} ${FOCUS_RING}`}
         >
-          <Bookmark size={12} />
-          Add Bookmark
+          <Bookmark size={14} />
+          Add bookmark
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 border border-white/10 hover:bg-white/5 transition-colors"
+          className={`${BTN_TOOLBAR} ${TONE_QUIET} ${FOCUS_RING}`}
         >
           Cancel
         </button>
@@ -249,7 +261,7 @@ function AddBookmarkForm({ onAdd, onCancel }: {
 
 function BookmarkCard({ item, onDelete, onTogglePin, onNavigate }: {
   item: BookmarkItem
-  onDelete: (id: string) => void
+  onDelete: (item: BookmarkItem) => void
   onTogglePin: (id: string) => void
   onNavigate: (item: BookmarkItem) => void
 }) {
@@ -258,59 +270,60 @@ function BookmarkCard({ item, onDelete, onTogglePin, onNavigate }: {
   const timeAgo = getTimeAgo(item.createdAt)
 
   return (
-    <div
-      className="group relative glass glass-hover rounded-xl p-4 cursor-pointer transition-all duration-200 animate-fade-in"
-      onClick={() => onNavigate(item)}
-    >
-      {/* Pin indicator */}
-      {item.pinned && (
-        <div className="absolute top-2 right-2">
-          <Star size={12} className="text-amber-400 fill-amber-400" />
-        </div>
-      )}
-
+    <div className={`group relative ${CARD_HOVER} p-4 cursor-pointer animate-fade-in`} onClick={() => onNavigate(item)}>
       <div className="flex items-start gap-3">
         {/* Icon */}
-        <div className={`rounded-lg p-2.5 ${colorClass} border shrink-0`}>
+        <div className={`rounded-lg p-2.5 ${colorClass} border shrink-0`} aria-hidden>
           <Icon size={18} />
         </div>
 
-        {/* Content */}
+        {/* Content: the name is the card's button (the whole card is its target), so a keyboard can open it */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
-              {item.label}
-            </h4>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-800 border border-white/5 text-slate-500 uppercase font-medium shrink-0">
-              {item.type}
-            </span>
+            <h3 className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors min-w-0">
+              <button
+                type="button"
+                className={`text-left max-w-full truncate rounded after:absolute after:inset-0 after:rounded-xl ${FOCUS_RING}`}
+              >
+                {item.label}
+              </button>
+            </h3>
+            {item.pinned && <Star size={11} className="text-amber-400 fill-amber-400 shrink-0" aria-hidden />}
+            <Badge color="slate">{item.type}</Badge>
           </div>
           <p className="text-xs text-slate-500 font-mono truncate mt-0.5">{item.target}</p>
           {item.notes && (
             <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">{item.notes}</p>
           )}
-          <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1">
-            <Clock size={9} />
+          <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+            <Clock size={10} aria-hidden />
             {timeAgo}
           </p>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => onTogglePin(item.id)}
-            className={`p-1.5 rounded-md transition-colors ${item.pinned ? 'text-amber-400 hover:text-amber-300' : 'text-slate-500 hover:text-amber-400'}`}
-            title={item.pinned ? 'Unpin' : 'Pin'}
-          >
-            <Star size={12} className={item.pinned ? 'fill-current' : ''} />
-          </button>
-          <button
-            onClick={() => onDelete(item.id)}
-            className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 transition-colors"
-            title="Delete"
-          >
-            <Trash2 size={12} />
-          </button>
+        {/* Actions: above the card's own button; there when the card is pointed at or has the keyboard, always on a device without hover */}
+        <div className="relative z-10 flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <Hint label={item.pinned ? 'Unpin' : 'Pin'}>
+            <button
+              type="button"
+              onClick={() => onTogglePin(item.id)}
+              aria-pressed={!!item.pinned}
+              aria-label={`${item.pinned ? 'Unpin' : 'Pin'} ${item.label}`}
+              className={`${BTN_ICON_SM} ${REVEAL} ${FOCUS_RING} ${item.pinned ? 'text-amber-400 hover:text-amber-300' : 'text-slate-500 hover:text-amber-400'} hover:bg-white/5`}
+            >
+              <Star size={13} className={item.pinned ? 'fill-current' : ''} />
+            </button>
+          </Hint>
+          <Hint label="Delete">
+            <button
+              type="button"
+              onClick={() => onDelete(item)}
+              aria-label={`Delete ${item.label}`}
+              className={`${BTN_ICON_SM} ${REVEAL} ${FOCUS_RING} text-slate-500 hover:text-rose-400 hover:bg-rose-500/10`}
+            >
+              <Trash2 size={13} />
+            </button>
+          </Hint>
         </div>
       </div>
     </div>
@@ -343,6 +356,7 @@ export default function Bookmarks() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'pinned' | 'page' | 'stack' | 'container' | 'custom'>('all')
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+  const confirm = useConfirm()
 
   const handleAdd = useCallback((item: Omit<BookmarkItem, 'id' | 'createdAt'>) => {
     const newItem: BookmarkItem = {
@@ -356,11 +370,18 @@ export default function Bookmarks() {
     setShowForm(false)
   }, [bookmarks])
 
-  const handleDelete = useCallback((id: string) => {
-    const updated = bookmarks.filter((b) => b.id !== id)
+  const handleDelete = useCallback(async (item: BookmarkItem) => {
+    const ok = await confirm({
+      title: 'Delete bookmark',
+      message: `Delete the bookmark "${item.label}"? It is only removed from this browser.`,
+      confirmLabel: 'Delete bookmark',
+      danger: true,
+    })
+    if (!ok) return
+    const updated = bookmarks.filter((b) => b.id !== item.id)
     setBookmarks(updated)
     saveBookmarks(updated)
-  }, [bookmarks])
+  }, [bookmarks, confirm])
 
   const handleTogglePin = useCallback((id: string) => {
     const updated = bookmarks.map((b) =>
@@ -381,7 +402,7 @@ export default function Bookmarks() {
   }, [setCurrentPage])
 
   // Filter and search
-  let filtered = bookmarks
+  let filtered = [...bookmarks]
   if (filter === 'pinned') filtered = filtered.filter((b) => b.pinned)
   else if (filter !== 'all') filtered = filtered.filter((b) => b.type === filter)
   if (search) {
@@ -406,55 +427,39 @@ export default function Bookmarks() {
   }
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
-      {/* Page header */}
-      <div className="flex items-center justify-between animate-fade-in">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/10 flex items-center justify-center text-amber-400">
-            <Bookmark size={20} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">
-              <span className="text-gradient">Bookmarks</span>
-            </h2>
-            <p className="text-sm text-slate-400">
-              Pin your favorite pages, stacks, and containers for quick access
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className={`
-            flex items-center gap-1.5 rounded-lg px-4 py-2
-            text-xs font-medium transition-all press
-            ${showForm
-              ? 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10'
-              : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25'
-            }
-          `}
-        >
-          {showForm ? <X size={14} /> : <Plus size={14} />}
-          {showForm ? 'Cancel' : 'Add Bookmark'}
-        </button>
-      </div>
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
+      <PageHeader
+        page="bookmarks"
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowForm(!showForm)}
+            aria-expanded={showForm}
+            className={`${BTN_TOOLBAR} ${FOCUS_RING} ${showForm ? TONE_QUIET : TONE_OK}`}
+          >
+            {showForm ? <X size={14} /> : <Plus size={14} />}
+            {showForm ? 'Cancel' : 'Add bookmark'}
+          </button>
+        }
+      />
 
       {/* Stats bar */}
       <div className="flex items-center gap-3 animate-fade-in">
-        <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg glass">
+        <div className={`${CARD} flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5`}>
           <span className="text-xs text-slate-500">
-            <span className="text-slate-300 font-semibold">{stats.total}</span> bookmarks
+            <span className="text-slate-200 font-semibold">{stats.total}</span> bookmark{stats.total === 1 ? '' : 's'}
           </span>
-          <span className="w-px h-4 bg-white/[0.06]" />
+          <span className="w-px h-4 bg-white/[0.06]" aria-hidden />
           <span className="text-xs text-slate-500">
             <span className="text-amber-400 font-semibold">{stats.pinned}</span> pinned
           </span>
-          <span className="w-px h-4 bg-white/[0.06]" />
+          <span className="w-px h-4 bg-white/[0.06]" aria-hidden />
           <span className="text-xs text-slate-500">
-            <span className="text-emerald-400 font-semibold">{stats.pages}</span> pages
+            <span className="text-cyan-400 font-semibold">{stats.pages}</span> page{stats.pages === 1 ? '' : 's'}
           </span>
-          <span className="w-px h-4 bg-white/[0.06]" />
+          <span className="w-px h-4 bg-white/[0.06]" aria-hidden />
           <span className="text-xs text-slate-500">
-            <span className="text-cyan-400 font-semibold">{stats.stacks}</span> stacks
+            <span className="text-cyan-400 font-semibold">{stats.stacks}</span> stack{stats.stacks === 1 ? '' : 's'}
           </span>
         </div>
       </div>
@@ -463,67 +468,74 @@ export default function Bookmarks() {
       {showForm && <AddBookmarkForm onAdd={handleAdd} onCancel={() => setShowForm(false)} />}
 
       {/* Search & Filter */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[12rem] max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search bookmarks..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-white/5 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30"
+            aria-label="Search bookmarks"
+            placeholder="Search bookmarks…"
+            className={SEARCH_FIELD}
           />
           {search && (
-            <button aria-label="Clear the search"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-            >
-              <X size={12} />
-            </button>
+            <Hint label="Clear the search">
+              <button
+                type="button"
+                aria-label="Clear the search"
+                onClick={() => setSearch('')}
+                className={`${BTN_ICON_SM} ${TONE_GHOST} ${FOCUS_RING} absolute right-1.5 top-1/2 -translate-y-1/2`}
+              >
+                <X size={14} />
+              </button>
+            </Hint>
           )}
         </div>
-        <div className="flex items-center flex-wrap gap-1">
-          {(['all', 'pinned', 'page', 'stack', 'container', 'custom'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`
-                px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition-all capitalize
-                ${filter === f
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                  : 'border-white/[0.03] text-slate-500 hover:text-slate-300 hover:border-white/10'}
-              `}
-            >
-              {f}
-            </button>
-          ))}
+        <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+          <SegmentedControl
+            aria-label="Show"
+            value={filter}
+            onChange={(v) => setFilter(v as typeof filter)}
+            data={[
+              { value: 'all', label: 'All' },
+              { value: 'pinned', label: 'Pinned' },
+              { value: 'page', label: 'Page' },
+              { value: 'stack', label: 'Stack' },
+              { value: 'container', label: 'Container' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+          />
         </div>
       </div>
 
       {/* Bookmark grid */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-          <div className="rounded-2xl bg-slate-800/40 p-6 mb-4">
-            <FolderHeart size={40} className="text-slate-500" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-300 mb-2">
-            {bookmarks.length === 0 ? 'No bookmarks yet' : 'No matches'}
-          </h3>
-          <p className="text-sm text-slate-500 max-w-md">
-            {bookmarks.length === 0
-              ? 'Add your first bookmark to quickly access your favorite pages, stacks, and containers.'
-              : 'Try adjusting your search or filter to find what you\'re looking for.'}
-          </p>
-          {bookmarks.length === 0 && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-4 flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
-            >
-              <Plus size={14} />
-              Create Your First Bookmark
-            </button>
-          )}
-        </div>
+        bookmarks.length === 0 ? (
+          <EmptyState
+            icon={<FolderHeart size={40} />}
+            title="No bookmarks yet"
+            hint="Add your first bookmark to quickly reach your favorite pages, stacks and containers."
+            action={
+              <button type="button" onClick={() => setShowForm(true)} className={`${BTN_TOOLBAR} ${TONE_OK} ${FOCUS_RING}`}>
+                <Plus size={14} />
+                Add your first bookmark
+              </button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<FolderHeart size={40} />}
+            title="No matches"
+            hint="Try another search or filter."
+            action={
+              <button type="button" onClick={() => { setSearch(''); setFilter('all') }} className={`${BTN_TOOLBAR_QUIET} ${FOCUS_RING}`}>
+                <X size={14} />
+                Show all bookmarks
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-children">
           {filtered.map((item) => (
