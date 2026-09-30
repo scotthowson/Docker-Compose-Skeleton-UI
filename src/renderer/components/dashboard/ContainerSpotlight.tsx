@@ -2,13 +2,15 @@
 // ContainerSpotlight — the containers you pinned, watched live
 // =============================================================================
 
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Crosshair, Settings2, X, Check, Search } from 'lucide-react'
 import { useContainerStore } from '../../stores/containerStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { CardHeader, CardEmpty, CardLoading, type CardCommonProps } from './cardShared'
+import Hint from '../common/Hint'
 import ModalOverlay from '../common/ModalOverlay'
+import { BTN_CARD, BTN_ICON_SM, BTN_SHEET_PRIMARY, BTN_SHEET_QUIET, TONE_GHOST, TONE_OK } from '../../lib/ui'
+import { Card, CardBody, CardEmpty, CardLoading, pctTone, TONE_FILL, type CardCommonProps } from './cardShared'
 
 interface SpotlightConfig { containers: string[] }
 
@@ -25,10 +27,10 @@ function formatUptime(s: number): string {
   return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`
 }
 
-function Bar({ value, tone }: { value: number | null; tone: string }) {
+function Bar({ value }: { value: number | null }) {
   return (
     <div className="h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
-      <div className={`h-full rounded-full transition-all duration-700 ${tone}`} style={{ width: `${value ?? 0}%` }} />
+      <div className={`h-full rounded-full transition-all duration-700 ${TONE_FILL[pctTone(value ?? 0)]}`} style={{ width: `${value ?? 0}%` }} />
     </div>
   )
 }
@@ -51,28 +53,26 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
   const canEdit = !!onSaveConfig && !dashboardEditMode
 
   return (
-    <div className="glass-card p-4 h-full flex flex-col">
-      <CardHeader
-        icon={<Crosshair size={15} />}
-        title="Container Spotlight"
-        count={picked.length || undefined}
-        right={canEdit ? (
-          <button onClick={() => setPicking(true)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Choose containers">
-            <Settings2 size={13} />
-          </button>
-        ) : undefined}
-      />
+    <Card
+      card="container-spotlight"
+      meta={picked.length || undefined}
+      actions={canEdit ? (
+        <Hint label="Choose containers">
+          <button type="button" aria-label="Choose containers" onClick={() => setPicking(true)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><Settings2 size={13} /></button>
+        </Hint>
+      ) : undefined}
+    >
       {picked.length === 0 ? (
         <CardEmpty
           icon={<Crosshair size={22} />}
           title="Nothing pinned yet"
           hint="Pick the containers you want to keep an eye on."
-          action={canEdit ? <button onClick={() => setPicking(true)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">Choose containers</button> : undefined}
+          action={canEdit ? <button type="button" onClick={() => setPicking(true)} className={`${BTN_CARD} ${TONE_OK}`}>Choose containers</button> : undefined}
         />
       ) : loading && containers.length === 0 ? (
-        <CardLoading />
+        <CardLoading label="Loading the containers…" rows={3} />
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 space-y-1.5">
+        <CardBody className="space-y-1.5">
           {rows.map(({ name, info, st }) => {
             const running = info?.state === 'running'
             const health = info?.health && info.health !== 'none' ? info.health : null
@@ -81,11 +81,12 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
             return (
               <button
                 key={name}
+                type="button"
                 onClick={() => setCurrentPage('containers', { focusContainer: name })}
-                className="w-full text-left rounded-lg px-2.5 py-2 bg-white/[0.02] border border-white/[0.03] hover:bg-white/[0.05] hover:border-white/10 transition-colors"
+                className="w-full text-left rounded-lg px-2.5 py-2 bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${!info ? 'bg-slate-700' : running ? (health === 'unhealthy' ? 'bg-rose-400' : 'bg-emerald-400') : 'bg-slate-500'}`} />
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${!info ? 'bg-slate-700' : running ? (health === 'unhealthy' ? 'bg-rose-400' : 'bg-emerald-400') : 'bg-slate-500'}`} aria-hidden />
                   <span className="text-xs font-mono font-medium text-slate-200 truncate">{name}</span>
                   <span className="ml-auto text-[10px] text-slate-500 shrink-0">
                     {!info ? 'not found' : running ? (health ? health : 'running') : info.state}
@@ -95,19 +96,19 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
                 {info && running && (
                   <div className="mt-1.5 grid grid-cols-2 gap-3">
                     <div>
-                      <div className="flex justify-between text-[9px] uppercase tracking-wider text-slate-500 mb-0.5"><span>CPU</span><span className="text-slate-400">{cpu != null ? `${cpu.toFixed(1)}%` : '—'}</span></div>
-                      <Bar value={cpu} tone="bg-cyan-400" />
+                      <div className="flex justify-between text-[10px] uppercase tracking-wider text-slate-500 mb-0.5"><span>CPU</span><span className="text-slate-400 tabular-nums">{cpu != null ? `${cpu.toFixed(1)}%` : '—'}</span></div>
+                      <Bar value={cpu} />
                     </div>
                     <div>
-                      <div className="flex justify-between text-[9px] uppercase tracking-wider text-slate-500 mb-0.5"><span>Memory</span><span className="text-slate-400">{mem != null ? `${mem.toFixed(1)}%` : '—'}</span></div>
-                      <Bar value={mem} tone="bg-violet-400" />
+                      <div className="flex justify-between text-[10px] uppercase tracking-wider text-slate-500 mb-0.5"><span>Memory</span><span className="text-slate-400 tabular-nums">{mem != null ? `${mem.toFixed(1)}%` : '—'}</span></div>
+                      <Bar value={mem} />
                     </div>
                   </div>
                 )}
               </button>
             )
           })}
-        </div>
+        </CardBody>
       )}
 
       {picking && createPortal(
@@ -118,19 +119,26 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
                 <h3 className="text-sm font-semibold text-slate-100">Spotlight containers</h3>
                 <p className="text-[11px] text-slate-500">{draft.length} chosen</p>
               </div>
-              <button aria-label="Close" onClick={() => setPicking(false)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+              <Hint label="Close"><button type="button" aria-label="Close" onClick={() => setPicking(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X size={16} /></button></Hint>
             </div>
             <div className="px-5 py-3">
               <div className="relative">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter containers…" className="w-full pl-8 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40" />
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
+                <input aria-label="Filter containers" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter containers…" className="w-full pl-8 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30" />
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3 space-y-0.5">
               {containers.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase())).map((c) => {
                 const on = draft.includes(c.name)
                 return (
-                  <button key={`${c.member ?? ''}|${c.name}`} onClick={() => setDraft((d) => on ? d.filter((n) => n !== c.name) : [...d, c.name])} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${on ? 'bg-emerald-500/[0.08]' : 'hover:bg-white/[0.04]'}`}>
+                  <button
+                    key={`${c.member ?? ''}|${c.name}`}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={on}
+                    onClick={() => setDraft((d) => on ? d.filter((n) => n !== c.name) : [...d, c.name])}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${on ? 'bg-emerald-500/[0.08]' : 'hover:bg-white/[0.04]'}`}
+                  >
                     <span className={`flex items-center justify-center w-4 h-4 rounded border ${on ? 'bg-emerald-500 border-emerald-500' : 'border-white/20'}`}>{on && <Check size={11} className="text-white" strokeWidth={3} />}</span>
                     <span className="text-xs font-mono text-slate-200 truncate">{c.name}</span>
                     <span className="ml-auto text-[10px] text-slate-500">{c.state}</span>
@@ -139,13 +147,13 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
               })}
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5">
-              <button onClick={() => setPicking(false)} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 transition-colors">Cancel</button>
-              <button onClick={async () => { await onSaveConfig?.({ containers: draft }); setPicking(false) }} className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 transition-colors">Save</button>
+              <button type="button" onClick={() => setPicking(false)} className={BTN_SHEET_QUIET}>Cancel</button>
+              <button type="button" onClick={async () => { await onSaveConfig?.({ containers: draft }); setPicking(false) }} className={BTN_SHEET_PRIMARY}>Save</button>
             </div>
           </div>
         </ModalOverlay>,
         document.body,
       )}
-    </div>
+    </Card>
   )
 }

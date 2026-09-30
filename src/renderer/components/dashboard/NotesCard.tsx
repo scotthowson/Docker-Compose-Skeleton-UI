@@ -4,7 +4,9 @@
 
 import React, { useEffect, useState } from 'react'
 import { StickyNote, Pencil, Check, X } from 'lucide-react'
-import { CardHeader, CardEmpty, type CardCommonProps } from './cardShared'
+import Hint from '../common/Hint'
+import { BTN_CARD, BTN_ICON_SM, TONE_GHOST, TONE_GHOST_OK, TONE_OK } from '../../lib/ui'
+import { Card, CardBody, CardEmpty, type CardCommonProps } from './cardShared'
 
 interface NotesConfig { text: string }
 
@@ -44,9 +46,10 @@ function Rendered({ text }: { text: string }) {
     }
     if (/^\s*[-*] /.test(line)) { list.push(<li key={key}>{inline(line.replace(/^\s*[-*] /, ''), key)}</li>); return }
     flush()
-    if (/^### /.test(line)) { nodes.push(<h4 key={key} className="text-xs font-semibold text-slate-200 mt-2">{inline(line.slice(4), key)}</h4>); return }
-    if (/^## /.test(line)) { nodes.push(<h3 key={key} className="text-sm font-semibold text-slate-100 mt-2">{inline(line.slice(3), key)}</h3>); return }
-    if (/^# /.test(line)) { nodes.push(<h2 key={key} className="text-base font-bold text-slate-100 mt-1">{inline(line.slice(2), key)}</h2>); return }
+    // (a note's own headings are text, not the page's outline: paragraphs in three weights)
+    if (/^### /.test(line)) { nodes.push(<p key={key} className="text-xs font-semibold text-slate-200 mt-2">{inline(line.slice(4), key)}</p>); return }
+    if (/^## /.test(line)) { nodes.push(<p key={key} className="text-sm font-semibold text-slate-100 mt-2">{inline(line.slice(3), key)}</p>); return }
+    if (/^# /.test(line)) { nodes.push(<p key={key} className="text-base font-bold text-slate-100 mt-1">{inline(line.slice(2), key)}</p>); return }
     if (!line.trim()) { nodes.push(<div key={key} className="h-2" />); return }
     nodes.push(<p key={key}>{inline(line, key)}</p>)
   })
@@ -68,36 +71,42 @@ export default function NotesCard({ cardConfig, onSaveConfig, dashboardEditMode 
   }
 
   return (
-    <div className="glass-card p-4 h-full flex flex-col">
-      <CardHeader
-        icon={<StickyNote size={15} />}
-        title="Notes"
-        right={canEdit ? (editing ? (
-          <>
-            <button onClick={() => { setDraft(text); setEditing(false) }} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Discard"><X size={13} /></button>
-            <button onClick={save} disabled={saving} className="p-1 rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50" title="Save (Ctrl+Enter)"><Check size={13} /></button>
-          </>
-        ) : (
-          <button onClick={() => setEditing(true)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Edit notes"><Pencil size={13} /></button>
-        )) : undefined}
-      />
+    <Card
+      card="notes"
+      actions={canEdit ? (editing ? (
+        <>
+          <Hint label="Discard"><button type="button" aria-label="Discard the changes" onClick={() => { setDraft(text); setEditing(false) }} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X size={14} /></button></Hint>
+          <Hint label="Save (Ctrl+Enter)"><button type="button" aria-label="Save the note" onClick={save} disabled={saving} className={`${BTN_ICON_SM} ${TONE_GHOST_OK}`}><Check size={14} /></button></Hint>
+        </>
+      ) : (
+        <Hint label="Edit the note"><button type="button" aria-label="Edit the note" onClick={() => setEditing(true)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><Pencil size={13} /></button></Hint>
+      )) : undefined}
+    >
       {editing ? (
         <textarea
           autoFocus
+          aria-label="Note"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') void save(); if (e.key === 'Escape') { setDraft(text); setEditing(false) } }}
           placeholder={'# Title\n- a bullet\n[ ] a task\n**bold**, `code`, links…'}
           spellCheck={false}
-          className="flex-1 min-h-[6rem] w-full resize-none rounded-lg bg-slate-950/60 border border-white/10 p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40"
+          className="flex-1 min-h-[6rem] w-full resize-none rounded-lg bg-white/5 border border-white/10 p-3 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30"
         />
       ) : text.trim() ? (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-1" onDoubleClick={canEdit ? () => setEditing(true) : undefined}>
-          <Rendered text={text} />
-        </div>
+        <CardBody className="pr-1">
+          <div onDoubleClick={canEdit ? () => setEditing(true) : undefined}>
+            <Rendered text={text} />
+          </div>
+        </CardBody>
       ) : (
-        <CardEmpty icon={<StickyNote size={22} />} title="Nothing here yet" hint="Reminders, IPs, the things you keep looking up." action={canEdit ? <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">Write a note</button> : undefined} />
+        <CardEmpty
+          icon={<StickyNote size={22} />}
+          title="Nothing here yet"
+          hint="Reminders, IPs, the things you keep looking up."
+          action={canEdit ? <button type="button" onClick={() => setEditing(true)} className={`${BTN_CARD} ${TONE_OK}`}>Write a note</button> : undefined}
+        />
       )}
-    </div>
+    </Card>
   )
 }

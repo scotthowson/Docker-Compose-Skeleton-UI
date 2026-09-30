@@ -2,8 +2,10 @@
 // PluginFrame — sandboxed plugin card frames with the API message bridge
 // =============================================================================
 
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
 import { apiClient } from '../../api/client'
+import { BTN_CARD_QUIET } from '../../lib/ui'
 
 // Injected ahead of every plugin card. The card runs sandboxed at a null
 // origin, so it can neither reach the API nor hold a session; instead any
@@ -66,16 +68,19 @@ export function PluginCardFrame({ pluginName, cardName, title, refreshInterval =
 
   if (error) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to load card</span>
+      <div className="h-full flex flex-col items-center justify-center gap-2 p-4 text-center" role="alert">
+        <AlertCircle size={18} className="text-rose-400" aria-hidden />
+        <p className="text-sm text-slate-400">This card did not load</p>
+        <button type="button" onClick={() => { setError(false); setTick((n) => n + 1) }} className={BTN_CARD_QUIET}><RefreshCw size={12} /> Try again</button>
       </div>
     )
   }
 
   if (!src) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: '20px', height: '20px', border: '2px solid rgba(139,92,246,0.3)', borderTop: '2px solid #8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <div className="h-full p-4" role="status">
+        <span className="sr-only">Loading {title}…</span>
+        <div className="skeleton h-full w-full" aria-hidden />
       </div>
     )
   }

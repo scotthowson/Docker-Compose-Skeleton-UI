@@ -10,8 +10,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as Icons from 'lucide-react'
 import {
-  Zap, Settings2, X, Plus, ArrowUp, ArrowDown, Trash2, Loader2, RotateCcw, ChevronDown,
+  Rocket, Zap, Settings2, X, Plus, ArrowUp, ArrowDown, Trash2, Loader2, RotateCcw,
 } from 'lucide-react'
+import { Badge } from '@mantine/core'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -29,8 +30,10 @@ import {
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import { pageLabel, pageTitles } from '../../constants/pageTitles'
-import { ACCENTS, ACCENT_NAMES, CardEmpty, type CardCommonProps } from './cardShared'
+import { Card, CardBody, CardEmpty, ACCENTS, ACCENT_NAMES, type CardCommonProps } from './cardShared'
 import ModalOverlay from '../common/ModalOverlay'
+import Hint from '../common/Hint'
+import { BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM, BTN_SHEET_PRIMARY, BTN_SHEET_QUIET, BTN_TOOLBAR_QUIET, TONE_GHOST, TONE_GHOST_DANGER, TONE_OK } from '../../lib/ui'
 
 export type ActionKind = 'page' | 'url' | 'stack' | 'container' | 'maintenance' | 'schedule' | 'automation'
 export interface ActionDef {
@@ -49,32 +52,32 @@ const KIND_LABEL: Record<ActionKind, string> = {
   page: 'Open a page', url: 'Open a link', stack: 'Stack control', container: 'Container control',
   maintenance: 'Maintenance job', schedule: 'Run a schedule', automation: 'Run an automation',
 }
+// (a shortcut is slate unless its colour means something: rose for the one that deletes)
 const MAINTENANCE_JOBS: { id: string; label: string; icon: string; color: string }[] = [
-  { id: 'prune-images', label: 'Prune Images', icon: 'Trash2', color: 'orange' },
-  { id: 'rotate-logs', label: 'Rotate Logs', icon: 'Archive', color: 'pink' },
-  { id: 'check-health', label: 'Check Health', icon: 'HeartPulse', color: 'emerald' },
-  { id: 'run-backup', label: 'Run Backup', icon: 'Download', color: 'cyan' },
+  { id: 'prune-images', label: 'Prune images', icon: 'Trash2', color: 'rose' },
+  { id: 'rotate-logs', label: 'Rotate logs', icon: 'Archive', color: 'slate' },
+  { id: 'check-health', label: 'Check health', icon: 'HeartPulse', color: 'slate' },
+  { id: 'run-backup', label: 'Run backup', icon: 'Download', color: 'slate' },
 ]
 const ICON_CHOICES = ['Layers', 'HeartPulse', 'ScrollText', 'Monitor', 'Settings2', 'Box', 'TerminalSquare', 'Wrench', 'Archive', 'Trash2', 'Download', 'ListChecks', 'ArrowUpCircle', 'Zap', 'Play', 'Square', 'RotateCw', 'RefreshCw', 'Globe', 'Link', 'Rocket', 'Bell', 'Clock', 'Shield', 'Database', 'FolderOpen', 'Image', 'Network', 'HardDrive', 'Activity', 'Bookmark', 'Star', 'Cloud', 'Server', 'Cpu', 'Key']
 const STACK_OPS = ['start', 'stop', 'restart', 'update']
 const CONTAINER_OPS = ['start', 'stop', 'restart', 'recreate']
 
 export const DEFAULT_ACTIONS: ActionDef[] = [
-  { id: 'stacks', kind: 'page', label: 'Manage Stacks', icon: 'Layers', color: 'emerald', target: 'stacks' },
-  { id: 'health', kind: 'page', label: pageLabel('health'), icon: 'HeartPulse', color: 'rose', target: 'health' },
-  { id: 'logs', kind: 'page', label: 'View Logs', icon: 'ScrollText', color: 'amber', target: 'logs' },
-  { id: 'system', kind: 'page', label: pageLabel('system'), icon: 'Monitor', color: 'cyan', target: 'system' },
-  { id: 'config', kind: 'page', label: pageLabel('config'), icon: 'Settings2', color: 'violet', target: 'config' },
-  { id: 'containers', kind: 'page', label: pageLabel('containers'), icon: 'Box', color: 'blue', target: 'containers' },
+  { id: 'stacks', kind: 'page', label: pageLabel('stacks'), icon: 'Layers', color: 'slate', target: 'stacks' },
+  { id: 'health', kind: 'page', label: pageLabel('health'), icon: 'HeartPulse', color: 'slate', target: 'health' },
+  { id: 'logs', kind: 'page', label: pageLabel('logs'), icon: 'ScrollText', color: 'slate', target: 'logs' },
+  { id: 'system', kind: 'page', label: pageLabel('system'), icon: 'Monitor', color: 'slate', target: 'system' },
+  { id: 'config', kind: 'page', label: pageLabel('config'), icon: 'Settings2', color: 'slate', target: 'config' },
+  { id: 'containers', kind: 'page', label: pageLabel('containers'), icon: 'Box', color: 'slate', target: 'containers' },
   { id: 'terminal', kind: 'page', label: pageLabel('terminal'), icon: 'TerminalSquare', color: 'slate', target: 'terminal' },
-  { id: 'maintenance', kind: 'page', label: pageLabel('maintenance'), icon: 'Wrench', color: 'amber', target: 'maintenance' },
-  { id: 'backup', kind: 'page', label: pageLabel('backup'), icon: 'Archive', color: 'teal', target: 'backup' },
-  { id: 'prune-images', kind: 'maintenance', label: 'Prune Images', icon: 'Trash2', color: 'orange', target: 'prune-images' },
-  { id: 'rotate-logs', kind: 'maintenance', label: 'Rotate Logs', icon: 'Archive', color: 'pink', target: 'rotate-logs' },
-  { id: 'check-health', kind: 'maintenance', label: 'Check Health', icon: 'HeartPulse', color: 'emerald', target: 'check-health' },
-  { id: 'run-backup', kind: 'maintenance', label: 'Run Backup', icon: 'Download', color: 'cyan', target: 'run-backup' },
-  { id: 'lint-stacks', kind: 'page', label: 'Lint All Stacks', icon: 'ListChecks', color: 'cyan', target: 'stacks' },
-  { id: 'check-updates', kind: 'page', label: 'Check Updates', icon: 'ArrowUpCircle', color: 'emerald', target: 'updates' },
+  { id: 'maintenance', kind: 'page', label: pageLabel('maintenance'), icon: 'Wrench', color: 'slate', target: 'maintenance' },
+  { id: 'backup', kind: 'page', label: pageLabel('backup'), icon: 'Archive', color: 'slate', target: 'backup' },
+  { id: 'prune-images', kind: 'maintenance', label: 'Prune images', icon: 'Trash2', color: 'rose', target: 'prune-images' },
+  { id: 'rotate-logs', kind: 'maintenance', label: 'Rotate logs', icon: 'Archive', color: 'slate', target: 'rotate-logs' },
+  { id: 'check-health', kind: 'maintenance', label: 'Check health', icon: 'HeartPulse', color: 'slate', target: 'check-health' },
+  { id: 'run-backup', kind: 'maintenance', label: 'Run backup', icon: 'Download', color: 'slate', target: 'run-backup' },
+  { id: 'check-updates', kind: 'page', label: pageLabel('updates'), icon: 'ArrowUpCircle', color: 'slate', target: 'updates' },
 ]
 
 function iconFor(name: string): React.ElementType {
@@ -93,7 +96,7 @@ function sanitize(list: unknown): ActionDef[] | null {
   return out
 }
 
-export default function QuickActions({ collapsible = false, cardConfig, onSaveConfig, dashboardEditMode }: { collapsible?: boolean } & CardCommonProps) {
+export default function QuickActions({ cardConfig, onSaveConfig, dashboardEditMode }: CardCommonProps) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
@@ -103,22 +106,12 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
   const confirm = useConfirm()
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
-  const [collapsed, setCollapsed] = useState(() => {
-    if (!collapsible) return false
-    try { return localStorage.getItem('dash-quickactions-collapsed') === 'true' } catch { return false }
-  })
 
   const actions = useMemo(() => {
     const cfg = cardConfig as { actions?: unknown } | undefined
     return sanitize(cfg?.actions) ?? DEFAULT_ACTIONS
   }, [cardConfig])
   const isCustom = !!sanitize((cardConfig as { actions?: unknown } | undefined)?.actions)
-
-  const toggleCollapsed = () => {
-    const next = !collapsed
-    setCollapsed(next)
-    try { localStorage.setItem('dash-quickactions-collapsed', String(next)) } catch { /* private mode */ }
-  }
 
   const run = useCallback(async (a: ActionDef) => {
     if (a.kind === 'page') { setCurrentPage(a.target as PageId); return }
@@ -165,28 +158,24 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
   const canEdit = !!onSaveConfig && !dashboardEditMode
 
   return (
-    <div className="glass-card p-4 h-full flex flex-col">
-      <div className="flex items-center gap-2 mb-3">
-        <Zap size={15} className="text-amber-400" />
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Quick Actions</h3>
-        {isCustom && <span className="text-[9px] uppercase tracking-wider text-slate-600">custom</span>}
-        <div className="ml-auto flex items-center gap-1">
-          {canEdit && (
-            <button onClick={() => setEditing(true)} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Customize the actions">
-              <Settings2 size={13} />
-            </button>
-          )}
-          {collapsible && (
-            <button onClick={toggleCollapsed} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title={collapsed ? 'Expand' : 'Collapse'}>
-              <ChevronDown size={13} className={`transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-            </button>
-          )}
-        </div>
-      </div>
-      {!collapsed && (visible.length === 0 ? (
-        <CardEmpty icon={<Zap size={22} />} title="No actions" hint="Add the shortcuts you use most." action={canEdit ? <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">Add actions</button> : undefined} />
+    <Card
+      card="quick-actions"
+      badge={isCustom ? <Badge component="span" color="slate">custom</Badge> : undefined}
+      actions={canEdit ? (
+        <Hint label="Customize the actions">
+          <button type="button" aria-label="Customize the actions" onClick={() => setEditing(true)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><Settings2 size={13} /></button>
+        </Hint>
+      ) : undefined}
+    >
+      {visible.length === 0 ? (
+        <CardEmpty
+          icon={<Rocket size={22} />}
+          title="No actions"
+          hint="Add the shortcuts you use most."
+          action={canEdit ? <button type="button" onClick={() => setEditing(true)} className={`${BTN_CARD} ${TONE_OK}`}>Add actions</button> : undefined}
+        />
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 grid gap-1.5 content-start" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))' }}>
+        <CardBody className="grid gap-1.5 content-start [grid-template-columns:repeat(auto-fill,minmax(118px,1fr))]">
           {visible.map((a) => {
             const acc = ACCENTS[a.color] ?? ACCENTS.cyan
             const Icon = iconFor(a.icon)
@@ -195,10 +184,11 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
             return (
               <button
                 key={a.id}
+                type="button"
                 onClick={() => run(a)}
                 disabled={disabled}
-                className="group flex items-center gap-2 rounded-lg px-2.5 py-2 border border-white/[0.03] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10 text-left transition-all disabled:opacity-40 press"
-                title={a.kind === 'url' ? a.target : a.kind === 'stack' || a.kind === 'container' ? `${a.op || 'start'} ${a.target}` : a.label}
+                className="group flex items-center gap-2 rounded-lg px-2.5 py-2 border border-white/5 bg-white/[0.03] hover:bg-white/[0.05] hover:border-white/10 text-left transition-all disabled:opacity-40 press"
+                title={a.kind === 'url' ? a.target : undefined}
               >
                 <span className={`flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${acc.bg} ${acc.text}`}>
                   {busy ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
@@ -210,10 +200,10 @@ export default function QuickActions({ collapsible = false, cardConfig, onSaveCo
               </button>
             )
           })}
-        </div>
-      ))}
+        </CardBody>
+      )}
       {editing && <ActionsEditor initial={actions} isAdmin={isAdmin} onClose={() => setEditing(false)} onSave={async (list) => { await onSaveConfig?.({ actions: list }); setEditing(false); addToast({ type: 'success', message: 'Quick actions saved' }) }} onReset={async () => { await onSaveConfig?.({}); setEditing(false); addToast({ type: 'success', message: 'Quick actions reset to the defaults' }) }} />}
-    </div>
+    </Card>
   )
 }
 
@@ -237,11 +227,6 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
   const [automations, setAutomations] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-  useEffect(() => {
     if (!isAdmin) return
     fetchSchedules().then((r) => setSchedules((r.schedules ?? []).map((s) => ({ id: s.id, name: s.name })))).catch(() => {})
     fetchAutomations().then((r) => setAutomations((r.automations ?? []).map((a) => ({ id: a.id, name: a.name })))).catch(() => {})
@@ -250,33 +235,33 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
   const update = (id: string, patch: Partial<ActionDef>) => setList((l) => l.map((a) => (a.id === id ? { ...a, ...patch } : a)))
   const move = (i: number, dir: -1 | 1) => setList((l) => { const n = [...l]; const j = i + dir; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n })
   const add = (kind: ActionKind) => {
-    const base: ActionDef = { id: newId(), kind, label: KIND_LABEL[kind], icon: 'Zap', color: 'cyan', target: '' }
-    if (kind === 'page') Object.assign(base, { label: 'Dashboard', target: 'dashboard', icon: 'LayoutDashboard' })
+    const base: ActionDef = { id: newId(), kind, label: KIND_LABEL[kind], icon: 'Zap', color: 'slate', target: '' }
+    if (kind === 'page') Object.assign(base, { label: pageLabel('dashboard'), target: 'dashboard', icon: 'LayoutDashboard' })
     if (kind === 'url') Object.assign(base, { label: 'My link', target: 'https://', icon: 'Link' })
-    if (kind === 'stack') Object.assign(base, { label: stacks[0] ? `Restart ${stacks[0].name}` : 'Restart stack', target: stacks[0]?.name ?? '', op: 'restart', icon: 'RotateCw', color: 'amber' })
-    if (kind === 'container') Object.assign(base, { label: containers[0] ? `Restart ${containers[0].name}` : 'Restart container', target: containers[0]?.name ?? '', op: 'restart', icon: 'RotateCw', color: 'amber' })
+    if (kind === 'stack') Object.assign(base, { label: stacks[0] ? `Restart ${stacks[0].name}` : 'Restart stack', target: stacks[0]?.name ?? '', op: 'restart', icon: 'RotateCw' })
+    if (kind === 'container') Object.assign(base, { label: containers[0] ? `Restart ${containers[0].name}` : 'Restart container', target: containers[0]?.name ?? '', op: 'restart', icon: 'RotateCw' })
     if (kind === 'maintenance') Object.assign(base, { label: MAINTENANCE_JOBS[0].label, target: MAINTENANCE_JOBS[0].id, icon: MAINTENANCE_JOBS[0].icon, color: MAINTENANCE_JOBS[0].color })
-    if (kind === 'schedule') Object.assign(base, { label: schedules[0]?.name ?? 'Schedule', target: schedules[0]?.id ?? '', icon: 'Clock', color: 'violet' })
-    if (kind === 'automation') Object.assign(base, { label: automations[0]?.name ?? 'Automation', target: automations[0]?.id ?? '', icon: 'Zap', color: 'amber' })
+    if (kind === 'schedule') Object.assign(base, { label: schedules[0]?.name ?? 'Schedule', target: schedules[0]?.id ?? '', icon: 'Clock' })
+    if (kind === 'automation') Object.assign(base, { label: automations[0]?.name ?? 'Automation', target: automations[0]?.id ?? '', icon: 'Bot' })
     setList((l) => [...l, base])
     setAdding(false)
   }
   const valid = list.every((a) => a.label.trim() && a.target.trim())
   const kinds: ActionKind[] = isAdmin ? ['page', 'url', 'stack', 'container', 'maintenance', 'schedule', 'automation'] : ['page', 'url']
-  const field = 'px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40'
+  const field = 'px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30'
 
   return createPortal(
     <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-2xl mx-4 max-h-[88vh] flex flex-col bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/10"><Zap size={16} className="text-amber-400" /></span>
+            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 border border-white/10"><Rocket size={16} className="text-slate-300" aria-hidden /></span>
             <div>
               <h3 className="text-sm font-semibold text-slate-100">Quick actions</h3>
               <p className="text-[11px] text-slate-500">Your shortcuts, in your order. Saved to your dashboard.</p>
             </div>
           </div>
-          <button aria-label="Close" onClick={onClose} className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5"><X size={16} /></button>
+          <Hint label="Close"><button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X size={16} /></button></Hint>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-6 py-4 space-y-2">
           {list.length === 0 && <p className="text-xs text-slate-500 text-center py-6">No actions yet — add one below.</p>}
@@ -287,12 +272,12 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
               <div key={a.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className={`flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${acc.bg} ${acc.text}`}><Icon size={14} /></span>
-                  <input value={a.label} onChange={(e) => update(a.id, { label: e.target.value })} placeholder="Label" className={`${field} flex-1 min-w-0`} />
+                  <input aria-label="Label" value={a.label} onChange={(e) => update(a.id, { label: e.target.value })} placeholder="Label" className={`${field} flex-1 min-w-0`} />
                   <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0 hidden sm:inline">{KIND_LABEL[a.kind]}</span>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    <button onClick={() => move(i, -1)} disabled={i === 0} className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-white/5 disabled:opacity-30" title="Move up"><ArrowUp size={12} /></button>
-                    <button onClick={() => move(i, 1)} disabled={i === list.length - 1} className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-white/5 disabled:opacity-30" title="Move down"><ArrowDown size={12} /></button>
-                    <button onClick={() => setList((l) => l.filter((x) => x.id !== a.id))} className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10" title="Remove"><Trash2 size={12} /></button>
+                    <Hint label="Move up"><button type="button" aria-label={`Move ${a.label} up`} onClick={() => move(i, -1)} disabled={i === 0} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><ArrowUp size={12} /></button></Hint>
+                    <Hint label="Move down"><button type="button" aria-label={`Move ${a.label} down`} onClick={() => move(i, 1)} disabled={i === list.length - 1} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><ArrowDown size={12} /></button></Hint>
+                    <Hint label="Remove"><button type="button" aria-label={`Remove ${a.label}`} onClick={() => setList((l) => l.filter((x) => x.id !== a.id))} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}><Trash2 size={12} /></button></Hint>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -301,7 +286,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                       {(Object.keys(pageTitles) as PageId[]).filter((p) => isAdmin || !ADMIN_ONLY_PAGES.has(p)).map((p) => <option key={p} value={p}>{pageTitles[p]}</option>)}
                     </select>
                   )}
-                  {a.kind === 'url' && <input value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} placeholder="https://…" spellCheck={false} className={`${field} flex-1 min-w-[12rem] font-mono`} />}
+                  {a.kind === 'url' && <input aria-label="Link" value={a.target} onChange={(e) => update(a.id, { target: e.target.value })} placeholder="https://…" spellCheck={false} className={`${field} flex-1 min-w-[12rem] font-mono`} />}
                   {a.kind === 'stack' && (
                     <>
                       <select aria-label="Stack action" value={a.op || 'start'} onChange={(e) => update(a.id, { op: e.target.value })} className={`${field} bg-slate-800`}>{STACK_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</select>
@@ -337,13 +322,13 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
                       {automations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   )}
-                  <select value={a.icon} onChange={(e) => update(a.id, { icon: e.target.value })} className={`${field} bg-slate-800`} title="Icon">
+                  <select aria-label="Icon" value={a.icon} onChange={(e) => update(a.id, { icon: e.target.value })} className={`${field} bg-slate-800`}>
                     {!ICON_CHOICES.includes(a.icon) && <option value={a.icon}>{a.icon}</option>}
                     {ICON_CHOICES.map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
-                  <div className="flex items-center gap-1" title="Colour">
+                  <div className="flex items-center gap-1.5" role="group" aria-label="Colour">
                     {ACCENT_NAMES.map((c) => (
-                      <button key={c} onClick={() => update(a.id, { color: c })} className={`h-4 w-4 rounded-full ${ACCENTS[c].dot} ${a.color === c ? 'ring-2 ring-white/70 ring-offset-1 ring-offset-slate-900' : 'opacity-60 hover:opacity-100'} transition-all`} aria-label={c} />
+                      <button key={c} type="button" onClick={() => update(a.id, { color: c })} className={`h-4 w-4 rounded-full ${ACCENTS[c].dot} ${a.color === c ? 'ring-2 ring-white/70 ring-offset-1 ring-offset-slate-900' : 'opacity-60 hover:opacity-100'} transition-all`} aria-label={c} aria-pressed={a.color === c} />
                     ))}
                   </div>
                 </div>
@@ -351,20 +336,20 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
             )
           })}
           <div className="relative">
-            <button onClick={() => setAdding((v) => !v)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 transition-colors"><Plus size={13} /> Add action</button>
+            <button type="button" aria-expanded={adding} onClick={() => setAdding((v) => !v)} className={BTN_TOOLBAR_QUIET}><Plus size={14} /> Add action</button>
             {adding && (
               <div className="absolute z-10 mt-1 w-56 rounded-xl bg-slate-900 border border-white/10 shadow-2xl p-1 animate-scale-in">
-                {kinds.map((k) => <button key={k} onClick={() => add(k)} className="w-full text-left px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-white/5">{KIND_LABEL[k]}</button>)}
+                {kinds.map((k) => <button key={k} type="button" onClick={() => add(k)} className="w-full text-left px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-white/5">{KIND_LABEL[k]}</button>)}
               </div>
             )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-t border-white/5">
-          <button onClick={() => void onReset()} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"><RotateCcw size={12} /> Reset to defaults</button>
+          <button type="button" onClick={() => void onReset()} className={BTN_CARD_QUIET}><RotateCcw size={12} /> Reset to defaults</button>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 transition-colors">Cancel</button>
-            <button onClick={async () => { setSaving(true); try { await onSave(list) } finally { setSaving(false) } }} disabled={!valid || saving} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-colors">
-              {saving && <Loader2 size={12} className="animate-spin" />} Save
+            <button type="button" onClick={onClose} className={BTN_SHEET_QUIET}>Cancel</button>
+            <button type="button" onClick={async () => { setSaving(true); try { await onSave(list) } finally { setSaving(false) } }} disabled={!valid || saving} className={BTN_SHEET_PRIMARY}>
+              {saving && <Loader2 size={14} className="animate-spin" />} Save
             </button>
           </div>
         </div>

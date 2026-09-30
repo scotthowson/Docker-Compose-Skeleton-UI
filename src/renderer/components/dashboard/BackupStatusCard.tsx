@@ -1,17 +1,23 @@
-import { HardDrive, ServerOff, AlertCircle, RefreshCw } from 'lucide-react'
-import { useSettingsStore } from '../../stores/settingsStore'
-import { useConnectionStore } from '../../stores/connectionStore'
-import type { BackupStatusResponse } from '../../../shared/types'
+// =============================================================================
+// BackupStatusCard — is a backup running, and when the last one was made
+// =============================================================================
 
-function statusBadge(status: string) {
+import { Archive, Lock } from 'lucide-react'
+import { Badge } from '@mantine/core'
+import { useConnectionStore } from '../../stores/connectionStore'
+import { useAuthStore } from '../../stores/authStore'
+import { pageLabel } from '../../constants/pageTitles'
+import type { BackupStatusResponse } from '../../../shared/types'
+import { Card, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
+
+/** idle is fine, a backup in progress is information, a failed one is a problem */
+function statusChip(status: string): { color: string; label: string } {
   switch (status) {
-    case 'running':
-    case 'restoring':
-      return 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-    case 'error':
-      return 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-    default:
-      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+    case 'running': return { color: 'cyan', label: 'Running' }
+    case 'restoring': return { color: 'cyan', label: 'Restoring' }
+    case 'error': return { color: 'rose', label: 'Error' }
+    case 'idle': return { color: 'emerald', label: 'Idle' }
+    default: return { color: 'emerald', label: status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Idle' }
   }
 }
 
@@ -23,91 +29,38 @@ interface Props {
 
 export default function BackupStatusCard({ data, error, onRetry }: Props) {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
-  const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
-  if (!isConnected && !data) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
-        <div className="flex items-center gap-2 mb-3">
-          <ServerOff size={14} className="text-slate-500" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Backups</h3>
-        </div>
-        <p className="text-xs text-slate-500">Not connected</p>
-      </div>
-    )
-  }
+  // the backup status is an admin's (the server answers 403 to anyone else, and the dashboard does not ask)
+  if (!isAdmin) return <Card card="backup-status"><CardEmpty icon={<Lock size={20} />} title="For admins" hint="An admin account makes and checks the backups." /></Card>
+  if (!isConnected && !data) return <Card card="backup-status" dim><CardOffline /></Card>
+  if (!data && error) return <Card card="backup-status"><CardError title="Could not load the backup status" error={error} onRetry={onRetry} /></Card>
+  if (!data) return <Card card="backup-status"><CardLoading label="Loading the backup status…" rows={2} /></Card>
 
-  if (isConnected && !data && error) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertCircle size={14} className="text-amber-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Backups</h3>
-        </div>
-        <p className="text-xs text-slate-500 mb-2">Unable to load backup status</p>
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            <RefreshCw size={10} />
-            Retry
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  if (isConnected && !data) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3">
-          <HardDrive size={14} className="text-emerald-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Backups</h3>
-        </div>
-        <div className="space-y-2">
-          <div className="h-6 w-16 rounded-md bg-slate-800/40 animate-pulse" />
-          <div className="h-4 w-40 rounded bg-slate-800/40 animate-pulse" />
-        </div>
-      </div>
-    )
-  }
-
-  const { status, last_backup, progress } = data!
+  const { status, last_backup, progress } = data
+  const chip = statusChip(status)
 
   return (
-    <div
-      className="glass-card p-4 md:p-6 animate-fade-in cursor-pointer hover:border-white/10 transition-colors"
-      onClick={() => setCurrentPage('backup')}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <HardDrive size={14} className="text-emerald-400" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Backups</h3>
-        </div>
-        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold capitalize ${statusBadge(status)}`}>
-          {status}
-        </span>
-      </div>
+    <Card card="backup-status" badge={<Badge component="span" color={chip.color}>{chip.label}</Badge>} open="backup" tone={status === 'error' ? 'problem' : undefined}>
       {status === 'running' && progress && (
         <div className="mb-3">
           <div className="h-1.5 w-full rounded-full bg-slate-800/60 overflow-hidden">
-            <div className="h-full bg-amber-500 rounded-full transition-all duration-500 animate-pulse" style={{ width: '60%' }} />
+            <div className="h-full bg-cyan-500 rounded-full transition-all duration-500 animate-pulse" style={{ width: '60%' }} />
           </div>
-          <p className="text-[10px] text-amber-400 mt-1">{progress}</p>
+          <p className="text-[11px] text-cyan-400 mt-1">{progress}</p>
         </div>
       )}
       {last_backup ? (
-        <div className="space-y-1">
-          <p className="text-xs text-slate-300">{last_backup.filename}</p>
-          <div className="flex items-center gap-3 text-[10px] text-slate-500">
+        <div className="space-y-1 min-w-0">
+          <p className="text-xs text-slate-200 font-mono truncate" title={last_backup.filename}>{last_backup.filename}</p>
+          <div className="flex items-center gap-3 text-[11px] text-slate-500">
             <span>{last_backup.size}</span>
             <span>{last_backup.timestamp}</span>
           </div>
         </div>
       ) : (
-        <p className="text-xs text-slate-500">No backups yet</p>
+        <CardEmpty icon={<Archive size={22} />} title="No backups yet" hint={`Make one on the ${pageLabel('backup')} page.`} />
       )}
-    </div>
+    </Card>
   )
 }
