@@ -78,7 +78,7 @@ export default function ProxmoxCard() {
             </div>
           ))}
           <div className="divide-y divide-white/[0.04]">
-            {(vms.data?.vms ?? []).slice(0, 8).map((v) => (
+            {(vms.data?.vms ?? []).slice(0, 60).map((v) => (
               <button key={`${v.node}/${v.type}/${v.vmid}`} type="button" onClick={() => setCurrentPage('proxmox')} className="w-full flex items-center gap-2 py-1.5 text-left hover:bg-white/[0.03] rounded-lg px-1">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${v.status === 'running' ? 'bg-emerald-400' : v.status === 'paused' ? 'bg-amber-400' : 'bg-slate-500'}`} aria-hidden />
                 <span className="text-xs text-slate-200 truncate flex-1 min-w-0">{v.name}{memberByVm.get(v.vmid) ? <span className="text-[10px] text-violet-300 ml-1">· {memberByVm.get(v.vmid)!.stacks_total} stack{memberByVm.get(v.vmid)!.stacks_total === 1 ? '' : 's'}</span> : null}</span>
@@ -86,7 +86,7 @@ export default function ProxmoxCard() {
                 <span className="text-[10px] text-slate-500 tabular-nums w-16 text-right">{v.status === 'running' ? `${v.cpu}% · ${fmtGb(v.mem)}` : v.status}</span>
               </button>
             ))}
-            {(vms.data?.vms.length ?? 0) > 8 && <button type="button" onClick={() => setCurrentPage('proxmox')} className="w-full text-[11px] text-slate-400 hover:text-slate-200 py-1.5">and {(vms.data?.vms.length ?? 0) - 8} more…</button>}
+            {(vms.data?.vms.length ?? 0) > 60 && <button type="button" onClick={() => setCurrentPage('proxmox')} className="w-full text-[11px] text-slate-400 hover:text-slate-200 py-1.5">and {(vms.data?.vms.length ?? 0) - 8} more…</button>}
           </div>
         </CardBody>
       )}

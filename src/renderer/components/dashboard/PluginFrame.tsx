@@ -30,6 +30,10 @@ function themeStyle(): string {
   return `<style>:root{${decl.join(';')}}</style>`
 }
 
+// The page a card lives in is exactly as tall as its frame (html and body are 100 %): a card that wants to follow its box when someone resizes it gives its root height: 100% and lets a
+// list take the rest (flex: 1; min-height: 0; overflow-y: auto) instead of a fixed max-height. Ahead of the card's own styles, so a card that sets its own body is unaffected.
+const BASE_STYLE = '<style>html,body{height:100%}</style>'
+
 /** counts up whenever the look changes (dark ↔ light, another theme), so a card is drawn again in the new palette */
 function useThemeKey(): number {
   const [key, setKey] = useState(0)
@@ -56,7 +60,7 @@ export function PluginCardFrame({ pluginName, cardName, title, refreshInterval =
         if (cancelled) return
         // Blob URL has null origin — CSP of parent page does NOT apply
         // Scripts execute freely inside blob URL iframes
-        const blob = new Blob([PLUGIN_BRIDGE + themeStyle() + res.html], { type: 'text/html' })
+        const blob = new Blob([PLUGIN_BRIDGE + themeStyle() + BASE_STYLE + res.html], { type: 'text/html' })
         setSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
         setError(false)
       })

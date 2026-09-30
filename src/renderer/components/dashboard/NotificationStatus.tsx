@@ -7,7 +7,7 @@ import { Badge } from '@mantine/core'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { pageLabel } from '../../constants/pageTitles'
 import type { NotificationHistoryResponse } from '../../../shared/types'
-import { Card, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
+import { Card, CardBody, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
 
 interface Props {
   data: NotificationHistoryResponse | null
@@ -23,7 +23,7 @@ export default function NotificationStatus({ data, error, onRetry }: Props) {
   if (!data) return <Card card="notifications"><CardLoading label="Loading the notifications…" rows={2} /></Card>
 
   const history = data.history
-  const recent = history.slice(0, 3)
+  const recent = history.slice(0, 30)   // as many as the card is tall: the body scrolls beyond that
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000
   const recentCount = history.filter((h) => new Date(h.timestamp).getTime() > dayAgo).length
 
@@ -32,7 +32,7 @@ export default function NotificationStatus({ data, error, onRetry }: Props) {
       {recent.length === 0 ? (
         <CardEmpty icon={<Bell size={22} />} title="No notifications sent" hint={`Set up webhooks and rules on the ${pageLabel('notifications')} page.`} />
       ) : (
-        <div className="space-y-1.5">
+        <CardBody className="space-y-1.5">
           {recent.map((h) => {
             const ok = h.status_code >= 200 && h.status_code < 300
             return (
@@ -45,7 +45,7 @@ export default function NotificationStatus({ data, error, onRetry }: Props) {
               </div>
             )
           })}
-        </div>
+        </CardBody>
       )}
     </Card>
   )

@@ -91,8 +91,8 @@ export default function RecentEvents() {
   const loading = useLogStore((s) => s.loading)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
 
-  // Take the last 10 events, most recent first
-  const recentEvents = [...events].slice(-10).reverse()
+  // The latest events, most recent first: as many as the card is tall (the body scrolls beyond that)
+  const recentEvents = [...events].slice(-60).reverse()
 
   if (loading && events.length === 0) return <Card card="recent-events"><CardLoading label="Loading the events…" rows={5} /></Card>
   if (!isConnected && events.length === 0) return <Card card="recent-events" dim><CardOffline /></Card>

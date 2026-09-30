@@ -105,7 +105,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
         {whitelist.length > 0 && (
           <p className="truncate">Trusted: <span className="font-mono text-slate-300">{whitelist.join(', ')}</span></p>
         )}
-        {decisions.slice(0, 5).map((d) => (
+        {decisions.slice(0, 60).map((d) => (
           <div key={`${d.ip}-${d.scenario}`} className="flex items-center justify-between gap-2">
             <span className="truncate"><span className="font-mono text-slate-300">{d.ip}</span> <span className="text-slate-600">{d.scenario?.replace('crowdsecurity/', '')}</span></span>
             {isAdmin && (
@@ -121,7 +121,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
             )}
           </div>
         ))}
-        {decisions.length > 5 && <p className="text-slate-600">+{decisions.length - 5} more</p>}
+        {decisions.length > 60 && <p className="text-slate-600">+{decisions.length - 60} more</p>}
       </CardBody>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

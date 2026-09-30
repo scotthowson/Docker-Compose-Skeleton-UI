@@ -7,7 +7,7 @@ import { Badge } from '@mantine/core'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { pageLabel } from '../../constants/pageTitles'
 import type { AutomationListResponse } from '../../../shared/types'
-import { Card, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
+import { Card, CardBody, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
 
 interface Props {
   data: AutomationListResponse | null
@@ -24,14 +24,14 @@ export default function ActiveAutomations({ data, error, onRetry }: Props) {
 
   const automations = data.automations
   const enabled = automations.filter((a) => a.enabled).length
-  const recent = automations.slice(0, 3)
+  const recent = automations.slice(0, 30)   // as many as the card is tall: the body scrolls beyond that
 
   return (
     <Card card="automations" meta={`${enabled}/${automations.length} enabled`} open="automations">
       {recent.length === 0 ? (
         <CardEmpty icon={<Bot size={22} />} title="No automations yet" hint={`Create a rule on the ${pageLabel('automations')} page and it shows up here.`} />
       ) : (
-        <div className="space-y-1.5">
+        <CardBody className="space-y-1.5">
           {recent.map((a) => (
             <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] border border-white/5 px-2.5 py-1.5">
               <div className="flex items-center gap-2 min-w-0">
@@ -41,7 +41,7 @@ export default function ActiveAutomations({ data, error, onRetry }: Props) {
               <Badge component="span" color={a.trigger_type === 'schedule' ? 'slate' : 'cyan'}>{a.trigger_type}</Badge>
             </div>
           ))}
-        </div>
+        </CardBody>
       )}
     </Card>
   )

@@ -272,7 +272,7 @@ export default function HealthSummary() {
         </Hint>
       )}
     >
-      <CardBody className={link.live ? '' : 'opacity-50 saturate-50'}>
+      <CardBody className={`flex flex-col ${link.live ? '' : 'opacity-50 saturate-50'}`}>
         {/* Score gauge + factors */}
         <div className="flex items-start gap-4">
           <div className="flex flex-col items-center gap-1.5">
@@ -314,12 +314,12 @@ export default function HealthSummary() {
 
         {/* Container list: unhealthy first, then running, then stopped */}
         {containers.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-white/5 flex flex-col">
+          <div className="mt-3 pt-3 border-t border-white/5 flex flex-col flex-1 min-h-[9rem]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Containers</span>
               <span className="text-[10px] text-slate-500 tabular-nums">{runningCount}/{containers.length} running</span>
             </div>
-            <div className="overflow-y-auto scrollbar-thin space-y-0.5 max-h-[200px]">
+            <div className="overflow-y-auto scrollbar-thin space-y-0.5 flex-1 min-h-0">
               {containers
                 .slice()
                 .sort((a, b) => {

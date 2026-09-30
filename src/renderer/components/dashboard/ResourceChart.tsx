@@ -183,9 +183,9 @@ function TrendingCharts({ history }: { history: ResourceHistoryPoint[] }) {
   }
 
   const chart = (label: string, dataKey: 'cpu' | 'mem', color: string, gradient: string, series: string) => (
-    <div>
+    <div className="flex flex-col flex-1 min-h-[10rem]">
       <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
-      <div className="h-36">
+      <div className="flex-1 min-h-[8rem]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={history} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
@@ -211,7 +211,7 @@ function TrendingCharts({ history }: { history: ResourceHistoryPoint[] }) {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5 h-full">
       {chart('CPU load', 'cpu', METRIC_HEX.cpu, 'cpuGradient', 'CPU')}
       {chart('Memory usage', 'mem', METRIC_HEX.mem, 'memGradient', 'Memory')}
     </div>
@@ -314,7 +314,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       card="resource-chart"
       actions={<CardSwitch label="View" value={activeTab} onChange={setActiveTab} data={[{ value: 'gauges', label: 'Gauges' }, { value: 'trending', label: 'Trending' }]} />}
     >
-      <CardBody>
+      <CardBody className={activeTab === 'trending' ? 'flex flex-col' : ''}>
         {activeTab === 'gauges' ? (
           <>
             <div className="gauge-grid grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:items-start sm:justify-around sm:gap-3">

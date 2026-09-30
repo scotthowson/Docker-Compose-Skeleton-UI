@@ -1,12 +1,12 @@
 // =============================================================================
-// TopResourceConsumers — the five containers using the most CPU or memory
+// TopResourceConsumers — the containers using the most CPU or memory (as many as the card is tall)
 // =============================================================================
 
 import { useState } from 'react'
 import { Cpu } from 'lucide-react'
 import { useContainerStore } from '../../stores/containerStore'
 import { useConnectionStore } from '../../stores/connectionStore'
-import { Card, CardEmpty, CardOffline, CardSwitch, pctTone, TONE_FILL } from './cardShared'
+import { Card, CardBody, CardEmpty, CardOffline, CardSwitch, pctTone, TONE_FILL } from './cardShared'
 
 function parsePercent(val: string): number {
   const n = parseFloat(val)
@@ -23,7 +23,7 @@ export default function TopResourceConsumers() {
   const entries = Object.entries(stats)
     .map(([name, s]) => ({ name, cpu: parsePercent(s.cpu_percent), mem: parsePercent(s.memory_percent) }))
     .sort((a, b) => mode === 'cpu' ? b.cpu - a.cpu : b.mem - a.mem)
-    .slice(0, 5)
+    .slice(0, 20)
 
   return (
     <Card
@@ -34,7 +34,7 @@ export default function TopResourceConsumers() {
       {entries.length === 0 ? (
         <CardEmpty icon={<Cpu size={22} />} title="No container stats yet" hint="They appear once containers are running." />
       ) : (
-        <div className="space-y-2">
+        <CardBody className="space-y-2">
           {entries.map((e) => {
             const pct = mode === 'cpu' ? e.cpu : e.mem
             return (
@@ -49,7 +49,7 @@ export default function TopResourceConsumers() {
               </div>
             )
           })}
-        </div>
+        </CardBody>
       )}
     </Card>
   )
