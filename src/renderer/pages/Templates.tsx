@@ -1,9 +1,12 @@
 // =============================================================================
-// Templates — Stack Templates / Quick Deploy Gallery with category filtering,
-//             search, template cards, and deploy modal
+// Templates — the gallery of ready-made stacks: category filtering, search,
+//             template cards, the deploy sheet (target stack, variables, routes,
+//             limits, preview) and the editor for your own templates. A category
+//             is told by its icon and its name, not by a colour: the colours of
+//             this dashboard mean state (violet is the fleet's).
 // =============================================================================
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react'
 import {
   Rocket,
   Search,
@@ -44,21 +47,29 @@ import {
   KeyRound,
   Wand2,
   Terminal, Moon,
-  Satellite, Home,
+  Satellite, Home, Check,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { Switch } from '@mantine/core'
+import { Badge, SegmentedControl, Select, Switch } from '@mantine/core'
 import { useComposeLinter, useEnvLinter } from '../hooks/useComposeLinter'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { usePluginStore } from '../stores/pluginStore'
-import { ErrorState } from '../components/common/PageState'
+import { isMobile } from '../hooks/useMobile'
+import { EmptyState, ErrorState, LoadingState } from '../components/common/PageState'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM, BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, BTN_SHEET_DANGER,
+  TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST_DANGER,
+} from '../lib/ui'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
   validateCompose,
 } from '../api/endpoints'
@@ -89,39 +100,24 @@ interface CategoryDef {
   icon: React.ElementType
   // Maps template category strings to this filter ID
   aliases: string[]
-  color: { badge: string; iconColor: string; border: string }
 }
 
 const CATEGORIES: CategoryDef[] = [
-  { id: 'all', label: 'All', icon: Package, aliases: [], color: { badge: '', iconColor: '', border: '' } },
-  { id: 'media', label: 'Media', icon: Tv, aliases: ['media', 'photos', 'content', 'publishing'],
-    color: { badge: 'bg-violet-500/15 text-violet-400 border-violet-500/20', iconColor: 'text-violet-400', border: 'border-l-violet-500/60' } },
-  { id: 'monitoring', label: 'Monitoring', icon: BarChart3, aliases: ['monitoring', 'metrics', 'dashboard'],
-    color: { badge: 'bg-amber-500/15 text-amber-400 border-amber-500/20', iconColor: 'text-amber-400', border: 'border-l-amber-500/60' } },
-  { id: 'web', label: 'Web', icon: Globe, aliases: ['web', 'communication'],
-    color: { badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20', iconColor: 'text-emerald-400', border: 'border-l-emerald-500/60' } },
-  { id: 'databases', label: 'Databases', icon: Database, aliases: ['databases', 'database', 'db'],
-    color: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20', iconColor: 'text-cyan-400', border: 'border-l-cyan-500/60' } },
-  { id: 'development', label: 'Development', icon: Code, aliases: ['development', 'dev'],
-    color: { badge: 'bg-rose-500/15 text-rose-400 border-rose-500/20', iconColor: 'text-rose-400', border: 'border-l-rose-500/60' } },
-  { id: 'tools', label: 'Tools', icon: Sparkles, aliases: ['tools', 'utilities', 'remote'],
-    color: { badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20', iconColor: 'text-indigo-400', border: 'border-l-indigo-500/60' } },
-  { id: 'productivity', label: 'Productivity', icon: Store, aliases: ['productivity', 'notes', 'documents', 'knowledge', 'finance', 'lifestyle'],
-    color: { badge: 'bg-teal-500/15 text-teal-400 border-teal-500/20', iconColor: 'text-teal-400', border: 'border-l-teal-500/60' } },
-  { id: 'automation', label: 'Automation', icon: Sparkles, aliases: ['automation', 'notifications', 'sync', 'home', 'smart-home'],
-    color: { badge: 'bg-orange-500/15 text-orange-400 border-orange-500/20', iconColor: 'text-orange-400', border: 'border-l-orange-500/60' } },
-  { id: 'security', label: 'Security', icon: Shield, aliases: ['security', 'vpn', 'privacy'],
-    color: { badge: 'bg-red-500/15 text-red-400 border-red-500/20', iconColor: 'text-red-400', border: 'border-l-red-500/60' } },
-  { id: 'network', label: 'Network', icon: Network, aliases: ['network', 'management'],
-    color: { badge: 'bg-blue-500/15 text-blue-400 border-blue-500/20', iconColor: 'text-blue-400', border: 'border-l-blue-500/60' } },
-  { id: 'storage', label: 'Storage', icon: HardDrive, aliases: ['storage', 'backup'],
-    color: { badge: 'bg-sky-500/15 text-sky-400 border-sky-500/20', iconColor: 'text-sky-400', border: 'border-l-sky-500/60' } },
-  { id: 'download', label: 'Download', icon: Download, aliases: ['download'],
-    color: { badge: 'bg-lime-500/15 text-lime-400 border-lime-500/20', iconColor: 'text-lime-400', border: 'border-l-lime-500/60' } },
-  { id: 'entertainment', label: 'Entertainment', icon: Tv, aliases: ['entertainment', 'ai', 'gaming'],
-    color: { badge: 'bg-pink-500/15 text-pink-400 border-pink-500/20', iconColor: 'text-pink-400', border: 'border-l-pink-500/60' } },
-  { id: 'other', label: 'Other', icon: Package, aliases: [],
-    color: { badge: 'bg-slate-500/15 text-slate-400 border-slate-500/20', iconColor: 'text-slate-400', border: 'border-l-slate-500/60' } },
+  { id: 'all', label: 'All', icon: Package, aliases: [] },
+  { id: 'media', label: 'Media', icon: Tv, aliases: ['media', 'photos', 'content', 'publishing'] },
+  { id: 'monitoring', label: 'Monitoring', icon: BarChart3, aliases: ['monitoring', 'metrics', 'dashboard'] },
+  { id: 'web', label: 'Web', icon: Globe, aliases: ['web', 'communication'] },
+  { id: 'databases', label: 'Databases', icon: Database, aliases: ['databases', 'database', 'db'] },
+  { id: 'development', label: 'Development', icon: Code, aliases: ['development', 'dev'] },
+  { id: 'tools', label: 'Tools', icon: Sparkles, aliases: ['tools', 'utilities', 'remote'] },
+  { id: 'productivity', label: 'Productivity', icon: Store, aliases: ['productivity', 'notes', 'documents', 'knowledge', 'finance', 'lifestyle'] },
+  { id: 'automation', label: 'Automation', icon: Sparkles, aliases: ['automation', 'notifications', 'sync', 'home', 'smart-home'] },
+  { id: 'security', label: 'Security', icon: Shield, aliases: ['security', 'vpn', 'privacy'] },
+  { id: 'network', label: 'Network', icon: Network, aliases: ['network', 'management'] },
+  { id: 'storage', label: 'Storage', icon: HardDrive, aliases: ['storage', 'backup'] },
+  { id: 'download', label: 'Download', icon: Download, aliases: ['download'] },
+  { id: 'entertainment', label: 'Entertainment', icon: Tv, aliases: ['entertainment', 'ai', 'gaming'] },
+  { id: 'other', label: 'Other', icon: Package, aliases: [] },
 ]
 
 /** Resolve a template's category string to a CategoryDef */
@@ -134,17 +130,6 @@ function resolveCategory(cat: string): CategoryDef {
 const CATEGORY_ICON_MAP: Record<string, React.ElementType> = Object.fromEntries(
   CATEGORIES.filter((c) => c.id !== 'all').flatMap((c) => c.aliases.map((a) => [a, c.icon]))
 )
-
-const CATEGORY_COLOR_MAP: Record<string, { badge: string; iconColor: string }> = Object.fromEntries(
-  CATEGORIES.filter((c) => c.id !== 'all').flatMap((c) =>
-    c.aliases.map((a) => [a, { badge: c.color.badge, iconColor: c.color.iconColor }])
-  )
-)
-
-const DEFAULT_CATEGORY_COLOR = {
-  badge: 'bg-slate-500/15 text-slate-400 border-slate-500/20',
-  iconColor: 'text-slate-400',
-}
 
 /** Maps template categories to their default target stack directory name */
 const CATEGORY_TO_STACK: Record<string, string> = {
@@ -170,8 +155,10 @@ function getCategoryIcon(category: string): React.ElementType {
   return CATEGORY_ICON_MAP[category.toLowerCase()] ?? Package
 }
 
-function getCategoryColors(category: string) {
-  return CATEGORY_COLOR_MAP[category.toLowerCase()] ?? DEFAULT_CATEGORY_COLOR
+/** a template's category: its icon and its name in one neutral pill */
+function CategoryChip({ category, size = 'sm' }: { category: string; size?: 'sm' | 'xs' }) {
+  const Icon = getCategoryIcon(category)
+  return <Badge component="span" color="slate" size={size} leftSection={<Icon size={size === 'xs' ? 9 : 10} />}>{category}</Badge>
 }
 
 function matchesCategory(template: TemplateInfo, filter: CategoryId): boolean {
@@ -528,6 +515,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   const defaultStack = preferredStack || template.target_stack || CATEGORY_TO_STACK[template.category.toLowerCase()] || ''
   const [targetStack, setTargetStack] = useState(defaultStack)
+  // the stacks to choose from, once each by name (a name on the hub and in a VM is one choice: the deploy goes by name)
+  const stackChoices = useMemo(() => Array.from(new Map(stacks.map((st) => [st.name, { value: st.name, label: st.name }])).values()), [stacks])
   // The suggested stack may not exist on this server (renamed or removed):
   // never preview or deploy into a stack that is not in the list
   const suggestedExists = stacks.some((s) => s.name === defaultStack)
@@ -548,8 +537,6 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [showCompose, setShowCompose] = useState(false)
   // F1: Confirmation step
   const [confirming, setConfirming] = useState(false)
-  // F2: Custom dropdown open state
-  const [dropdownOpen, setDropdownOpen] = useState(false)
   // F4: Local deploying state (stays true through wait period, unlike parent prop)
   const [localDeploying, setLocalDeploying] = useState(false)
   // F4: Success result
@@ -1015,7 +1002,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     : localDeploying ? 'busy' : 'idle'
   const headerTitle = deployResult
     ? (outcome === 'running' ? 'Deployed and running' : outcome === 'failed' ? 'Deployment needs attention' : outcome === 'not-started' ? 'Merged — not started' : `Deploying ${template.name}`)
-    : localDeploying ? `Preparing ${template.name}${selectedStack?.placement === 'vm' ? ` in VM ${selectedStack.member_name || selectedStack.vmid || ''}` : ''}` : `Deploy: ${template.name}`
+    : localDeploying ? `Preparing ${template.name}${selectedStack?.placement === 'vm' ? ` in VM ${selectedStack.member_name || selectedStack.vmid || ''}` : ''}` : `Deploy ${template.name}`
   const headerSub = deployResult
     ? (outcome === 'pending'
       ? `${phaseLabel(activity?.phase)}${activity?.elapsed_s ? ` · ${activity.elapsed_s}s` : ''}`
@@ -1027,10 +1014,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const currentStep = stepForPhase(activity?.phase, progressServices)
 
   const renderSecretsPanel = () => requiredSecrets.length === 0 ? null : (
-    <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-3 space-y-2">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <KeyRound size={13} className="text-violet-300 shrink-0" />
-        <p className="text-xs font-semibold text-violet-200">Secrets this deployment uses</p>
+        <KeyRound size={13} className="text-slate-300 shrink-0" />
+        <p className="text-xs font-semibold text-slate-200">Secrets this deployment uses</p>
         <span className="ml-auto text-[10px] text-slate-500">
           {existingSecrets === null ? 'checking…' : missingSecrets.length === 0 ? 'all available' : `${missingSecrets.length} missing`}
         </span>
@@ -1042,24 +1029,27 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           <div key={name} className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[11px] text-slate-200">{name}</span>
             {exists ? (
-              <span className="text-[9px] px-1.5 py-px rounded bg-emerald-500/10 text-emerald-300">stored</span>
+              <Badge component="span" color="emerald" size="xs">stored</Badge>
             ) : willCreate ? (
-              <span className="text-[9px] px-1.5 py-px rounded bg-cyan-500/10 text-cyan-300">stored when you deploy</span>
+              <Badge component="span" color="cyan" size="xs">stored when you deploy</Badge>
             ) : (
               <>
-                <span className="text-[9px] px-1.5 py-px rounded bg-amber-500/10 text-amber-300">missing</span>
+                <Badge component="span" color="amber" size="xs">missing</Badge>
                 <input
                   type="password"
                   value={secretDrafts[name] ?? ''}
                   onChange={(e) => setSecretDrafts((prev) => ({ ...prev, [name]: e.target.value }))}
+                  aria-label={`Value of the secret ${name}`}
                   placeholder="value"
-                  className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                  className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                 />
-                <button type="button" onClick={() => setSecretDrafts((prev) => ({ ...prev, [name]: generateSecretValue() }))} className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10" title="Generate a random 32-character value">
-                  <Wand2 size={11} /> Generate
-                </button>
-                <button type="button" onClick={() => void handleCreateSecret(name)} disabled={creatingSecret === name || !isAdmin} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-violet-500/15 text-violet-200 border border-violet-500/25 hover:bg-violet-500/25 disabled:opacity-50">
-                  {creatingSecret === name ? <Loader2 size={11} className="animate-spin" /> : <Lock size={11} />} Store
+                <Hint label="Generate a random 32-character value">
+                  <button type="button" onClick={() => setSecretDrafts((prev) => ({ ...prev, [name]: generateSecretValue() }))} className={BTN_CARD_QUIET}>
+                    <Wand2 size={12} /> Generate
+                  </button>
+                </Hint>
+                <button type="button" onClick={() => void handleCreateSecret(name)} disabled={creatingSecret === name || !isAdmin} className={`${BTN_CARD} ${TONE_OK}`}>
+                  {creatingSecret === name ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />} Store
                 </button>
               </>
             )}
@@ -1074,7 +1064,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
   const renderOutputPanel = (defaultOpen: boolean) => (
     <div className="rounded-xl border border-white/5 bg-slate-950/70 overflow-hidden">
-      <button type="button" onClick={() => setShowOutput((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors">
+      <button type="button" onClick={() => setShowOutput((v) => !v)} aria-expanded={showOutput} className="w-full flex items-center justify-between px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors">
         <span className="flex items-center gap-1.5"><Terminal size={11} /> Compose output</span>
         <span>{activity?.output?.length ?? 0} lines · {(showOutput ?? defaultOpen) ? 'hide' : 'show'}</span>
       </button>
@@ -1143,10 +1133,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               <p className="text-[11px] text-slate-500 truncate">{headerSub}</p>
             </div>
           </div>
-          <button aria-label="Close"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0 ml-2"
-          >
+          <button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} text-slate-500 hover:text-slate-200 hover:bg-white/10 shrink-0 ml-2`}>
             <X size={16} />
           </button>
         </div>
@@ -1185,12 +1172,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {renderOutputPanel(true)}
               {activityError && <p className="text-[10px] text-amber-400/80">{activityError}</p>}
             </div>
-            <div className="flex items-center justify-between gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
               <p className="text-[10px] text-slate-500">Closing this window does not stop the deployment.</p>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">Continue in background</button>
-                <button onClick={handleViewStack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 transition-colors">
-                  View Stack <ArrowRight size={13} />
+                <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>Continue in background</button>
+                <button type="button" onClick={handleViewStack} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
+                  View stack <ArrowRight size={14} />
                 </button>
               </div>
             </div>
@@ -1212,8 +1199,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   {autoOpenIn !== null && (
                     <div className="flex items-center gap-2 text-[11px] text-slate-400">
                       <Loader2 size={12} className="animate-spin text-cyan-400" />
-                      Opening the container page in {autoOpenIn}s
-                      <button onClick={() => setAutoOpenIn(null)} className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">Stay here</button>
+                      Opening the {pageLabel('containers')} page in {autoOpenIn}s
+                      <button type="button" onClick={() => setAutoOpenIn(null)} className={BTN_CARD_QUIET}>Stay here</button>
                     </div>
                   )}
                 </div>
@@ -1221,7 +1208,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {outcome === 'failed' && (
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] p-3">
                   <p className="text-xs font-semibold text-rose-300 flex items-center gap-2"><AlertTriangle size={13} /> {phaseLabel(activity?.phase)}</p>
-                  <p className="text-[11px] text-rose-200/80 mt-1 break-words">{activity?.error || activityError || 'Compose reported a problem while starting the services. The output below has the details; the compose file was merged and can be edited on the Stacks page.'}</p>
+                  <p className="text-[11px] text-rose-200/80 mt-1 break-words">{activity?.error || activityError || 'Compose reported a problem while starting the services. The output below has the details; the compose file was merged and can be edited on the ' + pageLabel('stacks') + ' page.'}</p>
                 </div>
               )}
               {outcome === 'not-started' && (
@@ -1238,28 +1225,28 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {(outcome === 'failed' || (activity?.output?.length ?? 0) > 0) && renderOutputPanel(outcome === 'failed')}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
-              <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">Done</button>
+              <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>Done</button>
               {isAdmin && onUndeploy && (
-                <button onClick={handleUndoDeploy} disabled={undeploying} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors disabled:opacity-50">
-                  {undeploying ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
-                  Undo Deploy
+                <button type="button" onClick={handleUndoDeploy} disabled={undeploying} className={`${BTN_SHEET} ${TONE_DANGER} flex-1 sm:flex-none`}>
+                  {undeploying ? <Loader2 size={15} className="animate-spin" /> : <Undo2 size={15} />}
+                  Undo deploy
                 </button>
               )}
               {isAdmin && outcome !== 'running' && (
-                <button onClick={handleStartNow} disabled={outcome === 'not-started' && missingSecrets.length > 0} title={outcome === 'not-started' && missingSecrets.length > 0 ? 'Store the missing secrets first' : 'Run the stack start again'} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors disabled:opacity-50">
-                  <Play size={13} />
+                <button type="button" onClick={handleStartNow} disabled={outcome === 'not-started' && missingSecrets.length > 0} title={outcome === 'not-started' && missingSecrets.length > 0 ? 'Store the missing secrets first' : 'Run the stack start again'} className={`${BTN_SHEET} ${TONE_OK} flex-1 sm:flex-none`}>
+                  <Play size={15} />
                   {outcome === 'failed' ? 'Retry start' : 'Start now'}
                 </button>
               )}
               {outcome === 'running' && (
-                <button onClick={openContainers} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors">
-                  <Package size={13} />
-                  View Container{(deployResult.services_added?.length ?? 0) > 1 ? 's' : ''}
+                <button type="button" onClick={openContainers} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
+                  <Package size={15} />
+                  View container{(deployResult.services_added?.length ?? 0) > 1 ? 's' : ''}
                 </button>
               )}
-              <button onClick={handleViewStack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
-                View Stack
-                <ArrowRight size={13} />
+              <button type="button" onClick={handleViewStack} className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}>
+                View stack
+                <ArrowRight size={15} />
               </button>
             </div>
           </>
@@ -1267,56 +1254,42 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           <>
             {/* Body — scrollable */}
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 scrollbar-thin">
-              {/* F2: Enriched target stack dropdown */}
+              {/* The stack the template is merged into */}
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Target Stack <span className="text-rose-400">*</span>
+                <label htmlFor="deploy-target-stack" className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Target stack <span className="text-rose-400">*</span>
                 </label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setDropdownOpen((prev) => !prev)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-200 font-mono focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors text-left"
-                  >
-                    {targetStack ? (
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selectedStack?.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                        <span className="truncate">{targetStack}</span>
-                        {selectedStack && (
-                          <span className="text-[10px] text-slate-500 shrink-0">
-                            {selectedStack.status === 'running' ? `${selectedStack.running_containers} running` : 'stopped'}
-                          </span>
-                        )}
-                        {targetStack === defaultStack && (
-                          <span className="text-[9px] text-emerald-500/70 font-semibold shrink-0">recommended</span>
-                        )}
+                <Select
+                  id="deploy-target-stack"
+                  data={stackChoices}
+                  value={targetStack || null}
+                  onChange={(v) => { if (v) { setTargetStack(v); setConfirming(false) } }}
+                  placeholder="Select a stack..."
+                  searchable={!isMobile && stackChoices.length > 8}
+                  nothingFoundMessage="No stack matches"
+                  spellCheck={false}
+                  autoComplete="off"
+                  styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
+                  renderOption={({ option, checked }) => {
+                    const st = stacks.find((x) => x.name === option.value)
+                    return (
+                      <span className="flex items-center gap-2.5 w-full min-w-0 text-xs">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st?.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} aria-hidden />
+                        <span className="font-mono truncate flex-1">{option.label}{st?.placement === 'vm' ? <span className="ml-1.5 text-[9px] font-sans text-violet-300/90">VM{st.vmid ? ` ${st.vmid}` : ''}</span> : null}</span>
+                        <span className="text-[10px] text-slate-500 shrink-0">{st ? (st.status === 'running' ? `${st.running_containers} running` : 'stopped') : ''}</span>
+                        {option.value === defaultStack && <span className="text-[9px] text-emerald-500/70 font-semibold shrink-0">recommended</span>}
+                        <Check size={13} className={`shrink-0 ${checked ? '' : 'invisible'}`} aria-hidden />
                       </span>
-                    ) : (
-                      <span className="text-slate-500">Select a stack...</span>
-                    )}
-                    <ChevronDown size={14} className={`text-slate-500 transition-transform duration-150 shrink-0 ml-2 ${dropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {dropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg bg-slate-800 border border-white/10 shadow-xl shadow-black/30 scrollbar-thin">
-                      {stacks.map((s) => (
-                        <button
-                          key={`${s.member ?? ''}|${s.name}`}
-                          onClick={() => { setTargetStack(s.name); setDropdownOpen(false); setConfirming(false) }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors ${s.name === targetStack ? 'bg-white/5' : ''}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                          <span className="font-mono text-slate-200 truncate flex-1">{s.name}{s.placement === 'vm' ? <span className="ml-1.5 text-[9px] font-sans text-amber-300/90">VM{s.vmid ? ` ${s.vmid}` : ''}</span> : null}</span>
-                          <span className="text-[10px] text-slate-500 shrink-0">
-                            {s.status === 'running' ? `${s.running_containers} running` : 'stopped'}
-                          </span>
-                          {s.name === defaultStack && (
-                            <span className="text-[9px] text-emerald-500/70 font-semibold shrink-0">recommended</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                    )
+                  }}
+                />
+                {selectedStack && (
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {selectedStack.status === 'running' ? `${selectedStack.running_containers} running` : 'Stopped'}
+                    {selectedStack.placement === 'vm' && <span className="text-violet-300/90"> · in the VM {selectedStack.member_name || selectedStack.vmid}</span>}
+                    {targetStack === defaultStack && <span className="text-emerald-500/80"> · recommended for this template</span>}
+                  </p>
+                )}
                 {defaultStack && suggestedExists && targetStack !== defaultStack && (
                   <p className="text-[10px] text-amber-400/70 mt-1">
                     Suggested stack for this template: <span className="font-mono">{defaultStack}</span>
@@ -1358,9 +1331,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
                 return allVars.length > 0 ? (
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    <h4 className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
                       Variables
-                    </label>
+                    </h4>
                     <div className="space-y-2.5">
                       {allVars.map((v) => {
                         const value = variables[v.name] ?? v.defaultValue
@@ -1381,22 +1354,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 {v.required && <span className="text-[9px] text-rose-400 font-semibold">Required</span>}
                               </div>
                               {v.description && <p className="text-[10px] text-slate-500 mb-1.5">{v.description}</p>}
-                              <div className="flex rounded-lg overflow-hidden border border-white/10">
-                                {v.options.map((opt) => (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => handleVariableChange(v.name, opt.value)}
-                                    className={`flex-1 px-3 py-2 text-[11px] font-medium transition-all duration-150 ${
-                                      value === opt.value
-                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                        : 'bg-white/[0.03] text-slate-400 hover:bg-white/[0.06] hover:text-slate-300'
-                                    } ${v.options!.indexOf(opt) > 0 ? 'border-l border-white/10' : ''}`}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
-                              </div>
+                              <SegmentedControl
+                                fullWidth
+                                aria-label={v.label}
+                                value={value}
+                                onChange={(next) => handleVariableChange(v.name, next)}
+                                data={v.options.map((opt) => ({ value: opt.value, label: opt.label }))}
+                              />
                             </div>
                           )
                         }
@@ -1430,33 +1394,38 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 type={v.type === 'password' ? 'password' : 'text'}
                                 value={value}
                                 onChange={(e) => handleVariableChange(v.name, e.target.value)}
+                                aria-label={v.label}
                                 placeholder={v.defaultValue || v.name}
-                                className={`w-full px-3 py-2 rounded-lg bg-white/5 border text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 transition-all ${storeAsSecret.has(v.name) ? 'border-violet-500/30 focus:border-violet-500/50 focus:ring-violet-500/20 pr-10' : 'border-white/5 focus:border-emerald-500/40 focus:ring-emerald-500/20'} ${isSensitiveVariable(v) ? 'pr-10' : ''}`}
+                                className={`w-full px-3 py-2 rounded-lg bg-white/5 border text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 transition-all ${storeAsSecret.has(v.name) ? 'border-emerald-500/30 focus:border-emerald-500/50 focus:ring-emerald-500/20 pr-10' : 'border-white/5 focus:border-emerald-500/40 focus:ring-emerald-500/20'} ${isSensitiveVariable(v) ? 'pr-10' : ''}`}
                               />
                               {isSensitiveVariable(v) && isAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => setStoreAsSecret((prev) => { const next = new Set(prev); if (next.has(v.name)) next.delete(v.name); else next.add(v.name); return next })}
-                                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${storeAsSecret.has(v.name) ? 'text-violet-300 bg-violet-500/15' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
-                                  title={storeAsSecret.has(v.name) ? `Stored in the secret store as ${v.name}; the stack .env keeps only \${SECRETS_${v.name}}. Click to write the value into .env instead.` : `Store this value in the encrypted secret store as ${v.name} instead of the .env file`}
-                                >
-                                  <Lock size={12} />
-                                </button>
+                                <Hint label={storeAsSecret.has(v.name) ? `Stored in the secret store as ${v.name}; the stack .env keeps only \${SECRETS_${v.name}}. Click to write the value into .env instead.` : `Store this value in the encrypted secret store as ${v.name} instead of the .env file`}>
+                                  <button
+                                    type="button"
+                                    aria-label={`Store ${v.label} in the secret store`}
+                                    aria-pressed={storeAsSecret.has(v.name)}
+                                    onClick={() => setStoreAsSecret((prev) => { const next = new Set(prev); if (next.has(v.name)) next.delete(v.name); else next.add(v.name); return next })}
+                                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 grid h-7 w-7 place-items-center rounded-md transition-colors ${storeAsSecret.has(v.name) ? 'text-emerald-300 bg-emerald-500/15' : 'text-slate-500 hover:text-slate-200 hover:bg-white/10'}`}
+                                  >
+                                    <Lock size={12} />
+                                  </button>
+                                </Hint>
                               )}
                             </div>
                             {storeAsSecret.has(v.name) && (value ?? '').trim() && !SECRET_REF_ONE.test((value ?? '').trim()) && (() => {
                               const sn = secretNames[v.name] ?? v.name
                               const ok = SECRET_NAME_OK.test(sn)
                               return (
-                                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1 text-[10px] text-violet-300/70">
+                                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1 text-[10px] text-slate-400">
                                   <span>Saved as secret</span>
                                   <input
                                     type="text"
                                     value={sn}
                                     onChange={(e) => setSecretNames((prev) => ({ ...prev, [v.name]: e.target.value.replace(/[^A-Za-z0-9_]/g, '') }))}
                                     spellCheck={false}
+                                    aria-label={`Name of the secret for ${v.label}`}
                                     title="Name of the secret in the store — you can pick any name"
-                                    className={`w-44 px-1.5 py-0.5 rounded bg-white/5 border text-[10px] font-mono text-violet-200 focus:outline-none transition-colors ${ok ? 'border-violet-500/30 focus:border-violet-500/60' : 'border-rose-500/50'}`}
+                                    className={`w-44 px-1.5 py-0.5 rounded bg-white/5 border text-[10px] font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-colors ${ok ? 'border-emerald-500/30 focus:border-emerald-500/60' : 'border-rose-500/50'}`}
                                   />
                                   <span>when you deploy — the stack&apos;s .env will hold <span className="font-mono">{`\${SECRETS_${sn || '…'}}`}</span></span>
                                   {!ok && <span className="basis-full text-rose-400">Letters, digits and underscores, starting with a letter</span>}
@@ -1477,7 +1446,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 return (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container names</label>
+                      <h4 className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Container names</h4>
                       <span className="text-[10px] text-slate-500">{active.length} service{active.length === 1 ? '' : 's'}</span>
                     </div>
                     <div className="space-y-2">
@@ -1494,6 +1463,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 type="text"
                                 value={typed}
                                 onChange={(e) => setContainerNames((prev) => ({ ...prev, [svc.name]: e.target.value.replace(/\s+/g, '') }))}
+                                aria-label={`Container name of ${svc.name}`}
                                 placeholder={fallback}
                                 spellCheck={false}
                                 className={`flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white/5 border text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 transition-all ${blocking ? 'border-rose-500/50 focus:border-rose-500/60 focus:ring-rose-500/20' : warning ? 'border-amber-500/40 focus:border-amber-500/50 focus:ring-amber-500/20' : 'border-white/5 focus:border-emerald-500/40 focus:ring-emerald-500/20'}`}
@@ -1564,12 +1534,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   {/* Master toggle + header */}
                   <div className="flex items-center justify-between px-3 py-2.5 bg-emerald-500/5">
                     <button
+                      type="button"
+                      aria-expanded={showRoutes}
                       onClick={() => setShowRoutes((prev) => !prev)}
-                      className="flex items-center gap-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="flex items-center gap-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                     >
                       <ChevronDown size={14} className={`transition-transform duration-200 ${showRoutes ? '' : '-rotate-90'}`} />
                       <Network size={13} />
-                      HTTPS Routing
+                      HTTPS routing
                     </button>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-500">{enableRouting ? `${routeServices.filter((s) => s.enabled).length} route${routeServices.filter((s) => s.enabled).length !== 1 ? 's' : ''}` : 'Off'}</span>
@@ -1593,7 +1565,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             aria-checked={svc.enabled}
                             aria-label={`Route ${svc.name} over HTTPS`}
                             onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, enabled: !s.enabled } : s))}
-                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${svc.enabled ? 'bg-emerald-500/30 border-emerald-500/40 text-emerald-400' : 'border-white/10'}`}
+                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${svc.enabled ? 'bg-emerald-500/30 border-emerald-500/40 text-emerald-400' : 'border-white/10'}`}
                           >
                             {svc.enabled && <CheckCircle size={10} />}
                           </button>
@@ -1612,8 +1584,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                               type="button"
                               disabled={!svc.enabled}
                               onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, authelia: !s.authelia } : s))}
+                              aria-pressed={enableAuthelia || svc.authelia}
                               title={(enableAuthelia || svc.authelia) ? 'Protected by Authelia (click to serve without sign-in)' : 'Protect this route with Authelia sign-in'}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 ${(enableAuthelia || svc.authelia) ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${(enableAuthelia || svc.authelia) ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
                             >
                               <Shield size={9} /> Auth
                             </button>
@@ -1623,8 +1596,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                               type="button"
                               disabled={!svc.enabled}
                               onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, onDemand: !s.onDemand } : s))}
+                              aria-pressed={svc.onDemand}
                               title={svc.onDemand ? 'Starts on the first request and sleeps after 30 minutes idle (click to keep it running)' : 'Start this service on demand: Sablier stops it when idle and wakes it on the first request'}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 ${svc.onDemand ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${svc.onDemand ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
                             >
                               <Moon size={9} /> On demand
                             </button>
@@ -1638,13 +1612,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         const onDemandCount = enabledSvcs.filter((s) => s.onDemand).length
                         const setAll = (v: boolean) => setRouteServices((prev) => prev.map((s) => s.enabled ? { ...s, onDemand: v } : s))
                         return (
-                          <div className="rounded-lg border border-indigo-500/15 bg-indigo-500/[0.04] overflow-hidden">
+                          <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden">
                             <button
                               type="button"
+                              aria-expanded={showSablierOptions}
                               onClick={() => setShowSablierOptions((v) => !v)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-indigo-500/[0.06] transition-colors"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/[0.04] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                             >
-                              <Moon size={12} className="text-indigo-300 shrink-0" />
+                              <Moon size={12} className="text-slate-300 shrink-0" />
                               <span className="text-[11px] font-medium text-slate-200 flex-1">Start on demand (Sablier)</span>
                               <span className="text-[10px] text-slate-500 shrink-0">
                                 {onDemandCount === 0 ? 'off' : `${onDemandCount} of ${enabledSvcs.length}`} · sleeps after {sablierOpts.session}
@@ -1654,11 +1629,11 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             {showSablierOptions && (
                               <div className="px-3 pb-3 space-y-2.5 animate-fade-in">
                                 <p className="text-[10px] text-slate-500 leading-relaxed">
-                                  Sablier stops a service after it has been idle for the sleep time and starts it on the next request, showing a waiting page meanwhile. Pick the services with the <span className="text-indigo-300">On demand</span> chips above, or all at once here.
+                                  Sablier stops a service after it has been idle for the sleep time and starts it on the next request, showing a waiting page meanwhile. Pick the services with the <span className="text-slate-200 font-medium">On demand</span> chips above, or all at once here.
                                 </p>
                                 <div className="flex items-center gap-2">
-                                  <button type="button" onClick={() => setAll(true)} className="px-2 py-1 rounded text-[10px] font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/25 transition-colors">All on demand</button>
-                                  <button type="button" onClick={() => setAll(false)} className="px-2 py-1 rounded text-[10px] font-medium bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 transition-colors">None</button>
+                                  <button type="button" onClick={() => setAll(true)} className={`${BTN_CARD} ${TONE_OK}`}>All on demand</button>
+                                  <button type="button" onClick={() => setAll(false)} className={BTN_CARD_QUIET}>None</button>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <label className="text-[10px] text-slate-400">
@@ -1666,7 +1641,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                     <select
                                       value={sablierOpts.session}
                                       onChange={(e) => setSablierOpts((o) => ({ ...o, session: e.target.value }))}
-                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
+                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                                     >
                                       {SABLIER_SESSIONS.map((s) => <option key={s} value={s}>{describeSession(s)}</option>)}
                                     </select>
@@ -1676,14 +1651,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                     <select
                                       value={sablierOpts.theme}
                                       onChange={(e) => setSablierOpts((o) => ({ ...o, theme: e.target.value }))}
-                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40"
+                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                                     >
                                       {SABLIER_THEMES.map((t) => <option key={t} value={t}>{t} — {SABLIER_THEME_NOTES[t]}</option>)}
                                     </select>
                                   </label>
                                 </div>
                                 <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-                                  <input type="checkbox" checked={sablierOpts.showDetails} onChange={(e) => setSablierOpts((o) => ({ ...o, showDetails: e.target.checked }))} className="accent-indigo-500" />
+                                  <input type="checkbox" checked={sablierOpts.showDetails} onChange={(e) => setSablierOpts((o) => ({ ...o, showDetails: e.target.checked }))} className="accent-emerald-500" />
                                   Show the container name and status on the waiting page
                                 </label>
                               </div>
@@ -1694,11 +1669,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
                       {/* Advanced: raw YAML toggle */}
                       <button
+                        type="button"
+                        aria-expanded={showAdvancedRoutes}
                         onClick={() => setShowAdvancedRoutes((prev) => !prev)}
-                        className="flex items-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 transition-colors mt-1"
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-slate-200 transition-colors mt-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       >
                         <ChevronDown size={10} className={`transition-transform duration-200 ${showAdvancedRoutes ? '' : '-rotate-90'}`} />
-                        Advanced: Edit raw YAML
+                        Advanced: edit raw YAML
                       </button>
                       {showAdvancedRoutes && (
                         <div className="space-y-2 animate-fade-in">
@@ -1713,7 +1690,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                                 onChange={(e) => setCustomRoutes((prev) => ({ ...prev, [svcName]: e.target.value }))}
                                 rows={Math.min(routeYaml.split('\n').length + 1, 16)}
                                 spellCheck={false}
-                                className="w-full bg-slate-950 text-[10px] font-mono text-slate-300 p-3 border-0 focus:outline-none focus:ring-0 resize-y scrollbar-thin leading-relaxed"
+                                className="w-full bg-slate-950 text-[10px] font-mono text-slate-300 p-3 border-0 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-emerald-500/30 resize-y scrollbar-thin leading-relaxed"
                               />
                             </div>
                           ))}
@@ -1726,34 +1703,34 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                   <div className="flex items-center justify-between px-3 py-2 border-t border-emerald-500/10 bg-emerald-500/[0.02]">
                     <div className="flex items-center gap-2">
                       <Network size={12} className="text-slate-500" />
-                      <span className="text-[11px] text-slate-400">Connect to <span className="text-emerald-400 font-medium">proxy</span> network</span>
+                      <span className="text-[11px] text-slate-400">Connect to the <span className="text-slate-200 font-medium">proxy</span> network</span>
                     </div>
                     <Switch size="sm" aria-label="Connect to the proxy network" checked={connectProxy} onChange={() => setConnectProxy(!connectProxy)} className="shrink-0" />
                   </div>
 
                   {/* Authelia SSO Protection Toggle */}
-                  <div className="flex items-center justify-between px-3 py-2 border-t border-emerald-500/10 bg-violet-500/[0.02]">
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-emerald-500/10">
                     <div className="flex items-center gap-2">
-                      <Shield size={12} className="text-violet-400" />
-                      <span className="text-[11px] text-slate-400">Protect with <span className="text-violet-400 font-medium">Authelia</span> SSO</span>
+                      <Shield size={12} className="text-slate-500" />
+                      <span className="text-[11px] text-slate-400">Protect with <span className="text-slate-200 font-medium">Authelia</span> SSO</span>
                     </div>
-                    <Switch size="sm" color="violet" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} className="shrink-0" />
+                    <Switch size="sm" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} className="shrink-0" />
                   </div>
                 </div>
               )}
 
               {/* Homarr Dashboard Toggle — visible when Homarr is deployed; without an API key the app only lands in its library */}
               {homarrActive && (
-                <div className="rounded-lg border border-white/5 bg-orange-500/[0.02] overflow-hidden">
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5">
                     <div className="flex items-center gap-2">
-                      <Store size={13} className="text-orange-400" />
-                      <span className="text-[11px] font-medium text-slate-300">Add to <span className="text-orange-400 font-medium">Homarr</span> Dashboard</span>
+                      <Store size={13} className="text-slate-500" />
+                      <span className="text-[11px] font-medium text-slate-300">Add to the <span className="text-slate-100 font-medium">Homarr</span> dashboard</span>
                     </div>
-                    <Switch size="sm" color="orange" aria-label="Add to the Homarr dashboard" checked={addToHomarr} onChange={() => setAddToHomarr(!addToHomarr)} className="shrink-0" />
+                    <Switch size="sm" aria-label="Add to the Homarr dashboard" checked={addToHomarr} onChange={() => setAddToHomarr(!addToHomarr)} className="shrink-0" />
                   </div>
                   {!homarrHasKey && (
-                    <p className="px-3 pb-2 -mt-0.5 text-[10px] text-slate-500">Without an API key the app lands in Homarr's library only — add the key in Server Config → Integrations</p>
+                    <p className="px-3 pb-2 -mt-0.5 text-[10px] text-slate-500">Without an API key the app lands in Homarr's library only — add the key in {pageLabel('config')} → Integrations</p>
                   )}
                 </div>
               )}
@@ -1762,21 +1739,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               <div className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <BarChart3 size={13} className="text-amber-400" />
-                    <span className="text-[11px] font-medium text-slate-300">Resource Limits</span>
+                    <BarChart3 size={13} className="text-slate-500" />
+                    <span className="text-[11px] font-medium text-slate-300">Resource limits</span>
                     <span className="text-[10px] text-slate-500">per service</span>
                   </div>
-                  <Switch size="sm" color="amber" aria-label="Resource limits" checked={enableResourceLimits} onChange={() => setEnableResourceLimits(!enableResourceLimits)} className="shrink-0" />
+                  <Switch size="sm" aria-label="Resource limits" checked={enableResourceLimits} onChange={() => setEnableResourceLimits(!enableResourceLimits)} className="shrink-0" />
                 </div>
                 {enableResourceLimits && (
                   <div className="px-3 py-3 border-t border-white/5 space-y-3 animate-fade-in">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Memory Limit</label>
-                        <select aria-label="Memory Limit"
+                        <label htmlFor="deploy-mem-limit" className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Memory limit</label>
+                        <select id="deploy-mem-limit"
                           value={memLimit}
                           onChange={(e) => setMemLimit(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                         >
                           <option value="">No limit</option>
                           <option value="128m">128 MB</option>
@@ -1790,11 +1767,11 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">CPU Limit</label>
-                        <select aria-label="CPU Limit"
+                        <label htmlFor="deploy-cpu-limit" className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">CPU limit</label>
+                        <select id="deploy-cpu-limit"
                           value={cpuLimit}
                           onChange={(e) => setCpuLimit(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-500/40"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                         >
                           <option value="">No limit</option>
                           <option value="0.5">0.5 CPU</option>
@@ -1815,15 +1792,17 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
               {/* Compose preview (collapsible) */}
               <div>
                 <button
+                  type="button"
+                  aria-expanded={showCompose}
                   onClick={() => setShowCompose((prev) => !prev)}
-                  className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+                  className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                 >
                   <ChevronDown
                     size={14}
                     className={`transition-transform duration-200 ${showCompose ? '' : '-rotate-90'}`}
                   />
                   <Eye size={13} />
-                  Compose Preview
+                  Compose preview
                 </button>
                 {showCompose && (
                   <div className="mt-2">
@@ -1853,22 +1832,23 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     <button
                       type="button"
                       onClick={() => setShowLintDetails((v) => !v)}
-                      className="flex items-center gap-2 w-full text-left group"
+                      aria-expanded={showLintDetails}
+                      className="flex items-center gap-2 w-full text-left group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                     >
                       <AlertTriangle size={14} className="text-amber-400 shrink-0" />
                       <span className="text-xs font-semibold text-amber-300 flex-1">
-                        Compose Lint
+                        Compose lint
                       </span>
                       <span className="flex items-center gap-1.5">
                         {warnCount > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                          <Badge component="span" color="amber" size="xs">
                             {warnCount} {warnCount === 1 ? 'warning' : 'warnings'}
-                          </span>
+                          </Badge>
                         )}
                         {infoCount > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/20">
+                          <Badge component="span" color="slate" size="xs">
                             {infoCount} {infoCount === 1 ? 'suggestion' : 'suggestions'}
-                          </span>
+                          </Badge>
                         )}
                       </span>
                       <ChevronDown
@@ -1898,24 +1878,21 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
 
               {/* Plugin Hooks Indicator */}
               {deployHookPlugins.length > 0 && (
-                <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 animate-fade-in">
+                <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 animate-fade-in">
                   <div className="flex items-center gap-2">
-                    <Sparkles size={14} className="text-violet-400 shrink-0" />
-                    <p className="text-xs font-semibold text-violet-300">
+                    <Sparkles size={14} className="text-cyan-400 shrink-0" />
+                    <p className="text-xs font-semibold text-cyan-300">
                       {deployHookPlugins.length} {deployHookPlugins.length === 1 ? 'plugin' : 'plugins'} will run during deployment
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-2 pl-[22px]">
                     {deployHookPlugins.map((p) => (
-                      <span
-                        key={p.name}
-                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/10 text-violet-300 border border-violet-500/15"
-                      >
+                      <Badge key={p.name} component="span" color="cyan">
                         {p.name}
-                        <span className="text-violet-500 ml-1">
+                        <span className="opacity-70 ml-1">
                           {(p.hooks ?? []).filter((h) => h === 'pre-deploy' || h === 'post-deploy').join(', ')}
                         </span>
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -1926,7 +1903,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2.5 animate-fade-in">
                   <div className="flex items-center gap-2">
                     <Scan size={14} className="text-cyan-400 shrink-0" />
-                    <p className="text-xs font-semibold text-cyan-300">Deployment Preview</p>
+                    <p className="text-xs font-semibold text-cyan-300">Deployment preview</p>
                   </div>
                   <div className="text-[11px] space-y-2.5 pl-[22px]">
                     {/* Services to add */}
@@ -1942,7 +1919,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <div className={`rounded-md p-2 ${replaceServices ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-rose-500/10 border border-rose-500/20'}`}>
                         <p className={`font-semibold text-[11px] ${replaceServices ? 'text-amber-400' : 'text-rose-400'}`}>
                           <AlertTriangle size={11} className="inline mr-1" />
-                          {replaceServices ? 'Services Will Be Replaced' : 'Service Name Conflicts'}
+                          {replaceServices ? 'Services will be replaced' : 'Service name conflicts'}
                         </p>
                         <p className={`text-[10px] mt-0.5 font-mono ${replaceServices ? 'text-amber-300/80' : 'text-rose-300/80'}`}>{dryRunResult.service_conflicts}</p>
                         <label className="flex items-center gap-2 mt-2 cursor-pointer group">
@@ -1964,7 +1941,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2 space-y-1.5">
                         <p className="text-rose-400 font-semibold text-[11px]">
                           <AlertTriangle size={11} className="inline mr-1" />
-                          Port Conflicts Detected
+                          Port conflicts detected
                         </p>
                         {dryRunResult.port_conflicts_detail && dryRunResult.port_conflicts_detail.length > 0 ? (
                           <div className="space-y-1">
@@ -2042,7 +2019,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                     )}
                     {storeAsSecret.size > 0 && (
                       <p className="mt-1 text-[10px] text-slate-500 flex items-start gap-1.5">
-                        <Lock size={10} className="shrink-0 mt-px text-violet-400" />
+                        <Lock size={10} className="shrink-0 mt-px text-slate-400" />
                         <span>{'${SECRETS_…}'} stands for a value in the encrypted store: the compose file and .env only ever hold the reference, and DCS exports the secret to Compose when the stack starts.</span>
                       </p>
                     )}
@@ -2065,7 +2042,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2 animate-fade-in">
                   <div className="flex items-center gap-2">
                     <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-                    <p className="text-xs font-semibold text-amber-300">Confirm Deployment</p>
+                    <p className="text-xs font-semibold text-amber-300">Confirm deployment</p>
                   </div>
                   <div className="text-[11px] text-slate-400 space-y-1 pl-[22px]">
                     <p>
@@ -2093,42 +2070,41 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
+            <div className="flex flex-wrap items-center justify-end gap-2 px-4 md:px-5 py-4 border-t border-white/5 shrink-0">
               <button
+                type="button"
                 onClick={() => { if (confirming) { setConfirming(false) } else { onClose() } }}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
+                className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}
               >
                 {confirming ? 'Back' : 'Cancel'}
               </button>
               {!confirming && (
                 <button
+                  type="button"
                   onClick={handleDryRun}
                   disabled={!targetStack || dryRunLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+                  className={`${BTN_SHEET} ${TONE_QUIET} flex-1 sm:flex-none`}
                 >
-                  {dryRunLoading ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
+                  {dryRunLoading ? <Loader2 size={15} className="animate-spin" /> : <Eye size={15} />}
                   Preview
                 </button>
               )}
               {isAdmin && (
                 <button
+                  type="button"
                   onClick={handleDeployClick}
                   disabled={!canDeploy || (autoStart && missingSecrets.length > 0) || badSecretNames.length > 0 || Object.keys(containerNameIssues.blocking).length > 0}
                   title={autoStart && missingSecrets.length > 0 ? `Store ${missingSecrets.join(', ')} first, or turn auto-start off` : badSecretNames.length > 0 ? 'Fix the secret names first' : Object.keys(containerNameIssues.blocking).length > 0 ? 'Fix the container names first' : undefined}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press ${
-                    confirming
-                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25'
-                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25'
-                  }`}
+                  className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}
                 >
                   {deploying ? (
-                    <Loader2 size={13} className="animate-spin" />
+                    <Loader2 size={15} className="animate-spin" />
                   ) : confirming ? (
-                    <AlertTriangle size={13} />
+                    <AlertTriangle size={15} />
                   ) : (
-                    <Rocket size={13} />
+                    <Rocket size={15} />
                   )}
-                  {confirming ? 'Confirm & Deploy' : 'Deploy Stack'}
+                  {confirming ? 'Confirm and deploy' : 'Deploy stack'}
                 </button>
               )}
             </div>
@@ -2155,6 +2131,7 @@ interface CreateEditModalProps {
 
 function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: CreateEditModalProps) {
   const confirm = useConfirm()
+  const uid = useId()
   const [name, setName] = useState(initial?.name ?? '')
   const [title, setTitle] = useState((initial?.metadata?.title as string) ?? '')
   const [description, setDescription] = useState((initial?.metadata?.description as string) ?? '')
@@ -2248,7 +2225,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
     }
   }, [compose])
 
-  // Ctrl/Cmd+S saves, Esc closes (asks first when there are unsaved changes)
+  // Esc closes (the overlay's key: it asks first when there are unsaved changes), Ctrl/Cmd+S saves
   const requestClose = useCallback(async () => {
     if (hasChanges && mode === 'edit' && !(await confirm({ title: 'Discard changes', message: 'Discard unsaved changes to this template?', confirmLabel: 'Discard', danger: true }))) return
     onClose()
@@ -2256,11 +2233,10 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); handleSaveInPlace() }
-      else if (e.key === 'Escape') { e.preventDefault(); requestClose() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSaveInPlace, requestClose])
+  }, [handleSaveInPlace])
 
   return createPortal(
     <ModalOverlay onClose={requestClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -2281,11 +2257,11 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               {mode === 'create' ? <Plus size={16} className="text-emerald-400" /> : <Pencil size={16} className="text-cyan-400" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">{mode === 'create' ? 'Create Template' : `Edit: ${initial?.name}`}</h3>
+              <h3 className="text-sm font-bold text-slate-100">{mode === 'create' ? 'Create template' : `Edit ${initial?.name}`}</h3>
               <p className="text-[10px] text-slate-500">Define a reusable stack template</p>
             </div>
           </div>
-          <button aria-label="Close" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+          <button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} text-slate-500 hover:text-slate-200 hover:bg-white/10`}>
             <X size={16} />
           </button>
         </div>
@@ -2296,8 +2272,9 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
           <div className="px-4 md:px-5 py-4 space-y-3 border-b border-white/5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Template Name *</label>
+                <label htmlFor={`${uid}-name`} className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Template name *</label>
                 <input
+                  id={`${uid}-name`}
                   value={name}
                   onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'))}
                   placeholder="my-template"
@@ -2306,19 +2283,21 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Display Title</label>
+                <label htmlFor={`${uid}-title`} className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Display title</label>
                 <input
+                  id={`${uid}-title`}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="My Template"
+                  placeholder="My template"
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 transition-colors"
                 />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</label>
+                <label htmlFor={`${uid}-description`} className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</label>
                 <input
+                  id={`${uid}-description`}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Brief description..."
@@ -2326,8 +2305,8 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Category</label>
-                <select aria-label="Category"
+                <label htmlFor={`${uid}-category`} className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Category</label>
+                <select id={`${uid}-category`}
                   value={category}
                   onChange={(e) => {
                     const cat = e.target.value
@@ -2350,8 +2329,8 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               </div>
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Default Target Stack</label>
-              <select aria-label="Default Target Stack"
+              <label htmlFor={`${uid}-target`} className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Default target stack</label>
+              <select id={`${uid}-target`}
                 value={targetStack}
                 onChange={(e) => setTargetStack(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors"
@@ -2366,10 +2345,13 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
           </div>
 
           {/* Editor tabs */}
-          <div className="flex items-center gap-0.5 px-4 md:px-5 pt-3 pb-0">
+          <div role="tablist" aria-label="Template files" className="flex items-center gap-0.5 px-4 md:px-5 pt-3 pb-0">
             {(['compose', 'env', 'meta'] as const).map((tab) => (
               <button
                 key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-3 py-1.5 rounded-t-lg text-[11px] font-medium transition-colors ${activeTab === tab ? 'bg-white/[0.06] text-slate-200 border border-white/10 border-b-transparent' : 'text-slate-500 hover:text-slate-400'}`}
               >
@@ -2384,6 +2366,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <textarea
                 value={compose}
                 onChange={(e) => { setCompose(e.target.value); setValidation(null) }}
+                aria-label="docker-compose.yml"
                 spellCheck={false}
                 className="w-full h-[58vh] min-h-[320px] px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="services:&#10;  app:&#10;    image: example:latest"
@@ -2416,6 +2399,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               <textarea
                 value={env}
                 onChange={(e) => setEnv(e.target.value)}
+                aria-label=".env"
                 spellCheck={false}
                 className="w-full h-[58vh] min-h-[320px] px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/20 resize-none scrollbar-thin"
                 placeholder="# Environment variables for this template"
@@ -2426,7 +2410,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               return (
                 <div className="rounded-lg bg-slate-950/60 border border-white/5 p-4 space-y-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                    Detected Variables ({parsedVars.length})
+                    Detected variables ({parsedVars.length})
                   </p>
                   {parsedVars.length === 0 ? (
                     <div className="text-xs text-slate-500 py-4 text-center">
@@ -2462,7 +2446,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 md:px-5 py-3 border-t border-white/5 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 md:px-5 py-3 border-t border-white/5 shrink-0">
           <div className="flex items-center gap-2">
             {saved && (
               <span className="text-xs text-emerald-400 animate-fade-in flex items-center gap-1">
@@ -2470,65 +2454,47 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {envLint.diagnostics.length > 0 && activeTab === 'env' && (
               <span className="text-[10px] text-amber-400 mr-1">{envLint.diagnostics.length} .env hint{envLint.diagnostics.length === 1 ? '' : 's'}</span>
             )}
             <button
+              type="button"
               onClick={handleValidate}
               disabled={validating || !compose.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+              className={`${BTN_SHEET} ${TONE_QUIET} flex-1 sm:flex-none whitespace-nowrap`}
               title="Run docker compose config on the server"
             >
-              {validating ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />} Validate
+              {validating ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />} Validate
             </button>
-            <button onClick={requestClose} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
+            <button type="button" onClick={requestClose} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none whitespace-nowrap`}>
               {mode === 'edit' ? 'Close' : 'Cancel'}
             </button>
             {mode === 'edit' && (
               <button
+                type="button"
                 onClick={handleSaveInPlace}
                 disabled={!canSave || !hasChanges}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+                className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none whitespace-nowrap`}
               >
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                 Save
               </button>
             )}
             {mode === 'create' && (
               <button
+                type="button"
                 onClick={handleSaveInPlace}
                 disabled={!canSave}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+                className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none whitespace-nowrap`}
               >
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                Create Template
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                Create template
               </button>
             )}
           </div>
         </div>
 
-        {/* Floating save bar for edit mode — fixed to viewport bottom, outside modal */}
-        {mode === 'edit' && hasChanges && createPortal(
-          <div className="fixed bottom-6 inset-x-0 z-[10000] flex justify-center pointer-events-none animate-fade-in-up">
-            <div className="flex items-center gap-3 rounded-xl bg-slate-800/95 backdrop-blur-lg border border-white/10 px-5 py-3 shadow-2xl shadow-black/40 pointer-events-auto">
-              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-sm text-slate-300">Unsaved changes</span>
-              <button onClick={handleDiscard} className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1">
-                Discard
-              </button>
-              <button
-                onClick={handleSaveInPlace}
-                disabled={saving}
-                className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 transition-all disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {saving && <Loader2 size={12} className="animate-spin" />}
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )}
       </div>
     </ModalOverlay>,
     document.body,
@@ -2541,6 +2507,7 @@ function CreateEditModal({ mode, initial, stacks, onClose, onSave, saving }: Cre
 
 function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { addToast } = useToast()
+  const uid = useId()
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [nameManual, setNameManual] = useState(false)
@@ -2628,8 +2595,8 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center">
-              <Link size={16} className="text-violet-400" />
+            <div className="w-9 h-9 rounded-lg bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center">
+              <Link size={16} className="text-cyan-400" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100">Import from URL</h3>
@@ -2638,7 +2605,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               </p>
             </div>
           </div>
-          <button aria-label="Close" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors p-1">
+          <button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} text-slate-500 hover:text-slate-200 hover:bg-white/10`}>
             <X size={16} />
           </button>
         </div>
@@ -2648,11 +2615,12 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           {/* URL + Name row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
-                Compose File URL
+              <label htmlFor={`${uid}-url`} className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
+                Compose file URL
               </label>
               <div className="flex gap-2">
                 <input
+                  id={`${uid}-url`}
                   type="url"
                   value={url}
                   onChange={(e) => { setUrl(e.target.value); if (compose) { setCompose(''); setFetchedUrl('') } }}
@@ -2661,11 +2629,12 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                   autoFocus
                 />
                 <button
+                  type="button"
                   onClick={handleFetch}
                   disabled={!url || fetching}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed press shrink-0"
+                  className={`${BTN_TOOLBAR} ${TONE_QUIET} shrink-0`}
                 >
-                  {fetching ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                  {fetching ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                   {fetching ? 'Fetching...' : 'Preview'}
                 </button>
               </div>
@@ -2677,10 +2646,11 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               )}
             </div>
             <div>
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
-                Template Name
+              <label htmlFor={`${uid}-name`} className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1.5">
+                Template name
               </label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 value={name}
                 onChange={(e) => { setName(e.target.value); setNameManual(true) }}
@@ -2694,30 +2664,34 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           {hasFetched && (
             <>
               {/* Tab bar */}
-              <div className="flex items-center gap-1 border-b border-white/5 -mb-1">
+              <div role="tablist" aria-label="Fetched file" className="flex items-center gap-1 border-b border-white/5 -mb-1">
                 <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'compose'}
                   onClick={() => setActiveTab('compose')}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 rounded-t ${
                     activeTab === 'compose'
-                      ? 'text-violet-400 border-violet-400'
+                      ? 'text-emerald-400 border-emerald-400'
                       : 'text-slate-500 border-transparent hover:text-slate-300'
                   }`}
                 >
                   Compose YAML
                 </button>
                 <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'env'}
                   onClick={() => setActiveTab('env')}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 rounded-t ${
                     activeTab === 'env'
-                      ? 'text-violet-400 border-violet-400'
+                      ? 'text-emerald-400 border-emerald-400'
                       : 'text-slate-500 border-transparent hover:text-slate-300'
                   }`}
                 >
                   Variables
                   {detectedVars.length > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[9px] font-bold bg-violet-500/20 text-violet-400">
-                      {detectedVars.length}
-                    </span>
+                    <Badge component="span" color="emerald" size="xs">{detectedVars.length}</Badge>
                   )}
                 </button>
               </div>
@@ -2729,7 +2703,8 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                     value={compose}
                     onChange={(e) => setCompose(e.target.value)}
                     spellCheck={false}
-                    className="w-full h-64 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-violet-500/20 resize-none scrollbar-thin"
+                    aria-label="Compose YAML"
+                    className="w-full h-64 px-4 py-3 rounded-lg bg-slate-950/60 border border-white/5 text-xs text-slate-300 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20 resize-none scrollbar-thin"
                     placeholder={'services:\n  app:\n    image: example:latest'}
                   />
                   <div className="absolute top-2 right-2 flex items-center gap-1">
@@ -2749,7 +2724,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               {activeTab === 'env' && (
                 <div className="rounded-lg bg-slate-950/60 border border-white/5 p-4 space-y-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                    Detected Variables ({detectedVars.length})
+                    Detected variables ({detectedVars.length})
                   </p>
                   {detectedVars.length === 0 ? (
                     <div className="text-xs text-slate-500 py-6 text-center">
@@ -2764,7 +2739,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                         const isBool = v.defaultValue === 'true' || v.defaultValue === 'false'
                         return (
                           <div key={v.name} className="flex items-center gap-3 py-1.5 px-2 rounded bg-white/[0.03]">
-                            <code className="text-[11px] font-mono text-violet-400 min-w-[140px]">{v.name}</code>
+                            <code className="text-[11px] font-mono text-emerald-400 min-w-[140px]">{v.name}</code>
                             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isBool ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'bg-slate-500/10 text-slate-500 border border-slate-500/15'}`}>
                               {isBool ? 'toggle' : 'text'}
                             </span>
@@ -2788,7 +2763,7 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           {/* Supported sources hint — only when no preview */}
           {!hasFetched && (
             <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-              <p className="text-[10px] text-slate-500 font-semibold mb-1.5">Supported Sources</p>
+              <p className="text-[10px] text-slate-500 font-semibold mb-1.5">Supported sources</p>
               <div className="space-y-1 text-[10px] text-slate-500">
                 <p>• GitHub blob or raw URLs (auto-converted)</p>
                 <p>• GitLab raw file URLs</p>
@@ -2809,16 +2784,17 @@ function UrlImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors">
+            <button type="button" onClick={onClose} className={BTN_SHEET_QUIET}>
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleImport}
               disabled={!compose || importing || !name}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/20 hover:bg-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed press"
+              className={BTN_SHEET_PRIMARY}
             >
-              {importing ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              Import Template
+              {importing ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              Import template
             </button>
           </div>
         </div>
@@ -2876,35 +2852,31 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-slate-500" />
+      <div role="status" aria-label="Reading the gallery" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <TemplateCardSkeleton key={i} />)}
       </div>
     )
   }
 
   if (gallery.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <Store size={24} className="text-slate-500" />
-        <p className="text-sm text-slate-500">No gallery templates available</p>
-        <p className="text-xs text-slate-500">Add templates to .config/template-gallery.json</p>
-      </div>
-    )
+    return <EmptyState icon={<Store size={28} />} title="No gallery templates available" hint="Add templates to .config/template-gallery.json" />
   }
 
   return (
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+        <div role="group" aria-label="Category" className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
           {categories.map((cat) => (
             <button
               key={cat}
+              type="button"
+              aria-pressed={category === cat}
               onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 capitalize ${
+              className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-all duration-150 capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                 category === cat
-                  ? 'bg-violet-500/15 text-violet-400 border-violet-500/30'
-                  : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/5'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-white/[0.03] text-slate-400 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-200'
               }`}
             >
               {cat}
@@ -2917,6 +2889,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search the gallery"
             placeholder="Search gallery..."
             className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
           />
@@ -2926,8 +2899,6 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
       {/* Gallery grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
         {filtered.map((t) => {
-          const colors = getCategoryColors(t.category)
-          const CatIcon = getCategoryIcon(t.category)
           const isImporting = importing === t.name
 
           return (
@@ -2936,15 +2907,12 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
               className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 flex flex-col gap-2.5 hover:border-white/10 hover:bg-white/[0.03] transition-all duration-200 group"
             >
               <div className="flex items-center justify-between">
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${colors.badge}`}>
-                  <CatIcon size={9} />
-                  {t.category}
-                </span>
+                <CategoryChip category={t.category} size="xs" />
                 {t.services.length > 0 && (
                   <span className="text-[9px] text-slate-500">{t.services.length} service{t.services.length > 1 ? 's' : ''}</span>
                 )}
               </div>
-              <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{t.name}</h4>
+              <h3 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{t.name}</h3>
               <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2 flex-1">{t.description}</p>
               {t.services.length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -2955,9 +2923,11 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
               )}
               {isAdmin && (
                 <button
+                  type="button"
                   onClick={() => handleImport(t)}
                   disabled={isImporting}
-                  className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all duration-200 disabled:opacity-50 press"
+                  aria-label={`Import ${t.name}`}
+                  className={`${BTN_CARD} ${TONE_OK} mt-auto w-full justify-center`}
                 >
                   {isImporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                   {isImporting ? 'Importing...' : 'Import'}
@@ -2969,9 +2939,7 @@ function GalleryView({ onImport, isAdmin = true }: { onImport: (url: string, nam
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-sm text-slate-500">No templates match your search</p>
-        </div>
+        <EmptyState compact title="No templates match your search" />
       )}
     </div>
   )
@@ -2992,60 +2960,91 @@ interface TemplateCardProps {
   deployStatus?: DeployStatus
 }
 
+/** a card's shape while the templates load: its category, its name, two lines, its tags, its button */
+function TemplateCardSkeleton() {
+  return (
+    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 md:p-5 flex flex-col gap-2.5 min-h-[13rem]" aria-hidden>
+      <div className="skeleton h-[18px] w-20 rounded-full" />
+      <div className="skeleton h-4 w-2/5 rounded" />
+      <div className="space-y-1.5"><div className="skeleton h-3 w-full rounded" /><div className="skeleton h-3 w-4/5 rounded" /></div>
+      <div className="flex gap-1.5"><div className="skeleton h-4 w-12 rounded" /><div className="skeleton h-4 w-14 rounded" /><div className="skeleton h-4 w-10 rounded" /></div>
+      <div className="skeleton h-8 w-full rounded-lg mt-auto" />
+    </div>
+  )
+}
+
+/** the dashed card at the end of the list */
+function CreateTemplateCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="
+        group relative flex flex-col items-center justify-center
+        min-h-[200px] rounded-xl border border-dashed
+        border-white/10 hover:border-emerald-500/30
+        bg-white/[0.02] hover:bg-emerald-500/[0.04]
+        transition-all duration-300 cursor-pointer
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40
+      "
+    >
+      <div className="
+        flex items-center justify-center w-12 h-12 rounded-xl
+        bg-white/5 group-hover:bg-emerald-500/15
+        border border-white/5 group-hover:border-emerald-500/20
+        transition-all duration-300 mb-3
+      ">
+        <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
+      </div>
+      <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
+        Create template
+      </span>
+      <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
+        Build a custom service template
+      </span>
+    </button>
+  )
+}
+
 function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deployStatus }: TemplateCardProps) {
-  const CatIcon = getCategoryIcon(template.category)
-  const colors = getCategoryColors(template.category)
+  const name = template.title || template.name
+  const running = deployStatus?.state === 'running'
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-5 flex flex-col gap-2.5 hover:border-white/10 hover:bg-white/[0.03] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 group">
       {/* Top row: category badge + deploy status + actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colors.badge}`}
-          >
-            <CatIcon size={10} />
-            {template.category}
-          </span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <CategoryChip category={template.category} />
           {deployStatus && deployStatus.state !== 'none' && (
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${
-              deployStatus.state === 'running'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15'
-                : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
-            }`}>
-              <Circle size={6} className={deployStatus.state === 'running' ? 'fill-emerald-400 text-emerald-400 animate-pulse' : 'fill-slate-500 text-slate-500'} />
-              {deployStatus.state === 'running' ? 'Running' : 'Deployed'}
-            </span>
+            <Badge component="span" color={running ? 'emerald' : 'slate'} leftSection={<Circle size={6} className={running ? 'fill-emerald-400 text-emerald-400 animate-pulse' : 'fill-slate-500 text-slate-500'} />}>
+              {running ? 'Running' : 'Deployed'}
+            </Badge>
           )}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          <button
-            onClick={(e) => { e.stopPropagation(); onExport(template) }}
-            className="p-1 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-            title="Export template"
-          >
-            <Download size={11} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(template) }}
-            className="p-1 rounded text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-            title="Edit template"
-          >
-            <Pencil size={11} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(template) }}
-            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-            title="Delete template"
-          >
-            <Trash2 size={11} />
-          </button>
+        {/* (on a phone, where nothing hovers, they are always there) */}
+        <div className="flex items-center gap-0.5 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+          <Hint label="Export this template">
+            <button type="button" aria-label={`Export ${name}`} onClick={(e) => { e.stopPropagation(); onExport(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10`}>
+              <Download size={12} />
+            </button>
+          </Hint>
+          <Hint label="Edit this template">
+            <button type="button" aria-label={`Edit ${name}`} onClick={(e) => { e.stopPropagation(); onEdit(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10`}>
+              <Pencil size={12} />
+            </button>
+          </Hint>
+          <Hint label="Delete this template">
+            <button type="button" aria-label={`Delete ${name}`} onClick={(e) => { e.stopPropagation(); onDelete(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-rose-300 hover:bg-rose-500/10`}>
+              <Trash2 size={12} />
+            </button>
+          </Hint>
         </div>
       </div>
 
       {/* Template name */}
       <h3 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">
-        {template.title || template.name}
+        {name}
       </h3>
 
       {/* Description (max 2 lines) */}
@@ -3056,7 +3055,7 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
       {/* F6: Deployed-to indicator */}
       {deployStatus && deployStatus.state !== 'none' && deployStatus.targetStack && (
         <p className="text-[10px] text-slate-500">
-          Deployed to: <span className="font-mono text-slate-500">{deployStatus.targetStack}</span>
+          Deployed to: <span className="font-mono text-slate-400">{deployStatus.targetStack}</span>
         </p>
       )}
 
@@ -3081,24 +3080,18 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
 
       {/* Deploy button */}
       {template.singleton && deployStatus && deployStatus.state !== 'none' ? (
-        <div className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-emerald-500/[0.06] text-emerald-500/60 border border-emerald-500/10 cursor-default select-none">
-          <CheckCircle size={11} />
+        <div className={`${BTN_CARD} mt-auto w-full justify-center bg-emerald-500/[0.06] text-emerald-300/80 border border-emerald-500/10 cursor-default select-none`}>
+          <CheckCircle size={12} />
           Deployed
         </div>
-      ) : deployStatus && deployStatus.state === 'running' ? (
-        <button
-          onClick={() => onDeploy(template)}
-          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/15 hover:bg-cyan-500/20 hover:border-cyan-500/25 transition-all duration-200 press"
-        >
-          <Rocket size={11} />
+      ) : running ? (
+        <button type="button" onClick={() => onDeploy(template)} aria-label={`Redeploy ${name}`} className={`${BTN_CARD} ${TONE_QUIET} mt-auto w-full justify-center`}>
+          <Rocket size={12} />
           Redeploy
         </button>
       ) : (
-        <button
-          onClick={() => onDeploy(template)}
-          className="mt-auto flex items-center justify-center gap-1.5 w-full px-3 py-2.5 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 press"
-        >
-          <Play size={11} />
+        <button type="button" onClick={() => onDeploy(template)} aria-label={`Deploy ${name}`} className={`${BTN_CARD} ${TONE_OK} mt-auto w-full justify-center`}>
+          <Play size={12} />
           Deploy
         </button>
       )}
@@ -3151,18 +3144,13 @@ export default function Templates() {
   const [historyData, setHistoryData] = useState<DeployHistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // Close topmost modal on Escape
+  // Escape closes the history panel; the sheets are ModalOverlays and take the key themselves (a deploy under way cannot be closed)
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (showHistory) { setShowHistory(false); return }
-      if (deployTarget) { setDeployTarget(null); return }
-      if (detail) { setDetail(null); return }
-      if (showUrlImport) { setShowUrlImport(false); return }
-    }
+    if (!showHistory) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowHistory(false) }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [showHistory, deployTarget, detail, showUrlImport])
+  }, [showHistory])
 
   // F6: Container list for deploy status
   const [containerList, setContainerList] = useState<ContainerInfo[]>([])
@@ -3565,142 +3553,103 @@ export default function Templates() {
   // -------------------------------------------------------------------------
 
   if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <Package size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to browse templates</p>
-      </div>
-    )
+    return <EmptyState icon={<Package size={28} />} title="Connect to a server to browse templates" />
   }
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
+  const categoryPills = CATEGORIES.filter((cat) => cat.id === 'all' || templates.some((t) => resolveCategory(t.category).id === cat.id))
+
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
       {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center text-emerald-400">
-            <Rocket size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold tracking-tight"><span className="text-gradient">Stack Templates</span></h2>
-            <p className="text-xs text-slate-500">
-              {templates.length} template{templates.length !== 1 ? 's' : ''} available
-              {filtered.length !== templates.length && ` (${filtered.length} shown)`}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Tab switcher */}
-          <div className="flex items-center rounded-lg border border-white/5 overflow-hidden mr-1">
-            <button
-              onClick={() => setActiveTab('templates')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'templates'
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-              }`}
-            >
-              My Templates
-            </button>
-            <button
-              onClick={() => setActiveTab('gallery')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                activeTab === 'gallery'
-                  ? 'bg-violet-500/15 text-violet-400'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-              }`}
-            >
-              <Store size={12} />
-              Gallery
-            </button>
-          </div>
-          <button
-            onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:border-emerald-500/30 transition-all duration-200 press"
-          >
+      <PageHeader
+        page="templates"
+        subtitle={<>
+          {templates.length} template{templates.length !== 1 ? 's' : ''} available
+          {filtered.length !== templates.length && ` (${filtered.length} shown)`}
+        </>}
+        actions={<>
+          <button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
             <Plus size={14} />
             Create
           </button>
           {isAdmin && (
-            <button
-              onClick={() => setShowUrlImport(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all duration-200 press"
-              title="Import template from URL"
-            >
-              <Link size={14} />
-              <span className="hidden sm:inline">URL Import</span>
-            </button>
+            <Hint label="Import a template from a URL">
+              <button type="button" aria-label="URL import" onClick={() => setShowUrlImport(true)} className={BTN_TOOLBAR_QUIET}>
+                <Link size={14} />
+                <span className="hidden sm:inline">URL import</span>
+              </button>
+            </Hint>
           )}
           {isAdmin && (
-            <button
-              onClick={handleImportTemplate}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
-              title="Import template from JSON file"
-            >
-              <Upload size={14} />
-              <span className="hidden sm:inline">File</span>
-            </button>
+            <Hint label="Import a template from a JSON file">
+              <button type="button" aria-label="File import" onClick={handleImportTemplate} className={BTN_TOOLBAR_QUIET}>
+                <Upload size={14} />
+                <span className="hidden sm:inline">File import</span>
+              </button>
+            </Hint>
           )}
-          <button
-            onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
-              showHistory
-                ? 'bg-violet-500/15 text-violet-400 border-violet-500/25 hover:bg-violet-500/25'
-                : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
-            }`}
-          >
-            <History size={14} />
-            <span className="hidden sm:inline">History</span>
-          </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
-            title="Refresh"
-          >
+          <Hint label="What was deployed, and undeploy it again">
+            <button
+              type="button"
+              aria-label="History"
+              aria-pressed={showHistory}
+              onClick={() => { setShowHistory((prev) => !prev); if (!showHistory) refreshHistory() }}
+              className={`${BTN_TOOLBAR} ${showHistory ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <History size={14} />
+              <span className="hidden sm:inline">History</span>
+            </button>
+          </Hint>
+          <button type="button" aria-label="Refresh" onClick={refresh} disabled={loading} className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        <SegmentedControl
+          aria-label="Show"
+          value={activeTab}
+          onChange={(v) => setActiveTab(v as 'templates' | 'gallery')}
+          data={[
+            { value: 'templates', label: 'My templates' },
+            { value: 'gallery', label: <span className="flex items-center gap-1.5"><Store size={12} aria-hidden /> Gallery</span> },
+          ]}
+        />
+      </PageHeader>
 
       {/* F3: Deploy History Panel */}
       {showHistory && (
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <History size={14} className="text-violet-400" />
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy History</h3>
+              <History size={14} className="text-slate-400" />
+              <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Deploy history</h2>
               <span className="text-[10px] text-slate-500">{deduplicatedHistory.length} events</span>
             </div>
-            <button aria-label="Close" onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <Hint label="Close the history"><button type="button" aria-label="Close the history" onClick={() => setShowHistory(false)} className={`${BTN_ICON_SM} text-slate-500 hover:text-slate-200 hover:bg-white/10`}>
               <X size={14} />
-            </button>
+            </button></Hint>
           </div>
           {historyLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={18} className="animate-spin text-slate-500" />
-            </div>
+            <LoadingState compact label="Reading the history…" />
           ) : deduplicatedHistory.length === 0 ? (
-            <p className="text-xs text-slate-500 text-center py-6">No deployment history yet</p>
+            <EmptyState compact title="No deployment history yet" hint="What you deploy from a template is listed here, with a way to undeploy it." />
           ) : (
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-white/5">
-                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Time</th>
-                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Action</th>
-                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Template</th>
-                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Stack</th>
-                    <th className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Services</th>
-                    <th className="text-right py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Actions</th>
+                    <th scope="col" className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Time</th>
+                    <th scope="col" className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Action</th>
+                    <th scope="col" className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Template</th>
+                    <th scope="col" className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Stack</th>
+                    <th scope="col" className="text-left py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Services</th>
+                    <th scope="col" className="text-right py-2 px-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3710,13 +3659,7 @@ export default function Templates() {
                         {new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="py-2 px-2">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          entry.action === 'deploy'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-amber-500/10 text-amber-400'
-                        }`}>
-                          {entry.action}
-                        </span>
+                        <Badge component="span" color={entry.action === 'deploy' ? 'emerald' : 'slate'}>{entry.action}</Badge>
                       </td>
                       <td className="py-2 px-2 font-mono text-slate-300">{entry.template}</td>
                       <td className="py-2 px-2 font-mono text-slate-400">{entry.target_stack}</td>
@@ -3730,11 +3673,12 @@ export default function Templates() {
                       <td className="py-2 px-2 text-right">
                         {isAdmin && entry.action === 'deploy' && latestActionMap.get(`${entry.template}__${entry.target_stack}`) !== 'undeploy' && (
                           <button
+                            type="button"
                             onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
-                            title="Undeploy these services"
+                            aria-label={`Undeploy ${entry.template} from ${entry.target_stack}`}
+                            className={`${BTN_CARD} ${TONE_GHOST_DANGER}`}
                           >
-                            <Undo2 size={10} />
+                            <Undo2 size={12} />
                             Undeploy
                           </button>
                         )}
@@ -3761,43 +3705,41 @@ export default function Templates() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search the templates"
                 placeholder={`Search ${templates.length} templates...`}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/[0.04] border border-white/5 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.06] focus:shadow-lg focus:shadow-emerald-500/5 transition-all duration-200"
               />
               {search ? (
-                <button aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                <Hint label="Clear the search"><button type="button" aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/10 transition-colors">
                   <X size={14} />
-                </button>
+                </button></Hint>
               ) : (
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 font-mono hidden sm:inline">/</span>
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 font-mono hidden sm:inline" aria-hidden>/</span>
               )}
             </div>
 
             {/* Category pills */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {CATEGORIES.filter((cat) => {
-                if (cat.id === 'all') return true
-                return templates.some((t) => resolveCategory(t.category).id === cat.id)
-              }).map((cat, idx) => {
+            <div role="group" aria-label="Category" className="flex flex-wrap items-center gap-1.5">
+              {categoryPills.map((cat, idx) => {
                 const CatIcon = cat.icon
                 const isActive = activeCategory === cat.id
                 const count = cat.id === 'all' ? templates.length : templates.filter((t) => resolveCategory(t.category).id === cat.id).length
                 return (
                   <React.Fragment key={cat.id}>
-                    {idx === 1 && <div className="w-px h-5 bg-white/10 mx-0.5" />}
+                    {idx === 1 && <div className="w-px h-5 bg-white/10 mx-0.5" aria-hidden />}
                     <button
+                      type="button"
+                      aria-pressed={isActive}
                       onClick={() => setActiveCategory(cat.id)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium border whitespace-nowrap transition-all duration-150 ${
+                      className={`flex items-center gap-1 h-8 sm:h-7 px-2.5 rounded-md text-[11px] font-medium border whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                         isActive
-                          ? cat.id === 'all'
-                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-sm shadow-emerald-500/10'
-                            : `${cat.color.badge} shadow-sm`
-                          : 'bg-white/[0.03] text-slate-500 border-white/[0.04] hover:bg-white/[0.06] hover:text-slate-300 hover:border-white/10'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : 'bg-white/[0.03] text-slate-400 border-white/[0.06] hover:bg-white/[0.06] hover:text-slate-200 hover:border-white/10'
                       }`}
                     >
-                      <CatIcon size={11} />
+                      <CatIcon size={11} aria-hidden />
                       {cat.label}
-                      <span className={`text-[9px] font-semibold ${isActive ? 'opacity-80' : 'text-slate-600'}`}>{count}</span>
+                      <span className={`text-[9px] font-semibold ${isActive ? 'opacity-80' : 'text-slate-500'}`}>{count}</span>
                     </button>
                   </React.Fragment>
                 )
@@ -3805,10 +3747,10 @@ export default function Templates() {
             </div>
           </div>
 
-          {/* Loading */}
+          {/* Loading: cards shaped like the ones that come */}
           {loading && !data && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={24} className="animate-spin text-slate-500" />
+            <div role="status" aria-label="Reading the templates" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[0, 1, 2, 3, 4, 5].map((i) => <TemplateCardSkeleton key={i} />)}
             </div>
           )}
           {error && !data && (
@@ -3817,37 +3759,21 @@ export default function Templates() {
 
           {/* Empty state */}
           {data && templates.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                <Package size={22} className="text-slate-500" />
-              </div>
-              <p className="text-sm text-slate-500 text-center max-w-md">
-                No templates available. Import templates or create them in the{' '}
-                <code className="font-mono bg-white/[0.06] px-1.5 py-0.5 rounded text-slate-400 text-xs">
-                  .templates/
-                </code>{' '}
-                directory.
-              </p>
-            </div>
+            <EmptyState
+              icon={<Package size={28} />}
+              title="No templates available"
+              hint="Import a template, create your own, or put one in the .templates/ folder of the server."
+              action={<button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Plus size={14} /> Create template</button>}
+            />
           )}
 
           {/* Filtered empty state */}
           {data && templates.length > 0 && filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                <Search size={22} className="text-slate-500" />
-              </div>
-              <p className="text-sm text-slate-500">No templates match your filter</p>
-              <button
-                onClick={() => {
-                  setSearch('')
-                  setActiveCategory('all')
-                }}
-                className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-              >
-                Clear filters
-              </button>
-            </div>
+            <EmptyState
+              icon={<Search size={28} />}
+              title="No templates match your filter"
+              action={<button type="button" onClick={() => { setSearch(''); setActiveCategory('all') }} className={BTN_TOOLBAR_QUIET}><X size={14} /> Clear the filters</button>}
+            />
           )}
 
           {/* Template cards — grouped by category when viewing "All", flat grid otherwise */}
@@ -3857,16 +3783,14 @@ export default function Templates() {
                 const { def, templates: groupTemplates } = group
                 const CatIcon = def.icon
                 return (
-                  <div key={def.id} className="animate-fade-in" style={{ animationDelay: `${gi * 40}ms` }}>
+                  <section key={def.id} aria-label={def.label} className="animate-fade-in" style={{ animationDelay: `${gi * 40}ms` }}>
                     {/* Category section header */}
-                    <div className={`flex items-center gap-3 mb-4 pb-2 border-b border-white/[0.04]`}>
-                      <div className={`w-7 h-7 rounded-md flex items-center justify-center ${def.color.iconColor}`} style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                    <div className="flex items-center gap-3 mb-4 pb-2 border-b border-white/[0.04]">
+                      <div className="w-7 h-7 rounded-md flex items-center justify-center bg-white/[0.03] text-slate-400" aria-hidden>
                         <CatIcon size={14} />
                       </div>
-                      <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">{def.label}</h3>
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${def.color.badge}`}>
-                        {groupTemplates.length}
-                      </span>
+                      <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">{def.label}</h2>
+                      <Badge component="span" color="slate" size="xs">{groupTemplates.length}</Badge>
                     </div>
                     {/* Category grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -3882,37 +3806,13 @@ export default function Templates() {
                         />
                       ))}
                     </div>
-                  </div>
+                  </section>
                 )
               })}
 
-              {/* Create Template Card — at the end */}
+              {/* Create template card — at the end */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <button
-                  onClick={handleOpenCreate}
-                  className="
-                    group relative flex flex-col items-center justify-center
-                    min-h-[200px] rounded-xl border border-dashed
-                    border-white/10 hover:border-emerald-500/30
-                    bg-white/[0.02] hover:bg-emerald-500/[0.04]
-                    transition-all duration-300 cursor-pointer
-                  "
-                >
-                  <div className="
-                    flex items-center justify-center w-12 h-12 rounded-xl
-                    bg-white/5 group-hover:bg-emerald-500/15
-                    border border-white/5 group-hover:border-emerald-500/20
-                    transition-all duration-300 mb-3
-                  ">
-                    <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
-                  </div>
-                  <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                    Create Template
-                  </span>
-                  <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-                    Build a custom service template
-                  </span>
-                </button>
+                <CreateTemplateCard onClick={handleOpenCreate} />
               </div>
             </div>
           ) : (
@@ -3929,32 +3829,8 @@ export default function Templates() {
                 />
               ))}
 
-              {/* Create Template Card */}
-              <button
-                onClick={handleOpenCreate}
-                className="
-                  group relative flex flex-col items-center justify-center
-                  min-h-[200px] rounded-xl border border-dashed
-                  border-white/10 hover:border-emerald-500/30
-                  bg-white/[0.02] hover:bg-emerald-500/[0.04]
-                  transition-all duration-300 cursor-pointer
-                "
-              >
-                <div className="
-                  flex items-center justify-center w-12 h-12 rounded-xl
-                  bg-white/5 group-hover:bg-emerald-500/15
-                  border border-white/5 group-hover:border-emerald-500/20
-                  transition-all duration-300 mb-3
-                ">
-                  <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
-                </div>
-                <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                  Create Template
-                </span>
-                <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-                  Build a custom service template
-                </span>
-              </button>
+              {/* Create template card */}
+              <CreateTemplateCard onClick={handleOpenCreate} />
             </div>
           )}
         </>

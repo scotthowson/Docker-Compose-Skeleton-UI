@@ -260,7 +260,22 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
     } catch (e) { setErr(e instanceof Error ? e.message : 'The request failed') } finally { setBusy(false) }
   }
   return (
-    <Sheet title="A stack in its own VM" subtitle="The hub creates the VM on Proxmox, installs Docker and DCS in it and joins it; the stack then lives there" icon={<Server size={18} />} onClose={busy ? () => {} : onClose} wide>
+    <Sheet
+      title="A stack in its own VM"
+      subtitle="The hub creates the VM on Proxmox, installs Docker and DCS in it and joins it; the stack then lives there"
+      icon={<Server size={18} />}
+      onClose={busy ? () => {} : onClose}
+      wide
+      footer={<>
+        {err && <p role="alert" className="text-xs text-rose-300 mb-3">{err}</p>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+          <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Build the VM
+          </button>
+        </div>
+      </>}
+    >
       <div className="space-y-4">
         <HubFirewallNote fw={defaults?.hub_firewall} />
         <div>
@@ -285,13 +300,6 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
         </div>
         <CapabilityNote caps={caps} />
         <p className="text-[11px] text-slate-500">{osLabel(settings, defaults) || 'The image'}, imported once · user {defaults?.vm_user || 'dcs'} with the hub's ssh key · the VM's admin is {defaults?.admin_user || 'your account'} with a generated password kept in the hub's secret store · {buildTimeNote(settings.os, settings.bake)}; watch it on the card.</p>
-        {err && <p role="alert" className="text-xs text-rose-300">{err}</p>}
-        <div className="flex gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Build the VM
-          </button>
-        </div>
       </div>
     </Sheet>
   )

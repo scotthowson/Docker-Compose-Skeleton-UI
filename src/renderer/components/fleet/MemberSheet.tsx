@@ -101,7 +101,21 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
   }
 
   return (
-    <Sheet title={editing ? `Edit ${member?.name}` : 'Add a member'} subtitle={editing ? 'Name, address, account and the guest this member runs in' : 'A DCS on another VM, reached by address with an account that exists there'} icon={<Link2 size={18} />} onClose={busy ? () => {} : onClose} wide>
+    <Sheet
+      title={editing ? `Edit ${member?.name}` : 'Add a member'}
+      subtitle={editing ? 'Name, address, account and the guest this member runs in' : 'A DCS on another VM, reached by address with an account that exists there'}
+      icon={<Link2 size={18} />}
+      onClose={busy ? () => {} : onClose}
+      wide
+      footer={
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>{state === 'done' ? 'Close' : 'Cancel'}</button>
+          <button type="button" onClick={run} disabled={busy || state === 'done' || (!editing && !password)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />} {editing ? 'Save' : 'Link this server'}
+          </button>
+        </div>
+      }
+    >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor={`${uid}-name`} className={labelCls}>Name</label>
@@ -136,12 +150,6 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
       <p className="text-[11px] text-slate-500 mt-2">The password is kept in this hub's secret store. A VM can also join by itself with a join code (the Join code button on the {pageLabel('proxmox')} page) — then no account is typed here.</p>
       {err && <p role="alert" className="text-xs text-rose-300 mt-2">{err}</p>}
       {(state !== 'idle') && <ProgressCard steps={ADD_STEPS} current={current} state={state} status={status} lines={lines} className="mt-3" compact />}
-      <div className="mt-4 flex gap-2">
-        <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>{state === 'done' ? 'Close' : 'Cancel'}</button>
-        <button type="button" onClick={run} disabled={busy || state === 'done' || (!editing && !password)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />} {editing ? 'Save' : 'Link this server'}
-        </button>
-      </div>
     </Sheet>
   )
 }

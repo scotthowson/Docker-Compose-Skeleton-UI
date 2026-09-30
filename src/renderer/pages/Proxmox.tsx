@@ -875,7 +875,13 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
     <Sheet title={vm.name} subtitle={<>
       {`${vm.type === 'qemu' ? 'VM' : 'Container'} ${vm.vmid} on ${vm.node} · ${vm.status}${running ? ` · up ${fmtUptime(d?.uptime ?? vm.uptime)}` : ''}`}
       {vm.tags.length > 0 && <span className="flex flex-wrap items-center gap-1 mt-1.5"><TagChips tags={vm.tags} /></span>}
-    </>} icon={<Server size={18} />} onClose={onClose} wide>
+    </>} icon={<Server size={18} />} onClose={onClose} wide footer={(isAdmin || pveUrl) ? (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {isAdmin && actionsFor(vm).map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled />)}
+        <span className="flex-1" />
+        {pveUrl && <a href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_TOOLBAR_QUIET}><ExternalLink size={14} /> Open in Proxmox</a>}
+      </div>
+    ) : undefined}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Tile label="CPU" value={running ? `${fmtPct(d?.cpu || vm.cpu)}%` : '—'} note={`${d?.cpus || vm.maxcpu} vCPU`} />
@@ -925,11 +931,6 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 flex-wrap pt-1">
-          {isAdmin && actionsFor(vm).map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled />)}
-          <span className="flex-1" />
-          {pveUrl && <a href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_TOOLBAR_QUIET}><ExternalLink size={14} /> Open in Proxmox</a>}
-        </div>
       </div>
     </Sheet>
   )

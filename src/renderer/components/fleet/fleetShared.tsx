@@ -72,24 +72,28 @@ export const MATCH_LABEL: Record<string, string> = {
   manual: 'mapped by hand',
 }
 
-/** A sheet (a bottom sheet on a phone, a centred dialog above): Escape closes it, focus moves in (the first field, else the close button), cycles inside and returns to what opened it */
-export function Sheet({ title, subtitle, icon, onClose, children, wide = false }: { title: string; subtitle?: ReactNode; icon?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean }) {
+/** A sheet (a bottom sheet on a phone, a centred dialog above): Escape closes it, focus moves in (the first field, else the close button), cycles inside and returns to what opened it.
+ *  The title stays put and the body scrolls; a `footer` (the buttons that end a form) stays in reach under it. */
+export function Sheet({ title, subtitle, icon, onClose, children, footer, wide = false }: { title: string; subtitle?: ReactNode; icon?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   useModalA11y(panelRef, onClose)
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto scrollbar-thin glass rounded-t-3xl sm:rounded-2xl p-5 animate-slide-up`} onClick={(e) => e.stopPropagation()}>
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
-        <div className="flex items-start gap-3 mb-4">
-          {icon && <div className="p-2.5 rounded-xl bg-violet-500/15 text-violet-300 shrink-0">{icon}</div>}
-          <div className="min-w-0 flex-1">
-            <h3 id={titleId} className="text-base font-semibold text-slate-100">{title}</h3>
-            {subtitle && <div className="text-sm text-slate-400 mt-0.5">{subtitle}</div>}
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] flex flex-col glass rounded-t-3xl sm:rounded-2xl animate-slide-up`} onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 px-5 pt-5">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
+          <div className="flex items-start gap-3 mb-4">
+            {icon && <div className="p-2.5 rounded-xl bg-violet-500/15 text-violet-300 shrink-0">{icon}</div>}
+            <div className="min-w-0 flex-1">
+              <h3 id={titleId} className="text-base font-semibold text-slate-100">{title}</h3>
+              {subtitle && <div className="text-sm text-slate-400 mt-0.5">{subtitle}</div>}
+            </div>
+            <button type="button" onClick={onClose} className={`${BTN_ICON} text-slate-500 hover:text-slate-200 hover:bg-white/10`} aria-label="Close"><X size={16} /></button>
           </div>
-          <button type="button" onClick={onClose} className={`${BTN_ICON} text-slate-500 hover:text-slate-200 hover:bg-white/10`} aria-label="Close"><X size={16} /></button>
         </div>
-        {children}
+        <div className={`min-h-0 flex-1 overflow-y-auto scrollbar-thin px-5 ${footer ? 'pb-4' : 'pb-5'}`}>{children}</div>
+        {footer && <div className="shrink-0 px-5 py-4 border-t border-white/10">{footer}</div>}
       </div>
     </div>,
     document.body,
