@@ -9,6 +9,8 @@ import {
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useStackStore } from '../../stores/stackStore'
 import { CopyButton } from '../common/CopyButton'
+import Hint from '../common/Hint'
+import { BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER } from '../../lib/ui'
 import type { StackInfo } from '../../../shared/types'
 
 function formatRelativeTime(timestamp: number): string {
@@ -61,43 +63,39 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
   const hasPriority = annotation.priority && annotation.priority !== 'normal'
   const priorityCfg = annotation.priority ? priorityConfig[annotation.priority] : null
 
+  // emerald starts, rose stops, the rest is neutral (the colours the Proxmox page gives a stack's controls)
   const actionButtons: {
     action: 'start' | 'stop' | 'restart' | 'update'
     icon: typeof Play
     label: string
-    color: string
-    hoverColor: string
+    tone: string
     disabled?: boolean
   }[] = [
     {
       action: 'start',
       icon: Play,
       label: isRunning ? 'Reload' : 'Start',
-      color: 'text-emerald-400',
-      hoverColor: 'hover:bg-emerald-500/15 hover:text-emerald-300',
+      tone: TONE_GHOST_OK,
     },
     {
       action: 'stop',
       icon: Square,
       label: 'Stop',
-      color: 'text-rose-400',
-      hoverColor: 'hover:bg-rose-500/15 hover:text-rose-300',
+      tone: TONE_GHOST_DANGER,
       disabled: !isRunning,
     },
     {
       action: 'restart',
       icon: RotateCcw,
       label: 'Restart',
-      color: 'text-amber-400',
-      hoverColor: 'hover:bg-amber-500/15 hover:text-amber-300',
+      tone: TONE_GHOST,
       disabled: !isRunning,
     },
     {
       action: 'update',
       icon: Download,
       label: 'Update',
-      color: 'text-cyan-400',
-      hoverColor: 'hover:bg-cyan-500/15 hover:text-cyan-300',
+      tone: TONE_GHOST,
     },
   ]
 
@@ -159,22 +157,33 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                   e.stopPropagation()
                   onToggleSelect?.(stack.name)
                 }}
-                className={`
-                  shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center
+                className="shrink-0 mt-0.5 flex items-center justify-center p-1.5 -m-1.5 rounded"
+              >
+                <span className={`
+                  w-5 h-5 rounded border-2 flex items-center justify-center
                   transition-all duration-200
                   ${isSelected
-                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                    ? 'bg-cyan-500 border-cyan-500 text-white'
                     : 'border-slate-500/50 hover:border-slate-400 bg-transparent'}
-                `}
-              >
-                {isSelected && <Check size={12} strokeWidth={3} />}
+                `}>
+                  {isSelected && <Check size={12} strokeWidth={3} />}
+                </span>
               </button>
             )}
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-slate-100 truncate group-hover:text-white transition-colors">
-                  {annotation.label || formatStackName(stack.name)}
+                {/* the whole card opens the stack for a mouse; this button is the way in for a keyboard */}
+                <h3 className="text-sm font-semibold truncate min-w-0">
+                  <button
+                    type="button"
+                    data-stack-open={stack.name}
+                    onClick={(e) => { e.stopPropagation(); handleCardClick() }}
+                    className="max-w-full truncate rounded text-left text-slate-100 group-hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                    aria-label={batchMode ? undefined : `Open ${annotation.label || formatStackName(stack.name)}`}
+                  >
+                    {annotation.label || formatStackName(stack.name)}
+                  </button>
                 </h3>
                 {hasPriority && priorityCfg && (
                   <span
@@ -188,7 +197,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
               </div>
               <p className="text-xs text-slate-500 truncate mt-0.5 font-mono flex items-center gap-1">
                 {stack.name}
-                <CopyButton text={stack.name} className="opacity-0 group-hover:opacity-100" size={10} />
+                <CopyButton text={stack.name} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" size={10} />
               </p>
             </div>
           </div>
@@ -198,32 +207,23 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             {!batchMode && onEdit && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(stack.name) }}
-                className="
-                  flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-semibold
-                  bg-slate-700/60 border border-slate-600/50 text-slate-200
-                  hover:bg-emerald-600 hover:border-emerald-500 hover:text-white
-                  shadow-sm transition-all duration-200
-                "
-                title="Edit stack"
+                aria-label={`Edit ${stack.name}`}
+                className={BTN_CARD_QUIET}
               >
-                <Pencil size={10} />
-                Edit
+                <Pencil size={12} />
+                <span className="hidden sm:inline">Edit</span>
               </button>
             )}
             {!batchMode && onDelete && !isRunning && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(stack.name) }}
-                className="
-                  flex items-center justify-center w-7 h-7 rounded-md
-                  bg-white/5 border border-white/5 text-slate-500
-                  hover:bg-rose-500/15 hover:border-rose-500/25 hover:text-rose-400
-                  opacity-0 group-hover:opacity-100
-                  transition-all duration-200
-                "
-                title="Delete stack"
-              >
-                <Trash2 size={11} />
-              </button>
+              <Hint label="Delete the stack">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(stack.name) }}
+                  aria-label={`Delete ${stack.name}`}
+                  className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER} sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100`}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </Hint>
             )}
             <span
               className={`
@@ -239,14 +239,13 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                 className={`w-1.5 h-1.5 rounded-full ${
                   isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
                 }`}
-                title={isRunning ? 'All containers are up' : 'Stack is not running'}
               />
               {isRunning ? 'Running' : 'Stopped'}
             </span>
           </div>
           {stack.placement === 'vm' && (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ring-1 ${stack.reachable === false ? 'bg-rose-500/10 text-rose-300 ring-rose-500/25' : 'bg-amber-500/15 text-amber-200 ring-amber-500/25'}`} title={stack.reachable === false ? 'The VM is off or not answering' : `Runs in its own VM${stack.node ? ` on ${stack.node}` : ''}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${stack.reachable === false ? 'bg-rose-400' : 'bg-amber-300'}`} />
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ring-1 ${stack.reachable === false ? 'bg-rose-500/10 text-rose-300 ring-rose-500/25' : 'bg-violet-500/15 text-violet-200 ring-violet-500/25'}`} title={stack.reachable === false ? 'The VM is off or not answering' : `Runs in its own VM${stack.node ? ` on ${stack.node}` : ''}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${stack.reachable === false ? 'bg-rose-400' : 'bg-violet-300'}`} />
               VM{stack.vmid ? ` #${stack.vmid}` : ''}{stack.reachable === false ? ' · off' : ''}
             </span>
           )}
@@ -292,31 +291,24 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/5"
             onClick={(e) => e.stopPropagation()}
           >
-            {actionButtons.filter((b) => b.action !== 'update' || isAdmin).map(({ action, icon: Icon, label, color, hoverColor, disabled }) => {
+            {actionButtons.filter((b) => b.action !== 'update' || isAdmin).map(({ action, icon: Icon, label, tone, disabled }) => {
               const isDisabled = disabled || isActionLoading
 
               return (
-                <button
-                  key={action}
-                  onClick={() => onAction(stack.name, action)}
-                  disabled={isDisabled}
-                  title={label}
-                  className={`
-                    relative flex items-center justify-center w-10 h-10 md:w-8 md:h-8 rounded-lg
-                    transition-all duration-200
-                    ${
-                      isDisabled
-                        ? 'text-slate-500 cursor-not-allowed'
-                        : `${color} ${hoverColor}`
-                    }
-                  `}
-                >
-                  {isActionLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                  ) : (
-                    <Icon className="w-4 h-4" />
-                  )}
-                </button>
+                <Hint key={action} label={label}>
+                  <button
+                    onClick={() => onAction(stack.name, action)}
+                    disabled={isDisabled}
+                    aria-label={`${label} ${stack.name}`}
+                    className={`${BTN_ICON} ${tone} disabled:cursor-not-allowed`}
+                  >
+                    {isActionLoading ? (
+                      <Loader2 size={14} className="animate-spin text-slate-400" />
+                    ) : (
+                      <Icon size={14} />
+                    )}
+                  </button>
+                </Hint>
               )
             })}
 

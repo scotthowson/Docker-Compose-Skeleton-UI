@@ -5,7 +5,7 @@
 // like a first install. Shows exactly what will go before asking for the name.
 // =============================================================================
 
-import React, { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bomb, Loader2, FolderX, Database, ShieldCheck, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { fetchContainerResetPreviewOn, resetContainerOn } from '../../api/fleetScoped'
@@ -13,6 +13,8 @@ import type { ContainerResetPreview, ContainerResetResponse } from '../../../sha
 import type { RowMember } from '../../../shared/fleetScoped'
 import { useToast } from '../common/Toast'
 import ModalOverlay from '../common/ModalOverlay'
+import Hint from '../common/Hint'
+import { BTN_ICON_SM, BTN_SHEET_DANGER, BTN_SHEET_QUIET, TONE_GHOST } from '../../lib/ui'
 
 interface NukeDialogProps {
   containerName: string
@@ -48,12 +50,6 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
   }, [containerName, member])
 
   useEffect(() => { if (open) void load() }, [open, load])
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, busy, onClose])
 
   const go = useCallback(async () => {
     if (typed !== containerName || busy) return
@@ -88,17 +84,17 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400"><Bomb size={18} /></div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-100">Nuke &amp; reinstall {containerName}{member && <span className="ml-1.5 text-[11px] font-medium text-amber-200/90">· VM {memberName || member}</span>}</h3>
+              <h3 className="text-sm font-semibold text-slate-100">Nuke &amp; reinstall {containerName}{member && <span className="ml-1.5 text-[11px] font-medium text-violet-200">· VM {memberName || member}</span>}</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">A fresh install{member ? ` inside the VM ${memberName || member}` : ''}: the container and its files go, then it is created again from the compose file.</p>
             </div>
           </div>
-          <button onClick={onClose} disabled={busy} className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40" aria-label="Close"><X size={16} /></button>
+          <Hint label="Close"><button onClick={onClose} disabled={busy} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label="Close"><X size={16} /></button></Hint>
         </div>
 
         <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin">
-          {loading && <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Working out what this container owns…</div>}
+          {loading && <div role="status" className="flex items-center gap-2 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Working out what this container owns…</div>}
           {error && !loading && (
-            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-300"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{error}</div>
+            <div role="alert" className="flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-300"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{error}</div>
           )}
           {preview && !result && (
             <>
@@ -164,10 +160,11 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
               )}
 
               <div className="pt-1">
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Type <span className="font-mono text-rose-300 normal-case">{containerName}</span> to confirm</label>
+                <label htmlFor="nuke-confirm-name" className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Type <span className="font-mono text-rose-300 normal-case">{containerName}</span> to confirm</label>
                 <input
+                  id="nuke-confirm-name"
                   type="text" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={containerName} autoFocus spellCheck={false}
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/40 transition-colors"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/40 focus:ring-1 focus:ring-rose-500/20 transition-colors"
                 />
               </div>
             </>
@@ -184,10 +181,10 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-white/5 bg-white/[0.02]">
-          <button onClick={onClose} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent transition-all disabled:opacity-40">{result ? 'Close' : 'Cancel'}</button>
+          <button onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>{result ? 'Close' : 'Cancel'}</button>
           {!result && (
-            <button onClick={go} disabled={!canGo} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <Bomb size={13} />}
+            <button onClick={go} disabled={!canGo} className={`${BTN_SHEET_DANGER} flex-1 sm:flex-none disabled:cursor-not-allowed`}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Bomb size={14} />}
               {busy ? 'Reinstalling…' : 'Nuke & reinstall'}
             </button>
           )}

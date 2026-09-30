@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { SegmentedControl } from '@mantine/core'
 import {
   X,
   Copy,
@@ -17,6 +18,9 @@ import {
   AlertTriangle,
   GitCompare,
   FileText,
+  Loader2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 import {
   validateStackCompose,
@@ -28,8 +32,22 @@ import { useComposeLinter, useEnvLinter } from '../../hooks/useComposeLinter'
 import { usePluginStore } from '../../stores/pluginStore'
 import type { LintDiagnostic, EnvDiagnostic } from '../../hooks/useComposeLinter'
 import { useToast } from '../common/Toast'
+import { LoadingState } from '../common/PageState'
+import Hint from '../common/Hint'
 import type { ComposeValidateResponse, StackEnvResponse } from '../../../shared/types'
 import { useModalA11y } from '../../hooks/useModalA11y'
+import { DiagNumber, EditorDiagnostics } from './LintParts'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON, BTN_ICON_SM, TONE_QUIET, TONE_OK, TONE_GHOST } from '../../lib/ui'
+
+/** the pressed state of a toggle button: the cyan the dashboard gives a chosen mode (Batch mode, Edit mode) */
+const TONE_ON = 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25'
+
+/** the number of errors (or, without any, warnings) a tab carries */
+function CountBadge({ errors, warnings }: { errors: number; warnings: number }) {
+  if (errors > 0) return <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums" aria-label={`${errors} error${errors === 1 ? '' : 's'}`}>{errors}</span>
+  if (warnings > 0) return <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums" aria-label={`${warnings} warning${warnings === 1 ? '' : 's'}`}>{warnings}</span>
+  return null
+}
 
 interface ComposeViewerProps {
   stackName: string
@@ -753,7 +771,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-6 ${
                   isChange
                     ? side === 'left' ? 'text-rose-400/60 bg-rose-500/[0.06]' : 'text-emerald-400/60 bg-emerald-500/[0.06]'
-                    : 'text-slate-700'
+                    : 'text-slate-500'
                 }`}>
                   {dl.lineNumber ?? ''}
                 </span>
@@ -786,19 +804,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   // ---- Render .env tab content ----
   function renderEnvTab() {
     if (envLoading) {
-      return (
-        <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-400 rounded-full animate-spin" />
-            Loading .env...
-          </div>
-        </div>
-      )
+      return <LoadingState compact label="Reading the .env file…" />
     }
 
     if (envError) {
       return (
-        <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+        <div className="flex items-center justify-center h-48 text-sm" role="alert">
           <div className="flex items-center gap-2 text-rose-400">
             <AlertTriangle size={16} />
             {envError}
@@ -816,36 +827,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             <div className="h-4" />
             {envEditLines.map((_, idx) => {
               const diags = envLineDiagnostics.get(idx + 1)
-              const sev = diags?.[0]?.severity
               return (
                 <div key={idx} className={`w-12 pr-3 pl-3 text-right leading-6 relative`}>
                   {diags ? (
-                    <span className="group/diag cursor-help">
-                      <span className={`text-xs tabular-nums font-mono ${
-                        sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                      }`}>
-                        {idx + 1}
-                      </span>
-                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
-                          {diags.map((d, di) => (
-                            <div key={di} className="flex items-start gap-2">
-                              <span className={`shrink-0 mt-0.5 ${
-                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                              }`}>
-                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
-                              </span>
-                              <div>
-                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </span>
+                    <DiagNumber line={idx + 1} diags={diags} focusable={false} width={300} className="text-xs tabular-nums font-mono" />
                   ) : (
-                    <span className="text-xs tabular-nums font-mono text-slate-700">{idx + 1}</span>
+                    <span className="text-xs tabular-nums font-mono text-slate-500">{idx + 1}</span>
                   )}
                 </div>
               )
@@ -855,7 +842,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
           <textarea aria-label=".env file"
             value={envEditContent}
             onChange={(e) => setEnvEditContent(e.target.value)}
-            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none leading-6`}
+            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/30 leading-6`}
             style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
@@ -908,30 +895,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               >
                 <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 select-none tabular-nums text-xs leading-6 relative`}>
                   {diags ? (
-                    <span className="group/diag cursor-help">
-                      <span className={`
-                        ${highestSeverity === 'error' ? 'text-rose-400' : highestSeverity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}
-                      `}>
-                        {idx + 1}
-                      </span>
-                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
-                          {diags.map((d, di) => (
-                            <div key={di} className="flex items-start gap-2">
-                              <span className={`shrink-0 mt-0.5 ${
-                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                              }`}>
-                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
-                              </span>
-                              <div>
-                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </span>
+                    <DiagNumber line={idx + 1} diags={diags} focusable={true} width={300} />
                   ) : (
                     <span className="text-slate-500">{idx + 1}</span>
                   )}
@@ -966,37 +930,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             <div className="h-4" />
             {editLines.map((_, idx) => {
               const diags = lineDiagnostics.get(idx + 1)
-              const sev = diags?.[0]?.severity
               return (
                 <div key={idx} className={`w-12 pr-3 pl-3 text-right leading-6 relative`}>
                   {diags ? (
-                    <span className="group/diag cursor-help">
-                      <span className={`text-xs tabular-nums font-mono ${
-                        sev === 'error' ? 'text-rose-400' : sev === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                      }`}>
-                        {idx + 1}
-                      </span>
-                      <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '300px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
-                          {diags.map((d, di) => (
-                            <div key={di} className="flex items-start gap-2">
-                              <span className={`shrink-0 mt-0.5 ${
-                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                              }`}>
-                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
-                              </span>
-                              <div>
-                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
-                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </span>
+                    <DiagNumber line={idx + 1} diags={diags} focusable={false} width={300} className="text-xs tabular-nums font-mono" />
                   ) : (
-                    <span className="text-xs tabular-nums font-mono text-slate-700">{idx + 1}</span>
+                    <span className="text-xs tabular-nums font-mono text-slate-500">{idx + 1}</span>
                   )}
                 </div>
               )
@@ -1007,7 +946,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             ref={textareaRef}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none leading-6`}
+            className={`flex-1 bg-slate-950 text-slate-200 font-mono text-[13px] py-4 px-4 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/30 leading-6`}
             style={{ minHeight: '70vh' }}
             spellCheck={false}
           />
@@ -1051,32 +990,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 {/* Diagnostic gutter indicator */}
                 <span className={`inline-block w-12 shrink-0 text-right pr-3 pl-3 py-[1px] select-none tabular-nums text-xs leading-6 relative`}>
                   {diags ? (
-                    <span className="group/diag cursor-help">
-                      <span className={`
-                        ${highestSeverity === 'error' ? 'text-rose-400' : highestSeverity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}
-                      `}>
-                        {idx + 1}
-                      </span>
-                      {/* Diagnostic tooltip */}
-                      <div className="absolute left-full top-0 ml-1 z-50 hidden group-hover/diag:block animate-fade-in pointer-events-none" style={{ width: '320px' }}>
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl shadow-black/40 p-2.5 space-y-1.5">
-                          {diags.map((d, di) => (
-                            <div key={di} className="flex items-start gap-2">
-                              <span className={`shrink-0 mt-0.5 ${
-                                d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'
-                              }`}>
-                                {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
-                              </span>
-                              <div>
-                                <p className="text-[11px] text-slate-200 leading-snug">{d.message}</p>
-                                {d.fix && <p className="text-[10px] text-slate-500 mt-0.5">Fix: {d.fix}</p>}
-                                <span className="text-[9px] text-slate-500 font-mono">{d.rule}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </span>
+                    <DiagNumber line={idx + 1} diags={diags} focusable={true} width={320} />
                   ) : (
                     <span className="text-slate-500">{idx + 1}</span>
                   )}
@@ -1133,8 +1047,8 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
         aria-labelledby="compose-viewer-title"
       >
         {/* ---- Header ---- */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 px-4 sm:px-5 py-3 sm:py-3.5 border-b border-white/5 shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1 basis-48">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/20 shrink-0">
               {activeTab === 'compose' ? (
                 <FileCode2 className="w-4 h-4 text-cyan-400" />
@@ -1153,208 +1067,130 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 {activeTab === 'compose' ? 'docker-compose.yml' : '.env'}
               </p>
             </div>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-0.5 ml-3 bg-slate-900/60 rounded-lg p-0.5">
-              <button
-                onClick={() => switchTab('compose')}
-                className={`
-                  flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors duration-150
-                  ${activeTab === 'compose'
-                    ? 'bg-white/[0.08] text-slate-200'
-                    : 'text-slate-500 hover:text-slate-300'
-                  }
-                `}
-              >
-                <FileCode2 size={12} />
-                Compose
-                {composeCounts.errors > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{composeCounts.errors}</span>
-                )}
-                {composeCounts.errors === 0 && composeCounts.warnings > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{composeCounts.warnings}</span>
-                )}
-              </button>
-              <button
-                onClick={() => switchTab('env')}
-                className={`
-                  flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors duration-150
-                  ${activeTab === 'env'
-                    ? 'bg-white/[0.08] text-slate-200'
-                    : 'text-slate-500 hover:text-slate-300'
-                  }
-                `}
-              >
-                <FileText size={12} />
-                .env
-                {envCounts.errors > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500/20 text-[9px] font-bold text-rose-400 tabular-nums">{envCounts.errors}</span>
-                )}
-                {envCounts.errors === 0 && envCounts.warnings > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-400 tabular-nums">{envCounts.warnings}</span>
-                )}
-              </button>
-            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Tabs: one choice */}
+          <SegmentedControl
+            aria-label="File"
+            value={activeTab}
+            onChange={(v) => switchTab(v as 'compose' | 'env')}
+            data={[
+              { value: 'compose', label: <span className="flex items-center gap-1.5"><FileCode2 size={12} aria-hidden />Compose<CountBadge errors={composeCounts.errors} warnings={composeCounts.warnings} /></span> },
+              { value: 'env', label: <span className="flex items-center gap-1.5"><FileText size={12} aria-hidden />.env<CountBadge errors={envCounts.errors} warnings={envCounts.warnings} /></span> },
+            ]}
+          />
+
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {/* ---- Compose tab buttons ---- */}
             {activeTab === 'compose' && (
               <>
                 {/* Edit / View toggle */}
-                <button
-                  onClick={() => {
-                    if (editMode) {
-                      setEditMode(false)
-                      setShowDiff(false)
-                      setValidationResult(null)
-                    } else {
-                      setEditMode(true)
-                      setSearchOpen(false)
-                      setSearchQuery('')
-                    }
-                  }}
-                  className={`
-                    flex items-center justify-center gap-1
-                    h-8 px-2.5 rounded-lg
-                    text-xs font-medium
-                    transition-colors duration-150
-                    ${editMode
-                      ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                    }
-                  `}
-                  title={editMode ? 'Switch to view mode' : 'Switch to edit mode'}
-                  aria-label={editMode ? 'Switch to view mode' : 'Switch to edit mode'}
-                >
-                  <Pencil size={13} strokeWidth={2} />
-                  <span>{editMode ? 'Editing' : 'Edit'}</span>
-                </button>
+                <Hint label={editMode ? 'Switch to view mode' : 'Switch to edit mode'}>
+                  <button
+                    type="button"
+                    aria-label="Edit mode"
+                    aria-pressed={editMode}
+                    onClick={() => {
+                      if (editMode) {
+                        setEditMode(false)
+                        setShowDiff(false)
+                        setValidationResult(null)
+                      } else {
+                        setEditMode(true)
+                        setSearchOpen(false)
+                        setSearchQuery('')
+                      }
+                    }}
+                    className={`${BTN_TOOLBAR} ${editMode ? TONE_ON : TONE_QUIET}`}
+                  >
+                    <Pencil size={14} />
+                    <span className="hidden sm:inline">{editMode ? 'Editing' : 'Edit'}</span>
+                  </button>
+                </Hint>
 
                 {/* Diff toggle (edit mode only) */}
                 {editMode && (
-                  <button
-                    onClick={() => setShowDiff((prev) => !prev)}
-                    className={`
-                      flex items-center justify-center gap-1
-                      h-8 px-2.5 rounded-lg
-                      text-xs font-medium
-                      transition-colors duration-150
-                      ${showDiff
-                        ? 'text-violet-400 bg-violet-500/10 ring-1 ring-violet-500/20'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                      }
-                    `}
-                    title="Toggle diff view"
-                    aria-label="Toggle diff view"
-                  >
-                    <GitCompare size={13} strokeWidth={2} />
-                    <span>Diff</span>
-                  </button>
+                  <Hint label="Show what changed next to the saved file">
+                    <button
+                      type="button"
+                      aria-label="Diff view"
+                      aria-pressed={showDiff}
+                      onClick={() => setShowDiff((prev) => !prev)}
+                      className={`${BTN_TOOLBAR} ${showDiff ? TONE_ON : TONE_QUIET}`}
+                    >
+                      <GitCompare size={14} />
+                      <span className="hidden sm:inline">Diff</span>
+                    </button>
+                  </Hint>
                 )}
 
                 {/* Validate (edit mode only) */}
                 {editMode && (
-                  <button
-                    onClick={handleValidate}
-                    disabled={validating}
-                    className={`
-                      flex items-center justify-center gap-1
-                      h-8 px-2.5 rounded-lg
-                      text-xs font-medium
-                      transition-colors duration-150
-                      ${validating
-                        ? 'text-slate-500 cursor-not-allowed'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                      }
-                    `}
-                    title="Validate compose file"
-                    aria-label="Validate compose file"
-                  >
-                    {validating ? (
-                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-slate-400 rounded-full animate-spin" />
-                    ) : (
-                      <CheckCircle size={13} strokeWidth={2} />
-                    )}
-                    <span>Validate</span>
-                  </button>
+                  <Hint label="Check the compose file with Docker">
+                    <button
+                      type="button"
+                      aria-label="Validate the compose file"
+                      onClick={handleValidate}
+                      disabled={validating}
+                      className={BTN_TOOLBAR_QUIET}
+                    >
+                      {validating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                      <span className="hidden sm:inline">Validate</span>
+                    </button>
+                  </Hint>
                 )}
 
                 {/* Save (edit mode only, disabled until validated) */}
                 {editMode && (
-                  <button
-                    onClick={handleSave}
-                    disabled={!validationResult?.valid || saving}
-                    className={`
-                      flex items-center justify-center gap-1
-                      h-8 px-2.5 rounded-lg
-                      text-xs font-medium
-                      transition-colors duration-150
-                      ${!validationResult?.valid || saving
-                        ? 'text-slate-500 cursor-not-allowed'
-                        : 'text-emerald-400 hover:bg-emerald-500/10'
-                      }
-                    `}
-                    title={!validationResult?.valid ? 'Validate first before saving' : 'Save compose file'}
-                    aria-label="Save compose file"
-                  >
-                    {saving ? (
-                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-emerald-400 rounded-full animate-spin" />
-                    ) : (
-                      <Save size={13} strokeWidth={2} />
-                    )}
-                    <span>Save</span>
-                  </button>
+                  <Hint label={!validationResult?.valid ? 'Validate first, then save' : 'Save the compose file'}>
+                    <span className="inline-flex">
+                      <button
+                        type="button"
+                        aria-label="Save the compose file"
+                        onClick={handleSave}
+                        disabled={!validationResult?.valid || saving}
+                        className={`${BTN_TOOLBAR} ${TONE_OK}`}
+                      >
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                        <span className="hidden sm:inline">Save</span>
+                      </button>
+                    </span>
+                  </Hint>
                 )}
 
                 {/* Search toggle (view mode only) */}
                 {!editMode && (
-                  <button
-                    onClick={() => {
-                      setSearchOpen((prev) => !prev)
-                      if (!searchOpen) {
-                        setTimeout(() => searchInputRef.current?.focus(), 0)
-                      } else {
-                        setSearchQuery('')
-                      }
-                    }}
-                    className={`
-                      flex items-center justify-center
-                      w-8 h-8 rounded-lg
-                      transition-colors duration-150
-                      ${searchOpen
-                        ? 'text-cyan-400 bg-cyan-500/10'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                      }
-                    `}
-                    title="Search (Ctrl+F)"
-                    aria-label="Search within file"
-                  >
-                    <Search size={15} strokeWidth={2} />
-                  </button>
+                  <Hint label="Search (Ctrl+F)">
+                    <button
+                      type="button"
+                      aria-label="Search in the file"
+                      aria-pressed={searchOpen}
+                      onClick={() => {
+                        setSearchOpen((prev) => !prev)
+                        if (!searchOpen) {
+                          setTimeout(() => searchInputRef.current?.focus(), 0)
+                        } else {
+                          setSearchQuery('')
+                        }
+                      }}
+                      className={`${BTN_ICON} ${searchOpen ? TONE_ON : TONE_QUIET}`}
+                    >
+                      <Search size={14} />
+                    </button>
+                  </Hint>
                 )}
 
                 {/* Copy button */}
-                <button
-                  onClick={handleCopy}
-                  className={`
-                    flex items-center justify-center
-                    w-8 h-8 rounded-lg
-                    transition-colors duration-150
-                    ${copied
-                      ? 'text-emerald-400 bg-emerald-500/10'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                    }
-                  `}
-                  title={copied ? 'Copied!' : 'Copy to clipboard'}
-                  aria-label="Copy to clipboard"
-                >
-                  {copied ? (
-                    <Check size={15} strokeWidth={2} />
-                  ) : (
-                    <Copy size={15} strokeWidth={2} />
-                  )}
-                </button>
+                <Hint label={copied ? 'Copied!' : 'Copy to the clipboard'}>
+                  <button
+                    type="button"
+                    aria-label="Copy to the clipboard"
+                    onClick={handleCopy}
+                    className={`${BTN_ICON} ${TONE_QUIET}`}
+                  >
+                    {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                  </button>
+                </Hint>
               </>
             )}
 
@@ -1362,85 +1198,63 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             {activeTab === 'env' && (
               <>
                 {/* Edit / View toggle */}
-                <button
-                  onClick={() => {
-                    if (envEditMode) {
-                      setEnvEditMode(false)
-                    } else {
-                      setEnvEditMode(true)
-                      setEnvEditContent(envContent ?? '')
-                    }
-                  }}
-                  disabled={envLoading || envError !== null}
-                  className={`
-                    flex items-center justify-center gap-1
-                    h-8 px-2.5 rounded-lg
-                    text-xs font-medium
-                    transition-colors duration-150
-                    ${envLoading || envError !== null
-                      ? 'text-slate-500 cursor-not-allowed'
-                      : envEditMode
-                        ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20'
-                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                    }
-                  `}
-                  title={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
-                  aria-label={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}
-                >
-                  <Pencil size={13} strokeWidth={2} />
-                  <span>{envEditMode ? 'Editing' : 'Edit'}</span>
-                </button>
+                <Hint label={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}>
+                  <span className="inline-flex">
+                    <button
+                      type="button"
+                      aria-label="Edit mode"
+                      aria-pressed={envEditMode}
+                      onClick={() => {
+                        if (envEditMode) {
+                          setEnvEditMode(false)
+                        } else {
+                          setEnvEditMode(true)
+                          setEnvEditContent(envContent ?? '')
+                        }
+                      }}
+                      disabled={envLoading || envError !== null}
+                      className={`${BTN_TOOLBAR} ${envEditMode ? TONE_ON : TONE_QUIET}`}
+                    >
+                      <Pencil size={14} />
+                      <span className="hidden sm:inline">{envEditMode ? 'Editing' : 'Edit'}</span>
+                    </button>
+                  </span>
+                </Hint>
 
                 {/* Save (edit mode only) */}
                 {envEditMode && (
                   <button
+                    type="button"
+                    aria-label="Save the .env file"
                     onClick={handleEnvSave}
                     disabled={envSaving}
-                    className={`
-                      flex items-center justify-center gap-1
-                      h-8 px-2.5 rounded-lg
-                      text-xs font-medium
-                      transition-colors duration-150
-                      ${envSaving
-                        ? 'text-slate-500 cursor-not-allowed'
-                        : 'text-emerald-400 hover:bg-emerald-500/10'
-                      }
-                    `}
-                    title="Save .env file"
-                    aria-label="Save .env file"
+                    className={`${BTN_TOOLBAR} ${TONE_OK}`}
                   >
-                    {envSaving ? (
-                      <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-emerald-400 rounded-full animate-spin" />
-                    ) : (
-                      <Save size={13} strokeWidth={2} />
-                    )}
-                    <span>Save</span>
+                    {envSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    <span className="hidden sm:inline">Save</span>
                   </button>
                 )}
               </>
             )}
 
             {/* Close button (always visible) */}
-            <button
-              onClick={onClose}
-              className="
-                flex items-center justify-center
-                w-8 h-8 rounded-lg
-                text-slate-500 hover:text-slate-300
-                hover:bg-white/5
-                transition-colors duration-150
-              "
-              aria-label="Close viewer"
-            >
-              <X size={18} strokeWidth={2} />
-            </button>
+            <Hint label="Close">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`${BTN_ICON} ${TONE_QUIET}`}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </Hint>
           </div>
         </div>
 
         {/* ---- Validation result bar ---- */}
         {activeTab === 'compose' && editMode && validationResult && (
-          <div className={`
-            flex items-start gap-2 px-5 py-2.5 border-b border-white/5 shrink-0 text-xs
+          <div role="status" className={`
+            flex items-start gap-2 px-4 sm:px-5 py-2.5 border-b border-white/5 shrink-0 text-xs
             ${validationResult.valid
               ? 'bg-emerald-500/[0.06] text-emerald-400'
               : 'bg-rose-500/[0.06] text-rose-400'
@@ -1459,23 +1273,24 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
 
         {/* ---- Search bar (compose view mode only) ---- */}
         {activeTab === 'compose' && !editMode && searchOpen && (
-          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/5 bg-slate-900/50 shrink-0">
+          <div className="flex items-center gap-2 px-4 sm:px-5 py-2.5 border-b border-white/5 bg-slate-900/50 shrink-0">
             <Search size={14} className="text-slate-500 shrink-0" />
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search in the file"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              placeholder="Search…"
               autoFocus
               className="
-                flex-1 bg-transparent text-sm text-slate-200
-                placeholder-slate-600
-                focus:outline-none
+                flex-1 min-w-0 bg-transparent text-sm text-slate-200
+                placeholder-slate-600 rounded px-1
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40
               "
             />
             {searchQuery && (
-              <span className="text-[11px] text-slate-500 font-mono tabular-nums shrink-0">
+              <span className="text-[11px] text-slate-500 font-mono tabular-nums shrink-0" role="status">
                 {totalMatches > 0
                   ? `${activeMatchIndex + 1} / ${totalMatches}`
                   : 'No results'
@@ -1484,57 +1299,56 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             )}
             {totalMatches > 1 && (
               <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  onClick={() =>
-                    setActiveMatchIndex((prev) => (prev - 1 + totalMatches) % totalMatches)
-                  }
-                  className="
-                    flex items-center justify-center w-6 h-6 rounded
-                    text-slate-500 hover:text-slate-300 hover:bg-white/5
-                    text-xs transition-colors
-                  "
-                  aria-label="Previous match"
-                >
-                  &#x2191;
-                </button>
-                <button
-                  onClick={() =>
-                    setActiveMatchIndex((prev) => (prev + 1) % totalMatches)
-                  }
-                  className="
-                    flex items-center justify-center w-6 h-6 rounded
-                    text-slate-500 hover:text-slate-300 hover:bg-white/5
-                    text-xs transition-colors
-                  "
-                  aria-label="Next match"
-                >
-                  &#x2193;
-                </button>
+                <Hint label="Previous match (Shift+Enter)">
+                  <button
+                    onClick={() =>
+                      setActiveMatchIndex((prev) => (prev - 1 + totalMatches) % totalMatches)
+                    }
+                    className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                    aria-label="Previous match"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                </Hint>
+                <Hint label="Next match (Enter)">
+                  <button
+                    onClick={() =>
+                      setActiveMatchIndex((prev) => (prev + 1) % totalMatches)
+                    }
+                    className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                    aria-label="Next match"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </Hint>
               </div>
             )}
-            <button
-              onClick={() => {
-                setSearchOpen(false)
-                setSearchQuery('')
-              }}
-              className="
-                flex items-center justify-center w-6 h-6 rounded
-                text-slate-500 hover:text-slate-300 hover:bg-white/5
-                transition-colors shrink-0
-              "
-              aria-label="Close search"
-            >
-              <X size={14} />
-            </button>
+            <Hint label="Close the search">
+              <button
+                onClick={() => {
+                  setSearchOpen(false)
+                  setSearchQuery('')
+                }}
+                className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                aria-label="Close the search"
+              >
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
         )}
 
         {/* ---- Content area ---- */}
         {activeTab === 'compose' ? renderComposeTab() : renderEnvTab()}
 
-        {/* ---- Diagnostics summary bar (hidden when compose-linter plugin is disabled) ---- */}
-        {linterPluginEnabled && (
-        <div className="flex items-center gap-3 px-5 py-2 border-t border-white/5 bg-slate-900/60 shrink-0">
+        {/* ---- In edit mode the messages are listed under the editor; otherwise a summary bar (hidden when the compose-linter plugin is disabled) ---- */}
+        {linterPluginEnabled && ((activeTab === 'compose' && editMode) || (activeTab === 'env' && envEditMode)) && (
+          activeTab === 'compose'
+            ? <EditorDiagnostics diagnostics={composeDiagnostics} counts={composeCounts} validation={validationResult} kind="compose" hint="Ctrl+S saves once validated · Esc leaves edit mode" />
+            : <EditorDiagnostics diagnostics={envDiagnostics} counts={envCounts} kind="env" hint="Ctrl+S saves · Esc leaves edit mode" />
+        )}
+        {linterPluginEnabled && !((activeTab === 'compose' && editMode) || (activeTab === 'env' && envEditMode)) && (
+        <div className="flex items-center gap-3 px-4 sm:px-5 py-2 border-t border-white/5 bg-slate-900/60 shrink-0">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Lint</span>
           {(activeTab === 'compose' ? composeDiagnostics.length : envDiagnostics.length) === 0 ? (
             <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400 neon-emerald">
@@ -1558,16 +1372,17 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
               {(activeTab === 'compose' ? composeCounts : envCounts).info > 0 && (
                 <span className="flex items-center gap-1 text-[10px] font-medium text-cyan-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  {(activeTab === 'compose' ? composeCounts : envCounts).info} info
+                  {(activeTab === 'compose' ? composeCounts : envCounts).info} hint{(activeTab === 'compose' ? composeCounts : envCounts).info !== 1 ? 's' : ''}
                 </span>
               )}
+              <span className="ml-auto hidden sm:inline text-[10px] text-slate-500">Marked line numbers show their messages on hover or focus</span>
             </>
           )}
         </div>
         )}
 
         {/* ---- Footer ---- */}
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/5 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-2.5 border-t border-white/5 shrink-0">
           <span className="text-[11px] text-slate-500 font-mono">
             {activeTab === 'compose'
               ? `${editMode ? editContent.split('\n').length : lines.length} line${(editMode ? editContent.split('\n').length : lines.length) !== 1 ? 's' : ''}`
@@ -1577,21 +1392,16 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             }
           </span>
           <div className="flex items-center gap-3">
-            {activeTab === 'compose' && editMode && (
-              <span className="text-[11px] text-amber-500/70 font-medium">
-                EDITING
-              </span>
-            )}
-            {activeTab === 'env' && envEditMode && (
-              <span className="text-[11px] text-amber-500/70 font-medium">
-                EDITING
+            {((activeTab === 'compose' && editMode) || (activeTab === 'env' && envEditMode)) && (
+              <span className="text-[11px] text-cyan-400/80 font-medium">
+                Editing
               </span>
             )}
             <span className="text-[11px] text-slate-500">
               {activeTab === 'compose' ? 'YAML' : 'ENV'}
             </span>
-            <span className="text-[10px] text-slate-700">
-              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-500 font-mono text-[9px]">Esc</kbd> to close
+            <span className="hidden sm:inline text-[10px] text-slate-500">
+              Press <kbd className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-400 font-mono text-[9px]">Esc</kbd> to close
             </span>
           </div>
         </div>

@@ -2,8 +2,9 @@
 // StackDetail — Detailed view for a selected stack with containers, logs, actions
 // =============================================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { createPortal } from 'react-dom'
+import { SegmentedControl } from '@mantine/core'
 import {
   ArrowLeft,
   Play,
@@ -17,7 +18,6 @@ import {
   Clock,
   Shield,
   Network,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   ChevronDown,
@@ -31,8 +31,16 @@ import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxV
 import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction } from '../../api/endpoints'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
-import { ComposeViewer } from './ComposeViewer'
+import { useConfirm } from '../common/ConfirmDialog'
+import { EmptyState, ErrorState, LoadingState } from '../common/PageState'
+import Hint from '../common/Hint'
 import ModalOverlay from '../common/ModalOverlay'
+import { ComposeViewer } from './ComposeViewer'
+import { pageLabel } from '../../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY,
+  TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
+} from '../../lib/ui'
 
 interface Props {
   stackName: string
@@ -87,27 +95,51 @@ function stateBadge(state: string) {
   return 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
 }
 
+type Tab = 'containers' | 'services' | 'logs'
+
+/** a container's ports as chips: an IPv6 binding that mirrors an IPv4 one (":::3001->…" beside "0.0.0.0:3001->…") is one port, not two */
+function portChips(ports: string): string[] {
+  const all = ports.split(',').map((p) => p.trim()).filter(Boolean)
+  const v6 = (p: string) => p.startsWith(':::') || p.startsWith('[::]')
+  const hostPort = (p: string) => p.split('->')[0].match(/:(\d+)$/)?.[1] ?? p
+  return all.filter((p) => !v6(p) || !all.some((o) => o !== p && !v6(o) && hostPort(o) === hostPort(p)))
+}
+
 export default function StackDetail({ stackName, onBack, onAction, isActionLoading, onContainerClick, isAdmin = false, stack = null }: Props) {
   // a VM stack: the VM is the stack — its power is part of the stack's controls
   const isVm = stack?.placement === 'vm'
   const [vmBusy, setVmBusy] = useState('')
   const vmPower = async (action: ProxmoxVmAction) => {
     if (!stack?.node || !stack.vmid) return
+    const vm = `the VM #${stack.vmid}${stack.member_name ? ` (${stack.member_name})` : ''}`
+    if (action !== 'start') {
+      const ok = await confirm(action === 'shutdown'
+        ? { title: 'Shut down the VM', message: `Shut down ${vm}? Every container in it stops until the VM is started again.`, confirmLabel: 'Shut down', danger: true }
+        : { title: 'Reboot the VM', message: `Reboot ${vm}? Its containers stop and start again with it.`, confirmLabel: 'Reboot' })
+      if (!ok) return
+    }
     setVmBusy(action)
-    try { await proxmoxVmAction(stack.node, 'qemu', stack.vmid, action) } catch { /* the toast below reports */ } finally { setVmBusy('') }
+    try {
+      await proxmoxVmAction(stack.node, 'qemu', stack.vmid, action)
+      addToast({ type: 'success', message: action === 'start' ? `Starting ${vm}` : action === 'reboot' ? `Rebooting ${vm}` : `Shutting down ${vm}` })
+    } catch (err) {
+      addToast({ type: 'error', message: `Could not ${action === 'shutdown' ? 'shut down' : action} ${vm}: ${err instanceof Error ? err.message : String(err)}`, duration: 6000 })
+    } finally { setVmBusy('') }
   }
   const [detail, setDetail] = useState<StackDetailType | null>(null)
   const [logs, setLogs] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [logsLoading, setLogsLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'containers' | 'logs' | 'services'>('containers')
-  const [confirmAction, setConfirmAction] = useState<'stop' | 'restart' | 'update' | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>('containers')
   const [showCompose, setShowCompose] = useState(false)
   const [composeContent, setComposeContent] = useState<string | undefined>(undefined)
   const [composeLoading, setComposeLoading] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { addToast } = useToast()
+  const confirm = useConfirm()
+  const cloneFieldId = useId()
 
   // Clone state
   const [showCloneModal, setShowCloneModal] = useState(false)
@@ -118,6 +150,13 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [renameMode, setRenameMode] = useState(false)
   const [renameTo, setRenameTo] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
+
+  // leaving the rename field puts the keyboard back on the pencil that opened it
+  const cancelRename = () => {
+    setRenameMode(false)
+    setRenameTo('')
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-rename-open]')?.focus())
+  }
 
   // Fetch compose file content
   const handleViewCompose = useCallback(async () => {
@@ -180,8 +219,10 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
     try {
       const data = await fetchStack(stackName)
       setDetail(data)
-    } catch {
-      // Keep previous detail on error
+      setLoadError(null)
+    } catch (err) {
+      // Keep previous detail on error; the message shows when there is none yet
+      setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -227,15 +268,20 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 
   const isRunning = detail?.status === 'running'
 
-  const handleConfirmedAction = (action: 'start' | 'stop' | 'restart' | 'update') => {
-    setConfirmAction(null)
-    onAction(stackName, action)
+  // stop, restart and update ask first; starting does not
+  const askThen = async (action: 'stop' | 'restart' | 'update') => {
+    const ask = {
+      stop: { title: 'Stop stack', message: `Stop every container in ${stackName}?`, confirmLabel: 'Stop', danger: true },
+      restart: { title: 'Restart stack', message: `Restart every container in ${stackName}?`, confirmLabel: 'Restart', danger: false },
+      update: { title: 'Update stack', message: `Pull the latest images for ${stackName} and apply rolling updates?`, confirmLabel: 'Update', danger: false },
+    }[action]
+    if (await confirm(ask)) onAction(stackName, action)
   }
 
   // Skeleton loading state
   if (loading && !detail) {
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-6 animate-fade-in" role="status" aria-label="Reading the stack">
         {/* Back button skeleton */}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
@@ -261,137 +307,114 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
     )
   }
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Confirmation modal overlay */}
-      {confirmAction && createPortal(
-        <ModalOverlay onClose={() => setConfirmAction(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="glass p-6 max-w-sm w-full mx-4 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100">Confirm Action</h3>
-                <p className="text-xs text-slate-400">
-                  {confirmAction === 'stop' && 'This will stop all containers in this stack.'}
-                  {confirmAction === 'restart' && 'This will restart all containers in this stack.'}
-                  {confirmAction === 'update' && 'This will pull latest images and apply rolling updates.'}
-                </p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-300">
-              Are you sure you want to <span className="font-semibold text-white">{confirmAction}</span>{' '}
-              <span className="font-mono text-emerald-400">{stackName}</span>?
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setConfirmAction(null)}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleConfirmedAction(confirmAction)}
-                className={`
-                  px-4 py-2 text-sm font-medium rounded-lg border transition-all
-                  ${
-                    confirmAction === 'stop'
-                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/25 hover:bg-rose-500/25'
-                      : confirmAction === 'restart'
-                        ? 'bg-amber-500/15 text-amber-400 border-amber-500/25 hover:bg-amber-500/25'
-                        : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25 hover:bg-cyan-500/25'
-                  }
-                `}
-              >
-                {confirmAction.charAt(0).toUpperCase() + confirmAction.slice(1)}
-              </button>
-            </div>
-          </div>
-        </ModalOverlay>,
-        document.body,
-      )}
+  // the first read failed: say so, with a way back and a way to try again
+  if (!detail && loadError) {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <h1 className="sr-only">{formatStackName(stackName)}</h1>
+        <Hint label={`Back to ${pageLabel('stacks')} (Esc)`}>
+          <button onClick={onBack} aria-label="Back" className={BTN_TOOLBAR_QUIET}>
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+        </Hint>
+        <ErrorState title={`Could not read ${stackName}`} error={loadError} onRetry={() => { setLoading(true); void loadDetail() }} />
+      </div>
+    )
+  }
 
+  return (
+    <div className="space-y-5 animate-fade-in">
       {/* Back button + stack name */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          title="Back to stacks (Esc)"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10 hover:border-white/15 transition-all text-sm press"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span className="hidden sm:inline">Back</span>
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
-        </button>
+        <Hint label={`Back to ${pageLabel('stacks')} (Esc)`}>
+          <button onClick={onBack} aria-label="Back" className={`${BTN_TOOLBAR_QUIET} shrink-0`}>
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">Back</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
+          </button>
+        </Hint>
         <div className="flex-1 min-w-0">
           {renameMode ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <input
+                aria-label="New name of the stack"
                 value={renameTo}
                 onChange={(e) => setRenameTo(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRename()
+                  if (e.key === 'Escape') { e.stopPropagation(); cancelRename() }
+                }}
                 placeholder={stackName}
                 autoFocus
-                className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-sm text-white font-mono placeholder-slate-500 focus:border-emerald-500/30 focus:ring-1 focus:ring-emerald-500/20 focus:outline-none w-56"
+                className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-100 font-mono placeholder-slate-500 focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30 focus:outline-none w-56 max-w-full"
               />
               <button
                 onClick={handleRename}
                 disabled={renameLoading || !renameTo.trim() || renameTo.trim() === stackName}
-                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-all"
+                className={`${BTN_TOOLBAR} ${TONE_OK}`}
               >
-                {renameLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                {renameLoading ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
               </button>
-              <button aria-label="Cancel the rename"
-                onClick={() => { setRenameMode(false); setRenameTo('') }}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <Hint label="Cancel the rename">
+                <button aria-label="Cancel the rename"
+                  onClick={cancelRename}
+                  className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                >
+                  <X size={14} />
+                </button>
+              </Hint>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-100">
+              <div className="min-w-0">
+                <h1 className="text-lg md:text-xl font-bold text-slate-100 truncate">
                   {formatStackName(stackName)}
-                </h2>
-                <p className="text-xs text-slate-500 font-mono">{stackName}</p>
-                {isVm && (
-                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px]">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border font-semibold ${stack?.reachable === false ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-amber-500/10 text-amber-200 border-amber-500/20'}`}>
-                      VM #{stack?.vmid}{stack?.node ? ` on ${stack.node}` : ''}{stack?.reachable === false ? ' · off / not answering' : ''}
-                    </span>
-                    {stack?.member_url && <span className="text-slate-500 font-mono">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span>}
-                    {stack?.version && <span className="text-slate-500">DCS {stack.version}</span>}
-                    {isAdmin && stack?.vmid && (
-                      <span className="inline-flex items-center gap-1 ml-1">
-                        {stack.reachable === false && <button type="button" onClick={() => vmPower('start')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-emerald-500/15 text-emerald-200 border border-emerald-500/25 hover:bg-emerald-500/25 disabled:opacity-50">{vmBusy === 'start' ? 'Starting…' : 'Start VM'}</button>}
-                        {stack.reachable !== false && <button type="button" onClick={() => vmPower('reboot')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 disabled:opacity-50">{vmBusy === 'reboot' ? 'Rebooting…' : 'Reboot VM'}</button>}
-                        {stack.reachable !== false && <button type="button" onClick={() => vmPower('shutdown')} disabled={!!vmBusy} className="h-7 px-2 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20 hover:bg-rose-500/20 disabled:opacity-50">{vmBusy === 'shutdown' ? 'Shutting down…' : 'Shut down VM'}</button>}
-                        <button type="button" onClick={() => useSettingsStore.getState().setCurrentPage('proxmox')} className="h-7 px-2 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10">Proxmox page</button>
-                      </span>
-                    )}
-                  </div>
-                )}
+                </h1>
+                <p className="text-xs text-slate-400 font-mono truncate">{stackName}</p>
               </div>
               {isAdmin && (
-                <button
-                  onClick={() => { setRenameMode(true); setRenameTo(stackName) }}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-                  title="Rename stack"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
+                <Hint label="Rename the stack">
+                  <button
+                    aria-label="Rename the stack"
+                    data-rename-open
+                    onClick={() => { setRenameMode(true); setRenameTo(stackName) }}
+                    className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </Hint>
               )}
             </div>
           )}
         </div>
       </div>
 
+      {/* a VM stack: where it runs, and its power */}
+      {isVm && !renameMode && (
+        <div className="flex items-center gap-2 flex-wrap text-[11px]">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1 font-semibold ${stack?.reachable === false ? 'bg-rose-500/10 text-rose-300 ring-rose-500/25' : 'bg-violet-500/15 text-violet-200 ring-violet-500/25'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${stack?.reachable === false ? 'bg-rose-400' : 'bg-violet-300'}`} />
+            VM #{stack?.vmid}{stack?.node ? ` on ${stack.node}` : ''}{stack?.reachable === false ? ' · off or not answering' : ''}
+          </span>
+          {stack?.member_url && <span className="text-slate-400 font-mono">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span>}
+          {stack?.version && <span className="text-slate-400">DCS {stack.version}</span>}
+          {isAdmin && stack?.vmid && (
+            <span className="inline-flex flex-wrap items-center gap-1.5 ml-1">
+              {stack.reachable === false && <button type="button" onClick={() => vmPower('start')} disabled={!!vmBusy} className={`${BTN_CARD} ${TONE_OK}`}>{vmBusy === 'start' ? 'Starting…' : 'Start VM'}</button>}
+              {stack.reachable !== false && <button type="button" onClick={() => vmPower('reboot')} disabled={!!vmBusy} className={BTN_CARD_QUIET}>{vmBusy === 'reboot' ? 'Rebooting…' : 'Reboot VM'}</button>}
+              {stack.reachable !== false && <button type="button" onClick={() => vmPower('shutdown')} disabled={!!vmBusy} className={`${BTN_CARD} ${TONE_DANGER}`}>{vmBusy === 'shutdown' ? 'Shutting down…' : 'Shut down VM'}</button>}
+              <button type="button" onClick={() => useSettingsStore.getState().setCurrentPage('proxmox')} className={BTN_CARD_QUIET}>{pageLabel('proxmox')} page</button>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Status + actions card */}
       <div className="glass p-5">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Status info */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
             {/* Status badge */}
             <span
               className={`
@@ -434,127 +457,62 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {/* Start */}
+          {/* Action buttons: emerald starts, rose stops, the rest is neutral */}
+          <div className="flex items-center flex-wrap gap-2">
             <button
-              onClick={() => handleConfirmedAction('start')}
+              onClick={() => onAction(stackName, 'start')}
               disabled={isRunning || isActionLoading}
-              className={`
-                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${
-                  isRunning || isActionLoading
-                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30'
-                }
-              `}
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {isActionLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5" />
-              )}
+              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               Start
             </button>
 
-            {/* Stop */}
             <button
-              onClick={() => setConfirmAction('stop')}
+              onClick={() => void askThen('stop')}
               disabled={!isRunning || isActionLoading}
-              className={`
-                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${
-                  !isRunning || isActionLoading
-                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30'
-                }
-              `}
+              className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
             >
-              {isActionLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Square className="w-3.5 h-3.5" />
-              )}
+              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
               Stop
             </button>
 
-            {/* Restart */}
             <button
-              onClick={() => setConfirmAction('restart')}
+              onClick={() => void askThen('restart')}
               disabled={!isRunning || isActionLoading}
-              className={`
-                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${
-                  !isRunning || isActionLoading
-                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
-                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30'
-                }
-              `}
+              className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
             >
-              {isActionLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="w-3.5 h-3.5" />
-              )}
+              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
               Restart
             </button>
 
             {/* Update — admin only (pulls images + redeploys) */}
             {isAdmin && (
               <button
-                onClick={() => setConfirmAction('update')}
+                onClick={() => void askThen('update')}
                 disabled={isActionLoading}
-                className={`
-                  inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                  border transition-all duration-200
-                  ${
-                    isActionLoading
-                      ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
-                      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30'
-                  }
-                `}
+                className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
               >
-                {isActionLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5" />
-                )}
+                {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                 Update
               </button>
             )}
 
-            {/* View Compose */}
             <button
               onClick={handleViewCompose}
               disabled={composeLoading}
-              className={`
-                inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${
-                  composeLoading
-                    ? 'bg-white/[0.03] text-slate-500 border-white/[0.03] cursor-not-allowed'
-                    : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30'
-                }
-              `}
+              className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
             >
-              {composeLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <FileCode2 className="w-3.5 h-3.5" />
-              )}
+              {composeLoading ? <Loader2 size={14} className="animate-spin" /> : <FileCode2 size={14} />}
               Compose
             </button>
 
-            {/* Clone */}
             {isAdmin && (
               <button
                 onClick={() => { setShowCloneModal(true); setCloneName('') }}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all duration-200 bg-slate-500/10 text-slate-300 border-slate-500/20 hover:bg-slate-500/20 hover:border-slate-500/30"
+                className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
               >
-                <Copy className="w-3.5 h-3.5" />
+                <Copy size={14} />
                 Clone
               </button>
             )}
@@ -574,39 +532,33 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       {/* Clone modal */}
       {showCloneModal && createPortal(
         <ModalOverlay onClose={() => setShowCloneModal(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCloneModal(false)}>
-          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/10 shadow-2xl shadow-black/40 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
                 <Copy size={14} className="text-cyan-400" />
               </div>
-              <h3 className="text-base font-semibold text-white">Clone Stack</h3>
+              <h3 className="text-base font-semibold text-slate-100">Clone stack</h3>
             </div>
             <p className="text-sm text-slate-400 mb-4">
               Create a copy of <span className="font-mono text-emerald-400">{stackName}</span> with a new name.
             </p>
             <div className="mb-4">
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">New Stack Name</label>
+              <label htmlFor={cloneFieldId} className="block text-xs font-medium text-slate-400 mb-1.5">New stack name</label>
               <input
+                id={cloneFieldId}
                 value={cloneName}
                 onChange={(e) => setCloneName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleClone()}
                 placeholder="my-stack-copy"
                 autoFocus
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/60 text-sm text-white font-mono placeholder-slate-500 border border-white/5 focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-white/5 text-sm text-slate-100 font-mono placeholder-slate-500 border border-white/10 focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30 focus:outline-none transition-all"
               />
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowCloneModal(false)}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/5 text-sm text-slate-300 hover:bg-white/10 transition-all"
-              >
+              <button onClick={() => setShowCloneModal(false)} className={`${BTN_SHEET_QUIET} flex-1`}>
                 Cancel
               </button>
-              <button
-                onClick={handleClone}
-                disabled={cloneLoading || !cloneName.trim()}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
-              >
+              <button onClick={handleClone} disabled={cloneLoading || !cloneName.trim()} className={`${BTN_SHEET_PRIMARY} flex-1`}>
                 {cloneLoading ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
                 Clone
               </button>
@@ -616,26 +568,18 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         document.body,
       )}
 
-      {/* Tab navigation */}
-      <div className="flex items-center gap-1 p-1 glass-subtle w-fit">
-        {(['containers', 'services', 'logs'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`
-              px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200
-              ${
-                activeTab === tab
-                  ? 'bg-white/10 text-slate-100 ring-1 ring-white/15'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-              }
-            `}
-          >
-            {tab === 'containers' && <span className="inline-flex items-center gap-1.5"><Box className="w-3.5 h-3.5" /> Containers</span>}
-            {tab === 'services' && <span className="inline-flex items-center gap-1.5"><Server className="w-3.5 h-3.5" /> Services</span>}
-            {tab === 'logs' && <span className="inline-flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5" /> Logs</span>}
-          </button>
-        ))}
+      {/* Tab navigation: one choice; a phone swipes it sideways */}
+      <div className="min-w-0 max-w-full self-start overflow-x-auto scrollbar-none">
+        <SegmentedControl
+          aria-label="Show"
+          value={activeTab}
+          onChange={(v) => setActiveTab(v as Tab)}
+          data={[
+            { value: 'containers', label: <span className="flex items-center gap-1.5"><Box size={13} aria-hidden />Containers</span> },
+            { value: 'services', label: <span className="flex items-center gap-1.5"><Server size={13} aria-hidden />Services</span> },
+            { value: 'logs', label: <span className="flex items-center gap-1.5"><Terminal size={13} aria-hidden />Logs</span> },
+          ]}
+        />
       </div>
 
       {/* Tab content */}
@@ -663,6 +607,8 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 // Sub-components
 // -----------------------------------------------------------------------------
 
+const TH = 'px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400'
+
 function ContainersTable({ containers, onContainerClick, member = null, isAdmin = false, onChanged }: { containers: ContainerInfo[]; onContainerClick?: (name: string) => void; member?: string | null; isAdmin?: boolean; onChanged?: () => void }) {
   // start / stop / restart straight from the row — through the hub for a VM's containers
   const [busy, setBusy] = useState('')
@@ -672,9 +618,13 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
   }
   if (containers.length === 0) {
     return (
-      <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
-        <Box className="w-8 h-8 text-slate-500 mb-2" />
-        <p className="text-sm text-slate-500">No containers in this stack</p>
+      <div className="glass-subtle rounded-xl">
+        <EmptyState
+          compact
+          icon={<Box size={28} />}
+          title="No containers in this stack"
+          hint="Start the stack and its containers appear here."
+        />
       </div>
     )
   }
@@ -685,63 +635,58 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-white/5">
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                State
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Health
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Image
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Uptime
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Ports
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Restarts
-              </th>
+              <th scope="col" className={TH}>Name</th>
+              <th scope="col" className={TH}>State</th>
+              <th scope="col" className={TH}>Health</th>
+              <th scope="col" className={TH}>Image</th>
+              <th scope="col" className={TH}>Uptime</th>
+              <th scope="col" className={TH}>Ports</th>
+              <th scope="col" className={TH}>Restarts</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.03]">
             {containers.map((c) => {
               const health = healthIndicator(c.health)
               const HealthIcon = health.icon
+              const running = c.state.toLowerCase() === 'running'
               return (
                 <tr
                   key={c.name}
                   onClick={() => onContainerClick?.(c.name)}
                   className={`hover:bg-white/[0.03] transition-colors ${onContainerClick ? 'cursor-pointer' : ''}`}
                 >
-                  <td className="px-4 py-3">
-                    <span className={`text-sm font-medium font-mono ${onContainerClick ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-200'}`}>
-                      {c.name}
-                    </span>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {onContainerClick ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onContainerClick(c.name) }}
+                        className="rounded text-sm font-medium font-mono text-emerald-400 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                      >
+                        {c.name}
+                      </button>
+                    ) : (
+                      <span className="text-sm font-medium font-mono text-slate-200">{c.name}</span>
+                    )}
                     {isAdmin && (
                       <span className="inline-flex items-center gap-0.5 ml-2 align-middle">
-                        {busy.startsWith(`${c.name}:`) ? <Loader2 className="w-3 h-3 animate-spin text-cyan-400" /> : (
+                        {busy.startsWith(`${c.name}:`) ? <Loader2 className="w-3 h-3 animate-spin text-cyan-400" aria-label="Working" /> : (
                           <>
-                            {c.state.toLowerCase() !== 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'start')} title="Start" className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10"><Play className="w-3 h-3" /></button>}
-                            {c.state.toLowerCase() === 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'restart')} title="Restart" className="p-1 rounded text-slate-300 hover:bg-white/10"><RotateCcw className="w-3 h-3" /></button>}
-                            {c.state.toLowerCase() === 'running' && <button type="button" onClick={(e) => quick(e, c.name, 'stop')} title="Stop" className="p-1 rounded text-rose-300 hover:bg-rose-500/10"><Square className="w-3 h-3" /></button>}
+                            {!running && <Hint label="Start"><button type="button" aria-label={`Start ${c.name}`} onClick={(e) => quick(e, c.name, 'start')} className={`${BTN_ICON_SM} ${TONE_GHOST_OK}`}><Play size={12} /></button></Hint>}
+                            {running && <Hint label="Restart"><button type="button" aria-label={`Restart ${c.name}`} onClick={(e) => quick(e, c.name, 'restart')} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><RotateCcw size={12} /></button></Hint>}
+                            {running && <Hint label="Stop"><button type="button" aria-label={`Stop ${c.name}`} onClick={(e) => quick(e, c.name, 'stop')} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}><Square size={12} /></button></Hint>}
                           </>
                         )}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${stateBadge(c.state)}`}
                     >
                       {c.state}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-1.5">
                       <div className={`flex items-center justify-center w-5 h-5 rounded ${health.bg}`}>
                         <HealthIcon className={`w-3 h-3 ${health.color} ${c.health.toLowerCase() === 'starting' ? 'animate-spin' : ''}`} />
@@ -749,29 +694,29 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
                       <span className={`text-xs ${health.color}`}>{c.health || 'N/A'}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-400 font-mono truncate max-w-[200px] block">
+                  <td className="px-3 py-3">
+                    <span className="text-xs text-slate-400 font-mono truncate max-w-[200px] block" title={c.image}>
                       {c.image}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400">
                       <Clock className="w-3 h-3 text-slate-500" />
-                      {c.state.toLowerCase() === 'running'
+                      {running
                         ? formatUptime(c.uptime_seconds)
                         : '--'}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     {c.ports ? (
                       <div className="flex flex-wrap gap-1">
-                        {c.ports.split(',').map((port) => (
+                        {portChips(c.ports).map((port) => (
                           <span
-                            key={port.trim()}
+                            key={port}
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400 font-mono ring-1 ring-cyan-500/20"
                           >
                             <Network className="w-2.5 h-2.5" />
-                            {port.trim()}
+                            {port}
                           </span>
                         ))}
                       </div>
@@ -779,7 +724,7 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
                       <span className="text-xs text-slate-500">--</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <span
                       className={`text-xs font-mono ${
                         c.restart_count > 0 ? 'text-amber-400' : 'text-slate-500'
@@ -801,9 +746,13 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
 function ServicesList({ services }: { services: string[] }) {
   if (services.length === 0) {
     return (
-      <div className="glass-subtle flex flex-col items-center justify-center py-12 rounded-xl">
-        <Server className="w-8 h-8 text-slate-500 mb-2" />
-        <p className="text-sm text-slate-500">No services defined</p>
+      <div className="glass-subtle rounded-xl">
+        <EmptyState
+          compact
+          icon={<Server size={28} />}
+          title="No services defined"
+          hint="Add a service to the stack's compose file and it appears here."
+        />
       </div>
     )
   }
@@ -844,24 +793,23 @@ function LogViewer({
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-medium text-slate-400">Stack Logs</span>
+          <h2 className="text-xs font-medium text-slate-400">Stack logs</h2>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/15 transition-all"
-        >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+        <button onClick={onRefresh} disabled={loading} className={BTN_CARD_QUIET}>
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
 
-      {/* Log content */}
-      <div className="p-4 max-h-96 overflow-y-auto scrollbar-thin font-mono text-xs leading-relaxed">
+      {/* Log content: a scrolling region the keyboard can reach */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Stack logs"
+        className="p-4 max-h-96 overflow-y-auto scrollbar-thin font-mono text-xs leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
+      >
         {loading && !logs ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
-          </div>
+          <LoadingState compact label="Reading the logs…" />
         ) : logs ? (
           <>
             {logs.split('\n').map((line, i) => (
@@ -884,7 +832,7 @@ function LogViewer({
             <div ref={logEndRef} />
           </>
         ) : (
-          <div className="text-center text-slate-500 py-8">No logs available</div>
+          <EmptyState compact icon={<Terminal size={28} />} title="No logs available" hint="The stack has not written anything yet." />
         )}
       </div>
     </div>

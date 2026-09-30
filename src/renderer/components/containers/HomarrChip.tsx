@@ -10,6 +10,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Check, LayoutGrid, Loader2 } from 'lucide-react'
 import { addContainerHomarr, fetchContainerHomarr } from '../../api/fleetScoped'
 import { useToast } from '../common/Toast'
+import Hint from '../common/Hint'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET } from '../../lib/ui'
 import type { RowMember } from '../../../shared/fleetScoped'
 import type { ContainerHomarrState } from '../../../shared/types'
 
@@ -49,30 +52,30 @@ export default function HomarrChip({ containerName, member, isAdmin }: Props) {
 
   if (state.added) {
     const where = state.app ? `${state.app.name} → ${state.app.href}` : state.target.url
-    const library = state.homarr.mode === 'library' ? ' — in the app library; store Homarr\'s API key (Server Config → Integrations) for a tile on the board' : ''
+    const library = state.homarr.mode === 'library' ? ` — in the app library; store Homarr's API key (${pageLabel('config')} → Integrations) for a tile on the board` : ''
     return (
-      <span
-        title={`On Homarr: ${where}${library}`}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-emerald-500/10 text-emerald-300 border-emerald-500/20 whitespace-nowrap"
-      >
-        <Check className="h-3.5 w-3.5" />
-        Added
-      </span>
+      <Hint label={`On Homarr: ${where}${library}`}>
+        <span className={`${BTN_TOOLBAR} bg-emerald-500/5 border border-emerald-500/20 text-emerald-300 whitespace-nowrap cursor-default`}>
+          <Check size={14} />
+          Added
+        </span>
+      </Hint>
     )
   }
 
   if (!isAdmin) return null
   const board = state.homarr.mode === 'board'
   return (
-    <button
-      type="button"
-      onClick={() => void add()}
-      disabled={busy}
-      title={`Put ${state.target.name} on Homarr at ${state.target.url}${board ? ', with a tile on the home board' : ' (the app library: store Homarr\'s API key for a tile on the board)'}`}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all whitespace-nowrap bg-white/5 text-slate-300 border-white/10 hover:bg-white/10 hover:text-white disabled:opacity-50"
-    >
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LayoutGrid className="h-3.5 w-3.5" />}
-      Add to Homarr
-    </button>
+    <Hint label={`Put ${state.target.name} on Homarr at ${state.target.url}${board ? ', with a tile on the home board' : " (the app library: store Homarr's API key for a tile on the board)"}`}>
+      <button
+        type="button"
+        onClick={() => void add()}
+        disabled={busy}
+        className={`${BTN_TOOLBAR_QUIET} whitespace-nowrap`}
+      >
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
+        Add to Homarr
+      </button>
+    </Hint>
   )
 }

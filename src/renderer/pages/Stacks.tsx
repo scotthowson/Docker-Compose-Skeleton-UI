@@ -26,7 +26,7 @@ import CreateStackOverlay from '../components/stacks/CreateStackOverlay'
 import EditStackOverlay from '../components/stacks/EditStackOverlay'
 import {
   Loader2, Play, Square, RotateCcw, Download,
-  CheckCircle2, XCircle, X, ListChecks, Trash2,
+  CheckCircle2, XCircle, X, ListChecks,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useFleetRole } from '../hooks/useFleetRole'
@@ -34,6 +34,8 @@ import { usePolling } from '../hooks/usePolling'
 import { fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities } from '../api/endpoints'
 import NewVmSheet from '../components/fleet/NewVmSheet'
 import ModalOverlay from '../components/common/ModalOverlay'
+import Hint from '../components/common/Hint'
+import { BTN_TOOLBAR, BTN_CARD_QUIET, BTN_ICON_SM, BTN_SHEET_PRIMARY, TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST } from '../lib/ui'
 
 // -----------------------------------------------------------------------------
 // Stacks Page
@@ -77,6 +79,13 @@ export default function Stacks() {
     }
   }, [navigationPayload])
 
+  // Back to the list: the keyboard lands on the stack that was open, not on the page
+  const closeDetail = useCallback(() => {
+    const name = selectedStackName
+    setSelectedStackName(null)
+    if (name) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-stack-open="${CSS.escape(name)}"]`)?.focus())
+  }, [selectedStackName])
+
   // Escape key returns from stack detail to list
   useEffect(() => {
     if (!selectedStackName) return
@@ -94,11 +103,11 @@ export default function Stacks() {
       )
       if (hasVisibleOverlay) return
       e.preventDefault()
-      setSelectedStackName(null)
+      closeDetail()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedStackName])
+  }, [selectedStackName, closeDetail])
 
   // Overlay states
   const [showCreateOverlay, setShowCreateOverlay] = useState(false)
@@ -114,7 +123,7 @@ export default function Stacks() {
   const [batchTotal, setBatchTotal] = useState(0)
 
   // Poll stacks list every 5 seconds
-  const { data: stacksData, refresh } = useApi(fetchStacks, 5000, {
+  const { data: stacksData, loading: stacksLoading, error: stacksError, refresh } = useApi(fetchStacks, 5000, {
     enabled: isConnected,
   })
 
@@ -296,19 +305,18 @@ export default function Stacks() {
     setEditingStackName(stackName)
   }, [])
 
-  // Batch action buttons config
+  // Batch action buttons config: emerald starts, rose stops, the rest is neutral
   const batchButtons: {
     action: 'start' | 'stop' | 'restart' | 'update'
     icon: typeof Play
     label: string
-    bg: string
-    hoverBg: string
+    tone: string
     adminOnly?: boolean
   }[] = [
-    { action: 'start', icon: Play, label: 'Start Selected', bg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25', hoverBg: 'hover:bg-emerald-500/25' },
-    { action: 'stop', icon: Square, label: 'Stop Selected', bg: 'bg-rose-500/15 text-rose-400 border-rose-500/25', hoverBg: 'hover:bg-rose-500/25' },
-    { action: 'restart', icon: RotateCcw, label: 'Restart Selected', bg: 'bg-amber-500/15 text-amber-400 border-amber-500/25', hoverBg: 'hover:bg-amber-500/25' },
-    { action: 'update', icon: Download, label: 'Update Selected', bg: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25', hoverBg: 'hover:bg-cyan-500/25', adminOnly: true },
+    { action: 'start', icon: Play, label: 'Start selected', tone: TONE_OK },
+    { action: 'stop', icon: Square, label: 'Stop selected', tone: TONE_DANGER },
+    { action: 'restart', icon: RotateCcw, label: 'Restart selected', tone: TONE_QUIET },
+    { action: 'update', icon: Download, label: 'Update selected', tone: TONE_QUIET, adminOnly: true },
   ]
 
   const isComplete = batchResults !== null && !batchLoading
@@ -319,7 +327,7 @@ export default function Stacks() {
       {selectedStackName && !batchMode ? (
         <StackDetail
           stackName={selectedStackName}
-          onBack={() => setSelectedStackName(null)}
+          onBack={closeDetail}
           onAction={handleAction}
           isActionLoading={actionLoading === selectedStackName}
           onContainerClick={(containerName) => {
@@ -334,6 +342,8 @@ export default function Stacks() {
           onAction={handleAction}
           onSelect={(name) => setSelectedStackName(name)}
           onRefresh={refresh}
+          loading={stacksLoading && !stacksData}
+          error={stacksError}
           onEdit={handleEdit}
           onCreateStack={() => (hubMode ? setShowNewVm(true) : setShowCreateOverlay(true))}
           onCreateHubStack={() => setShowCreateOverlay(true)}
@@ -381,10 +391,14 @@ export default function Stacks() {
       {/* Floating Batch Action Bar                                         */}
       {/* ----------------------------------------------------------------- */}
       {batchMode && selectedStacks.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up w-[calc(100%-2rem)] max-w-fit">
+        // the row centres the bar (a transform on the bar itself would be overwritten by its slide-up); on a phone it sits above the tab bar
+        <div className="fixed inset-x-0 bottom-20 md:bottom-6 z-40 flex justify-center px-4 pointer-events-none">
           <div
+            role="toolbar"
+            aria-label="Batch actions"
             className="
-              flex items-center flex-wrap gap-2 sm:gap-3 px-3 sm:px-5 py-3 rounded-2xl
+              pointer-events-auto animate-slide-up max-w-full
+              flex items-center flex-wrap justify-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 rounded-2xl
               bg-slate-900/80 backdrop-blur-xl border border-white/10
               shadow-2xl shadow-black/40
             "
@@ -398,41 +412,31 @@ export default function Stacks() {
             </div>
 
             {/* Action buttons */}
-            {batchButtons.filter((b) => !b.adminOnly || isAdmin).map(({ action, icon: Icon, label, bg, hoverBg }) => (
-              <button
-                key={action}
-                onClick={() => handleBatchAction(action)}
-                disabled={!!batchLoading}
-                title={label}
-                className={`
-                  flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
-                  border transition-all duration-200
-                  ${bg} ${hoverBg}
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                `}
-              >
-                {batchLoading === action ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Icon size={14} />
-                )}
-                <span className="hidden sm:inline">{label.replace(' Selected', '')}</span>
-              </button>
+            {batchButtons.filter((b) => !b.adminOnly || isAdmin).map(({ action, icon: Icon, label, tone }) => (
+              <Hint key={action} label={label}>
+                <button
+                  onClick={() => handleBatchAction(action)}
+                  disabled={!!batchLoading}
+                  aria-label={label}
+                  className={`${BTN_TOOLBAR} ${tone}`}
+                >
+                  {batchLoading === action ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Icon size={14} />
+                  )}
+                  <span className="hidden sm:inline">{label.replace(' selected', '')}</span>
+                </button>
+              </Hint>
             ))}
 
-            {/* Select All / Clear */}
+            {/* Select all / Clear */}
             <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
-              <button
-                onClick={handleSelectAll}
-                className="px-2.5 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all"
-              >
-                Select All
+              <button onClick={handleSelectAll} className={BTN_CARD_QUIET}>
+                Select all
               </button>
-              <button
-                onClick={handleClearSelection}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
-              >
-                <Trash2 size={11} />
+              <button onClick={handleClearSelection} className={BTN_CARD_QUIET}>
+                <X size={12} />
                 Clear
               </button>
             </div>
@@ -453,7 +457,7 @@ export default function Stacks() {
                   <ListChecks className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-100">Batch Operation</h3>
+                  <h3 className="text-sm font-semibold text-slate-100">Batch operation</h3>
                   <p className="text-xs text-slate-500">
                     {isComplete
                       ? `Completed ${batchResults.length} of ${batchTotal}`
@@ -462,15 +466,17 @@ export default function Stacks() {
                 </div>
               </div>
               {isComplete && (
-                <button aria-label="Close"
-                  onClick={() => {
-                    setShowBatchProgress(false)
-                    setBatchResults(null)
-                  }}
-                  className="text-slate-400 hover:text-white transition-colors rounded-md hover:bg-slate-800 p-1.5"
-                >
-                  <X size={16} />
-                </button>
+                <Hint label="Close">
+                  <button aria-label="Close"
+                    onClick={() => {
+                      setShowBatchProgress(false)
+                      setBatchResults(null)
+                    }}
+                    className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </Hint>
               )}
             </div>
 
@@ -542,11 +548,7 @@ export default function Stacks() {
                     setSelectedStacks(new Set())
                     setBatchMode(false)
                   }}
-                  className="
-                    flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
-                    bg-emerald-500 text-white hover:bg-emerald-400
-                    shadow-lg shadow-emerald-500/20 transition-all
-                  "
+                  className={BTN_SHEET_PRIMARY}
                 >
                   <CheckCircle2 size={14} />
                   Done

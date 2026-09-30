@@ -2,8 +2,9 @@
 // CreateStackOverlay — Full-screen glass overlay for creating a new stack
 // =============================================================================
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useId } from 'react'
 import { createPortal } from 'react-dom'
+import { SegmentedControl } from '@mantine/core'
 import {
   X,
   Plus,
@@ -15,7 +16,9 @@ import {
 } from 'lucide-react'
 import { createStack, saveStackCompose, saveStackEnv } from '../../api/endpoints'
 import { useToast } from '../common/Toast'
+import Hint from '../common/Hint'
 import { useModalA11y } from '../../hooks/useModalA11y'
+import { BTN_ICON, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_QUIET } from '../../lib/ui'
 
 interface Props {
   onClose: () => void
@@ -59,6 +62,7 @@ const DEFAULT_ENV = `# =========================================================
 export default function CreateStackOverlay({ onClose, onCreated }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const nameFieldId = useId()
   const { addToast } = useToast()
 
   const [stackName, setStackName] = useState('')
@@ -173,42 +177,36 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
         aria-labelledby="create-stack-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-white/5 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20 shrink-0">
               <Sparkles className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 id="create-stack-title" className="text-base font-semibold text-slate-100">
-                Create New Stack
+                Create stack
               </h2>
               <p className="text-xs text-slate-500">
-                Set up a new Docker Compose service stack
+                Set up a new Compose stack
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="
-              flex items-center justify-center w-9 h-9 rounded-lg
-              text-slate-500 hover:text-slate-200
-              hover:bg-white/5
-              transition-colors duration-150
-            "
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+          <Hint label="Close">
+            <button onClick={onClose} className={`${BTN_ICON} ${TONE_QUIET}`} aria-label="Close">
+              <X size={16} />
+            </button>
+          </Hint>
         </div>
 
         {/* Body — scrollable */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-4 sm:px-6 py-5 space-y-5">
           {/* Stack name input */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              Stack Name
+            <label htmlFor={nameFieldId} className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Stack name
             </label>
             <input
+              id={nameFieldId}
               ref={nameInputRef}
               type="text"
               value={stackName}
@@ -227,51 +225,29 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
                 transition-all duration-200
               "
             />
-            <div className="flex items-center justify-between mt-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2">
               <p className="text-[10px] text-slate-500">
-                Use lowercase letters, numbers, and hyphens
+                Use lowercase letters, numbers and hyphens
               </p>
-              {stackName && sanitizedName !== stackName.trim().toLowerCase() && (
-                <p className="text-[10px] text-slate-500">
-                  Will be created as: <span className="text-emerald-400 font-mono">{sanitizedName}</span>
-                </p>
-              )}
               {sanitizedName && (
                 <p className="text-[10px] text-slate-500">
-                  <span className="text-emerald-400 font-mono">{sanitizedName}</span>
+                  Created as <span className="text-emerald-400 font-mono">{sanitizedName}</span>
                 </p>
               )}
             </div>
           </div>
 
-          {/* Tab switcher */}
-          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/5 rounded-lg p-1 w-fit">
-            <button
-              onClick={() => setActiveTab('compose')}
-              className={`
-                flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150
-                ${activeTab === 'compose'
-                  ? 'bg-white/[0.08] text-slate-200 ring-1 ring-white/[0.1]'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                }
-              `}
-            >
-              <FileCode2 size={13} />
-              docker-compose.yml
-            </button>
-            <button
-              onClick={() => setActiveTab('env')}
-              className={`
-                flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150
-                ${activeTab === 'env'
-                  ? 'bg-white/[0.08] text-slate-200 ring-1 ring-white/[0.1]'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                }
-              `}
-            >
-              <FileText size={13} />
-              .env
-            </button>
+          {/* Tab switcher: one choice */}
+          <div className="min-w-0 max-w-full w-fit overflow-x-auto scrollbar-none">
+            <SegmentedControl
+              aria-label="File"
+              value={activeTab}
+              onChange={(v) => setActiveTab(v as 'compose' | 'env')}
+              data={[
+                { value: 'compose', label: <span className="flex items-center gap-1.5"><FileCode2 size={13} aria-hidden />docker-compose.yml</span> },
+                { value: 'env', label: <span className="flex items-center gap-1.5"><FileText size={13} aria-hidden />.env</span> },
+              ]}
+            />
           </div>
 
           {/* Editor area */}
@@ -293,6 +269,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
 
             {/* Textarea */}
             <textarea
+              aria-label={activeTab === 'compose' ? 'docker-compose.yml' : '.env file'}
               value={activeTab === 'compose' ? composeContent : envContent}
               onChange={(e) => {
                 if (activeTab === 'compose') {
@@ -304,14 +281,15 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
               className="
                 w-full bg-transparent text-slate-200 font-mono text-sm
                 p-4 resize-none focus:outline-none
+                focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/30
                 placeholder-slate-600 leading-relaxed
               "
               style={{ minHeight: '280px' }}
               spellCheck={false}
               placeholder={
                 activeTab === 'compose'
-                  ? 'Paste or write your docker-compose.yml here...'
-                  : 'Define environment variables (KEY=value)...'
+                  ? 'Paste or write your docker-compose.yml here…'
+                  : 'Define environment variables (KEY=value)…'
               }
             />
 
@@ -328,7 +306,7 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
 
           {/* Error display */}
           {error && (
-            <div className="flex items-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 animate-fade-in">
+            <div role="alert" className="flex items-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 animate-fade-in">
               <AlertTriangle size={15} className="text-rose-400 shrink-0" />
               <p className="text-xs text-rose-300">{error}</p>
             </div>
@@ -336,38 +314,25 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-white/5 shrink-0 bg-slate-900/50">
-          <p className="text-[11px] text-slate-500">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-white/5 shrink-0 bg-slate-900/50">
+          <p className="hidden sm:block text-[11px] text-slate-500">
             Press <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-slate-400 font-mono text-[10px]">Esc</kbd> to cancel
           </p>
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={onClose}
-              className="
-                px-4 py-2.5 text-sm text-slate-400 hover:text-slate-200
-                bg-white/5 hover:bg-white/10
-                rounded-lg border border-white/10
-                transition-all duration-200
-              "
-            >
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <button onClick={onClose} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
               Cancel
             </button>
             <button
               onClick={handleCreate}
               disabled={creating || !sanitizedName}
-              className="
-                flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg
-                bg-emerald-500 text-white hover:bg-emerald-400
-                shadow-lg shadow-emerald-500/20 transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
+              className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}
             >
               {creating ? (
                 <Loader2 size={15} className="animate-spin" />
               ) : (
                 <Plus size={15} />
               )}
-              Create Stack
+              Create stack
             </button>
           </div>
         </div>
