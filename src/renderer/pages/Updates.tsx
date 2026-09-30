@@ -958,7 +958,7 @@ export default function Updates() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-[9px] text-slate-500 mt-2">Auto-rollback {updHistory.auto_rollback ? `on: ${updHistory.rollback_drop} points within ${updHistory.health_grace} s` : 'off'} · schedule a “DCS Self-Update” on the {pageLabel('schedules')} page</p>
+                    <p className="text-[9px] text-slate-500 mt-2">Auto-rollback {updHistory.auto_rollback ? `on: ${updHistory.rollback_drop} points within ${updHistory.health_grace} s` : 'off'} · schedule a “DCS self-update” on the {pageLabel('schedules')} page</p>
                   </details>
                 )}
 
