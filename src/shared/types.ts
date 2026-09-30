@@ -3737,7 +3737,7 @@ export interface ProxmoxStorageResponse { node: string; storages: ProxmoxStorage
 export interface FleetImage { id: string; label: string; url: string; file: string; family?: string; /** a purpose-built DCS image (vm-images/): nothing to bake */ prebuilt?: boolean; /** what its kernel drives (vm-images/images.json): whether a GPU or a USB device can be passed through */ hardware?: string }
 /** A file already on a Proxmox storage: an imported cloud image, or an installer ISO */
 export interface FleetStoredImage { volid: string; file: string; size: number; storage: string }
-/** A DCS template the hub baked: VMs cloned from it build in about 40 s */
+/** A DCS template the hub baked: VMs cloned from it build in about half a minute */
 export interface FleetTemplate { vmid: number; node: string; image_id: string; image_file: string; family: string; name: string; baked_at: number; dcs_version: string }
 export interface FleetTemplatesResponse { total: number; templates: FleetTemplate[] }
 
