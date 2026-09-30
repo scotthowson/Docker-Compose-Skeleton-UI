@@ -574,7 +574,7 @@ export default function Volumes() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           aria-label="Search volumes"
-          placeholder="Search volumes by name, driver or mountpoint…"
+          placeholder="Search by name, driver or mountpoint…"
           className={SEARCH_FIELD}
         />
         {searchQuery && (

@@ -887,7 +887,7 @@ export default function Networks() {
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <StatTile icon={<Network size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Total networks" short="Total" value={networks.length} />
         <StatTile icon={<Plus size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Custom networks" short="Custom" value={userNetworks.length} />
-        <StatTile icon={<Plug size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Connections" value={totalContainers} />
+        <StatTile icon={<Plug size={14} className="text-cyan-400 shrink-0" aria-hidden />} label="Connections" short="Links" value={totalContainers} />
       </div>
 
       {/* Search + sort bar */}
