@@ -1,13 +1,15 @@
 // =============================================================================
-// StackList — Premium stack grid with create card, sorting, batch mode toggle
+// StackList — the Stacks page: header, filters, the grid of stack cards, batch
+// mode toggle, and the dialogs that belong to the list (delete, lint all)
 // =============================================================================
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { SegmentedControl } from '@mantine/core'
 import {
-  Search, Layers, Filter, Plus, Play, Square, Download,
-  ArrowUpDown, X, Loader2, AlertTriangle, Check, Sparkles,
-  Trash2, ListChecks, Server, Home,
+  Search, Layers, Filter, Plus, Play, Square,
+  ArrowUpDown, X, Loader2, AlertTriangle, Sparkles,
+  Trash2, ListChecks, Server, Home, ChevronDown,
 } from 'lucide-react'
 import { useStackStore } from '../../stores/stackStore'
 import { useContainerStore } from '../../stores/containerStore'
@@ -19,6 +21,11 @@ import type { LintDiagnostic } from '../../hooks/useComposeLinter'
 import StackCard from './StackCard'
 import { EmptyState } from '../common/PageState'
 import ModalOverlay from '../common/ModalOverlay'
+import PageHeader from '../common/PageHeader'
+import Hint from '../common/Hint'
+import { useConfirm } from '../common/ConfirmDialog'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_SHEET_QUIET, BTN_SHEET_DANGER, BTN_ICON_SM, TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST } from '../../lib/ui'
 
 interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
@@ -50,10 +57,67 @@ const priorityOrder: Record<string, number> = {
   low: 3,
 }
 
+/**
+ * A button that opens a small menu. Escape, a click outside or a pick closes it; the first item takes the focus when it
+ * opens, the arrow keys walk the items and focus goes back to the button when it closes.
+ */
+function MenuButton({ ariaLabel, className, label, icon, width = 'w-64', children }: {
+  ariaLabel: string
+  className: string
+  label: ReactNode
+  icon: ReactNode
+  width?: string
+  /** the items: buttons with role="menuitem"; close() shuts the menu */
+  children: (close: () => void) => ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => { setOpen(false); trigger.current?.focus() }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close() }
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey, true)
+    wrap.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey, true) }
+  }, [open, close])
+
+  const walk = (e: React.KeyboardEvent) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const items = Array.from(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])
+    if (items.length === 0) return
+    e.preventDefault()
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length
+    items[next].focus()
+  }
+
+  return (
+    <div ref={wrap} className="relative">
+      <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((v) => !v)} className={className}>
+        {icon}
+        <span>{label}</span>
+        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <div role="menu" aria-label={ariaLabel} onKeyDown={walk} className={`absolute right-0 mt-1 ${width} max-w-[calc(100vw-2rem)] rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30 animate-fade-in`}>
+          {children(close)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const MENU_ITEM = 'w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:opacity-50'
+
 export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
-  const [moreOpen, setMoreOpen] = useState(false)
-  const [newOpen, setNewOpen] = useState(false)
   const { stacks, actionLoading, loading } = useStackStore()
+  const confirm = useConfirm()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
   const linterPluginEnabled = usePluginStore((s) => { const p = s.plugins.find((pl) => pl.name === 'compose-linter'); return !p || p.enabled })
   const [search, setSearch] = useState('')
@@ -130,6 +194,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
   const runningCount = stacks.filter((s) => s.status === 'running').length
   const stoppedCount = stacks.filter((s) => s.status === 'stopped').length
   const criticalCount = stacks.filter((s) => stackAnnotations[s.name]?.priority === 'critical').length
+  const vmCount = stacks.filter((s) => s.placement === 'vm').length
 
   const handleLintAll = useCallback(async () => {
     if (lintAllLoading || stacks.length === 0 || !isComposeLinterEnabled()) return
@@ -147,6 +212,23 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
     setLintAllResults(results)
     setLintAllLoading(false)
   }, [lintAllLoading, stacks])
+
+  const handleStartAll = useCallback(() => {
+    stacks.filter((s) => s.status === 'stopped').forEach((s) => onAction(s.name, 'start'))
+  }, [stacks, onAction])
+
+  // one click stops every running stack: ask first
+  const handleStopAll = useCallback(async () => {
+    const running = stacks.filter((s) => s.status === 'running')
+    if (running.length === 0) return
+    if (!(await confirm({
+      title: 'Stop all stacks',
+      message: `Stop ${running.length} running stack${running.length !== 1 ? 's' : ''}? Every container in ${running.length !== 1 ? 'them' : 'it'} stops until you start ${running.length !== 1 ? 'them' : 'it'} again.`,
+      confirmLabel: 'Stop all',
+      danger: true,
+    }))) return
+    running.forEach((s) => onAction(s.name, 'stop'))
+  }, [stacks, onAction, confirm])
 
   const handleDelete = useCallback(async (name: string) => {
     setDeleting(true)
@@ -166,23 +248,27 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
     }
   }, [onRefresh])
 
+  const filtering = !!search || statusFilter !== 'all'
+  const closeDelete = () => { setShowDeleteModal(null); setDeleteError(null) }
+  const batchClass = batchMode ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-5">
       {/* Delete Confirmation Modal */}
       {showDeleteModal && createPortal(
-        <ModalOverlay onClose={() => { setShowDeleteModal(null); setDeleteError(null) }} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay onClose={closeDelete} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass p-6 max-w-sm w-full mx-4 space-y-4 animate-scale-in">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20 shrink-0">
                 <Trash2 className="w-5 h-5 text-rose-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-100">Delete Stack</h3>
+                <h3 className="text-sm font-semibold text-slate-100">Delete stack</h3>
                 <p className="text-xs text-slate-400">
                   {(() => {
                     const vmStack = stacks.find((st) => st.name === showDeleteModal && st.placement === 'vm')
                     return vmStack
-                      ? `This removes the stack's files from its VM${vmStack.member_name ? ` (${vmStack.member_name})` : ''}. The VM itself stays — remove it on the Proxmox page when you no longer need it.`
+                      ? `This removes the stack's files from its VM${vmStack.member_name ? ` (${vmStack.member_name})` : ''}. The VM itself stays — remove it on the ${pageLabel('proxmox')} page when you no longer need it.`
                       : 'This will permanently remove the stack directory and all its files.'
                   })()}
                 </p>
@@ -194,29 +280,17 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             </p>
 
             {deleteError && (
-              <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2" role="alert">
                 <AlertTriangle size={14} className="text-rose-400 shrink-0" />
                 <p className="text-xs text-rose-300">{deleteError}</p>
               </div>
             )}
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => { setShowDeleteModal(null); setDeleteError(null) }}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-all"
-              >
+              <button onClick={closeDelete} className={BTN_SHEET_QUIET}>
                 Cancel
               </button>
-              <button
-                onClick={() => handleDelete(showDeleteModal)}
-                disabled={deleting}
-                className="
-                  flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
-                  bg-rose-500/15 text-rose-400 border border-rose-500/25
-                  hover:bg-rose-500/25 transition-all
-                  disabled:opacity-50
-                "
-              >
+              <button onClick={() => handleDelete(showDeleteModal)} disabled={deleting} className={BTN_SHEET_DANGER}>
                 {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Delete
               </button>
@@ -226,249 +300,188 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         document.body,
       )}
 
-      {/* Header with stats + actions */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
-            <Layers className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">{hubMode ? 'Stacks' : 'Stack Manager'}</h2>
-            <p className="text-xs text-slate-500">
-              {hubMode ? <>{stacks.filter((s) => s.placement === 'vm').length} VM{stacks.filter((s) => s.placement === 'vm').length === 1 ? '' : 's'} · {stacks.filter((s) => s.placement !== 'vm').length} on the hub</> : <>{stacks.length} total</>}
-              <span className="mx-1.5 text-slate-700">|</span>
-              <span className="text-emerald-400">{runningCount} running</span>
-              <span className="mx-1.5 text-slate-700">|</span>
-              <span className="text-slate-400">{stoppedCount} stopped</span>
-              {criticalCount > 0 && (
-                <>
-                  <span className="mx-1.5 text-slate-700">|</span>
-                  <span className="text-rose-400">{criticalCount} critical</span>
-                </>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Header actions: a hub keeps the header calm — New, a pill for builds in flight, and More */}
-        {hubMode ? (
-          <div className="flex items-center gap-2">
+      {/* Header: the stats, the state of the builds and the actions */}
+      <PageHeader
+        page="stacks"
+        badge={
+          <span className="text-sm text-slate-400">
+            <span className="text-emerald-400 font-semibold">{runningCount} running</span>
+            <span className="mx-1.5 text-slate-500">&middot;</span>
+            <span>{stacks.length} total</span>
+            {criticalCount > 0 && (
+              <>
+                <span className="mx-1.5 text-slate-500">&middot;</span>
+                <span className="text-rose-400">{criticalCount} critical</span>
+              </>
+            )}
+          </span>
+        }
+        subtitle={hubMode ? `${vmCount} VM${vmCount === 1 ? '' : 's'} · ${stacks.length - vmCount} on the hub` : undefined}
+        actions={hubMode ? (
+          // a hub keeps the header calm: New, a pill for builds in flight, and More
+          <>
             {building > 0 && onOpenBuilds && (
-              <button
-                onClick={onOpenBuilds}
-                title="Follow the builds on the Proxmox page"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-200 border border-amber-500/20 hover:bg-amber-500/20"
-              >
-                <Loader2 size={13} className="animate-spin" />
-                {building} VM{building === 1 ? '' : 's'} being built
-              </button>
+              <Hint label={`Follow the builds on the ${pageLabel('proxmox')} page`}>
+                <button onClick={onOpenBuilds} className={`${BTN_TOOLBAR} bg-violet-500/10 border border-violet-500/20 text-violet-200 hover:bg-violet-500/20`}>
+                  <Loader2 size={14} className="animate-spin" />
+                  {building} VM{building === 1 ? '' : 's'} being built
+                </button>
+              </Hint>
             )}
             {isAdmin && (
-              <div className="relative">
-                <button
-                  onClick={() => { setNewOpen((v) => !v); setMoreOpen(false) }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25"
-                >
-                  <Plus size={14} />
-                  New stack
-                </button>
-                {newOpen && (
-                  <div className="absolute right-0 mt-1 w-64 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30" onMouseLeave={() => setNewOpen(false)}>
-                    <button onClick={() => { setNewOpen(false); onCreateStack?.() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5">
-                      <p className="text-xs font-medium text-slate-200 flex items-center gap-2"><Server size={12} className="text-amber-400" /> In its own VM</p>
+              <MenuButton ariaLabel="New stack" label="New stack" icon={<Plus size={14} />} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                {(close) => (
+                  <>
+                    <button role="menuitem" onClick={() => { close(); onCreateStack?.() }} className={MENU_ITEM}>
+                      <p className="text-xs font-medium text-slate-200 flex items-center gap-2"><Server size={12} className="text-violet-300" /> In its own VM</p>
                       <p className="text-[10px] text-slate-500 mt-0.5">The hub builds a VM and the stack runs there (the usual way)</p>
                     </button>
-                    <button onClick={() => { setNewOpen(false); onCreateHubStack?.() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5">
+                    <button role="menuitem" onClick={() => { close(); onCreateHubStack?.() }} className={MENU_ITEM}>
                       <p className="text-xs font-medium text-slate-200 flex items-center gap-2"><Home size={12} className="text-emerald-400" /> On the hub</p>
                       <p className="text-[10px] text-slate-500 mt-0.5">Next to core-infrastructure, on this server</p>
                     </button>
-                  </div>
+                  </>
                 )}
-              </div>
+              </MenuButton>
             )}
-            <div className="relative">
-              <button
-                onClick={() => { setMoreOpen((v) => !v); setNewOpen(false) }}
-                title="Start all, stop all, batch, lint"
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${batchMode ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25' : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200 hover:bg-white/10'}`}
-              >
-                <ListChecks size={14} />
-                {batchMode ? 'Batch on' : 'More'}
-              </button>
-              {moreOpen && (
-                <div className="absolute right-0 mt-1 w-56 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30" onMouseLeave={() => setMoreOpen(false)}>
+            <MenuButton ariaLabel="More actions" label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width="w-56" className={`${BTN_TOOLBAR} ${batchClass}`}>
+              {(close) => (
+                <>
                   {stoppedCount > 0 && (
-                    <button onClick={() => { setMoreOpen(false); stacks.filter((s) => s.status === 'stopped').forEach((s) => onAction(s.name, 'start')) }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-emerald-300 flex items-center gap-2"><Play size={12} /> Start all ({stoppedCount} stopped)</button>
+                    <button role="menuitem" onClick={() => { close(); handleStartAll() }} className={`${MENU_ITEM} text-xs text-emerald-300 flex items-center gap-2`}><Play size={12} /> Start all ({stoppedCount} stopped)</button>
                   )}
                   {runningCount > 0 && (
-                    <button onClick={() => { setMoreOpen(false); stacks.filter((s) => s.status === 'running').forEach((s) => onAction(s.name, 'stop')) }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-rose-300 flex items-center gap-2"><Square size={12} /> Stop all ({runningCount} running)</button>
+                    <button role="menuitem" onClick={() => { close(); void handleStopAll() }} className={`${MENU_ITEM} text-xs text-rose-300 flex items-center gap-2`}><Square size={12} /> Stop all ({runningCount} running)</button>
                   )}
                   {isAdmin && onToggleBatchMode && (
-                    <button onClick={() => { setMoreOpen(false); onToggleBatchMode() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-slate-200 flex items-center gap-2"><ListChecks size={12} /> {batchMode ? 'Exit batch mode' : 'Batch mode'}</button>
+                    <button role="menuitem" onClick={() => { close(); onToggleBatchMode() }} className={`${MENU_ITEM} text-xs text-slate-200 flex items-center gap-2`}><ListChecks size={12} /> {batchMode ? 'Exit batch mode' : 'Batch mode'}</button>
                   )}
                   {linterPluginEnabled && (
-                    <button onClick={() => { setMoreOpen(false); handleLintAll() }} disabled={lintAllLoading || stacks.length === 0} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-cyan-300 flex items-center gap-2 disabled:opacity-50">{lintAllLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Lint all</button>
+                    <button role="menuitem" onClick={() => { close(); void handleLintAll() }} disabled={lintAllLoading || stacks.length === 0} className={`${MENU_ITEM} text-xs text-slate-200 flex items-center gap-2`}>{lintAllLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Lint all</button>
                   )}
-                </div>
+                </>
               )}
-            </div>
-          </div>
+            </MenuButton>
+          </>
         ) : (
-        <div className="flex items-center gap-2">
-          {/* Quick actions: Start All / Stop All */}
-          {!batchMode && stacks.length > 0 && (
-            <>
-              {stoppedCount > 0 && (
+          <>
+            {/* Quick actions: Start all / Stop all */}
+            {!batchMode && stacks.length > 0 && (
+              <>
+                {stoppedCount > 0 && (
+                  <button aria-label="Start all stacks" onClick={handleStartAll} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                    <Play size={14} />
+                    <span className="hidden sm:inline">Start all</span>
+                  </button>
+                )}
+                {runningCount > 0 && (
+                  <button aria-label="Stop all stacks" onClick={() => void handleStopAll()} className={`${BTN_TOOLBAR} ${TONE_DANGER}`}>
+                    <Square size={14} />
+                    <span className="hidden sm:inline">Stop all</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Batch mode toggle */}
+            {isAdmin && onToggleBatchMode && (
+              <button
+                onClick={onToggleBatchMode}
+                aria-label={batchMode ? 'Exit batch mode' : 'Batch mode'}
+                aria-pressed={batchMode}
+                className={`${BTN_TOOLBAR} ${batchClass}`}
+              >
+                <ListChecks size={14} />
+                <span className="hidden sm:inline">{batchMode ? 'Exit batch mode' : 'Batch mode'}</span>
+              </button>
+            )}
+
+            {linterPluginEnabled && (
+              <Hint label="Check every stack's compose file for mistakes">
                 <button
-                  onClick={() => {
-                    const stopped = stacks.filter((s) => s.status === 'stopped').map((s) => s.name)
-                    stopped.forEach((name) => onAction(name, 'start'))
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
+                  onClick={handleLintAll}
+                  disabled={lintAllLoading || stacks.length === 0}
+                  aria-label="Lint all stacks"
+                  className={BTN_TOOLBAR_QUIET}
                 >
-                  <Play size={13} />
-                  <span className="hidden sm:inline">Start All</span>
+                  {lintAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  <span className="hidden sm:inline">Lint all</span>
                 </button>
-              )}
-              {runningCount > 0 && (
-                <button
-                  onClick={() => {
-                    const running = stacks.filter((s) => s.status === 'running').map((s) => s.name)
-                    running.forEach((name) => onAction(name, 'stop'))
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all"
-                >
-                  <Square size={13} />
-                  <span className="hidden sm:inline">Stop All</span>
-                </button>
-              )}
-            </>
-          )}
+              </Hint>
+            )}
 
-          {/* Batch mode toggle */}
-          {isAdmin && onToggleBatchMode && (
-            <button
-              onClick={onToggleBatchMode}
-              className={`
-                flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
-                border transition-all duration-200
-                ${batchMode
-                  ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25 ring-1 ring-cyan-500/20'
-                  : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200 hover:bg-white/10'}
-              `}
-            >
-              <ListChecks size={14} />
-              <span className="hidden sm:inline">{batchMode ? 'Exit Batch' : 'Batch'}</span>
-            </button>
-          )}
-
-          {linterPluginEnabled && (
-            <button
-              onClick={handleLintAll}
-              disabled={lintAllLoading || stacks.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50 press"
-            >
-              {lintAllLoading ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
-              <span className="hidden sm:inline">Lint All</span>
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              onClick={onCreateStack}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
-            >
-              <Plus size={14} />
-              New Stack
-            </button>
-          )}
-        </div>
+            {isAdmin && (
+              <button aria-label="New stack" onClick={onCreateStack} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                <Plus size={14} />
+                <span className="hidden sm:inline">New stack</span>
+              </button>
+            )}
+          </>
         )}
-      </div>
+      />
 
       {/* Search, filter, and sort bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Search input */}
-        <div className="relative flex-1 min-w-0 md:min-w-[200px] max-w-md basis-full sm:basis-auto sm:flex-1 min-w-0">
+        <div className="relative flex-1 min-w-0 md:min-w-[200px] max-w-md basis-full sm:basis-auto sm:flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input
             type="text"
+            aria-label="Search stacks"
             placeholder="Search stacks or containers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="
-              w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg
+              w-full pl-10 pr-9 py-2.5 bg-white/5 border border-white/10 rounded-lg
               text-sm text-slate-200 placeholder-slate-500
               focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
               transition-all duration-200
             "
           />
           {search && (
-            <button aria-label="Clear the search"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              <X size={14} />
-            </button>
+            <Hint label="Clear the search">
+              <button aria-label="Clear the search"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </Hint>
           )}
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/5 rounded-lg">
-          <Filter className="w-3.5 h-3.5 text-slate-500 ml-2 mr-1" />
-          {(['all', 'running', 'stopped'] as StatusFilter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className={`
-                px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200
-                ${
-                  statusFilter === f
-                    ? f === 'running'
-                      ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
-                      : f === 'stopped'
-                        ? 'bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/25'
-                        : 'bg-white/10 text-slate-200 ring-1 ring-white/15'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                }
-              `}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+        {/* Status filter: one choice (the dashboard's segmented control); a phone swipes the row sideways */}
+        <div className="flex items-center gap-2 min-w-0 max-w-full overflow-x-auto scrollbar-none">
+          <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden />
+          <SegmentedControl
+            aria-label="Show"
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as StatusFilter)}
+            data={[{ value: 'all', label: 'All' }, { value: 'running', label: 'Running' }, { value: 'stopped', label: 'Stopped' }]}
+          />
         </div>
 
-        {/* Sort dropdown */}
-        <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/5 rounded-lg">
-          <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 ml-2 mr-1" />
-          {(['priority', 'name', 'status', 'containers'] as SortMode[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSortMode(s)}
-              className={`
-                px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200
-                ${
-                  sortMode === s
-                    ? 'bg-cyan-500/15 text-cyan-400 ring-1 ring-cyan-500/25'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                }
-              `}
-            >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </button>
-          ))}
+        {/* Sort */}
+        <div className="flex items-center gap-2 min-w-0 max-w-full overflow-x-auto scrollbar-none">
+          <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden />
+          <SegmentedControl
+            aria-label="Sort by"
+            value={sortMode}
+            onChange={(v) => setSortMode(v as SortMode)}
+            data={[{ value: 'priority', label: 'Priority' }, { value: 'name', label: 'Name' }, { value: 'status', label: 'Status' }, { value: 'containers', label: 'Containers' }]}
+          />
         </div>
       </div>
 
       {/* Batch mode indicator */}
       {batchMode && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/15">
-          <ListChecks size={14} className="text-cyan-400" />
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/15">
+          <ListChecks size={14} className="text-cyan-400 shrink-0" />
           <span className="text-xs text-cyan-300 font-medium">
-            Batch mode active — click cards to select, then use the action bar below
+            Batch mode is on — click stacks to select them, then use the bar that appears at the bottom
           </span>
           {selectedStacks && selectedStacks.size > 0 && (
-            <span className="ml-auto text-xs text-cyan-400/70">
+            <span className="ml-auto shrink-0 text-xs text-cyan-400/70">
               {selectedStacks.size} selected
             </span>
           )}
@@ -477,12 +490,12 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
 
       {/* Stack grid */}
       {loading && stacks.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div role="status" aria-label="Reading the stacks" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl h-[200px] border border-white/[0.03]" />
           ))}
         </div>
-      ) : filtered.length > 0 || stacks.length > 0 ? (
+      ) : filtered.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {/* a hub: each VM is a stack — VMs first, then what the hub itself runs */}
           {hubMode && filtered.some((s) => s.placement === 'vm') && (
@@ -525,7 +538,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
             />
           ))}
 
-          {/* Create Stack Card — always at the end (hidden in batch mode and for non-admins) */}
+          {/* Create stack card — always at the end (hidden in batch mode and for non-admins) */}
           {isAdmin && !batchMode && (
             <button
               onClick={onCreateStack}
@@ -546,10 +559,10 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 <Plus className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors duration-300" />
               </div>
               <span className="text-sm font-medium text-slate-400 group-hover:text-emerald-400 transition-colors duration-300">
-                Create New Stack
+                New stack
               </span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400 mt-1 transition-colors">
-                Add a new service category
+                {hubMode ? 'The hub builds a VM for it' : 'Add a compose stack to this server'}
               </span>
             </button>
           )}
@@ -558,25 +571,22 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         <div className="glass-subtle rounded-xl">
           <EmptyState
             icon={<Layers size={32} />}
-            title={search || statusFilter !== 'all' ? 'No stacks match your filters' : 'No stacks found'}
-            hint={search || statusFilter !== 'all' ? 'Try another name or status.' : 'No stacks yet — deploy a template or create a stack.'}
-            action={search || statusFilter !== 'all' ? (
+            title={filtering ? 'No stacks match your filters' : 'No stacks found'}
+            hint={filtering ? 'Try another name or status.' : 'No stacks yet — deploy a template or create a stack.'}
+            action={filtering ? (
               <button
                 onClick={() => {
                   setSearch('')
                   setStatusFilter('all')
                 }}
-                className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                className={BTN_TOOLBAR_QUIET}
               >
-                Clear filters
+                <X size={14} /> Clear the filters
               </button>
             ) : isAdmin ? (
-              <button
-                onClick={onCreateStack}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press"
-              >
+              <button onClick={onCreateStack} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
                 <Plus size={14} />
-                New Stack
+                New stack
               </button>
             ) : undefined}
           />
@@ -588,23 +598,25 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
         <div className="h-20" />
       )}
 
-      {/* Lint All Results Modal */}
+      {/* Lint all results */}
       {lintAllResults && createPortal(
         <ModalOverlay onClose={() => setLintAllResults(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setLintAllResults(null)}>
           <div className="glass rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col min-h-0 border border-white/10 animate-scale-in gradient-border" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-                  <ListChecks size={18} className="text-cyan-400" />
+                  <Sparkles size={18} className="text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-100">Compose Lint Results</h3>
-                  <p className="text-[10px] text-slate-500">{stacks.length} stacks analyzed</p>
+                  <h3 className="text-sm font-semibold text-slate-100">Compose lint results</h3>
+                  <p className="text-[10px] text-slate-500">{lintAllResults.length} stack{lintAllResults.length === 1 ? '' : 's'} checked</p>
                 </div>
               </div>
-              <button aria-label="Close" onClick={() => setLintAllResults(null)} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400">
-                <X size={16} />
-              </button>
+              <Hint label="Close">
+                <button aria-label="Close" onClick={() => setLintAllResults(null)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                  <X size={14} />
+                </button>
+              </Hint>
             </div>
             {/* Summary */}
             <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
@@ -618,7 +630,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
               </span>
               <span className="flex items-center gap-1 text-[11px] font-medium text-cyan-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'info').length, 0)} info
+                {lintAllResults.reduce((sum, r) => sum + r.diagnostics.filter(d => d.severity === 'info').length, 0)} hints
               </span>
             </div>
             {/* Per-stack results — the only scrolling region */}
@@ -632,9 +644,9 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono text-slate-200">{result.name}</span>
                       <div className="flex items-center gap-2">
-                        {errors > 0 && <span className="text-[10px] font-medium text-rose-400">{errors}E</span>}
-                        {warnings > 0 && <span className="text-[10px] font-medium text-amber-400">{warnings}W</span>}
-                        {infos > 0 && <span className="text-[10px] font-medium text-cyan-400">{infos}I</span>}
+                        {errors > 0 && <span className="text-[10px] font-medium text-rose-400">{errors} error{errors === 1 ? '' : 's'}</span>}
+                        {warnings > 0 && <span className="text-[10px] font-medium text-amber-400">{warnings} warning{warnings === 1 ? '' : 's'}</span>}
+                        {infos > 0 && <span className="text-[10px] font-medium text-cyan-400">{infos} hint{infos === 1 ? '' : 's'}</span>}
                         {result.diagnostics.length === 0 && <span className="text-[10px] font-medium text-emerald-400">Clean</span>}
                       </div>
                     </div>
@@ -643,7 +655,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                         {result.diagnostics.slice(0, 5).map((d) => (
                           <div key={`${d.line}-${d.message}`} className="flex items-start gap-2 text-[10px]">
                             <span className={`shrink-0 mt-0.5 ${d.severity === 'error' ? 'text-rose-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`}>
-                              {d.severity === 'error' ? '\u25cf' : d.severity === 'warning' ? '\u25b2' : '\u2139'}
+                              {d.severity === 'error' ? '●' : d.severity === 'warning' ? '▲' : 'ℹ'}
                             </span>
                             <span className="text-slate-500 tabular-nums shrink-0">L{d.line}</span>
                             <span className="text-slate-400">{d.message}</span>
