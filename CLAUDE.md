@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Docker Compose Skeleton UI is a premium Electron desktop application for managing [Docker Compose Skeleton](https://github.com/scotthowson/Docker-Compose-Skeleton) servers. It connects to the DCS REST API (default `http://127.0.0.1:9876`) and provides live monitoring, stack management, container control, and full server administration through a dark glassmorphism design system.
+DCS Manager is the dashboard of [DCS Orchestrator](https://github.com/scotthowson/dcs-orchestrator) (formerly Docker Compose Skeleton): a premium Electron desktop application that also builds as a web app (the `DCS-UI` container) and an Android app (Capacitor). It connects to the DCS REST API (default `http://127.0.0.1:9876`) and provides live monitoring, stack management, container control, and full server administration through a dark glassmorphism design system.
 
 **Stack:** Electron 33 + React 18 + Vite 6 + Tailwind CSS 3 + Zustand 5 + TypeScript 5 (+ [Mantine](https://mantine.dev) 8 for a few components, see below)
 
@@ -19,7 +19,7 @@ npm run build            # Full production build + electron-builder packaging
 npm run electron         # Build main process and launch Electron
 ```
 
-There are no tests, no linter, and no CI pipeline beyond the GitHub Actions build workflow.
+There is no unit-test suite and no linter. The checks are `npm run typecheck`, `npm run check:themes` and the browser sweep `tests/ui-sweep.mjs` against the lab (`tests/lab/lab.sh`, see `tests/README.md`); GitHub Actions builds and publishes on a tag.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Preload (src/main/preload.ts)
 
 Renderer (src/renderer/)
   ├── React 18 SPA — no React Router, uses currentPage state
-  ├── Zustand stores (14 stores) for all state management
+  ├── Zustand stores (one per concern, in src/renderer/stores/) for all state management
   ├── Fetch-based API client with retry logic
   └── Tailwind + custom glassmorphism CSS
 ```
@@ -61,13 +61,13 @@ There is no React Router. Navigation is a `currentPage: PageId` state in `settin
 All stores follow: `export const useXStore = create<State>((set, get) => ({ ... }))`
 
 Key stores to understand:
-- **authStore** — PBKDF2 password hashing, session management, rate limiting. Authentication is local-only (no server tokens).
+- **authStore** — PBKDF2 password hashing, session management, rate limiting. Sign-in goes to the server (`POST /auth/login`, optional 2FA); the token it returns is the credential (`apiToken`), and a local PBKDF2 account is kept beside it so the lock screen works offline.
 - **settingsStore** — Dual persistence: electron-store IPC or localStorage fallback. Holds currentPage, theme, serverUrl, polling intervals, and all user preferences.
 - **connectionStore** — API connection lifecycle with exponential backoff (max 30s, 50 retries), heartbeat monitoring (10s), and tab-visibility-aware reconnection. Pages use `reportPollSuccess/reportPollFailure` to track connection health.
 
 ### API Layer
 
-**Client** (`src/renderer/api/client.ts`): Fetch wrapper with 30s timeout, AbortController, max 2 retries on network errors only. Singleton `apiClient` instance. No auth headers — API is open, authentication is client-side only.
+**Client** (`src/renderer/api/client.ts`): Fetch wrapper with 30s timeout, AbortController, max 2 retries on network errors only. Singleton `apiClient` instance. Sends the session token as `Authorization: Bearer` (`apiClient.setAuthToken`); a 401 on a signed-in session signs the person out.
 
 **Endpoints** (`src/renderer/api/endpoints.ts`): ~60 typed functions wrapping all REST routes. Every function returns `Promise<TypedResponse>`. To add a new endpoint:
 1. Add response type in `src/shared/types.ts`
@@ -84,7 +84,7 @@ What belongs to the PERSON follows them to every device (`lib/userSync.ts`): the
 
 ### Authentication Flow
 
-Local PBKDF2 (100k iterations, random 128-bit salt, Web Crypto API). No server-side auth. Three modes on Login page:
+The server issues the session token; a local PBKDF2 account (100k iterations, random 128-bit salt, Web Crypto API) is kept beside it for the lock screen. Three modes on Login page:
 1. Initial setup → Create Admin Account
 2. Returning user → Sign In (4-hour sessions, rate-limited to 5 attempts)
 3. Invite registration → Register with invite code via `authRegister` API endpoint
@@ -167,6 +167,6 @@ const stacks = useStackStore((s) => s.stacks)
 
 ## Backend API Reference
 
-The UI connects to the Docker Compose Skeleton REST API (`api-server.sh`). The backend repo is at `../Docker-Compose-Skeleton/`. Key endpoint groups: `/status`, `/health`, `/stacks`, `/containers`, `/images`, `/networks`, `/volumes`, `/logs`, `/events`, `/config`, `/system`, `/env`, `/maintenance`, `/backups`, `/batch`, `/auth`.
+The UI connects to the DCS Orchestrator REST API (`.scripts/api-server.sh`). The backend repo is `dcs-orchestrator` (checkout `../Docker-Compose-Skeleton-AIO/`). Key endpoint groups: `/status`, `/health`, `/stacks`, `/containers`, `/images`, `/networks`, `/volumes`, `/logs`, `/events`, `/config`, `/system`, `/env`, `/maintenance`, `/backups`, `/batch`, `/auth`.
 
 All endpoint types are defined in `src/shared/types.ts` and all fetch wrappers in `src/renderer/api/endpoints.ts`.
