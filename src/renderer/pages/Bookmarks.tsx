@@ -15,6 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { pageLabel } from '../constants/pageTitles'
 import PageHeader from '../components/common/PageHeader'
 import Hint from '../components/common/Hint'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { EmptyState } from '../components/common/PageState'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON_SM, TONE_OK, TONE_QUIET, TONE_GHOST } from '../lib/ui'
@@ -428,6 +429,7 @@ export default function Bookmarks() {
 
   return (
     <div className="space-y-4 md:space-y-5 animate-fade-in">
+      <DisconnectedBanner />
       <PageHeader
         page="bookmarks"
         actions={

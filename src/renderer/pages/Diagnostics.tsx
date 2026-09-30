@@ -1559,7 +1559,7 @@ export default function Diagnostics() {
           </div>
 
           {/* ══════════════════════════════════════════════════════════ */}
-          {/* ROW 4: Network Topology                                  */}
+          {/* ROW 4: Networks                                          */}
           {/* ══════════════════════════════════════════════════════════ */}
           <div className={`${CARD} p-4 md:p-6`}>
             <SectionHeader icon={<Network size={14} />} title="Networks" />
