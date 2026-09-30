@@ -674,8 +674,8 @@ export default function Notifications() {
         </div>
       )}
 
-      {/* ── Quick add presets ──────────────────────────────────────────── */}
-      <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
+      {/* ── Quick add presets (adding a rule is for admins) ─────────────── */}
+      {isAdmin && <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
         <div className="flex items-center gap-2 mb-4">
           <Zap size={14} className="text-slate-400" />
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick add — notification presets</h2>
@@ -722,7 +722,7 @@ export default function Notifications() {
             )
           })}
         </div>
-      </div>
+      </div>}
 
       {/* ── Channels: ntfy and Discord, side by side ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
