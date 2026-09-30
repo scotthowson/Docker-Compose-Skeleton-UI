@@ -36,6 +36,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import type { HealthReport, HealthContainer, ContainerInfo, SystemMetricsResponse, HealthScoreResponse } from '../../shared/types'
 import { useApiLink, sinceText, type ApiLinkState } from '../hooks/useApiLink'
 import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import PageHeader from '../components/common/PageHeader'
 import SortableTh from '../components/common/SortableTh'
 import { EmptyState } from '../components/common/PageState'
@@ -400,7 +401,7 @@ export default function Health() {
 
   return (
     <div className="space-y-4 md:space-y-5 animate-fade-in">
-      {/* the headline below says when the API does not answer: no banner saying it again */}
+      <DisconnectedBanner />
       <OnDemandMissingBanner />
       <PageHeader
         page="health"

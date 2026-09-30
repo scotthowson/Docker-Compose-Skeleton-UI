@@ -24,6 +24,7 @@ import type { ResourceHistoryPoint } from '../components/dashboard/ResourceChart
 import DashboardGrid from '../components/dashboard/DashboardGrid'
 import PageHeader from '../components/common/PageHeader'
 import Hint from '../components/common/Hint'
+import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useStackStore } from '../stores/stackStore'
@@ -391,6 +392,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-5 animate-fade-in">
+      {/* the "never connected" screen below says it in full: the banner is for a link that drops later */}
+      {!showDisconnected && <DisconnectedBanner />}
       <PageHeader
         page="dashboard"
         badge={isConnected ? <Badge component="span" color="emerald" leftSection={<Wifi size={11} />}>Live</Badge> : undefined}
@@ -410,7 +413,6 @@ export default function Dashboard() {
         <DisconnectedHero />
       ) : (
         <>
-
           <DashboardGrid
             cards={dashLayout.allCards}
             editMode={dashLayout.editMode}

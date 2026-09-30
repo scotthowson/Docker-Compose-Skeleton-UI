@@ -463,6 +463,7 @@ export default function Terminal() {
   if (authChecking) {
     return (
       <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <DisconnectedBanner />
         <PageHeader page="terminal" />
         <LoadingState label="Verifying the terminal session…" />
       </div>
@@ -473,6 +474,7 @@ export default function Terminal() {
   if (!authenticated) {
     return (
       <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <DisconnectedBanner />
         <PageHeader page="terminal" />
         {sessionExpired && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 max-w-md mx-auto" role="alert">
@@ -496,7 +498,7 @@ export default function Terminal() {
 
   // Signed in — the terminal
   return (
-    <div className="flex flex-col h-[calc(100vh-10rem)] min-h-[32rem] gap-3">
+    <div className="flex flex-col h-[calc(100vh-10rem)] min-h-[32rem] gap-4 md:gap-5">
       <DisconnectedBanner />
       <PageHeader
         page="terminal"
