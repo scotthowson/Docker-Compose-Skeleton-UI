@@ -8,6 +8,7 @@
 import type React from 'react'
 import { Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { BTN_TOOLBAR, TONE_GHOST } from '../../lib/ui'
 
 interface FloatingSaveBarProps {
   hasChanges: boolean
@@ -45,15 +46,17 @@ export function FloatingSaveBar({
         <span className="text-sm text-slate-300">{message}</span>
         {extra}
         <button
+          type="button"
           onClick={onDiscard}
-          className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1"
+          className={`${BTN_TOOLBAR} ${TONE_GHOST} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40`}
         >
           {discardLabel}
         </button>
         <button
+          type="button"
           onClick={onSave}
           disabled={saving}
-          className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 transition-all disabled:opacity-50 flex items-center gap-1.5"
+          className={`${BTN_TOOLBAR} font-semibold text-white bg-emerald-500 hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70`}
         >
           {saving && <Loader2 size={12} className="animate-spin" />}
           {saving ? savingLabel : saveLabel}

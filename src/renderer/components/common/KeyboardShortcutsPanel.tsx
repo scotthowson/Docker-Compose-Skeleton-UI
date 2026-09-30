@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Keyboard } from 'lucide-react'
 import ModalOverlay from './ModalOverlay'
+import { pageLabel } from '../../constants/pageTitles'
 
 interface Props {
   open: boolean
@@ -17,7 +18,7 @@ const shortcutGroups = [
     title: 'Navigation',
     shortcuts: [
       { keys: ['Ctrl', '1-9'], description: 'Switch to page by index' },
-      { keys: ['Ctrl', '0'], description: 'Settings' },
+      { keys: ['Ctrl', '0'], description: pageLabel('settings') },
     ],
   },
   {
@@ -27,12 +28,12 @@ const shortcutGroups = [
       { keys: ['Ctrl', 'B'], description: 'Toggle sidebar' },
       { keys: ['Ctrl', 'D'], description: 'Toggle theme' },
       { keys: ['Ctrl', 'R'], description: 'Refresh data' },
-      { keys: ['Ctrl', 'T'], description: 'Terminal' },
+      { keys: ['Ctrl', 'T'], description: pageLabel('terminal') },
       { keys: ['Ctrl', 'Shift', 'P'], description: 'Command palette (alt)' },
     ],
   },
   {
-    title: 'Page-Specific',
+    title: 'Page-specific',
     shortcuts: [
       { keys: ['?'], description: 'This shortcuts panel' },
       { keys: ['Esc'], description: 'Close dialogs and modals' },

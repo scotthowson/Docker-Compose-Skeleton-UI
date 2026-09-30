@@ -129,7 +129,7 @@ export function Sidebar() {
       color: runningContainers > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
     }
     badges.stacks = isHub && vmStacks !== null
-      ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs
+      ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs (violet: the fleet)
       : { value: `${systemStatus.stacks.running}`, color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400' }
     badges.images = {
       value: `${systemStatus.docker.images + fleet.images}`,

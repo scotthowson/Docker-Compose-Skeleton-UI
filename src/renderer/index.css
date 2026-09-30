@@ -20,6 +20,12 @@
   [data-accent="fuchsia"] { --color-accent: 232 121 249; --color-accent-secondary: 217 70 239; }
   [data-accent="lime"] { --color-accent: 163 230 53; --color-accent-secondary: 132 204 22; }
 
+  /* keyboard focus: every control shows where it is, in the person's accent, unless it draws a focus state of its own (this rule has no specificity, so any utility wins) */
+  :where(a[href], button, input, select, textarea, summary, [role='button'], [role='tab'], [role='switch'], [role='menuitem'], [role='checkbox'], [role='radio'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid rgb(var(--color-accent) / 0.7);
+    outline-offset: 2px;
+  }
+
   body {
     @apply bg-slate-950 text-slate-100 overflow-hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

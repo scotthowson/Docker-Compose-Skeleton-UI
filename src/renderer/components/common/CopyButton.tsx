@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Copy, Check } from 'lucide-react'
+import Hint from './Hint'
 
 interface CopyButtonProps {
   text: string
@@ -20,24 +21,27 @@ export function CopyButton({ text, className = '', size = 12 }: CopyButtonProps)
   }, [text])
 
   return (
-    <button
-      onClick={handleCopy}
-      className={`
-        inline-flex items-center justify-center
-        rounded p-0.5
-        text-slate-500 hover:text-slate-300
-        hover:bg-white/5
-        transition-all duration-150
-        ${className}
-      `}
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
-      aria-label="Copy to clipboard"
-    >
-      {copied ? (
-        <Check size={size} className="text-emerald-400" />
-      ) : (
-        <Copy size={size} />
-      )}
-    </button>
+    <Hint label={copied ? 'Copied' : 'Copy to clipboard'}>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={`
+          inline-flex items-center justify-center
+          h-6 w-6 rounded
+          text-slate-500 hover:text-slate-300
+          hover:bg-white/5
+          transition-colors duration-150
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40
+          ${className}
+        `}
+        aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+      >
+        {copied ? (
+          <Check size={size} className="text-emerald-400" />
+        ) : (
+          <Copy size={size} />
+        )}
+      </button>
+    </Hint>
   )
 }

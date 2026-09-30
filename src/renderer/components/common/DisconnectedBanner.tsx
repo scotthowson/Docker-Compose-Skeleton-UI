@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { WifiOff, RefreshCw, HeartPulse } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useApiLink } from '../../hooks/useApiLink'
@@ -8,16 +9,25 @@ export function DisconnectedBanner() {
   const link = useApiLink()
 
   const show = !link.live
+  // The banner leaves the page once its collapse has run. An invisible copy kept a slot in the page's spacing (a gap under the header) and a Retry button
+  // that could still be tabbed to.
+  const [present, setPresent] = useState(show)
+  useEffect(() => {
+    if (show) { setPresent(true); return }
+    const t = setTimeout(() => setPresent(false), 320)
+    return () => clearTimeout(t)
+  }, [show])
+  if (!show && !present) return null
   const reconnecting = link.state === 'reconnecting'
   const trouble = link.state === 'trouble'
 
-  // Smooth height transition: render the wrapper always, but collapse when connected
+  // Smooth height transition when the link comes back; `invisible` also takes the collapsing copy out of the tab order
   return (
     <div
       aria-hidden={!show}
       role={show ? 'status' : undefined}
       className={`overflow-hidden transition-all duration-300 ease-out ${
-        show ? 'max-h-16 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'
+        show ? 'max-h-16 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0 invisible'
       }`}
     >
       <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
@@ -34,7 +44,7 @@ export function DisconnectedBanner() {
         {!reconnecting && !trouble && (
           <button
             onClick={() => { void connect() }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/10 text-slate-300 hover:bg-white/[0.1] transition-all press"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/10 text-slate-300 hover:bg-white/[0.1] transition-all press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
           >
             <RefreshCw className="w-3 h-3" />
             Retry

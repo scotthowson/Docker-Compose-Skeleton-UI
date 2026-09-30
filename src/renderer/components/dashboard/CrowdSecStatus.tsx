@@ -4,13 +4,17 @@
 // =============================================================================
 
 import { useState } from 'react'
-import { ShieldCheck, ShieldOff, ShieldAlert, RefreshCw, Loader2, Unlock, UserCheck, AlertCircle } from 'lucide-react'
+import { Badge } from '@mantine/core'
+import { ShieldAlert, ShieldOff, Loader2, Unlock, UserCheck } from 'lucide-react'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { crowdsecUnbanMe, crowdsecTrust, crowdsecUnban } from '../../api/endpoints'
 import type { CrowdSecStatusResponse } from '../../../shared/types'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_CARD, BTN_CARD_QUIET, TONE_OK } from '../../lib/ui'
+import { Card, CardBody, CardEmpty, CardError, CardLoading, CardOffline } from './cardShared'
 
 interface Props {
   data: CrowdSecStatusResponse | null
@@ -38,46 +42,30 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
     }
   }
 
-  const title = <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Protection</h3>
-
-  if (!isConnected && !data) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in opacity-60">
-        <div className="flex items-center gap-2 mb-3"><ShieldOff size={14} className="text-slate-500" />{title}</div>
-        <p className="text-xs text-slate-500">Not connected</p>
-      </div>
-    )
-  }
-  if (!data && error) {
-    return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in">
-        <div className="flex items-center gap-2 mb-3"><AlertCircle size={14} className="text-amber-400" />{title}</div>
-        <p className="text-xs text-slate-500 mb-2">Unable to load CrowdSec status</p>
-        {onRetry && <button onClick={onRetry} className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300"><RefreshCw size={10} /> Retry</button>}
-      </div>
-    )
-  }
-  if (!data) {
-    return <div className="glass-card p-4 md:p-6 h-full skeleton" />
-  }
+  if (!isConnected && !data) return <Card card="crowdsec" dim><CardOffline /></Card>
+  if (!data && error) return <Card card="crowdsec" tone="attention"><CardError title={`Could not load ${pageLabel('crowdsec')}'s state`} error={error} onRetry={onRetry} /></Card>
+  if (!data) return <Card card="crowdsec"><CardLoading label={`Asking ${pageLabel('crowdsec')}…`} rows={3} /></Card>
   // deployed but not running well (stopped, restarting, Docker down): say so, and send the person to the page that fixes it
   if (!data.installed && data.state && data.state !== 'not_deployed') {
     return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col">
-        <div className="flex items-center gap-2 mb-3"><ShieldAlert size={14} className="text-amber-400" />{title}</div>
-        <p className="text-sm text-amber-300">{data.title || 'CrowdSec needs attention'}</p>
-        <p className="text-xs text-slate-500 mt-1 flex-1">{data.detail || 'Open the CrowdSec page for the reason and the one-click fix.'}</p>
-        <button onClick={() => setCurrentPage('crowdsec')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Open CrowdSec →</button>
-      </div>
+      <Card card="crowdsec" icon={ShieldAlert} tone="attention" open="crowdsec">
+        <CardEmpty
+          title={data.title || 'CrowdSec needs attention'}
+          hint={data.detail || `Open the ${pageLabel('crowdsec')} page for the reason and the one-click fix.`}
+        />
+      </Card>
     )
   }
   if (!data.installed) {
     return (
-      <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col">
-        <div className="flex items-center gap-2 mb-3"><ShieldOff size={14} className="text-slate-500" />{title}</div>
-        <p className="text-xs text-slate-500 flex-1">CrowdSec is not running. Deploy the <span className="text-slate-300">crowdsec</span> template to block scanners and brute-force attempts at the reverse proxy.</p>
-        <button onClick={() => setCurrentPage('crowdsec')} className="mt-3 self-start text-[11px] text-cyan-400 hover:text-cyan-300">Set up CrowdSec →</button>
-      </div>
+      <Card card="crowdsec" icon={ShieldOff} open="crowdsec">
+        <CardEmpty
+          icon={<ShieldOff size={22} />}
+          title="CrowdSec is not running"
+          hint="Deploy the crowdsec template to block scanners and brute-force attempts at the reverse proxy."
+          action={<button type="button" onClick={() => setCurrentPage('crowdsec')} className={`${BTN_CARD} ${TONE_OK}`}>Set up {pageLabel('crowdsec')}</button>}
+        />
+      </Card>
     )
   }
 
@@ -89,21 +77,18 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
   const whitelist = data.whitelist?.addresses ?? []
 
   return (
-    <div className="glass-card p-4 md:p-6 animate-fade-in h-full flex flex-col min-h-0">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {banned ? <ShieldAlert size={14} className="text-rose-400" /> : attention.length > 0 ? <ShieldAlert size={14} className="text-amber-400" /> : <ShieldCheck size={14} className="text-emerald-400" />}
-          {title}
-        </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${attention.length > 0 ? 'bg-amber-500/15 text-amber-300' : decisions.length ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
-          {attention.length > 0 ? 'needs attention' : `${decisions.length} active ban${decisions.length === 1 ? '' : 's'}`}
-        </span>
-      </div>
-
+    <Card
+      card="crowdsec"
+      icon={banned || attention.length > 0 ? ShieldAlert : undefined}
+      tone={banned ? 'problem' : attention.length > 0 ? 'attention' : undefined}
+      badge={<Badge component="span" color={attention.length > 0 || decisions.length > 0 ? 'amber' : 'emerald'}>{attention.length > 0 ? 'needs attention' : `${decisions.length} active ban${decisions.length === 1 ? '' : 's'}`}</Badge>}
+      open="crowdsec"
+      clickable={false}
+    >
       {attention.length > 0 && (
-        <button type="button" onClick={() => setCurrentPage('crowdsec')} className="mb-3 w-full text-left rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/15 transition-colors">
+        <button type="button" onClick={() => setCurrentPage('crowdsec')} className="mb-3 w-full text-left rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
           <span className="font-medium">{attention[0].title}</span>{attention.length > 1 ? ` and ${attention.length - 1} more` : ''}
-          <span className="block text-[10px] mt-0.5">Open the CrowdSec page to fix it</span>
+          <span className="block text-[10px] mt-0.5">Open the {pageLabel('crowdsec')} page to fix it</span>
         </button>
       )}
       {banned && (
@@ -112,7 +97,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
         </div>
       )}
 
-      <div className="text-[11px] text-slate-500 space-y-1 flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      <CardBody className="text-[11px] text-slate-500 space-y-1">
         <p>
           Whitelist follows the home address{data.whitelist?.public_ip ? <> (<span className="font-mono text-slate-300">{data.whitelist.public_ip}</span>)</> : null}
           {data.whitelist?.synced_at ? <> · synced {new Date(data.whitelist.synced_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</> : null}
@@ -125,9 +110,11 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
             <span className="truncate"><span className="font-mono text-slate-300">{d.ip}</span> <span className="text-slate-600">{d.scenario?.replace('crowdsecurity/', '')}</span></span>
             {isAdmin && (
               <button
+                type="button"
                 onClick={() => run(`unban-${d.ip}`, () => crowdsecUnban(d.ip), `Unbanned ${d.ip}`)}
                 disabled={busy !== null}
-                className="text-[10px] text-cyan-400 hover:text-cyan-300 shrink-0 disabled:opacity-50"
+                aria-label={`Unban ${d.ip}`}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 shrink-0 disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
               >
                 {busy === `unban-${d.ip}` ? <Loader2 size={10} className="animate-spin" /> : 'unban'}
               </button>
@@ -135,30 +122,31 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
           </div>
         ))}
         {decisions.length > 5 && <p className="text-slate-600">+{decisions.length - 5} more</p>}
-      </div>
+      </CardBody>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
+          type="button"
           onClick={() => run('me', () => crowdsecUnbanMe(), 'Your addresses were unbanned')}
           disabled={busy !== null}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+          className={BTN_CARD_QUIET}
           title="Remove any ban on your current address and the home public address"
         >
           {busy === 'me' ? <Loader2 size={11} className="animate-spin" /> : <Unlock size={11} />} Unban me
         </button>
         {isAdmin && (
           <button
+            type="button"
             onClick={() => run('trust', () => crowdsecTrust(), 'Address added to the whitelist')}
             disabled={busy !== null}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+            className={`${BTN_CARD} ${TONE_OK}`}
             title="Whitelist the home public address and your current address so they can never be banned"
           >
             {busy === 'trust' ? <Loader2 size={11} className="animate-spin" /> : <UserCheck size={11} />} Trust my address
           </button>
         )}
         <span className="ml-auto text-[10px] text-slate-600">{trusted.length} trusted</span>
-        <button onClick={() => setCurrentPage('crowdsec')} className="text-[11px] text-cyan-400 hover:text-cyan-300">Open CrowdSec →</button>
       </div>
-    </div>
+    </Card>
   )
 }
