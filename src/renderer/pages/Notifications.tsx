@@ -27,6 +27,7 @@ import {
   BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM,
   BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_OK, TONE_GHOST, TONE_GHOST_DANGER,
 } from '../lib/ui'
+import { INPUT, CAPTION as LABEL, FOCUS_RING } from '../lib/fieldStyles'
 import {
   fetchNotificationRules,
   createNotificationRule,
@@ -294,15 +295,12 @@ function statusCodeColor(code: number): string {
   return 'text-amber-400'
 }
 
-/** the form pieces of this page's rule and webhook forms */
-const LABEL = 'text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block'
-const INPUT = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors'
 /** a link inside a sentence */
-const LINK_BTN = 'h-auto text-cyan-400 hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+const LINK_BTN = `h-auto text-cyan-400 hover:underline rounded ${FOCUS_RING}`
 /** the button that folds a section open and shut: it is the section's heading */
-const SECTION_TOGGLE = 'flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+const SECTION_TOGGLE = `flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 rounded transition-colors ${FOCUS_RING}`
 /** All · Essentials · None beside a list of choices */
-const MINI_LINK = 'px-2 h-8 sm:h-6 rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+const MINI_LINK = `px-2 h-8 sm:h-6 rounded hover:underline ${FOCUS_RING}`
 
 function formatTimestamp(ts: string): string {
   try {
