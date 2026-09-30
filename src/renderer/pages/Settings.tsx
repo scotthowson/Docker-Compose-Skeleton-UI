@@ -2334,7 +2334,7 @@ function AlertThresholdsEditor() {
       <div className="flex items-center gap-3">
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-amber-400/50 w-10 shrink-0">Warn</span>
+            <span className="text-[10px] text-amber-400/80 w-10 shrink-0">Warn</span>
             <input aria-label={`${label} warning`}
               type="range" min={10} max={100} step={5}
               value={thresholds[warningKey]}
@@ -2349,7 +2349,7 @@ function AlertThresholdsEditor() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-rose-400/50 w-10 shrink-0">Crit</span>
+            <span className="text-[10px] text-rose-400/80 w-10 shrink-0">Crit</span>
             <input aria-label={`${label} critical`}
               type="range" min={10} max={100} step={5}
               value={thresholds[criticalKey]}

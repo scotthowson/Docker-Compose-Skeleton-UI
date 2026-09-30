@@ -714,7 +714,7 @@ export default function Notifications() {
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${priorityColor(preset.priority)}`}>
                         {preset.priority}
                       </span>
-                      <span className="text-[9px] text-slate-600">{preset.tags.join(', ')}</span>
+                      <span className="text-[9px] text-slate-500">{preset.tags.join(', ')}</span>
                     </div>
                   </div>
                 </div>
