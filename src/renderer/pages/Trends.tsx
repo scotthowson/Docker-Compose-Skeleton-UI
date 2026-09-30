@@ -1,12 +1,11 @@
 // =============================================================================
-// Trends — Resource Usage Trends page with historical CPU, Memory, and Disk
-//           charts powered by server-side metrics collection (cron snapshots)
+// Trends — historical CPU, memory and disk charts, powered by the server's own
+//          metrics snapshots (cron)
 // =============================================================================
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { SegmentedControl } from '@mantine/core'
 import {
-  TrendingUp,
   Clock,
   Cpu,
   HardDrive,
@@ -30,6 +29,7 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { apiClient } from '../api/client'
 import { memberPath } from '../api/endpoints'
 import { fetchMetricsTrends, captureMetricsSnapshot, fetchAlertConfig, updateAlertConfig } from '../api/endpoints'
@@ -38,8 +38,12 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { LoadingState, ErrorState } from '../components/common/PageState'
+import { EmptyState, ErrorState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { Panel, StatTile, METRIC_HEX, pctTone, quiet } from '../components/dashboard/cardShared'
+import { BTN_ICON_SM, BTN_SHEET_PRIMARY, BTN_SHEET_QUIET, BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_GHOST, TONE_OK, TONE_QUIET } from '../lib/ui'
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -48,13 +52,13 @@ import ModalOverlay from '../components/common/ModalOverlay'
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d' | '90d' | '1y' | 'all'
 
 const TIME_RANGES: { id: TimeRange; label: string; shortLabel: string }[] = [
-  { id: '1h', label: '1 Hour', shortLabel: '1h' },
-  { id: '6h', label: '6 Hours', shortLabel: '6h' },
-  { id: '24h', label: '24 Hours', shortLabel: '24h' },
-  { id: '7d', label: '7 Days', shortLabel: '7d' },
-  { id: '30d', label: '30 Days', shortLabel: '30d' },
-  { id: '90d', label: '90 Days', shortLabel: '90d' },
-  { id: '1y', label: '1 Year', shortLabel: '1y' },
+  { id: '1h', label: '1 hour', shortLabel: '1h' },
+  { id: '6h', label: '6 hours', shortLabel: '6h' },
+  { id: '24h', label: '24 hours', shortLabel: '24h' },
+  { id: '7d', label: '7 days', shortLabel: '7d' },
+  { id: '30d', label: '30 days', shortLabel: '30d' },
+  { id: '90d', label: '90 days', shortLabel: '90d' },
+  { id: '1y', label: '1 year', shortLabel: '1y' },
   { id: 'all', label: 'All', shortLabel: 'All' },
 ]
 
@@ -125,53 +129,12 @@ function buildChartData(data: MetricsTrendsResponse | null, range: TimeRange) {
 }
 
 // ---------------------------------------------------------------------------
-// Stat Card sub-component
+// One chart: a panel with its average and peak, the area, the min–max band and the alert thresholds
 // ---------------------------------------------------------------------------
 
-interface StatCardProps {
-  icon: React.ReactNode
-  label: string
-  value: string
-  subValue?: string
-  color: string
-  delay: number
-}
-
-function StatCard({ icon, label, value, subValue, color, delay }: StatCardProps) {
-  const colorMap: Record<string, string> = {
-    amber: 'from-amber-500/20 to-orange-500/20 border-amber-500/10 text-amber-400',
-    emerald: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/10 text-emerald-400',
-    cyan: 'from-cyan-500/20 to-blue-500/20 border-cyan-500/10 text-cyan-400',
-    slate: 'from-slate-500/20 to-slate-600/20 border-slate-500/10 text-slate-400',
-  }
-  const classes = colorMap[color] || colorMap.slate
-
-  return (
-    <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-3 md:p-4 animate-fade-in hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div className="flex items-center gap-2.5 mb-2">
-        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${classes} border flex items-center justify-center shrink-0`}>
-          {icon}
-        </div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
-      </div>
-      <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{value}</p>
-      {subValue && (
-        <p className="text-[10px] text-slate-500 mt-0.5">{subValue}</p>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Chart Card sub-component
-// ---------------------------------------------------------------------------
-
-interface ChartCardProps {
+interface TrendPanelProps {
   title: string
-  icon: React.ReactNode
+  icon: typeof Cpu
   gradientId: string
   strokeColor: string
   dataKey: string
@@ -180,24 +143,10 @@ interface ChartCardProps {
   data: ReturnType<typeof buildChartData>
   thresholdWarning?: number
   thresholdCritical?: number
-  delay: number
   unit?: string
 }
 
-function ChartCard({
-  title,
-  icon,
-  gradientId,
-  strokeColor,
-  dataKey,
-  bandKey,
-  range,
-  data,
-  thresholdWarning,
-  thresholdCritical,
-  delay,
-  unit = '%',
-}: ChartCardProps) {
+function TrendPanel({ title, icon, gradientId, strokeColor, dataKey, bandKey, range, data, thresholdWarning, thresholdCritical, unit = '%' }: TrendPanelProps) {
   const hasBand = !!bandKey && data.some((d) => (d as Record<string, unknown>)[bandKey] != null)
   // Compute min/max for the dataKey
   const values = data.map((d) => Number((d as unknown as Record<string, unknown>)[dataKey] ?? 0))
@@ -205,30 +154,14 @@ function ChartCard({
   const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
 
   return (
-    <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 animate-fade-in gradient-border hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200"
-      style={{ animationDelay: `${delay}ms` }}
+    <Panel
+      icon={icon}
+      title={title}
+      meta={<>Avg <span className="text-slate-400 font-medium">{avg.toFixed(1)}{unit}</span> · Peak <span className="text-slate-400 font-medium">{peak.toFixed(1)}{unit}</span></>}
     >
-      {/* Chart header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] text-slate-500">
-            Avg: <span className="text-slate-400 font-medium tabular-nums">{avg.toFixed(1)}{unit}</span>
-          </span>
-          <span className="text-[10px] text-slate-500">
-            Peak: <span className="text-slate-400 font-medium tabular-nums">{peak.toFixed(1)}{unit}</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Chart area - responsive height */}
-      <div className="h-40 md:h-52">
+      <div className="h-40 md:h-52" role="img" aria-label={`${title} over ${TIME_RANGES.find((r) => r.id === range)?.label ?? range}: average ${avg.toFixed(1)}${unit}, peak ${peak.toFixed(1)}${unit}`}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={strokeColor} stopOpacity={0.35} />
@@ -243,18 +176,18 @@ function ChartCard({
               scale="time"
               domain={['dataMin', 'dataMax']}
               tickFormatter={(v: number) => formatTimeLabel(v, range)}
-              tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }}
+              tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.3)' }}
               tickLine={false}
               axisLine={false}
               minTickGap={48}
             />
             <YAxis
               domain={[0, 100]}
-              tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }}
+              tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.3)' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v: number) => `${v}%`}
-              width={40}
+              width={44}
             />
             <Tooltip
               contentStyle={tooltipStyle}
@@ -275,13 +208,7 @@ function ChartCard({
                 strokeDasharray="6 3"
                 strokeWidth={1}
                 strokeOpacity={0.5}
-                label={{
-                  value: `Warn ${thresholdWarning}%`,
-                  position: 'insideTopRight',
-                  fill: '#fbbf24',
-                  fontSize: 9,
-                  opacity: 0.6,
-                }}
+                label={{ value: `Warning ${thresholdWarning}%`, position: 'insideTopRight', fill: '#fbbf24', fontSize: 10, opacity: 0.7 }}
               />
             )}
             {/* Threshold critical line */}
@@ -292,13 +219,7 @@ function ChartCard({
                 strokeDasharray="6 3"
                 strokeWidth={1}
                 strokeOpacity={0.5}
-                label={{
-                  value: `Crit ${thresholdCritical}%`,
-                  position: 'insideTopRight',
-                  fill: '#f43f5e',
-                  fontSize: 9,
-                  opacity: 0.6,
-                }}
+                label={{ value: `Critical ${thresholdCritical}%`, position: 'insideTopRight', fill: '#f43f5e', fontSize: 10, opacity: 0.7 }}
               />
             )}
             {hasBand && bandKey && (
@@ -332,7 +253,7 @@ function ChartCard({
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -353,15 +274,6 @@ export default function Trends() {
   const [showAlertConfig, setShowAlertConfig] = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
   const [editThresholds, setEditThresholds] = useState<AlertThresholds | null>(null)
-
-  // Escape closes alert config modal
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showAlertConfig) setShowAlertConfig(false)
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [showAlertConfig])
 
   // Trends are per server: the hub's, or one VM's through the hub (Everywhere shows the hub's)
   const { scope, setScope, member: scopeMember, memberName: scopeName, members: scopeMembers, hasFleet } = useFleetScope()
@@ -384,11 +296,11 @@ export default function Trends() {
     if (isConnected) refresh()
   }, [range, isConnected, refresh])
 
-  // Fetch alert thresholds (once, low frequency)
+  // Fetch alert thresholds (once, low frequency). They are an admin's: the route answers 403 to anyone else
   const { data: alertConfig } = usePolling<AlertConfigResponse>(
     fetchAlertConfig,
     300000,
-    { enabled: isConnected },
+    { enabled: isConnected && isAdmin },
   )
 
   // Build chart data
@@ -408,14 +320,15 @@ export default function Trends() {
     setCapturing(true)
     try {
       await captureMetricsSnapshot()
+      addToast({ type: 'success', message: 'Snapshot captured' })
       // Refresh trends data after capturing
       setTimeout(() => refresh(), 500)
-    } catch {
-      // Silently fail - the user can see the error in the console
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? `Could not capture a snapshot: ${err.message}` : 'Could not capture a snapshot' })
     } finally {
       setCapturing(false)
     }
-  }, [refresh])
+  }, [refresh, addToast])
 
   // Manual refresh (also performs a one-time fetch when autoRefresh is off)
   const handleRefresh = useCallback(() => {
@@ -451,17 +364,19 @@ export default function Trends() {
     }
   }, [editThresholds, addToast])
 
+
+
+  const rangeLabel = TIME_RANGES.find((r) => r.id === range)?.label ?? range
+
   // -------------------------------------------------------------------------
   // Disconnected state
   // -------------------------------------------------------------------------
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to view resource trends</p>
+      <div className="space-y-4 md:space-y-5 animate-fade-in">
+        <PageHeader page="trends" />
+        <EmptyState icon={<WifiOff size={28} />} title="Not connected" hint="Connect to a server to see its resource trends." />
       </div>
     )
   }
@@ -470,110 +385,101 @@ export default function Trends() {
   // Render
   // -------------------------------------------------------------------------
 
-  return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
-      <DisconnectedBanner />
-      {hasFleet && (
-        <div className="mb-3">
-          <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Trends of" busy={loading && !!data} />
-          {scope === 'all' && <p className="mt-1 text-[10px] text-slate-500">Trends are kept per server: this is the hub's. Pick a VM to see its own.</p>}
-          {trendsMember && <p className="mt-1 text-[10px] text-slate-500">The VM {scopeName}'s trends, read through the hub.</p>}
-        </div>
-      )}
-      {/* ----------------------------------------------------------------- */}
-      {/* Page header                                                        */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center text-emerald-400">
-            <TrendingUp size={20} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Resource Trends</span></h2>
-            <p className="text-xs text-slate-500">
-              {pointCount > 0
-                ? `${sampleCount.toLocaleString()} sample${sampleCount === 1 ? '' : 's'}${data?.resolution_s ? ` \u00b7 ${formatResolution(data.resolution_s)} resolution` : ''} \u00b7 ${TIME_RANGES.find((r) => r.id === range)?.label ?? range}${historySince ? ` \u00b7 history since ${historySince.toLocaleDateString([], { dateStyle: 'medium' })}` : ''}`
-                : 'Historical resource usage metrics'}
-            </p>
-          </div>
-        </div>
+  // one threshold slider: the value in a tone (amber for the warning, rose for the critical line)
+  const slider = (id: string, label: string, tone: 'warning' | 'critical', value: number, onChange: (n: number) => void) => (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label htmlFor={id} className={`text-[11px] uppercase tracking-wider font-semibold ${tone === 'warning' ? 'text-amber-400/80' : 'text-rose-400/80'}`}>{tone === 'warning' ? 'Warning' : 'Critical'}</label>
+        <span className={`text-xs font-mono tabular-nums ${tone === 'warning' ? 'text-amber-400' : 'text-rose-400'}`}>{value}%</span>
+      </div>
+      <input
+        id={id}
+        aria-label={label}
+        type="range"
+        min={10}
+        max={100}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={`w-full h-1.5 rounded-full appearance-none bg-slate-800 cursor-pointer ${tone === 'warning' ? 'accent-amber-400' : 'accent-rose-400'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40`}
+      />
+    </div>
+  )
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2">
-          {/* Capture Snapshot — admin only */}
+  return (
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
+      <DisconnectedBanner />
+      <PageHeader
+        page="trends"
+        badge={trendsMember ? <VmCapsule member={trendsMember} name={scopeName} vmid={scopeMembers.find((m) => m.id === trendsMember)?.vmid} /> : undefined}
+        subtitle={pointCount > 0
+          ? `${sampleCount.toLocaleString()} sample${sampleCount === 1 ? '' : 's'}${data?.resolution_s ? ` · ${formatResolution(data.resolution_s)} resolution` : ''} · ${rangeLabel}${historySince ? ` · history since ${historySince.toLocaleDateString([], { dateStyle: 'medium' })}` : ''}`
+          : undefined}
+        actions={<>
+          {/* Capture a snapshot: admins only */}
           {isAdmin && (
-            <button
-              onClick={handleCaptureSnapshot}
-              disabled={capturing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
-            >
-              {capturing ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Camera size={14} />
-              )}
-              <span className="hidden sm:inline">Capture Snapshot</span>
-              <span className="sm:hidden">Capture</span>
+            <button type="button" onClick={handleCaptureSnapshot} disabled={capturing} aria-label="Capture a snapshot" className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              {capturing ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+              <span className="hidden sm:inline">Capture snapshot</span>
             </button>
           )}
 
           {/* Auto-refresh toggle */}
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            aria-pressed={autoRefresh}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-200 press ${
-              autoRefresh
-                ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/25'
-                : 'bg-white/5 text-slate-500 border-white/5 hover:bg-white/10 hover:text-slate-400'
-            }`}
-            title={autoRefresh ? 'Auto-refresh enabled (1 min)' : 'Auto-refresh disabled'}
-          >
-            <Timer size={14} />
-            <span className="hidden sm:inline">{autoRefresh ? 'Auto' : 'Paused'}</span>
-          </button>
+          <Hint label={autoRefresh ? 'The charts refresh by themselves' : 'The charts refresh only when you ask'}>
+            <button
+              type="button"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              aria-pressed={autoRefresh}
+              aria-label="Auto-refresh"
+              className={`${BTN_TOOLBAR} ${autoRefresh ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <Timer size={14} />
+              <span className="hidden sm:inline">{autoRefresh ? 'Auto' : 'Paused'}</span>
+            </button>
+          </Hint>
 
-          {/* Manual Refresh */}
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
-          >
+          {/* Manual refresh */}
+          <button type="button" onClick={handleRefresh} disabled={loading} aria-label="Refresh" className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && (
+          <>
+            <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Trends of" busy={loading && !!data} />
+            {scope === 'all' && <p className="mt-1 text-[11px] text-slate-500">Trends are kept per server: this is the hub's. Pick a VM to see its own.</p>}
+            {trendsMember && <p className="mt-1 text-[11px] text-slate-500">The VM {scopeName}'s trends, read through the hub.</p>}
+          </>
+        )}
+      </PageHeader>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Time range selector                                                */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Time range */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="max-w-full overflow-x-auto scrollbar-none">
         <SegmentedControl
           aria-label="Time range"
           value={range}
           onChange={(v) => setRange(v as TimeRange)}
           data={TIME_RANGES.map((tr) => ({
             value: tr.id,
-            label: <span className="flex items-center gap-1.5"><Clock size={12} aria-hidden /><span className="hidden sm:inline">{tr.label}</span><span className="sm:hidden">{tr.shortLabel}</span></span>,
+            label: <span className="flex items-center gap-1.5"><Clock size={12} aria-hidden className="hidden sm:block" /><span className="hidden sm:inline">{tr.label}</span><span className="sm:hidden">{tr.shortLabel}</span></span>,
           }))}
         />
+        </div>
 
-        {/* Configure Alerts gear button — admin only */}
+        {/* Alert thresholds: admins only */}
         {isAdmin && (
-          <button
-            onClick={openAlertConfig}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 hover:text-slate-300 transition-all duration-200 press"
-            title="Configure alert thresholds"
-          >
-            <Settings2 size={13} />
-            <span className="hidden sm:inline">Alerts</span>
-          </button>
+          <Hint label="Set the levels that raise a warning or a critical alert">
+            <button type="button" onClick={openAlertConfig} aria-label="Alerts" className={BTN_TOOLBAR_QUIET}>
+              <Settings2 size={14} />
+              <span className="hidden sm:inline">Alerts</span>
+            </button>
+          </Hint>
         )}
 
-        {/* Subtle connection indicator */}
         {autoRefresh && (
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-            <span className="relative flex h-1.5 w-1.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <span className="relative flex h-1.5 w-1.5" aria-hidden>
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-40" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             </span>
@@ -582,290 +488,152 @@ export default function Trends() {
         )}
       </div>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Summary stats row                                                  */}
-      {/* ----------------------------------------------------------------- */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 stagger-children">
-        <StatCard
-          icon={<Cpu size={14} />}
-          label="Current CPU"
-          value={latest ? `${latest.cpu_pct.toFixed(1)}%` : '--'}
-          subValue={latest ? `Load: ${latest.load1.toFixed(2)}` : undefined}
-          color="amber"
-          delay={0}
-        />
-        <StatCard
-          icon={<MemoryStick size={14} />}
-          label="Current Memory"
-          value={latest ? `${latest.mem_pct.toFixed(1)}%` : '--'}
-          subValue={latest ? `${latest.mem_used_mb.toLocaleString()} / ${latest.mem_total_mb.toLocaleString()} MB` : undefined}
-          color="emerald"
-          delay={60}
-        />
-        <StatCard
-          icon={<HardDrive size={14} />}
-          label="Current Disk"
-          value={latest ? `${latest.disk_pct.toFixed(1)}%` : '--'}
-          color="cyan"
-          delay={120}
-        />
-        <StatCard
-          icon={<Database size={14} />}
+      {/* Summary tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatTile icon={Cpu} label="Current CPU" value={latest ? `${latest.cpu_pct.toFixed(1)}%` : '--'} sub={latest ? `Load ${latest.load1.toFixed(2)}` : undefined} tone={latest ? quiet(pctTone(latest.cpu_pct)) : 'neutral'} />
+        <StatTile icon={MemoryStick} label="Current memory" value={latest ? `${latest.mem_pct.toFixed(1)}%` : '--'} sub={latest ? `${latest.mem_used_mb.toLocaleString()} / ${latest.mem_total_mb.toLocaleString()} MB` : undefined} tone={latest ? quiet(pctTone(latest.mem_pct)) : 'neutral'} />
+        <StatTile icon={HardDrive} label="Current disk" value={latest ? `${latest.disk_pct.toFixed(1)}%` : '--'} tone={latest ? quiet(pctTone(latest.disk_pct)) : 'neutral'} />
+        <StatTile
+          icon={Database}
           label="Samples"
           value={sampleCount > 0 ? sampleCount.toLocaleString() : '--'}
-          subValue={pointCount > 0 ? `${pointCount.toLocaleString()} points drawn${data?.resolution_s ? ` \u00b7 ${formatResolution(data.resolution_s)}` : ''}` : undefined}
-          color="slate"
-          delay={180}
+          sub={pointCount > 0 ? `${pointCount.toLocaleString()} points drawn${data?.resolution_s ? ` · ${formatResolution(data.resolution_s)}` : ''}` : undefined}
         />
       </div>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Loading state (initial load only)                                  */}
-      {/* ----------------------------------------------------------------- */}
-      {loading && !data && <LoadingState label="Loading trend data…" />}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Error state                                                        */}
-      {/* ----------------------------------------------------------------- */}
-      {error && !data && <ErrorState title="Failed to load trend data" error={error} onRetry={handleRefresh} />}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Empty state                                                        */}
-      {/* ----------------------------------------------------------------- */}
-      {data && chartData.length === 0 && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-8 md:p-12 text-center animate-fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center mx-auto mb-4">
-            <BarChart3 size={24} className="text-slate-500" />
-          </div>
-          <p className="text-sm text-slate-400 font-medium mb-1.5">No trend data yet</p>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-            Metrics are collected every minute via cron. Data will appear here once the first snapshots are recorded. You can also manually capture a snapshot above.
-          </p>
-          {isAdmin && (
-            <button
-              onClick={handleCaptureSnapshot}
-              disabled={capturing}
-              className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
-            >
-              {capturing ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Camera size={13} />
-              )}
-              Capture First Snapshot
-            </button>
-          )}
+      {/* Loading: panels shaped like the charts that follow */}
+      {loading && !data && (
+        <div className="space-y-3 md:space-y-4" role="status" aria-label="Loading the trend data">
+          {[[Cpu, 'CPU load'], [MemoryStick, 'Memory usage'], [HardDrive, 'Disk usage']].map(([Icon, title]) => (
+            <Panel key={title as string} icon={Icon as typeof Cpu} title={title as string}>
+              <div className="skeleton h-40 md:h-52" aria-hidden />
+            </Panel>
+          ))}
         </div>
       )}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Charts                                                             */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Error state */}
+      {error && !data && <ErrorState title="Could not load the trend data" error={error} onRetry={handleRefresh} />}
+
+      {/* Empty state */}
+      {data && chartData.length === 0 && (
+        <div className="glass-card">
+          <EmptyState
+            icon={<BarChart3 size={28} />}
+            title="No trend data yet"
+            hint="The server records a snapshot every minute (cron). The charts appear once the first ones are in."
+            action={isAdmin ? (
+              <button type="button" onClick={handleCaptureSnapshot} disabled={capturing} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                {capturing ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                Capture the first snapshot
+              </button>
+            ) : undefined}
+          />
+        </div>
+      )}
+
+      {/* Charts */}
       {chartData.length > 0 && (
         <div className="space-y-3 md:space-y-4">
-          {/* CPU Load Chart */}
-          <ChartCard
-            title="CPU Load"
-            icon={<Cpu size={14} className="text-amber-400" />}
+          <TrendPanel
+            title="CPU load"
+            icon={Cpu}
             gradientId="trendCpuGradient"
-            strokeColor="#f59e0b"
+            strokeColor={METRIC_HEX.cpu}
             dataKey="cpu"
-          bandKey="cpuBand"
-          range={range}
+            bandKey="cpuBand"
+            range={range}
             data={chartData}
             thresholdWarning={thresholds?.cpu_warning}
             thresholdCritical={thresholds?.cpu_critical}
-            delay={0}
           />
-
-          {/* Memory Usage Chart */}
-          <ChartCard
-            title="Memory Usage"
-            icon={<MemoryStick size={14} className="text-emerald-400" />}
+          <TrendPanel
+            title="Memory usage"
+            icon={MemoryStick}
             gradientId="trendMemGradient"
-            strokeColor="#10b981"
+            strokeColor={METRIC_HEX.mem}
             dataKey="mem"
-          bandKey="memBand"
-          range={range}
+            bandKey="memBand"
+            range={range}
             data={chartData}
             thresholdWarning={thresholds?.memory_warning}
             thresholdCritical={thresholds?.memory_critical}
-            delay={60}
           />
-
-          {/* Disk Usage Chart */}
-          <ChartCard
-            title="Disk Usage"
-            icon={<HardDrive size={14} className="text-cyan-400" />}
+          <TrendPanel
+            title="Disk usage"
+            icon={HardDrive}
             gradientId="trendDiskGradient"
-            strokeColor="#06b6d4"
+            strokeColor={METRIC_HEX.disk}
             dataKey="disk"
-          bandKey="diskBand"
-          range={range}
+            bandKey="diskBand"
+            range={range}
             data={chartData}
             thresholdWarning={thresholds?.disk_warning}
             thresholdCritical={thresholds?.disk_critical}
-            delay={120}
           />
         </div>
       )}
 
-      {/* ------------------------------------------------------------------- */}
-      {/* Alert Threshold Configuration Modal                                  */}
-      {/* ------------------------------------------------------------------- */}
+      {/* Alert thresholds */}
       {showAlertConfig && editThresholds && createPortal(
         <ModalOverlay onClose={() => setShowAlertConfig(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
-            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
-                <Settings2 size={16} className="text-emerald-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Alert Thresholds</h3>
+                <Settings2 size={16} className="text-slate-300" aria-hidden />
+                <h3 className="text-sm font-semibold text-slate-200">Alert thresholds</h3>
               </div>
-              <button aria-label="Close"
-                onClick={() => setShowAlertConfig(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <Hint label="Close"><button type="button" aria-label="Close" onClick={() => setShowAlertConfig(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X size={16} /></button></Hint>
             </div>
 
-            {/* Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <p className="text-xs text-slate-500">A warning is raised when a resource passes the first level, a critical alert at the second.</p>
               {/* CPU */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Cpu size={14} className="text-amber-400" />
-                  <span className="text-xs font-semibold text-slate-300">CPU Load</span>
+                  <Cpu size={14} className="text-slate-400" aria-hidden />
+                  <span className="text-xs font-semibold text-slate-300">CPU load</span>
                 </div>
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
-                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.cpu_warning}%</span>
-                    </div>
-                    <input aria-label="CPU warning"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.cpu_warning}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, cpu_warning: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
-                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.cpu_critical}%</span>
-                    </div>
-                    <input aria-label="CPU critical"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.cpu_critical}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, cpu_critical: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
-                    />
-                  </div>
+                  {slider('thr-cpu-warn', 'CPU warning', 'warning', editThresholds.cpu_warning, (n) => setEditThresholds({ ...editThresholds, cpu_warning: n }))}
+                  {slider('thr-cpu-crit', 'CPU critical', 'critical', editThresholds.cpu_critical, (n) => setEditThresholds({ ...editThresholds, cpu_critical: n }))}
                 </div>
               </div>
 
-              <div className="border-t border-white/[0.03]" />
+              <div className="border-t border-white/5" />
 
               {/* Memory */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <MemoryStick size={14} className="text-emerald-400" />
-                  <span className="text-xs font-semibold text-slate-300">Memory Usage</span>
+                  <MemoryStick size={14} className="text-slate-400" aria-hidden />
+                  <span className="text-xs font-semibold text-slate-300">Memory usage</span>
                 </div>
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
-                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.memory_warning}%</span>
-                    </div>
-                    <input aria-label="Memory warning"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.memory_warning}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, memory_warning: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
-                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.memory_critical}%</span>
-                    </div>
-                    <input aria-label="Memory critical"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.memory_critical}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, memory_critical: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
-                    />
-                  </div>
+                  {slider('thr-mem-warn', 'Memory warning', 'warning', editThresholds.memory_warning, (n) => setEditThresholds({ ...editThresholds, memory_warning: n }))}
+                  {slider('thr-mem-crit', 'Memory critical', 'critical', editThresholds.memory_critical, (n) => setEditThresholds({ ...editThresholds, memory_critical: n }))}
                 </div>
               </div>
 
-              <div className="border-t border-white/[0.03]" />
+              <div className="border-t border-white/5" />
 
               {/* Disk */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <HardDrive size={14} className="text-cyan-400" />
-                  <span className="text-xs font-semibold text-slate-300">Disk Usage</span>
+                  <HardDrive size={14} className="text-slate-400" aria-hidden />
+                  <span className="text-xs font-semibold text-slate-300">Disk usage</span>
                 </div>
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-amber-400/80 uppercase tracking-wider font-semibold">Warning</label>
-                      <span className="text-xs font-mono text-amber-400 tabular-nums">{editThresholds.disk_warning}%</span>
-                    </div>
-                    <input aria-label="Disk warning"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.disk_warning}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, disk_warning: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-amber-400 cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-rose-400/80 uppercase tracking-wider font-semibold">Critical</label>
-                      <span className="text-xs font-mono text-rose-400 tabular-nums">{editThresholds.disk_critical}%</span>
-                    </div>
-                    <input aria-label="Disk critical"
-                      type="range"
-                      min={10}
-                      max={100}
-                      value={editThresholds.disk_critical}
-                      onChange={(e) => setEditThresholds({ ...editThresholds, disk_critical: Number(e.target.value) })}
-                      className="w-full h-1.5 rounded-full appearance-none bg-slate-800 accent-rose-400 cursor-pointer"
-                    />
-                  </div>
+                  {slider('thr-disk-warn', 'Disk warning', 'warning', editThresholds.disk_warning, (n) => setEditThresholds({ ...editThresholds, disk_warning: n }))}
+                  {slider('thr-disk-crit', 'Disk critical', 'critical', editThresholds.disk_critical, (n) => setEditThresholds({ ...editThresholds, disk_critical: n }))}
                 </div>
               </div>
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5 shrink-0">
-              <button
-                onClick={() => setShowAlertConfig(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveAlertConfig}
-                disabled={savingConfig}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
-              >
-                {savingConfig ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                Save Thresholds
+              <button type="button" onClick={() => setShowAlertConfig(false)} className={BTN_SHEET_QUIET}>Cancel</button>
+              <button type="button" onClick={handleSaveAlertConfig} disabled={savingConfig} className={BTN_SHEET_PRIMARY}>
+                {savingConfig ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save thresholds
               </button>
             </div>
           </div>

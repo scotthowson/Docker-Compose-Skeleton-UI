@@ -1,5 +1,5 @@
 // =============================================================================
-// Uptime — Container availability monitor with timeline bars and incident log
+// Uptime — container availability monitor with timeline bars and an incident log
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
@@ -15,8 +15,8 @@ import {
   ArrowUp,
   Timer,
   Server,
-  ChevronRight,
 } from 'lucide-react'
+import { Badge } from '@mantine/core'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetScope } from '../hooks/useFleetScope'
 import { fetchContainersScoped, scopeContainerRows, fetchHealthScoped, fetchEventsScoped, rowKey } from '../api/fleetScoped'
@@ -27,7 +27,10 @@ import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { OnDemandMissingBanner } from '../components/common/OnDemandMissingBanner'
-import { LoadingState, EmptyState } from '../components/common/PageState'
+import PageHeader from '../components/common/PageHeader'
+import { EmptyState } from '../components/common/PageState'
+import { Panel, StatTile, type Tone } from '../components/dashboard/cardShared'
+import { BTN_TOOLBAR_QUIET } from '../lib/ui'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,6 +91,11 @@ function availabilityColor(pct: number): string {
   if (pct >= 100) return 'text-emerald-400'
   if (pct >= 95) return 'text-amber-400'
   return 'text-rose-400'
+}
+
+/** fully available is fine, from 95 % needs a look, below that is a problem */
+function availabilityTone(pct: number): Tone {
+  return pct >= 100 ? 'ok' : pct >= 95 ? 'attention' : 'problem'
 }
 
 function relativeTime(ts: number): string {
@@ -215,12 +223,13 @@ function SegmentTooltip({ text, status, x, y }: { text: string; status: Segment[
 // UptimeBar — individual container timeline bar
 // ---------------------------------------------------------------------------
 
-function UptimeBar({ segments }: { segments: Segment[] }) {
+function UptimeBar({ segments, name }: { segments: Segment[]; name: string }) {
   const [tooltip, setTooltip] = useState<{ text: string; status: Segment['status']; x: number; y: number } | null>(null)
+  const count = (status: Segment['status']) => segments.filter((seg) => seg.status === status).length
 
   return (
     <>
-      <div className="uptime-bar flex gap-[2px] h-7 items-center">
+      <div className="uptime-bar flex gap-[2px] h-7 items-center" role="img" aria-label={`${name}, the last ${SEGMENT_COUNT} minutes: ${count('running')} running, ${count('stopped')} stopped, ${count('unknown')} without data`}>
         {segments.map((seg, i) => {
           const live = i === segments.length - 1 && seg.status === 'running'
           return (
@@ -243,7 +252,8 @@ function UptimeBar({ segments }: { segments: Segment[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// StatusBadge
+// StatusBadge: running and healthy is fine, unhealthy a problem, restarting needs a look,
+// stopped is neutral, "on demand" is Sablier's indigo
 // ---------------------------------------------------------------------------
 
 function StatusBadge({ state, health, onDemand }: { state: string; health: string; onDemand?: boolean }) {
@@ -252,89 +262,17 @@ function StatusBadge({ state, health, onDemand }: { state: string; health: strin
 
   if (s !== 'running' && onDemand) {
     return (
-      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[10px] font-semibold text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
-        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-[10px] font-medium text-indigo-300" title="Stopped on purpose: Sablier starts it on the first request">
+        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" aria-hidden />
         On demand
       </span>
     )
   }
-
-  if (s === 'running' && h === 'healthy') {
-    return (
-      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        Healthy
-      </span>
-    )
-  }
-  if (s === 'running' && h === 'unhealthy') {
-    return (
-      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-[10px] font-semibold text-rose-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-        Unhealthy
-      </span>
-    )
-  }
-  if (s === 'running') {
-    return (
-      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        Running
-      </span>
-    )
-  }
-  if (s === 'restarting') {
-    return (
-      <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-[10px] font-semibold text-amber-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-        Restarting
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/15 text-[10px] font-semibold text-slate-400">
-      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-      Stopped
-    </span>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// StatCard
-// ---------------------------------------------------------------------------
-
-function StatCard({
-  label,
-  value,
-  sub,
-  icon: Icon,
-  color,
-  delay,
-  neon,
-}: {
-  label: string
-  value: string | number
-  sub?: string
-  icon: React.ElementType
-  color: string
-  delay: number
-  neon?: string
-}) {
-  return (
-    <div
-      className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-5 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-300"
-      style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
-        <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 ${color}`}>
-          <Icon size={16} />
-        </div>
-      </div>
-      <p className={`text-lg md:text-2xl font-bold tabular-nums ${color} ${neon ?? ''}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-500 mt-1">{sub}</p>}
-    </div>
-  )
+  if (s === 'running' && h === 'healthy') return <Badge component="span" color="emerald">Healthy</Badge>
+  if (s === 'running' && h === 'unhealthy') return <Badge component="span" color="rose">Unhealthy</Badge>
+  if (s === 'running') return <Badge component="span" color="emerald">Running</Badge>
+  if (s === 'restarting') return <Badge component="span" color="amber">Restarting</Badge>
+  return <Badge component="span" color="slate">Stopped</Badge>
 }
 
 // ---------------------------------------------------------------------------
@@ -478,43 +416,29 @@ export default function Uptime() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
       <OnDemandMissingBanner />
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-bold tracking-tight"><span className="text-gradient">Uptime Monitor</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live
-            </span>
-          </div>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {fleetWide && hasFleet
-              ? `Availability of every container on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}`
-              : scopeMember
-                ? `Availability of the containers inside the VM ${memberName}`
-                : 'Container availability and uptime tracking across all stacks'}
-          </p>
-          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} busy={containersLoading && !!containerData} /></div>}
-        </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="
-            flex items-center gap-2 rounded-lg px-3 py-2
-            text-xs font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200
-          "
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        page="uptime"
+        badge={<>
+          {scopeMember && <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} />}
+          <Badge component="span" color="emerald" leftSection={<span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden />}>Live</Badge>
+        </>}
+        subtitle={fleetWide && hasFleet
+          ? `Availability of every container on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'}`
+          : scopeMember
+            ? `Availability of the containers inside the VM ${memberName}`
+            : undefined}
+        actions={
+          <button type="button" onClick={refresh} disabled={loading} aria-label="Refresh" className={BTN_TOOLBAR_QUIET}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        }
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} busy={containersLoading && !!containerData} />}
+      </PageHeader>
 
       {/* Everywhere: how each DCS answered */}
       {fleetMembers && fleetMembers.length > 0 && (
@@ -527,7 +451,7 @@ export default function Uptime() {
               title={mb.reachable ? `Only ${mb.id ? `the VM ${mb.name}` : 'the hub'}` : mb.error || 'not answering'}
               className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border text-[11px] transition-colors shrink-0 whitespace-nowrap ${!mb.reachable ? 'border-white/[0.06] text-slate-500 cursor-default' : 'bg-white/[0.03] border-white/[0.06] text-slate-300 hover:bg-white/[0.06]'}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${!mb.reachable ? 'bg-slate-600' : mb.id ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${!mb.reachable ? 'bg-slate-600' : mb.id ? 'bg-violet-400' : 'bg-emerald-400'}`} aria-hidden />
               <span className="font-medium">{mb.id ? `VM${mb.vmid ? ` #${mb.vmid}` : ''} · ${mb.name}` : 'Hub'}</span>
               <span className="text-slate-500">{mb.reachable ? `${mb.summary?.total ?? 0} monitored` : 'not answering'}</span>
             </button>
@@ -537,77 +461,54 @@ export default function Uptime() {
 
       {/* Error state */}
       {containersError && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-rose-500/20 rounded-xl p-4">
-          <p className="text-sm text-rose-400">Failed to fetch {scopeMember ? `the containers of the VM ${memberName}` : 'data'}: {containersError.message}</p>
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3 text-xs text-rose-300" role="alert">
+          Could not load {scopeMember ? `the containers of the VM ${memberName}` : 'the containers'}: {containersError.message}
         </div>
       )}
 
-      {/* Summary stat cards */}
-      <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4 stagger-children">
-        <StatCard
-          label="Overall Availability"
+      {/* Summary tiles */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          icon={ArrowUp}
+          label="Overall availability"
           value={`${stats.overallAvailability}%`}
           sub={`${stats.running} of ${stats.total} running`}
-          icon={ArrowUp}
-          color={availabilityColor(stats.overallAvailability)}
-          delay={0}
-          neon={stats.overallAvailability >= 99 ? 'neon-emerald' : stats.overallAvailability >= 95 ? 'neon-amber' : 'neon-rose'}
+          tone={stats.total > 0 ? availabilityTone(stats.overallAvailability) : 'neutral'}
         />
-        <StatCard
-          label="Healthy Containers"
-          value={stats.healthyCount}
-          sub={`of ${stats.total} total`}
-          icon={CheckCircle}
-          color="text-emerald-400"
-          delay={60}
-        />
-        <StatCard
-          label="Average Uptime"
-          value={formatAverageUptime(stats.avgUptimeSec)}
-          sub="across all containers"
-          icon={Timer}
-          color="text-cyan-400"
-          delay={120}
-        />
-        <StatCard
+        <StatTile icon={CheckCircle} label="Healthy containers" value={stats.healthyCount} sub={`of ${stats.total} total`} tone={stats.healthyCount > 0 ? 'ok' : 'neutral'} />
+        <StatTile icon={Timer} label="Average uptime" value={formatAverageUptime(stats.avgUptimeSec)} sub="across all containers" />
+        <StatTile
+          icon={AlertTriangle}
           label="Incidents"
           value={stats.totalRestarts}
           sub={`${incidents.length} container${incidents.length !== 1 ? 's' : ''} affected`}
-          icon={AlertTriangle}
-          color={stats.totalRestarts > 0 ? 'text-amber-400' : 'text-slate-400'}
-          delay={180}
+          tone={stats.totalRestarts > 0 ? 'attention' : 'neutral'}
         />
       </div>
 
-      {/* Container Uptime Bars */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
-        {/* Section header */}
-        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-            <Activity size={16} className="text-emerald-400" />
-            Container Uptime
-            <span className="text-xs font-normal text-slate-500">
-              ({containers.length} monitored)
-            </span>
-          </h3>
-          <div className="flex items-center gap-4 text-[10px] text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.running }} />
-              Running
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.stopped }} />
-              Stopped
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.unknown }} />
-              No Data
-            </span>
-          </div>
+      {/* Container uptime bars */}
+      <Panel flush icon={Activity} title="Container uptime" meta={`${containers.length} monitored`}>
+        <div className="px-4 py-2 border-b border-white/[0.03] flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-slate-500">
+          <span className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.running }} aria-hidden />Running</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.stopped }} aria-hidden />Stopped</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.unknown }} aria-hidden />No data</span>
+          </span>
+          <span>Each bar covers the last {SEGMENT_COUNT} minutes</span>
         </div>
 
-        {/* Loading state */}
-        {loading && containers.length === 0 && <LoadingState label="Loading uptime data…" />}
+        {/* Loading: rows shaped like the rows that follow */}
+        {loading && containers.length === 0 && (
+          <div className="divide-y divide-white/[0.03]" role="status" aria-label="Loading the uptime data">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3" aria-hidden>
+                <div className="space-y-1.5"><div className="skeleton h-4 w-32" /><div className="skeleton h-3 w-24" /></div>
+                <div className="skeleton h-7" />
+                <div className="skeleton h-4 w-16 md:ml-auto" />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* No containers */}
         {!loading && containers.length === 0 && (
@@ -623,7 +524,7 @@ export default function Uptime() {
             return (
               <div
                 key={rowKey(container)}
-                className={`grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up${container.state === 'running' && (container.health === 'healthy' || container.health === '' || container.health === 'none') ? ' glow-emerald' : ''}`}
+                className="grid grid-cols-1 md:grid-cols-[220px_1fr_140px] items-center gap-2 md:gap-4 px-4 md:px-5 py-3 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up"
                 style={{
                   animationDelay: `${Math.min(idx * 30, 600)}ms`,
                   animationFillMode: 'both',
@@ -638,7 +539,7 @@ export default function Uptime() {
                     {fleetWide && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" onClick={() => setScope(container.member ?? 'hub')} />}
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-slate-500 font-mono truncate min-w-0" title={container.image}>
+                    <p className="text-[11px] text-slate-500 font-mono truncate min-w-0" title={container.image}>
                       {truncateImage(container.image)}
                     </p>
                     <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
@@ -647,7 +548,7 @@ export default function Uptime() {
 
                 {/* Center: uptime bar */}
                 <div className="min-w-0">
-                  <UptimeBar segments={segments} />
+                  <UptimeBar segments={segments} name={container.name} />
                 </div>
 
                 {/* Right: uptime + availability */}
@@ -655,7 +556,7 @@ export default function Uptime() {
                   <p className={`text-sm font-bold tabular-nums ${availabilityColor(availability)}`}>
                     {availability}%
                   </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
+                  <p className="text-[11px] text-slate-500 mt-0.5">
                     {formatUptime(container.uptime_seconds)}
                   </p>
                 </div>
@@ -666,26 +567,16 @@ export default function Uptime() {
 
         {/* Time labels */}
         {containers.length > 0 && (
-          <div className="px-5 py-2 border-t border-white/[0.03] flex justify-between text-[9px] text-slate-500">
+          <div className="px-5 py-2 border-t border-white/[0.03] flex justify-between text-[10px] text-slate-500">
             <span>30 min ago</span>
             <span>Now</span>
           </div>
         )}
-      </div>
+      </Panel>
 
-      {/* Incident Log */}
+      {/* Incident log */}
       {incidents.length > 0 && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-400" />
-            <h3 className="text-sm font-semibold text-slate-200">
-              Incident Log
-            </h3>
-            <span className="text-xs font-normal text-slate-500">
-              ({incidents.length} container{incidents.length !== 1 ? 's' : ''})
-            </span>
-          </div>
-
+        <Panel flush icon={AlertTriangle} title="Incident log" tone="attention" meta={`${incidents.length} container${incidents.length !== 1 ? 's' : ''}`}>
           <div className="divide-y divide-white/[0.03]">
             {incidents.map((container, idx) => {
               const lastEvent = getLastEvent(container)
@@ -693,20 +584,14 @@ export default function Uptime() {
               return (
                 <div
                   key={rowKey(container)}
-                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up"
+                  className="flex items-center gap-4 px-4 md:px-5 py-3.5 hover:bg-white/[0.03] transition-colors duration-150 animate-fade-in-up"
                   style={{
                     animationDelay: `${idx * 60}ms`,
                     animationFillMode: 'both',
                   }}
                 >
                   {/* Status icon */}
-                  <div className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 ${
-                    container.health.toLowerCase() === 'unhealthy'
-                      ? 'bg-rose-500/10'
-                      : container.state === 'restarting'
-                        ? 'bg-amber-500/10'
-                        : 'bg-amber-500/10'
-                  }`}>
+                  <div className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 ${container.health.toLowerCase() === 'unhealthy' ? 'bg-rose-500/10' : 'bg-amber-500/10'}`} aria-hidden>
                     {container.health.toLowerCase() === 'unhealthy' ? (
                       <XCircle size={18} className="text-rose-400" />
                     ) : container.state === 'restarting' ? (
@@ -722,16 +607,16 @@ export default function Uptime() {
                       <p className="font-mono text-sm text-slate-200 truncate min-w-0 flex items-center gap-2"><span className="truncate">{container.name}</span>{fleetWide && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}</p>
                       <StatusBadge state={container.state} health={container.health} onDemand={container.on_demand} />
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-500">
                       {container.restart_count > 0 && (
                         <span className="flex items-center gap-1">
-                          <RefreshCw size={10} />
+                          <RefreshCw size={10} aria-hidden />
                           {container.restart_count} restart{container.restart_count !== 1 ? 's' : ''}
                         </span>
                       )}
                       {lastEvent && (
                         <span className="flex items-center gap-1">
-                          <Clock size={10} />
+                          <Clock size={10} aria-hidden />
                           Last event: {lastEvent.action} {relativeTime(lastEvent.timestamp)}
                         </span>
                       )}
@@ -744,25 +629,23 @@ export default function Uptime() {
                       {calculateAvailability(container)}%
                     </p>
                   </div>
-
-                  <ChevronRight size={14} className="text-slate-500 shrink-0" />
                 </div>
               )
             })}
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* All clear message */}
       {incidents.length === 0 && containers.length > 0 && !loading && (
         <div
-          className="bg-slate-900/60 backdrop-blur-md border border-emerald-500/10 rounded-xl p-6 text-center animate-fade-in-up"
+          className="glass-card border-emerald-500/20 p-6 text-center animate-fade-in-up"
           style={{ animationDelay: '200ms', animationFillMode: 'both' }}
         >
-          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 mx-auto mb-3">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 mx-auto mb-3" aria-hidden>
             <Shield size={24} className="text-emerald-400" />
           </div>
-          <p className="text-sm font-semibold text-emerald-400">All Clear</p>
+          <p className="text-sm font-semibold text-emerald-400">All clear</p>
           <p className="text-xs text-slate-500 mt-1">
             No incidents detected. All containers are running without restarts.
           </p>

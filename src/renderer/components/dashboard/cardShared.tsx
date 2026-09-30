@@ -8,6 +8,10 @@
 //     …the card's own content…
 //   </Card>
 //
+//   Panel   the same frame for a section of a page (Health, Uptime, Trends, System …): as tall as its
+//           content, an icon, a title, the same header buttons; `flush` lets a table or a list run edge to edge
+//   StatTile  the small number tile of those pages: an icon, a label, a value, a line under it
+//
 //   Card    card       the card's id in the registry (cardRegistry.ts): its name and icon come from
 //                      there, so the header, the edit-mode chip and the picker always agree
 //           icon       the header icon when it changes with the state (a lucide component; drawn at 16, slate)
@@ -65,6 +69,9 @@ export function pctTone(pct: number): Tone {
   return pct >= PCT_PROBLEM ? 'problem' : pct >= PCT_ATTENTION ? 'attention' : 'ok'
 }
 
+/** a number that is fine stays plain: only a verdict that needs a look takes a colour */
+export const quiet = (t: Tone): Tone => (t === 'ok' ? 'neutral' : t)
+
 /** the load average against the cores there are: fine below one per core, busy from one, overloaded from two ('neutral' while the core count is unknown) */
 export function loadTone(load: number, cores: number | undefined): Tone {
   if (!cores || cores < 1) return 'neutral'
@@ -91,13 +98,15 @@ interface HeaderProps {
   actions?: React.ReactNode
   open?: PageId
   tone?: CardTone
+  /** no space under the header (a panel whose body runs edge to edge draws its own) */
+  bare?: boolean
 }
 
 /** the header every card wears (Card draws it; a card with a frame of its own can use it directly) */
-export function CardHeader({ icon: Icon, title, meta, badge, actions, open, tone }: HeaderProps) {
+export function CardHeader({ icon: Icon, title, meta, badge, actions, open, tone, bare = false }: HeaderProps) {
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
   return (
-    <div className="flex items-center gap-2 mb-3 min-h-8 sm:min-h-7">
+    <div className={`flex items-center gap-2 ${bare ? '' : 'mb-3'} min-h-8 sm:min-h-7`}>
       <Icon size={16} className={`shrink-0 ${tone ? ICON_TINT[tone] : 'text-slate-400'}`} aria-hidden />
       <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200" title={title}>{title}</h2>
       {(meta || badge || actions || open) && (
@@ -141,6 +150,47 @@ export function Card({ card, icon, title, meta, badge, actions, open, clickable 
     >
       <CardHeader icon={icon ?? (card ? cardIcon(card) : Box)} title={title ?? (card ? cardTitle(card) : '')} meta={meta} badge={badge} actions={actions} open={open} tone={tone} />
       {children}
+    </div>
+  )
+}
+
+/** A section of a page in the card's frame: as tall as its content, the same header. `flush`: the body runs edge to edge (a table, a list of rows) under a header of its own. */
+export function Panel({ icon, title, meta, badge, actions, open, tone, flush = false, className = '', children }: HeaderProps & {
+  flush?: boolean
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className={`glass-card animate-fade-in hover:!transform-none ${flush ? 'overflow-hidden' : 'p-4'} ${tone ? EDGE[tone] : ''} ${className}`}>
+      {flush ? (
+        <div className="px-4 py-2.5 border-b border-white/5">
+          <CardHeader icon={icon} title={title} meta={meta} badge={badge} actions={actions} open={open} tone={tone} bare />
+        </div>
+      ) : (
+        <CardHeader icon={icon} title={title} meta={meta} badge={badge} actions={actions} open={open} tone={tone} />
+      )}
+      {children}
+    </section>
+  )
+}
+
+/** A number tile of a page: an icon, a label, the value (in a tone when it means something) and a line under it. */
+export function StatTile({ icon: Icon, label, value, sub, tone = 'neutral', className = '' }: {
+  icon: LucideIcon
+  label: string
+  value: React.ReactNode
+  sub?: React.ReactNode
+  tone?: Tone
+  className?: string
+}) {
+  return (
+    <div className={`glass-subtle p-3 md:p-4 flex items-center gap-3 min-w-0 ${className}`}>
+      <Icon size={18} className={`shrink-0 ${tone === 'neutral' ? 'text-slate-400' : TONE_TEXT[tone]}`} aria-hidden />
+      <div className="min-w-0">
+        <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wide truncate">{label}</p>
+        <p className={`text-lg md:text-xl font-bold tabular-nums ${tone === 'neutral' ? 'text-white' : TONE_TEXT[tone]}`}>{value}</p>
+        {sub && <p className="text-[11px] text-slate-500 truncate">{sub}</p>}
+      </div>
     </div>
   )
 }
