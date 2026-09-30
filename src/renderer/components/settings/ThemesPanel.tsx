@@ -351,13 +351,13 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
         <Hint label="Copy the JSON"><button type="button" onClick={copyJson} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Copy the JSON"><Copy size={14} /></button></Hint>
         <Hint label="Save as a file"><button type="button" onClick={exportFile} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Save as a file"><Download size={14} /></button></Hint>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onClose} className={BTN_SHEET_QUIET}>Cancel</button>
-        <button type="button" onClick={() => commit('local')} disabled={!!saving} className={isAdmin && serverOk ? BTN_SHEET_QUIET : BTN_SHEET_PRIMARY}>
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-auto sm:flex-none`}>Cancel</button>
+        <button type="button" onClick={() => commit('local')} disabled={!!saving} className={`${isAdmin && serverOk ? BTN_SHEET_QUIET : BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
           {saving === 'local' ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />} Save on this device
         </button>
         {isAdmin && serverOk && (
-          <button type="button" onClick={() => commit('server')} disabled={!!saving} className={BTN_SHEET_PRIMARY}>
+          <button type="button" onClick={() => commit('server')} disabled={!!saving} className={`${BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
             {saving === 'server' ? <Loader2 size={16} className="animate-spin" /> : <Server size={16} />} Save to server
           </button>
         )}
@@ -692,8 +692,8 @@ function InstallSheet({ isAdmin, serverOk, onClose, onInstalled }: InstallProps)
       ) : (
         <span className="text-[10px] text-slate-500 mr-auto inline-flex items-center gap-1"><Smartphone size={12} /> Installs on this device{isAdmin ? ' (this server cannot store themes)' : ''}</span>
       )}
-      <button type="button" onClick={onClose} className={BTN_SHEET_QUIET}>Cancel</button>
-      <button type="button" onClick={install} disabled={busy} className={BTN_SHEET_PRIMARY}>
+      <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-auto sm:flex-none`}>Cancel</button>
+      <button type="button" onClick={install} disabled={busy} className={`${BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
         {busy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Install
       </button>
     </div>
