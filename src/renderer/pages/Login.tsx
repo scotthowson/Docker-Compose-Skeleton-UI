@@ -691,7 +691,7 @@ export default function Login() {
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
                   aria-label="Change the server"
-                  className={`${LINK_BTN} h-7 px-2 -mr-1 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -862,7 +862,7 @@ export default function Login() {
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
                   aria-label="Change the server"
-                  className={`${LINK_BTN} h-7 px-2 -mr-1 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -935,7 +935,7 @@ export default function Login() {
                   role="checkbox"
                   aria-checked={rememberMe}
                   onClick={() => setRememberMe(!rememberMe)}
-                  className={`${LINK_BTN} flex items-center gap-2 -my-1 py-1 pr-2 text-left`}
+                  className={`${LINK_BTN} flex items-center gap-2 min-h-[2rem] -my-1 py-1 pr-2 text-left`}
                 >
                   <span
                     aria-hidden
@@ -987,7 +987,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => switchMode('register')}
-                  className={`${LINK_BTN} px-2 py-1.5 text-xs text-slate-500 hover:text-slate-300`}
+                  className={`${LINK_BTN} px-2 py-2 text-xs text-slate-500 hover:text-slate-300`}
                 >
                   Have an invite code? <span className="font-medium text-cyan-400">Register</span>
                 </button>
@@ -1008,7 +1008,7 @@ export default function Login() {
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
                   aria-label="Change the server"
-                  className={`${LINK_BTN} h-7 px-2 -mr-1 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -1149,7 +1149,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => switchMode('login')}
-                  className={`${LINK_BTN} px-2 py-1.5 text-xs text-slate-500 hover:text-slate-300`}
+                  className={`${LINK_BTN} px-2 py-2 text-xs text-slate-500 hover:text-slate-300`}
                 >
                   Already have an account? <span className="font-medium text-emerald-400">Sign in</span>
                 </button>

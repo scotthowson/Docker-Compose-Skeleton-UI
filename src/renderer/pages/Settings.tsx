@@ -2089,7 +2089,6 @@ function NotificationPreferencesSection() {
                 </div>
               </div>
               <MantineSwitch
-                size="sm"
                 aria-label={item.label}
                 checked={checked}
                 onChange={() => {

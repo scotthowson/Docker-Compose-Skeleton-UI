@@ -300,7 +300,7 @@ const LINK_BTN = `h-auto text-cyan-400 hover:underline rounded ${FOCUS_RING}`
 /** the button that folds a section open and shut: it is the section's heading */
 const SECTION_TOGGLE = `flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 rounded transition-colors ${FOCUS_RING}`
 /** All · Essentials · None beside a list of choices */
-const MINI_LINK = `px-2 h-8 sm:h-6 rounded hover:underline ${FOCUS_RING}`
+const MINI_LINK = `px-2 min-w-[2rem] h-8 sm:h-6 rounded hover:underline ${FOCUS_RING}`
 
 function formatTimestamp(ts: string): string {
   try {

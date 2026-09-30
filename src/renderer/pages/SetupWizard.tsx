@@ -1806,7 +1806,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <p className="text-xs font-medium text-slate-300">Enable HTTPS with Traefik</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">Automatic TLS certificates via Let's Encrypt</p>
                         </div>
-                        <Switch size="sm" aria-label="Enable HTTPS with Traefik" checked={enableTraefik} onChange={() => setEnableTraefik(!enableTraefik)} className="shrink-0" />
+                        <Switch aria-label="Enable HTTPS with Traefik" checked={enableTraefik} onChange={() => setEnableTraefik(!enableTraefik)} className="shrink-0" />
                       </div>
 
                       {enableTraefik && (
@@ -1876,7 +1876,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <Tooltip label={isWebMode() ? 'Locked on in AIO — Docker Socket Proxy secures the Docker API' : includeDockerSocket ? 'On: the stack gets the read-only Docker API proxy' : 'Off: no Docker Socket Proxy in the stack'}>
                               <span className="inline-flex shrink-0">
                                 {/* locked on in web mode: it keeps its on look, dimmed, and ignores a click */}
-                                <Switch size="sm" aria-label="Include Docker Socket Proxy" aria-disabled={isWebMode() || undefined} style={isWebMode() ? { opacity: 0.6 } : undefined} checked={includeDockerSocket} onChange={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }} />
+                                <Switch aria-label="Include Docker Socket Proxy" aria-disabled={isWebMode() || undefined} style={isWebMode() ? { opacity: 0.6 } : undefined} checked={includeDockerSocket} onChange={() => { if (!isWebMode()) setIncludeDockerSocket(!includeDockerSocket) }} />
                               </span>
                             </Tooltip>
                           </div>
@@ -1914,7 +1914,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                                   <p className="text-xs font-medium text-slate-300">Dynamic DNS (DDNS)</p>
                                   <p className="text-[10px] text-slate-500 mt-0.5">Auto-update DNS when your public IP changes</p>
                                 </div>
-                                <Switch size="sm" aria-label="Dynamic DNS (DDNS)" checked={enableDDNS} onChange={() => setEnableDDNS(!enableDDNS)} className="shrink-0" />
+                                <Switch aria-label="Dynamic DNS (DDNS)" checked={enableDDNS} onChange={() => setEnableDDNS(!enableDDNS)} className="shrink-0" />
                               </div>
 
                               {enableDDNS && (
@@ -2068,7 +2068,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <p className="text-xs font-medium text-slate-300">Block at the proxy (Traefik bouncer)</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Banned IPs are refused by Traefik before they reach any app. No root needed.</p>
                           </div>
-                          <Switch size="sm" aria-label="Block at the proxy (Traefik bouncer)" checked={crowdsecBouncer} onChange={() => setCrowdsecBouncer(!crowdsecBouncer)} className="shrink-0" />
+                          <Switch aria-label="Block at the proxy (Traefik bouncer)" checked={crowdsecBouncer} onChange={() => setCrowdsecBouncer(!crowdsecBouncer)} className="shrink-0" />
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
                           {(envVars.DISCORD_WEBHOOK_URL || '').trim()
