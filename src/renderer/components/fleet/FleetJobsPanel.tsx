@@ -1,6 +1,6 @@
 // =============================================================================
 // FleetJobsPanel — the VMs the hub is building (or built, or failed to build):
-// a summary with a progress ring, then one wide card per job — its name, size
+// a summary with a progress ring, then one wide card per job (the Proxmox page's compact cards wear its own card, the wizard's the glass one) — its name, size
 // and address, the nine steps as a segmented bar (hover a segment for the step),
 // what it is doing now. Open a card for the step checklist and the log; Retry
 // for a failed one, Dismiss for a finished one. Progress bars, rings and
@@ -8,15 +8,18 @@
 // =============================================================================
 
 import { useEffect, useRef, useState } from 'react'
-import { Progress, RingProgress, Text, Tooltip } from '@mantine/core'
+import { Badge, Progress, RingProgress, Text, Tooltip } from '@mantine/core'
 import { Loader2, RefreshCw, Trash2, ChevronDown, CheckCircle2, XCircle, Clock, Server, Layers, Circle, MinusCircle } from 'lucide-react'
 import { retryFleetJob, deleteFleetJob } from '../../api/endpoints'
 import type { FleetJob, FleetJobStep } from '../../../shared/types'
 import { useConfirm } from '../common/ConfirmDialog'
+import Hint from '../common/Hint'
 import { ago, CopyChip } from './fleetShared'
+import { BTN_CARD, BTN_CARD_QUIET, BTN_ICON_QUIET, TONE_OK } from '../../lib/ui'
 
-// the theme's status colours (lib/themeEngine sets them; the fallbacks are the stock dark look)
-const C = { done: 'var(--dcs-success, #34d399)', running: 'var(--dcs-info, #22d3ee)', failed: 'var(--dcs-danger, #fb7185)', pending: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 20%, transparent)', template: 'var(--dcs-warning, #fbbf24)' }
+// the theme's status colours (lib/themeEngine sets them; the fallbacks are the stock dark look); a template's own
+// steps wear the fleet's violet (Mantine's violet, which every theme keeps)
+const C = { done: 'var(--dcs-success, #34d399)', running: 'var(--dcs-info, #22d3ee)', failed: 'var(--dcs-danger, #fb7185)', pending: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 20%, transparent)', template: 'var(--mantine-color-violet-5)' }
 
 function jobCurrent(j: FleetJob): number {
   const i = j.steps.findIndex((s) => s.state === 'running' || s.state === 'failed')
@@ -27,7 +30,7 @@ function jobCurrent(j: FleetJob): number {
 function jobStatus(j: FleetJob): string {
   if (j.status === 'queued') return 'Waiting for its turn — VMs are built one at a time'
   if (j.status === 'failed') return j.error || 'Failed'
-  if (j.kind === 'bake' && j.status === 'done') return `DCS template VM ${j.vmid} for ${j.template_for ?? j.image_id} is baked — VMs built from it clone it in about 40 s`
+  if (j.kind === 'bake' && j.status === 'done') return `DCS template VM ${j.vmid} for ${j.template_for ?? j.image_id} is baked — a VM cloned from it builds in about half a minute`
   if (j.status === 'done' && j.manual && !j.member_id) return `VM ${j.vmid} boots the installer — install the system in its Proxmox console, then join with the code below`
   if (j.status === 'done' && j.manual) return `VM ${j.vmid} at ${j.ip} was installed by hand and joined as ${j.stack}`
   if (j.status === 'done') return `VM ${j.vmid} at ${j.ip} runs the stack ${j.stack}`
@@ -35,15 +38,16 @@ function jobStatus(j: FleetJob): string {
   return st ? `${st.label}${st.hint ? ` — ${st.hint}` : ''}${st.detail ? ` · ${st.detail}` : ''}` : 'Working…'
 }
 
-type Tone = { text: string; cls: string }
+/** what a build is called and drawn as: `cls` tints its icon tile, `color` is the Mantine colour of its pill */
+type Tone = { text: string; cls: string; color: 'emerald' | 'cyan' | 'slate' | 'rose' | 'amber' }
 function tone(j: FleetJob): Tone {
-  if (j.kind === 'bake' && j.status === 'done') return { text: 'template ready', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/25' }
-  if (j.kind === 'bake' && j.status === 'running') return { text: 'baking', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/25' }
-  if (j.status === 'queued') return { text: 'waiting', cls: 'bg-white/5 text-slate-400 border-white/10' }
-  if (j.status === 'running') return { text: 'building', cls: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25' }
-  if (j.status === 'failed') return { text: 'failed', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/25' }
-  if (j.manual && !j.member_id) return { text: 'install by hand', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/25' }
-  return { text: 'ready', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' }
+  if (j.kind === 'bake' && j.status === 'done') return { text: 'template ready', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', color: 'emerald' }
+  if (j.kind === 'bake' && j.status === 'running') return { text: 'baking', cls: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25', color: 'cyan' }
+  if (j.status === 'queued') return { text: 'waiting', cls: 'bg-white/5 text-slate-400 border-white/10', color: 'slate' }
+  if (j.status === 'running') return { text: 'building', cls: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25', color: 'cyan' }
+  if (j.status === 'failed') return { text: 'failed', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/25', color: 'rose' }
+  if (j.manual && !j.member_id) return { text: 'install by hand', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/25', color: 'amber' }
+  return { text: 'ready', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', color: 'emerald' }
 }
 function took(j: FleetJob): string {
   if (j.started_at && j.finished_at) { const s = j.finished_at - j.started_at; return s >= 120 ? `took ${Math.round(s / 60)} min` : `took ${s} s` }
@@ -141,24 +145,24 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
   const title = job.kind === 'bake' ? `DCS template for ${job.template_for ?? job.image_id}` : job.stack
   const os = job.image_kind === 'iso' ? `installer ${(job.iso ?? '').split('/').pop()}` : (job.image_id && job.image_id !== 'url' && job.image_id !== 'proxmox' ? job.image_id : job.image_file)
   return (
-    <div className={`glass-card rounded-2xl ${compact ? 'p-3.5' : 'p-4'} ${job.status === 'running' ? 'ring-1 ring-cyan-400/20' : ''}`}>
+    <div className={`${compact ? 'rounded-xl bg-white/[0.03] border border-white/5 p-3.5' : 'glass-card rounded-2xl p-4'} ${job.status === 'running' ? 'ring-1 ring-cyan-400/20' : ''}`}>
       <div className="flex items-start gap-3">
         <div className={`grid place-items-center shrink-0 rounded-xl border ${t.cls} ${compact ? 'w-9 h-9' : 'w-10 h-10'}`}>{statusIcon}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-slate-100 truncate max-w-full">{title}</p>
-            {job.kind !== 'bake' && <span className="text-[11px] text-slate-500 inline-flex items-center gap-1"><Server size={11} />VM{job.vmid ? ` #${job.vmid}` : ''}</span>}
-            {job.cloned_from ? <span className="text-[11px] text-amber-400">cloned from template {job.cloned_from}</span> : null}
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${t.cls}`}>{t.text}</span>
+            {job.kind !== 'bake' && <span className="text-[11px] text-violet-300/90 inline-flex items-center gap-1"><Server size={11} />VM{job.vmid ? ` #${job.vmid}` : ''}</span>}
+            {job.cloned_from ? <span className="text-[11px] text-violet-300/90">cloned from template {job.cloned_from}</span> : null}
+            <Badge component="span" color={t.color}>{t.text}</Badge>
           </div>
           <p className="text-[11px] text-slate-500 mt-0.5 break-words">
             <span className="text-slate-300">{os}</span> · {sizeText(job)} · <span className="font-mono">{job.ip}</span>{took(job) ? ` · ${took(job)}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {job.status === 'failed' && <button type="button" onClick={retry} disabled={!!busy} className="h-9 px-3 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 flex items-center gap-1.5 disabled:opacity-50">{busy === 'retry' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Retry</button>}
-          {(job.status === 'failed' || job.status === 'done') && <button type="button" onClick={dismiss} disabled={!!busy} className="h-9 w-9 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 flex items-center justify-center disabled:opacity-50" title="Dismiss" aria-label="Dismiss"><Trash2 size={13} /></button>}
-          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="h-9 w-9 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 flex items-center justify-center" title={open ? 'Hide the steps and log' : 'Show the steps and log'} aria-label={open ? 'Hide details' : 'Show details'}><ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button>
+          {job.status === 'failed' && <button type="button" onClick={retry} disabled={!!busy} className={`${BTN_CARD} ${TONE_OK} font-medium`}>{busy === 'retry' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Retry</button>}
+          {(job.status === 'failed' || job.status === 'done') && <Hint label="Dismiss"><button type="button" onClick={dismiss} disabled={!!busy} className={BTN_ICON_QUIET} aria-label={`Dismiss ${title}`}><Trash2 size={14} /></button></Hint>}
+          <Hint label={open ? 'Hide the steps and log' : 'Show the steps and log'}><button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={BTN_ICON_QUIET} aria-label={open ? `Hide details of ${title}` : `Show details of ${title}`}><ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button></Hint>
         </div>
       </div>
 
@@ -220,23 +224,23 @@ export function JobsSummary({ jobs, onChanged, compact = false, title = 'VMs bei
   const what = `${vmJobs.length} VM${vmJobs.length === 1 ? '' : 's'}${templateJobs.length ? ` and ${templateJobs.length === 1 ? 'a template' : `${templateJobs.length} templates`}` : ''}`
   const ringColor = failed.length && active === 0 ? C.failed : active === 0 ? C.done : C.running
   return (
-    <div className="glass-card rounded-2xl px-4 py-3.5 flex items-center gap-4 flex-wrap">
+    <div className={`${compact ? 'rounded-xl bg-white/[0.03] border border-white/5' : 'glass-card rounded-2xl'} px-4 py-3.5 flex items-center gap-4 flex-wrap`}>
       <RingProgress size={compact ? 58 : 64} thickness={6} roundCaps sections={[{ value: Math.max(pct, active > 0 ? 2 : 0), color: ringColor }]}
         label={<Text ta="center" fw={700} size="xs" c="dimmed" style={{ lineHeight: 1 }}>{pct}%</Text>} />
       <div className="min-w-0 flex-1 basis-56">
-        <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Layers size={14} className="text-cyan-400 shrink-0" />{active > 0 ? `Building ${what}` : failed.length ? `${what}: ${failed.length} failed` : `${what} ready`}</p>
+        <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Layers size={14} className="text-violet-300 shrink-0" />{active > 0 ? `Building ${what}` : failed.length ? `${what}: ${failed.length} failed` : `${what} ready`}</p>
         <p className="text-[11px] text-slate-500 mt-0.5">{title}{eta > 0 && active > 0 ? ` · about ${eta} min left` : ''}</p>
         <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          {[
-            { n: done.length, text: 'done', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' },
-            { n: running.length, text: 'building', cls: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25' },
-            { n: queued.length, text: 'waiting', cls: 'bg-white/5 text-slate-400 border-white/10' },
-            { n: failed.length, text: 'failed', cls: 'bg-rose-500/10 text-rose-300 border-rose-500/25' },
-          ].filter((c) => c.n > 0).map((c) => <span key={c.text} className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${c.cls}`}>{c.n} {c.text}</span>)}
+          {([
+            { n: done.length, text: 'done', color: 'emerald' },
+            { n: running.length, text: 'building', color: 'cyan' },
+            { n: queued.length, text: 'waiting', color: 'slate' },
+            { n: failed.length, text: 'failed', color: 'rose' },
+          ] as const).filter((c) => c.n > 0).map((c) => <Badge key={c.text} component="span" color={c.color} className="tabular-nums">{c.n} {c.text}</Badge>)}
         </div>
       </div>
       {clearable.length > 0 && active === 0 && (
-        <button type="button" onClick={clearFinished} disabled={clearing} className="h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300 hover:bg-white/10 flex items-center gap-1.5 disabled:opacity-50">
+        <button type="button" onClick={clearFinished} disabled={clearing} className={BTN_CARD_QUIET}>
           {clearing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Clear finished
         </button>
       )}

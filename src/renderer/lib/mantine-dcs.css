@@ -10,6 +10,24 @@
   box-shadow: 0 0 0 1px var(--dcs-field-ring);
 }
 
+/* The fleet's fields — a Mantine field with variant="fleet" and the native inputs of the fleet's sheets (class
+   dcs-fleet-field, see components/fleet/fleetShared) — focus in the fleet's violet. The dark look does it with the
+   theme's variables and the field's own classes; in the light look every input focuses in emerald with !important
+   (index.css, and the theme engine's rule for each look), so this more specific selector puts the violet back. */
+html:root.light .dcs-fleet-field:focus,
+html:root.light .mantine-Input-input[data-variant='fleet']:focus {
+  border-color: var(--dcs-fleet-focus) !important;
+  box-shadow: 0 0 0 3px var(--dcs-fleet-ring) !important;
+}
+/* a bare field inside a bordered wrapper (the size stepper's number box): the wrapper shows the focus, so the
+   light look's own fill and ring round the field itself stay off */
+html:root.light .dcs-fleet-bare {
+  background-color: transparent !important;
+}
+html:root.light .dcs-fleet-bare:focus {
+  box-shadow: none !important;
+}
+
 /* dropdown options: one quiet highlight for the pointer and the keyboard, the chosen one in emerald */
 .mantine-Select-option[data-combobox-selected],
 .mantine-Combobox-option[data-combobox-selected] {

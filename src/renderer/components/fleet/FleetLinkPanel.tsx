@@ -7,12 +7,16 @@
 // =============================================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Badge } from '@mantine/core'
 import { Radar, Loader2, Link2, CheckCircle2, Server, RefreshCw } from 'lucide-react'
 import { proxmoxTest, runFleetDiscover, fetchFleetMembers } from '../../api/endpoints'
 import type { FleetGuestScan, FleetMember, ProxmoxStatus, ProxmoxVm } from '../../../shared/types'
 import ProgressCard, { type ProgressLine, type ProgressState } from '../common/ProgressCard'
 import MemberSheet, { type MemberSheetPrefill } from './MemberSheet'
 import JoinCodeCard from './JoinCodeCard'
+import { TONE_ATTN } from './fleetShared'
+import { BTN_CARD, BTN_CARD_QUIET } from '../../lib/ui'
+import { pageLabel } from '../../constants/pageTitles'
 
 const STEPS = [
   { label: 'Connect', hint: 'Proxmox API' },
@@ -111,8 +115,8 @@ export default function FleetLinkPanel({ pve, autoRun = true, showJoinCode = tru
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-xs text-slate-400 flex items-center gap-2"><Radar size={13} className="text-amber-400" /> The hub asks Proxmox for each guest's addresses and looks for a DCS API there.</div>
-        <button type="button" onClick={() => void run()} disabled={state === 'running'} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 disabled:opacity-50">
+        <div className="text-xs text-slate-400 flex items-center gap-2"><Radar size={13} className="text-violet-300" /> The hub asks Proxmox for each guest's addresses and looks for a DCS API there.</div>
+        <button type="button" onClick={() => void run()} disabled={state === 'running'} className={BTN_CARD_QUIET}>
           {state === 'running' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} {state === 'idle' ? 'Scan the VMs' : 'Scan again'}
         </button>
       </div>
@@ -131,9 +135,9 @@ export default function FleetLinkPanel({ pve, autoRun = true, showJoinCode = tru
                   </p>
                 </div>
                 {g.member ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1"><CheckCircle2 size={10} /> linked</span>
+                  <Badge component="span" color="emerald" leftSection={<CheckCircle2 size={10} />}>linked</Badge>
                 ) : g.dcs ? (
-                  <button type="button" onClick={() => setLinking({ name: g.name, url: g.dcs!.url, vmid: g.vmid, node: g.node, type: g.type })} className="h-8 px-2.5 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-[11px] font-medium hover:bg-amber-500/25 flex items-center gap-1.5">
+                  <button type="button" onClick={() => setLinking({ name: g.name, url: g.dcs!.url, vmid: g.vmid, node: g.node, type: g.type })} className={`${BTN_CARD} ${TONE_ATTN} font-medium`}>
                     <Link2 size={12} /> Link
                   </button>
                 ) : null}
@@ -154,7 +158,7 @@ export default function FleetLinkPanel({ pve, autoRun = true, showJoinCode = tru
         }} />
       )}
       {members.length > 0 && state === 'done' && guests.every((g) => !g.member) && (
-        <p className="text-[11px] text-slate-500">Members without a guest match: {members.filter((m) => !m.vmid).map((m) => m.name).join(', ') || 'none'} — map them from the member menu on the Proxmox page.</p>
+        <p className="text-[11px] text-slate-500">Members without a guest match: {members.filter((m) => !m.vmid).map((m) => m.name).join(', ') || 'none'} — map them from the member menu on the {pageLabel('proxmox')} page.</p>
       )}
     </div>
   )

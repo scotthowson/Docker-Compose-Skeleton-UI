@@ -8,6 +8,8 @@ import { KeyRound, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { createFleetJoinToken, fetchFleetJoinTokens, revokeFleetJoinToken } from '../../api/endpoints'
 import type { FleetJoinToken } from '../../../shared/types'
 import { CopyChip } from './fleetShared'
+import Hint from '../common/Hint'
+import { BTN_CARD_QUIET } from '../../lib/ui'
 
 const CLONE = 'git clone https://github.com/scotthowson/dcs-orchestrator.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO'
 
@@ -35,16 +37,16 @@ export default function JoinCodeCard({ compact = false, autoMint = true }: { com
   const cmd = latest ? `DCS_HUB_URL=${hubUrl} DCS_JOIN_TOKEN=${latest.token} ./setup.sh` : ''
   const joinCmd = latest ? `./setup.sh --join ${hubUrl} ${latest.token}` : ''
   return (
-    <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-3 space-y-2.5">
+    <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 text-xs font-semibold text-amber-200"><KeyRound size={13} /> Join code for the other VMs</div>
+        <div className="flex items-center gap-2 text-xs font-semibold text-violet-200"><KeyRound size={13} /> Join code for the other VMs</div>
         <div className="flex items-center gap-1.5">
-          <button type="button" onClick={mint} disabled={busy} className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 hover:bg-white/10 flex items-center gap-1.5 disabled:opacity-50">
+          <button type="button" onClick={mint} disabled={busy} className={BTN_CARD_QUIET}>
             {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} New code
           </button>
         </div>
       </div>
-      {err && <p className="text-[11px] text-rose-300">{err}</p>}
+      {err && <p role="alert" className="text-[11px] text-rose-300">{err}</p>}
       {latest ? (
         <>
           <div className="flex items-center gap-2 flex-wrap">
@@ -73,7 +75,7 @@ export default function JoinCodeCard({ compact = false, autoMint = true }: { com
             <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
               Older codes still valid: {tokens.slice(0, -1).map((t) => (
                 <span key={t.token} className="inline-flex items-center gap-1 font-mono text-slate-400">{t.token}
-                  <button type="button" onClick={() => revokeFleetJoinToken(t.token).then(load).catch(() => {})} className="text-slate-500 hover:text-rose-300" title="Revoke"><Trash2 size={11} /></button>
+                  <Hint label="Revoke this code"><button type="button" onClick={() => revokeFleetJoinToken(t.token).then(load).catch(() => {})} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:text-rose-300 hover:bg-rose-500/10 transition-colors" aria-label={`Revoke ${t.token}`}><Trash2 size={11} /></button></Hint>
                 </span>
               ))}
             </div>

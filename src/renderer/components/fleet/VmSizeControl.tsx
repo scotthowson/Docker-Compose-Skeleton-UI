@@ -49,7 +49,7 @@ function Stepper({ label, unit, value, steps, min, max, disabled, onChange }: {
   return (
     <div className="min-w-0">
       <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">{label}</span>
-      <div className={`flex items-center h-9 rounded-lg bg-slate-800/60 border border-white/10 overflow-hidden focus-within:border-amber-500/40 ${disabled ? 'opacity-50' : ''}`}>
+      <div className={`flex items-center h-9 rounded-lg bg-slate-800/60 border border-white/10 overflow-hidden focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/30 ${disabled ? 'opacity-50' : ''}`}>
         <button type="button" aria-label={`Less ${label.toLowerCase()}`} onClick={down} disabled={disabled || value <= min}
           className="w-8 h-full shrink-0 grid place-items-center text-slate-400 hover:text-slate-100 hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent">
           <Minus size={13} />
@@ -65,7 +65,7 @@ function Stepper({ label, unit, value, steps, min, max, disabled, onChange }: {
               else if (e.key === 'ArrowDown') { e.preventDefault(); down() }
             }}
             style={{ width: `${Math.max(text.length, 1) + 0.6}ch` }}
-            className="min-w-0 bg-transparent text-right text-sm font-semibold text-slate-100 tabular-nums focus:outline-none" />
+            className="dcs-fleet-bare min-w-0 bg-transparent text-right text-sm font-semibold text-slate-100 tabular-nums focus:outline-none" />
           <span className="text-[11px] text-slate-500 truncate">{unit}</span>
         </div>
         <button type="button" aria-label={`More ${label.toLowerCase()}`} onClick={up} disabled={disabled || value >= max}
@@ -92,7 +92,8 @@ export function VmSizeControl({ value, onChange, limits = {}, disabled }: {
             <button key={p.id} type="button" disabled={disabled || !ok}
               title={ok ? undefined : `More than the Proxmox node has (${maxCores} cores, ${maxMemGb} GB)`}
               onClick={() => onChange({ ...p.size, diskGb: Math.max(p.size.diskGb, minDiskGb) })}
-              className={`px-2 py-1.5 rounded-lg border text-left transition-colors disabled:opacity-35 ${active === p.id ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.06]'}`}>
+              aria-pressed={active === p.id}
+              className={`px-2 py-1.5 rounded-lg border text-left transition-colors disabled:opacity-35 ${active === p.id ? 'bg-violet-500/15 border-violet-500/40 text-violet-200' : 'bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.06]'}`}>
               <span className="block text-xs font-semibold">{p.label}</span>
               <span className="block text-[10px] text-slate-500 tabular-nums">{p.size.cores} CPU · {p.size.memGb} GB · {Math.max(p.size.diskGb, minDiskGb)} GB</span>
             </button>

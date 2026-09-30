@@ -10,10 +10,12 @@ import { Progress, Tooltip } from '@mantine/core'
 import { AlertTriangle, Cpu, HardDrive, MemoryStick } from 'lucide-react'
 import type { FleetProvisionDefaults } from '../../../shared/types'
 
-// the theme's colours (lib/themeEngine sets them; the fallbacks are the stock dark look)
+// the theme's colours (lib/themeEngine sets them; the fallbacks are the stock dark look); the VMs being planned
+// wear the fleet's violet (Mantine's, which every theme keeps) — amber is for what needs attention, and only the
+// over-full plan does (rose)
 const C = {
   held: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 45%, transparent)',
-  planned: 'var(--dcs-warning, #fbbf24)',
+  planned: 'var(--mantine-color-violet-5)',
   over: 'var(--dcs-danger, #fb7185)',
   free: 'color-mix(in srgb, var(--dcs-text-muted, #94a3b8) 12%, transparent)',
 }

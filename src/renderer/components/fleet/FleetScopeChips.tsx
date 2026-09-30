@@ -1,7 +1,9 @@
 // =============================================================================
 // FleetScopeChips — Everywhere · Hub · one VM: the row every fleet-aware page
 // shows above its list (Health, Images, Updates). A group of pressed/unpressed
-// buttons for a screen reader; each chip explains itself in a tooltip.
+// buttons for a screen reader; each chip explains itself in a tooltip. The chip
+// that is pressed wears the fleet's colour, violet, like the VM capsules of the
+// rows below it; the others are neutral.
 // =============================================================================
 
 import { Tooltip } from '@mantine/core'
@@ -13,7 +15,8 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
   /** false on a page that always talks to one server (files, .env, system): no Everywhere chip */
   everywhere?: boolean
 }) {
-  const base = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 whitespace-nowrap'
+  const base = 'inline-flex items-center gap-1.5 h-8 sm:h-7 px-2.5 rounded-full text-[11px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+  const on = 'bg-violet-500/15 border-violet-500/30 text-violet-200'
   const off = 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
   return (
     // a phone gets one swipeable row (sixteen VMs would otherwise push the page down); wider screens wrap
@@ -25,14 +28,14 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
             type="button"
             aria-pressed={scope === 'all'}
             onClick={() => onChange('all')}
-            className={`${base} ${scope === 'all' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' : off}`}
+            className={`${base} ${scope === 'all' ? on : off}`}
           >
             <Boxes size={11} /> Everywhere
           </button>
         </Tooltip>
       )}
       <Tooltip label="Only what runs on the hub itself">
-        <button type="button" aria-pressed={scope === 'hub'} onClick={() => onChange('hub')} className={`${base} ${scope === 'hub' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : off}`}>
+        <button type="button" aria-pressed={scope === 'hub'} onClick={() => onChange('hub')} className={`${base} ${scope === 'hub' ? on : off}`}>
           <Server size={11} /> Hub
         </button>
       </Tooltip>
@@ -45,9 +48,9 @@ export default function FleetScopeChips({ scope, members, onChange, label = 'Sho
               aria-pressed={scope === m.id}
               onClick={() => { if (m.reachable) onChange(m.id) }}
               disabled={!m.reachable}
-              className={`${base} ${scope === m.id ? 'bg-amber-500/15 border-amber-500/30 text-amber-200' : off}`}
+              className={`${base} ${scope === m.id ? on : off}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${m.reachable ? 'bg-emerald-400' : 'bg-slate-600'}`} aria-hidden />
               {m.name}
             </button>
           </span>
