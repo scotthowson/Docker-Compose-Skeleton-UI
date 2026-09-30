@@ -297,6 +297,23 @@ const Images: React.FC = () => {
         {/* ---- Header ---- */}
         <PageHeader
           page="images"
+          badge={images.length > 0 ? (
+            <span className="text-sm text-slate-400">
+              <span>{counts.total} total</span>
+              {counts.stale > 0 && (
+                <>
+                  <span className="mx-1.5 text-slate-500">&middot;</span>
+                  <span className="text-rose-400">{counts.stale} stale</span>
+                </>
+              )}
+              {counts.updates > 0 && (
+                <>
+                  <span className="mx-1.5 text-slate-500">&middot;</span>
+                  <span className="text-emerald-400 font-semibold">{counts.updates} with updates</span>
+                </>
+              )}
+            </span>
+          ) : undefined}
           subtitle={subtitle}
           actions={<>
             <Hint label="Compare the local digests with the upstream registries">

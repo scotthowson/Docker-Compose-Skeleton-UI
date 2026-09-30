@@ -568,11 +568,8 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
 
                     {!loading && !error && sortedEntries.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="text-center py-12 text-slate-500">
-                          <div className="flex flex-col items-center gap-2">
-                            <FolderOpen className="h-8 w-8 text-slate-700" />
-                            <span>This directory is empty.</span>
-                          </div>
+                        <td colSpan={5}>
+                          <EmptyState compact icon={<FolderOpen size={28} />} title="This directory is empty." />
                         </td>
                       </tr>
                     )}

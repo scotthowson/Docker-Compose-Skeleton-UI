@@ -238,7 +238,7 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
             <MiniBar percent={memPct} label="Memory" />
           </div>
         ) : (
-          <span className="text-xs text-slate-600">--</span>
+          <span className="text-xs text-slate-500">--</span>
         )}
       </td>
 

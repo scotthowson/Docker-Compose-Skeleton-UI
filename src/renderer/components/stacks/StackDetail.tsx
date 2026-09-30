@@ -142,6 +142,13 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [renameTo, setRenameTo] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
 
+  // leaving the rename field puts the keyboard back on the pencil that opened it
+  const cancelRename = () => {
+    setRenameMode(false)
+    setRenameTo('')
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-rename-open]')?.focus())
+  }
+
   // Fetch compose file content
   const handleViewCompose = useCallback(async () => {
     setComposeLoading(true)
@@ -307,7 +314,10 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 aria-label="New name of the stack"
                 value={renameTo}
                 onChange={(e) => setRenameTo(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRename()
+                  if (e.key === 'Escape') { e.stopPropagation(); cancelRename() }
+                }}
                 placeholder={stackName}
                 autoFocus
                 className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-100 font-mono placeholder-slate-500 focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30 focus:outline-none w-56 max-w-full"
@@ -321,7 +331,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               </button>
               <Hint label="Cancel the rename">
                 <button aria-label="Cancel the rename"
-                  onClick={() => { setRenameMode(false); setRenameTo('') }}
+                  onClick={cancelRename}
                   className={`${BTN_ICON_SM} ${TONE_GHOST}`}
                 >
                   <X size={14} />
@@ -340,6 +350,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 <Hint label="Rename the stack">
                   <button
                     aria-label="Rename the stack"
+                    data-rename-open
                     onClick={() => { setRenameMode(true); setRenameTo(stackName) }}
                     className={`${BTN_ICON_SM} ${TONE_GHOST}`}
                   >

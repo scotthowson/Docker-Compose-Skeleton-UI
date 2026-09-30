@@ -3,7 +3,7 @@
 // mode toggle, and the dialogs that belong to the list (delete, lint all)
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { SegmentedControl } from '@mantine/core'
 import {
@@ -59,37 +59,58 @@ const priorityOrder: Record<string, number> = {
 
 /**
  * A button that opens a small menu. Escape, a click outside or a pick closes it; the first item takes the focus when it
- * opens, the arrow keys walk the items and focus goes back to the button when it closes.
+ * opens, the arrow keys walk the items and focus goes back to the button when it closes. The menu is drawn on the page
+ * (a portal) at the button, right-aligned and kept on the screen, so a narrow phone never cuts it off.
  */
-function MenuButton({ ariaLabel, className, label, icon, width = 'w-64', children }: {
+function MenuButton({ ariaLabel, className, label, icon, width = 256, children }: {
   ariaLabel: string
   className: string
   label: ReactNode
   icon: ReactNode
-  width?: string
+  /** the menu's width in px (never wider than the screen) */
+  width?: number
   /** the items: buttons with role="menuitem"; close() shuts the menu */
   children: (close: () => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const wrap = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 8, width })
+  const menu = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => { setOpen(false); trigger.current?.focus() }, [])
+  const place = useCallback(() => {
+    const r = trigger.current?.getBoundingClientRect()
+    if (!r) return
+    const w = Math.min(width, window.innerWidth - 16)
+    setPos({ top: r.bottom + 4, left: Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8), width: w })
+  }, [width])
 
+  useLayoutEffect(() => { if (open) place() }, [open, place])
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false) }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (!menu.current?.contains(t) && !trigger.current?.contains(t)) setOpen(false)
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); close() }
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)
-    wrap.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey, true) }
-  }, [open, close])
+    // the page scrolls or the window resizes: the menu stays at its button
+    window.addEventListener('resize', place)
+    document.addEventListener('scroll', place, true)
+    menu.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('resize', place)
+      document.removeEventListener('scroll', place, true)
+    }
+  }, [open, close, place])
 
   const walk = (e: React.KeyboardEvent) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
-    const items = Array.from(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])
+    const items = Array.from(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])
     if (items.length === 0) return
     e.preventDefault()
     const at = items.indexOf(document.activeElement as HTMLElement)
@@ -98,18 +119,26 @@ function MenuButton({ ariaLabel, className, label, icon, width = 'w-64', childre
   }
 
   return (
-    <div ref={wrap} className="relative">
+    <>
       <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((v) => !v)} className={className}>
         {icon}
         <span>{label}</span>
         <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
-      {open && (
-        <div role="menu" aria-label={ariaLabel} onKeyDown={walk} className={`absolute right-0 mt-1 ${width} max-w-[calc(100vw-2rem)] rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-30 animate-fade-in`}>
+      {open && createPortal(
+        <div
+          ref={menu}
+          role="menu"
+          aria-label={ariaLabel}
+          onKeyDown={walk}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
+          className="rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/10 shadow-xl p-1.5 z-[60] animate-fade-in"
+        >
           {children(close)}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   )
 }
 
@@ -344,7 +373,7 @@ export default function StackList({ onAction, onSelect, onRefresh, onEdit, onCre
                 )}
               </MenuButton>
             )}
-            <MenuButton ariaLabel={batchMode ? 'More actions, batch mode is on' : 'More actions'} label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width="w-56" className={`${BTN_TOOLBAR} ${batchClass}`}>
+            <MenuButton ariaLabel={batchMode ? 'More actions, batch mode is on' : 'More actions'} label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width={224} className={`${BTN_TOOLBAR} ${batchClass}`}>
               {(close) => (
                 <>
                   {stoppedCount > 0 && (
