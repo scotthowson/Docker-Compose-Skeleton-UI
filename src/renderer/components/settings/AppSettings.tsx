@@ -1,5 +1,6 @@
 // =============================================================================
-// AppSettings — Polling intervals, appearance, and reset controls
+// AppSettings — Settings → Application preferences: polling intervals, layout,
+// personal preferences, Discord Rich Presence (desktop app) and the reset
 // =============================================================================
 
 import React, { useState, useCallback, useEffect } from 'react'
@@ -8,6 +9,8 @@ import { Timer, Layout, RotateCcw, User, Gamepad2,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { pageLabel } from '../../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_OK } from '../../lib/ui'
+import { FIELD, SUBHEAD } from '../../lib/fieldStyles'
 import type { PageId } from '../../../shared/types'
 import type { AppSettings as AppSettingsType } from '../../../shared/types'
 
@@ -41,28 +44,28 @@ interface IntervalField {
 const intervalFields: IntervalField[] = [
   {
     key: 'pollingInterval',
-    label: 'Dashboard Polling',
+    label: 'Dashboard polling',
     description: 'How often the dashboard overview refreshes',
     min: 2,
     max: 120,
   },
   {
     key: 'containerPollingInterval',
-    label: 'Container Polling',
+    label: 'Container polling',
     description: 'Refresh interval for container listings',
     min: 2,
     max: 120,
   },
   {
     key: 'imagePollingInterval',
-    label: 'Image Polling',
+    label: 'Image polling',
     description: 'Refresh interval for image data',
     min: 10,
     max: 600,
   },
   {
     key: 'logPollingInterval',
-    label: 'Log Polling',
+    label: 'Log polling',
     description: 'How often the log viewer fetches new entries',
     min: 1,
     max: 60,
@@ -154,8 +157,8 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
       {/* Polling intervals */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <Timer size={16} className="text-cyan-400" />
-          <h4 className="text-sm font-semibold text-slate-200">Polling Intervals</h4>
+          <Timer size={14} className="accent-text" />
+          <h3 className={SUBHEAD}>Polling intervals</h3>
         </div>
 
         <div className="space-y-4">
@@ -173,13 +176,7 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
                     max={field.max}
                     value={localIntervals[field.key] ?? field.min}
                     onChange={(e) => handleIntervalChange(field.key, Number(e.target.value))}
-                    className="
-                      w-20 rounded-lg px-3 py-1.5 text-right
-                      text-sm text-slate-200 font-mono
-                      bg-slate-900/60 border border-white/10
-                      focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-                      transition-all duration-200
-                    "
+                    className={`w-20 text-right font-mono ${FIELD}`}
                   />
                   <span className="text-xs text-slate-500 w-5">sec</span>
                 </div>
@@ -215,13 +212,13 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
       {/* Appearance */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <Layout size={16} className="text-amber-400" />
-          <h4 className="text-sm font-semibold text-slate-200">Appearance</h4>
+          <Layout size={14} className="accent-text" />
+          <h3 className={SUBHEAD}>Layout</h3>
         </div>
 
         <div className="flex items-center justify-between py-2">
           <div>
-            <p className="text-sm font-medium text-slate-300">Sidebar Collapsed</p>
+            <p className="text-sm font-medium text-slate-300">Sidebar collapsed</p>
             <p className="text-xs text-slate-500">Start with a compact sidebar</p>
           </div>
           <Switch label="Sidebar collapsed" on={sidebarCollapsed} onChange={() => toggleSidebar()} />
@@ -236,18 +233,9 @@ export default function AppSettingsForm({ onDirtyChange, onRegisterSave }: {
 
       {/* Reset to defaults */}
       <div className="flex items-center pt-2 border-t border-white/5">
-        <button
-          onClick={handleReset}
-          className="
-            flex items-center gap-2 rounded-lg px-4 py-2
-            text-sm font-medium
-            text-slate-400 bg-white/5 border border-white/10
-            hover:bg-white/10 hover:text-slate-300
-            transition-all duration-200
-          "
-        >
+        <button onClick={handleReset} className={BTN_TOOLBAR_QUIET}>
           <RotateCcw size={14} />
-          Reset to Defaults
+          Reset to defaults
         </button>
       </div>
     </div>
@@ -274,8 +262,8 @@ function PersonalSettings() {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2 mb-2">
-        <User size={14} className="text-emerald-400" />
-        <h4 className="text-sm font-semibold text-slate-200">Personal</h4>
+        <User size={14} className="accent-text" />
+        <h3 className={SUBHEAD}>Personal</h3>
       </div>
 
       <div className="flex items-center justify-between py-2">
@@ -286,7 +274,7 @@ function PersonalSettings() {
         <select aria-label="Start on"
           value={defaultPage ?? 'dashboard'}
           onChange={(e) => updateSetting('defaultPage', e.target.value as PageId)}
-          className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+          className={FIELD}
         >
           {LANDING_PAGES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
@@ -355,7 +343,7 @@ function DiscordPresenceSettings() {
     <div className="space-y-1">
       <div className="flex items-center gap-2 mb-2">
         <Gamepad2 size={14} className="text-indigo-400" />
-        <h4 className="text-sm font-semibold text-slate-200">Discord Rich Presence</h4>
+        <h3 className={SUBHEAD}>Discord Rich Presence</h3>
         {status && (
           <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${status.connected ? 'bg-emerald-500/15 text-emerald-400' : status.enabled ? 'bg-amber-500/15 text-amber-400' : 'bg-white/[0.06] text-slate-400'}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-emerald-400' : status.enabled ? 'bg-amber-400' : 'bg-slate-500'}`} />
@@ -381,22 +369,23 @@ function DiscordPresenceSettings() {
       </div>
 
       <div className="py-2">
-        <p className="text-sm font-medium text-slate-300 mb-1">Discord Application ID</p>
+        <label htmlFor="presence-app-id" className="block text-sm font-medium text-slate-300 mb-1">Discord Application ID</label>
         <div className="flex gap-2">
           <input
+            id="presence-app-id"
             type="text"
             value={clientId}
             onChange={(e) => setClientId(e.target.value.replace(/[^0-9]/g, ''))}
             placeholder="123456789012345678"
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+            className={`flex-1 min-w-0 font-mono ${FIELD}`}
           />
           <button
             type="button"
             onClick={() => void save(enabled, clientId)}
             disabled={saving || (!!clientId && !idOk)}
-            className="px-3 py-2 rounded-lg text-xs font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/25 disabled:opacity-50 transition-colors"
+            className={`${BTN_TOOLBAR} ${TONE_OK} shrink-0`}
           >
-            {saving ? 'Saving…' : 'Save & reconnect'}
+            {saving ? 'Saving…' : 'Save and reconnect'}
           </button>
         </div>
         <p className="text-[11px] text-slate-500 mt-2">

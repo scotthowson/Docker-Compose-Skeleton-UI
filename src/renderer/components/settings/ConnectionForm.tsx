@@ -8,6 +8,8 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { discoverServer, type DiscoveredServer } from '../../lib/discover'
 import { useServerStore } from '../../stores/serverStore'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_OK } from '../../lib/ui'
+import { FIELD } from '../../lib/fieldStyles'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'failed'
 
@@ -93,19 +95,14 @@ export default function ConnectionForm() {
           {connectionStatus}
         </span>
         <input
+          aria-label="Server address"
           type="text"
           inputMode="url"
           value={urlInput}
           onChange={handleUrlChange}
           onKeyDown={handleKeyDown}
           placeholder="192.168.1.10:9876 or https://ui.example.com"
-          className="
-            flex-1 rounded-lg px-3 py-1.5
-            text-xs text-slate-200 placeholder-slate-600 font-mono
-            bg-black/30 border border-white/10
-            focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-            transition-all duration-200
-          "
+          className={`flex-1 min-w-0 font-mono ${FIELD}`}
         />
         <div className="flex items-center justify-center w-5 h-5 shrink-0">
           {testStatus === 'testing' && <Loader2 size={12} className="animate-spin text-amber-400" />}
@@ -115,7 +112,7 @@ export default function ConnectionForm() {
       </div>
 
       {/* Test result — fixed height */}
-      <div className="h-3.5">
+      <div className="h-3.5" aria-live="polite">
         {testStatus === 'success' && (
           <p className="text-[10px] text-emerald-400 animate-fade-in">
             Reachable {resolved?.via === 'proxy' ? 'through the dashboard proxy' : 'on the API port'}{resolved?.version ? ` · API ${resolved.version}` : ''}{dirty ? ' — save to use this address' : ''}
@@ -131,31 +128,17 @@ export default function ConnectionForm() {
         <button
           onClick={handleTest}
           disabled={testStatus === 'testing' || !urlInput.trim()}
-          className="
-            flex items-center gap-1.5 rounded-lg px-3 py-1.5
-            text-[11px] font-medium
-            text-slate-300 bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200 press
-          "
+          className={BTN_TOOLBAR_QUIET}
         >
-          {testStatus === 'testing' ? <Loader2 size={11} className="animate-spin" /> : <Link2 size={11} />}
+          {testStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
           Test
         </button>
 
-        <div className={`transition-all duration-200 overflow-hidden ${dirty ? 'max-w-[200px] opacity-100' : 'max-w-0 opacity-0'}`}>
-          <button
-            onClick={handleSave}
-            className="
-              flex items-center gap-1.5 rounded-lg px-3 py-1.5
-              text-[11px] font-medium whitespace-nowrap
-              text-emerald-400 bg-emerald-500/10 border border-emerald-500/20
-              hover:bg-emerald-500/20 hover:border-emerald-500/30
-              transition-all duration-200 press
-            "
-          >
-            <Save size={11} />
-            Save & Reconnect
+        {/* the save button is there while the address is unchanged too, folded to nothing (and out of the tab order) */}
+        <div className={`transition-all duration-200 overflow-hidden ${dirty ? 'max-w-[220px] opacity-100' : 'max-w-0 opacity-0 invisible'}`}>
+          <button onClick={handleSave} className={`${BTN_TOOLBAR} ${TONE_OK} whitespace-nowrap`}>
+            <Save size={14} />
+            Save and reconnect
           </button>
         </div>
       </div>
