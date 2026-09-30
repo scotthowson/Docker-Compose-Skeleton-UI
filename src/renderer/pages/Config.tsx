@@ -1,11 +1,12 @@
 // =============================================================================
-// Config — Premium server configuration with toggles, dropdowns, NTFY, and more
+// Config — the server's settings as cards of rows: toggles, choices, numbers and
+// text, saved together. Every row is one family (a name and one sentence of help on
+// the left, its control on the right), and the cards fold away.
 // =============================================================================
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useId, useState, useCallback } from 'react'
 import { Switch } from '@mantine/core'
 import {
-  Settings2,
   Globe,
   FolderOpen,
   Bell,
@@ -29,6 +30,10 @@ import {
 } from 'lucide-react'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { ProxmoxTestPanel, TraefikFeedPanel, HomarrPanel } from '../components/settings/IntegrationPanels'
+import PageHeader from '../components/common/PageHeader'
+import { ErrorState } from '../components/common/PageState'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_OK, TONE_QUIET } from '../lib/ui'
 import { usePolling } from '../hooks/usePolling'
 import { fetchConfig, updateConfig, setSecret } from '../api/endpoints'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -38,17 +43,58 @@ import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import type { ServerConfig } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
-// Toggle Button
+// The rows of a card — one family
 // ---------------------------------------------------------------------------
 
-/** the dashboard's toggle (a Mantine Switch, themed in lib/mantine.tsx), named for a screen reader */
-function Toggle({ value, onChange, disabled, label }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
-  return <Switch checked={value} disabled={disabled} onChange={() => { if (!disabled) onChange(!value) }} aria-label={label} className="shrink-0" />
+/** every field in a row (choice, text, number): one padding, one border, one focus ring */
+const FIELD = 'rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:opacity-50'
+
+/** a status shown in place of a control (Configured · Active): one pill for all of them */
+function StatePill({ tone, children }: { tone: 'ok' | 'off'; children: React.ReactNode }) {
+  return tone === 'ok' ? (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden />
+      {children}
+    </span>
+  ) : (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" aria-hidden />
+      {children}
+    </span>
+  )
 }
 
-// ---------------------------------------------------------------------------
-// Editable Row Components
-// ---------------------------------------------------------------------------
+/**
+ * One row of a card: the name (a real label of its control) and one sentence of help on the left, the
+ * control on the right. Every row helper below is this with a different control, so they all space,
+ * wrap and read the same.
+ */
+function Row({ label, description, controlId, helpId, children }: {
+  label: string
+  description?: React.ReactNode
+  /** the id of the control, so the name is its label and a click on the name reaches it */
+  controlId?: string
+  helpId?: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-white/[0.03] last:border-b-0">
+      <div className="flex-1 min-w-0">
+        {controlId
+          ? <label htmlFor={controlId} className="block text-sm font-medium text-slate-200">{label}</label>
+          : <span className="block text-sm font-medium text-slate-200">{label}</span>}
+        {description && <p id={helpId} className="text-xs text-slate-500 mt-0.5">{description}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/** the ids a row's control and its label/help share */
+function useRowIds(description: React.ReactNode) {
+  const id = useId()
+  return { id, helpId: description ? `${id}-help` : undefined }
+}
 
 function ToggleRow({
   label,
@@ -65,14 +111,12 @@ function ToggleRow({
   onChange: (key: string, val: boolean) => void
   disabled?: boolean
 }) {
+  const { id, helpId } = useRowIds(description)
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
-      <div className="flex-1 min-w-0 mr-4">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-      </div>
-      <Toggle label={label} value={value} onChange={(v) => onChange(configKey, v)} disabled={disabled} />
-    </div>
+    <Row label={label} description={description} controlId={id} helpId={helpId}>
+      {/* the dashboard's toggle (a Mantine Switch, themed in lib/mantine.tsx), named by the row's label */}
+      <Switch id={id} checked={value} disabled={disabled} aria-describedby={helpId} onChange={() => { if (!disabled) onChange(configKey, !value) }} className="shrink-0" />
+    </Row>
   )
 }
 
@@ -93,23 +137,22 @@ function SelectRow({
   onChange: (key: string, val: string) => void
   disabled?: boolean
 }) {
+  const { id, helpId } = useRowIds(description)
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
-      <div className="flex-1 min-w-0 mr-4">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-      </div>
-      <select aria-label={label}
+    <Row label={label} description={description} controlId={id} helpId={helpId}>
+      <select
+        id={id}
+        aria-describedby={helpId}
         value={value}
         onChange={(e) => onChange(configKey, e.target.value)}
         disabled={disabled}
-        className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+        className={`${FIELD} shrink-0`}
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>{opt}</option>
         ))}
       </select>
-    </div>
+    </Row>
   )
 }
 
@@ -134,26 +177,25 @@ function TextRow({
   placeholder?: string
   type?: 'text' | 'password'
 }) {
+  const { id, helpId } = useRowIds(description)
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
-      <div className="flex-1 min-w-0 mr-4">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-      </div>
+    <Row label={label} description={description} controlId={readOnly ? undefined : id} helpId={helpId}>
       {readOnly ? (
         <span className="text-sm text-slate-400 font-mono truncate max-w-[180px] md:max-w-[260px]" title={value}>{value}</span>
       ) : (
-        <input aria-label={label}
+        <input
+          id={id}
+          aria-describedby={helpId}
           type={type}
           value={value}
           onChange={(e) => onChange(configKey, e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
           autoComplete={type === 'password' ? 'new-password' : undefined}
-          className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-40 md:w-48 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50 placeholder-slate-600"
+          className={`${FIELD} font-mono w-40 md:w-48 shrink-0`}
         />
       )}
-    </div>
+    </Row>
   )
 }
 
@@ -176,22 +218,21 @@ function NumberRow({
   min?: number
   max?: number
 }) {
+  const { id, helpId } = useRowIds(description)
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.03] last:border-b-0">
-      <div className="flex-1 min-w-0 mr-4">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-      </div>
-      <input aria-label={label}
+    <Row label={label} description={description} controlId={id} helpId={helpId}>
+      <input
+        id={id}
+        aria-describedby={helpId}
         type="number"
         value={value}
         onChange={(e) => onChange(configKey, parseInt(e.target.value, 10))}
         disabled={disabled}
         min={min}
         max={max}
-        className="rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-slate-200 font-mono w-28 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+        className={`${FIELD} font-mono w-28 shrink-0`}
       />
-    </div>
+    </Row>
   )
 }
 
@@ -217,8 +258,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * A card of rows. Its heading is a button that folds the card (aria-expanded, a focus ring); a folded
+ * card leaves the tab order, so a keyboard never lands on a field nobody can see.
+ */
 function GroupCard({ icon, title, description, children, storageKey }: GroupCardProps) {
   const key = storageKey || `cfg-card-${title.toLowerCase().replace(/\s+/g, '-')}`
+  const uid = useId()
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(key) === 'true' } catch { return false }
   })
@@ -230,27 +276,66 @@ function GroupCard({ icon, title, description, children, storageKey }: GroupCard
 
   return (
     <div className="glass rounded-xl border border-white/5 overflow-hidden">
+      <h2 className="m-0">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+          aria-controls={`${uid}-body`}
+          aria-labelledby={`${uid}-title`}
+          aria-describedby={description ? `${uid}-about` : undefined}
+          className="block w-full px-5 py-4 border-b border-white/5 text-left select-none hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
+        >
+          <span className="flex items-center justify-between">
+            <span className="flex items-center gap-2.5">
+              {icon}
+              <span id={`${uid}-title`} className="text-sm font-semibold text-slate-200">{title}</span>
+            </span>
+            <ChevronDown
+              size={16}
+              aria-hidden
+              className={`text-slate-500 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
+            />
+          </span>
+          {description && !collapsed && (
+            <span id={`${uid}-about`} className="block text-xs font-normal text-slate-500 mt-1 ml-[26px]">{description}</span>
+          )}
+        </button>
+      </h2>
       <div
-        className="px-5 py-4 border-b border-white/5 cursor-pointer select-none hover:bg-white/[0.03] transition-colors"
-        onClick={toggle}
+        id={`${uid}-body`}
+        className={`transition-[max-height,visibility] duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0 invisible' : 'max-h-[2000px]'}`}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            {icon}
-            <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
-          </div>
-          <ChevronDown
-            size={16}
-            className={`text-slate-500 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
-          />
-        </div>
-        {description && !collapsed && (
-          <p className="text-xs text-slate-500 mt-1 ml-[26px]">{description}</p>
-        )}
-      </div>
-      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
         <div className="px-5 py-2">{children}</div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Loading: the cards' shape while the settings arrive
+// ---------------------------------------------------------------------------
+
+function ConfigSkeleton() {
+  const card = (rows: number, key: number) => (
+    <div key={key} className="glass rounded-xl border border-white/5 overflow-hidden" aria-hidden>
+      <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2.5">
+        <div className="skeleton h-4 w-4 rounded" />
+        <div className="skeleton h-4 w-36 rounded" />
+      </div>
+      <div className="px-5 py-2">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-white/[0.03] last:border-b-0">
+            <div className="space-y-1.5"><div className="skeleton h-3.5 w-32 rounded" /><div className="skeleton h-3 w-52 max-w-full rounded" /></div>
+            <div className="skeleton h-7 w-24 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <div role="status" aria-label="Loading the settings" className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5">
+      {[5, 4, 6, 3].map((rows, i) => card(rows, i))}
     </div>
   )
 }
@@ -463,47 +548,22 @@ export default function Config() {
   const cfg = data
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5">
-            <Settings2 className="w-6 h-6 text-emerald-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Server Configuration</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Environment variables, feature flags, and server settings</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="config"
+        actions={<>
           {hasChanges && (
-            <button
-              onClick={handleReset}
-              className="
-                flex items-center gap-2 rounded-lg px-3 py-2
-                text-xs font-medium text-slate-400
-                bg-white/5 border border-white/10
-                hover:bg-white/10 hover:text-slate-200
-                transition-all duration-200
-              "
-            >
+            <button type="button" onClick={handleReset} className={BTN_TOOLBAR_QUIET}>
               <Undo2 size={14} />
               Reset
             </button>
           )}
           <button
+            type="button"
             onClick={hasChanges ? handleSave : refresh}
             disabled={saving || (loading && !cfg)}
-            className={`
-              flex items-center gap-2 rounded-lg px-3 py-2
-              text-xs font-medium transition-all duration-200
-              ${hasChanges
-                ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
-                : 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/15'
-              }
-              disabled:opacity-50
-            `}
+            className={`${BTN_TOOLBAR} ${hasChanges ? TONE_OK : TONE_QUIET}`}
           >
             {saving ? (
               <RefreshCw size={14} className="animate-spin" />
@@ -512,14 +572,16 @@ export default function Config() {
             ) : (
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             )}
-            {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Refresh'}
+            {saving ? 'Saving…' : hasChanges ? 'Save changes' : 'Refresh'}
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Save result banner */}
       {saveResult && (
-        <div className={`
+        <div
+          role={saveResult.success ? 'status' : 'alert'}
+          className={`
           flex items-center gap-3 rounded-xl p-4 animate-fade-in
           ${saveResult.success
             ? 'bg-emerald-500/10 border border-emerald-500/20'
@@ -537,26 +599,17 @@ export default function Config() {
         </div>
       )}
 
-      {/* Error state */}
-      {error && (
-        <div className="glass rounded-xl p-4 border border-rose-500/20">
-          <p className="text-sm text-rose-400">Failed to fetch config: {error.message}</p>
-        </div>
-      )}
+      {/* Could not load */}
+      {error && <ErrorState title="Could not load the server settings" error={error} onRetry={refresh} />}
 
-      {/* Loading placeholder */}
-      {loading && !cfg && (
-        <div className="glass rounded-xl border border-white/5 p-8 text-center">
-          <RefreshCw size={20} className="inline animate-spin text-slate-500 mr-2" />
-          <span className="text-sm text-slate-500">Loading configuration...</span>
-        </div>
-      )}
+      {/* The cards' shape while the settings arrive */}
+      {loading && !cfg && <ConfigSkeleton />}
 
       {cfg && (
         <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
           {/* Environment */}
           <GroupCard
-            icon={<Globe size={16} className="text-emerald-400" />}
+            icon={<Globe size={16} className="text-slate-400" />}
             title="Environment"
             description="Runtime environment and server identity"
 
@@ -570,7 +623,7 @@ export default function Config() {
               onChange={handleStringChange}
             />
             <SelectRow
-              label="Log Level"
+              label="Log level"
               description="Logging verbosity"
               configKey="LOG_LEVEL"
               value={String(edits.LOG_LEVEL ?? cfg.log_level)}
@@ -578,7 +631,7 @@ export default function Config() {
               onChange={handleStringChange}
             />
             <SelectRow
-              label="Update Channel"
+              label="Update channel"
               description="stable follows the tagged releases; main follows every commit on the main branch"
               configKey="UPDATE_CHANNEL"
               value={String(edits.UPDATE_CHANNEL ?? cfg.update_channel ?? 'stable')}
@@ -586,7 +639,7 @@ export default function Config() {
               onChange={handleStringChange}
             />
             <TextRow
-              label="Server Name"
+              label="Server name"
               description="Display name for this server"
               configKey="SERVER_NAME"
               value={String(edits.SERVER_NAME ?? cfg.server_name)}
@@ -601,70 +654,70 @@ export default function Config() {
               onChange={handleStringChange}
               placeholder="UTC"
             />
-            <TextRow label="Server Subtitle" description="Subtitle shown in the UI header" configKey="SERVER_SUBTITLE" value={String(edits.SERVER_SUBTITLE ?? '')} onChange={handleStringChange} />
-            <TextRow label="Proxy Domain" description="Primary reverse proxy domain" configKey="PROXY_DOMAIN" value={String(edits.PROXY_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
+            <TextRow label="Server subtitle" description="Subtitle shown in the UI header" configKey="SERVER_SUBTITLE" value={String(edits.SERVER_SUBTITLE ?? '')} onChange={handleStringChange} />
+            <TextRow label="Proxy domain" description="Primary reverse proxy domain" configKey="PROXY_DOMAIN" value={String(edits.PROXY_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
             <NumberRow label="PUID" description="User ID for container permissions" configKey="PUID" value={Number(edits.PUID ?? 1000)} onChange={handleNumberChange} min={0} max={65534} />
             <NumberRow label="PGID" description="Group ID for container permissions" configKey="PGID" value={Number(edits.PGID ?? 1000)} onChange={handleNumberChange} min={0} max={65534} />
           </GroupCard>
 
           {/* Paths (read-only) */}
           <GroupCard
-            icon={<FolderOpen size={16} className="text-cyan-400" />}
+            icon={<FolderOpen size={16} className="text-slate-400" />}
             title="Paths"
             description="Server directory paths (read-only)"
 
           >
-            <TextRow label="Compose Dir" configKey="" value={cfg.compose_dir} onChange={() => {}} readOnly />
-            <TextRow label="App Data Dir" configKey="" value={cfg.app_data_dir} onChange={() => {}} readOnly />
-            <TextRow label="Base Dir" configKey="" value={cfg.base_dir} onChange={() => {}} readOnly />
-            <TextRow label="Compose Command" configKey="" value={cfg.compose_command} onChange={() => {}} readOnly />
+            <TextRow label="Compose directory" configKey="" value={cfg.compose_dir} onChange={() => {}} readOnly />
+            <TextRow label="App data directory" configKey="" value={cfg.app_data_dir} onChange={() => {}} readOnly />
+            <TextRow label="Base directory" configKey="" value={cfg.base_dir} onChange={() => {}} readOnly />
+            <TextRow label="Compose command" configKey="" value={cfg.compose_command} onChange={() => {}} readOnly />
           </GroupCard>
 
           {/* Feature Flags */}
           <GroupCard
-            icon={<Zap size={16} className="text-amber-400" />}
-            title="Feature Flags"
+            icon={<Zap size={16} className="text-slate-400" />}
+            title="Feature flags"
             description="Toggle framework features on or off"
 
           >
             <ToggleRow
-              label="Show Banners"
+              label="Show banners"
               description="Display ASCII art banners during startup and shutdown"
               configKey="SHOW_BANNERS"
               value={Boolean(edits.SHOW_BANNERS ?? cfg.show_banners)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Skip Healthcheck Wait"
+              label="Skip health check wait"
               description="Don't wait for containers to pass health checks during startup"
               configKey="SKIP_HEALTHCHECK_WAIT"
               value={Boolean(edits.SKIP_HEALTHCHECK_WAIT ?? cfg.skip_healthcheck_wait)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Continue on Failure"
+              label="Continue on failure"
               description="Continue stack operations even if one stack fails"
               configKey="CONTINUE_ON_FAILURE"
               value={Boolean(edits.CONTINUE_ON_FAILURE ?? cfg.continue_on_failure)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Remove Volumes on Stop"
+              label="Remove volumes on stop"
               description="Delete anonymous volumes when stopping stacks"
               configKey="REMOVE_VOLUMES_ON_STOP"
               value={Boolean(edits.REMOVE_VOLUMES_ON_STOP ?? cfg.remove_volumes_on_stop)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Aggressive Image Prune"
+              label="Aggressive image prune"
               description="Prune all unused images, not just dangling ones"
               configKey="AGGRESSIVE_IMAGE_PRUNE"
               value={Boolean(edits.AGGRESSIVE_IMAGE_PRUNE ?? cfg.aggressive_image_prune)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Update Notifications"
-              description="Send NTFY notifications when stack images are updated"
+              label="Update notifications"
+              description="Send ntfy notifications when stack images are updated"
               configKey="UPDATE_NOTIFICATION"
               value={Boolean(edits.UPDATE_NOTIFICATION ?? cfg.update_notification)}
               onChange={handleBoolChange}
@@ -673,20 +726,20 @@ export default function Config() {
 
           {/* Display & Colors */}
           <GroupCard
-            icon={<Palette size={16} className="text-violet-400" />}
-            title="Display & Colors"
+            icon={<Palette size={16} className="text-slate-400" />}
+            title="Display & colors"
             description="Terminal output appearance settings"
 
           >
             <ToggleRow
-              label="Enable Colors"
+              label="Enable colors"
               description="Enable colored terminal output for logs and banners"
               configKey="ENABLE_COLORS"
               value={Boolean(edits.ENABLE_COLORS ?? cfg.enable_colors ?? true)}
               onChange={handleBoolChange}
             />
             <SelectRow
-              label="Color Mode"
+              label="Color mode"
               description="When to use color output"
               configKey="COLOR_MODE"
               value={String(edits.COLOR_MODE ?? cfg.color_mode ?? 'auto')}
@@ -694,28 +747,28 @@ export default function Config() {
               onChange={handleStringChange}
             />
             <ToggleRow
-              label="Force Color"
+              label="Force color"
               description="Force color output regardless of terminal type detection"
               configKey="FORCE_COLOR"
               value={Boolean(edits.FORCE_COLOR ?? cfg.force_color ?? false)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Verbose Mode"
+              label="Verbose mode"
               description="Show additional detail in command output"
               configKey="VERBOSE_MODE"
               value={Boolean(edits.VERBOSE_MODE ?? cfg.verbose_mode ?? false)}
               onChange={handleBoolChange}
             />
             <ToggleRow
-              label="Show System Info"
+              label="Show system info"
               description="Display system information during startup"
               configKey="SHOW_SYSTEM_INFO"
               value={Boolean(edits.SHOW_SYSTEM_INFO ?? cfg.show_system_info ?? true)}
               onChange={handleBoolChange}
             />
             <NumberRow
-              label="Progress Bar Width"
+              label="Progress bar width"
               description="Character width of progress bars in terminal output"
               configKey="PROGRESS_BAR_WIDTH"
               value={Number(edits.PROGRESS_BAR_WIDTH ?? cfg.progress_bar_width ?? 50)}
@@ -727,26 +780,26 @@ export default function Config() {
 
           {/* Log Formatting */}
           <GroupCard
-            icon={<ScrollText size={16} className="text-cyan-400" />}
-            title="Log Formatting"
+            icon={<ScrollText size={16} className="text-slate-400" />}
+            title="Log formatting"
             description="Customize log output format and metadata"
 
           >
             <ToggleRow
-              label="Log Timestamps"
+              label="Log timestamps"
               description="Include date/time in log entries"
               configKey="ENABLE_LOG_DATE"
               value={Boolean(edits.ENABLE_LOG_DATE ?? cfg.enable_log_date ?? true)}
               onChange={handleBoolChange}
             />
-            <NumberRow label="Log Backup Count" description="Number of rotated log archives to keep" configKey="LOG_BACKUP_COUNT" value={Number(edits.LOG_BACKUP_COUNT ?? 12)} onChange={handleNumberChange} min={1} max={100} />
-            <ToggleRow label="Structured Logging" description="Enable JSONL structured log output" configKey="ENABLE_STRUCTURED_LOGGING" value={Boolean(edits.ENABLE_STRUCTURED_LOGGING)} onChange={handleBoolChange} />
+            <NumberRow label="Log backup count" description="Number of rotated log archives to keep" configKey="LOG_BACKUP_COUNT" value={Number(edits.LOG_BACKUP_COUNT ?? 12)} onChange={handleNumberChange} min={1} max={100} />
+            <ToggleRow label="Structured logging" description="Enable JSONL structured log output" configKey="ENABLE_STRUCTURED_LOGGING" value={Boolean(edits.ENABLE_STRUCTURED_LOGGING)} onChange={handleBoolChange} />
           </GroupCard>
 
           {/* API Server */}
           <GroupCard
-            icon={<Server size={16} className="text-emerald-400" />}
-            title="API Server"
+            icon={<Server size={16} className="text-slate-400" />}
+            title="API server"
             description="REST API server settings"
 
           >
@@ -767,7 +820,7 @@ export default function Config() {
               </div>
             )}
             <ToggleRow
-              label="API Enabled"
+              label="API enabled"
               description={isConnected && !cfg.api_enabled ? 'API is running manually — enable this to auto-start with ./start.sh' : 'Enable or disable the REST API server on startup'}
               configKey="API_ENABLED"
               value={Boolean(edits.API_ENABLED ?? cfg.api_enabled ?? true)}
@@ -783,7 +836,7 @@ export default function Config() {
               max={65535}
             />
             <TextRow
-              label="Bind Address"
+              label="Bind address"
               description="Network interface to bind to (0.0.0.0 for all)"
               configKey="API_BIND"
               value={String(edits.API_BIND ?? cfg.api_bind)}
@@ -791,46 +844,33 @@ export default function Config() {
               placeholder="0.0.0.0"
             />
             <ToggleRow label="Authentication" description="Require auth for API requests (auto-enabled when bound to 0.0.0.0)" configKey="API_AUTH_ENABLED" value={Boolean(edits.API_AUTH_ENABLED ?? true)} onChange={handleBoolChange} />
-            <NumberRow label="Rate Limit" description="Max requests per window per IP" configKey="API_RATE_LIMIT" value={Number(edits.API_RATE_LIMIT ?? 600)} onChange={handleNumberChange} min={10} max={10000} />
-            <NumberRow label="Rate Window" description="Rate limit window in seconds" configKey="API_RATE_WINDOW" value={Number(edits.API_RATE_WINDOW ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
-            <NumberRow label="Token Expiry" description="Session token lifetime in seconds (86400 = 24h)" configKey="API_TOKEN_EXPIRY" value={Number(edits.API_TOKEN_EXPIRY ?? 86400)} onChange={handleNumberChange} min={300} max={604800} />
-            <ToggleRow label="Single Session" description="Allow only one active session per user" configKey="API_SINGLE_SESSION" value={Boolean(edits.API_SINGLE_SESSION)} onChange={handleBoolChange} />
-            <TextRow label="CORS Origins" description="Comma-separated allowed origins (empty = same-origin only)" configKey="API_CORS_ORIGINS" value={String(edits.API_CORS_ORIGINS ?? '')} onChange={handleStringChange} placeholder="http://localhost:3000" />
-            <TextRow label="IP Whitelist" description="Comma-separated allowed IPs/CIDRs (empty = allow all)" configKey="API_IP_WHITELIST" value={String(edits.API_IP_WHITELIST ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24,10.0.0.5" />
-            <NumberRow label="Max Login Attempts" description="Failed login attempts before lockout" configKey="API_MAX_LOGIN_ATTEMPTS" value={Number(edits.API_MAX_LOGIN_ATTEMPTS ?? 5)} onChange={handleNumberChange} min={1} max={20} />
-            <NumberRow label="Lockout Duration" description="Seconds of lockout after max failed attempts" configKey="API_LOCKOUT_DURATION" value={Number(edits.API_LOCKOUT_DURATION ?? 900)} onChange={handleNumberChange} min={60} max={86400} />
-            <NumberRow label="Invite Expiry" description="Invite code validity in seconds (604800 = 7 days)" configKey="API_INVITE_EXPIRY" value={Number(edits.API_INVITE_EXPIRY ?? 604800)} onChange={handleNumberChange} min={3600} max={2592000} />
-            <NumberRow label="Max Body Size" description="Maximum request body size in bytes" configKey="API_MAX_BODY_SIZE" value={Number(edits.API_MAX_BODY_SIZE ?? 1048576)} onChange={handleNumberChange} min={65536} max={10485760} />
-            <NumberRow label="Terminal Session Expiry" description="Terminal session validity in seconds (14400 = 4h)" configKey="TERMINAL_SESSION_EXPIRY" value={Number(edits.TERMINAL_SESSION_EXPIRY ?? 14400)} onChange={handleNumberChange} min={300} max={86400} />
+            <NumberRow label="Rate limit" description="Max requests per window per IP" configKey="API_RATE_LIMIT" value={Number(edits.API_RATE_LIMIT ?? 600)} onChange={handleNumberChange} min={10} max={10000} />
+            <NumberRow label="Rate window" description="Rate limit window in seconds" configKey="API_RATE_WINDOW" value={Number(edits.API_RATE_WINDOW ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
+            <NumberRow label="Token expiry" description="Session token lifetime in seconds (86400 = 24h)" configKey="API_TOKEN_EXPIRY" value={Number(edits.API_TOKEN_EXPIRY ?? 86400)} onChange={handleNumberChange} min={300} max={604800} />
+            <ToggleRow label="Single session" description="Allow only one active session per user" configKey="API_SINGLE_SESSION" value={Boolean(edits.API_SINGLE_SESSION)} onChange={handleBoolChange} />
+            <TextRow label="CORS origins" description="Comma-separated allowed origins (empty = same-origin only)" configKey="API_CORS_ORIGINS" value={String(edits.API_CORS_ORIGINS ?? '')} onChange={handleStringChange} placeholder="http://localhost:3000" />
+            <TextRow label="IP whitelist" description="Comma-separated allowed IPs/CIDRs (empty = allow all)" configKey="API_IP_WHITELIST" value={String(edits.API_IP_WHITELIST ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24,10.0.0.5" />
+            <NumberRow label="Max login attempts" description="Failed login attempts before lockout" configKey="API_MAX_LOGIN_ATTEMPTS" value={Number(edits.API_MAX_LOGIN_ATTEMPTS ?? 5)} onChange={handleNumberChange} min={1} max={20} />
+            <NumberRow label="Lockout duration" description="Seconds of lockout after max failed attempts" configKey="API_LOCKOUT_DURATION" value={Number(edits.API_LOCKOUT_DURATION ?? 900)} onChange={handleNumberChange} min={60} max={86400} />
+            <NumberRow label="Invite expiry" description="Invite code validity in seconds (604800 = 7 days)" configKey="API_INVITE_EXPIRY" value={Number(edits.API_INVITE_EXPIRY ?? 604800)} onChange={handleNumberChange} min={3600} max={2592000} />
+            <NumberRow label="Max body size" description="Maximum request body size in bytes" configKey="API_MAX_BODY_SIZE" value={Number(edits.API_MAX_BODY_SIZE ?? 1048576)} onChange={handleNumberChange} min={65536} max={10485760} />
+            <NumberRow label="Terminal session expiry" description="Terminal session validity in seconds (14400 = 4h)" configKey="TERMINAL_SESSION_EXPIRY" value={Number(edits.TERMINAL_SESSION_EXPIRY ?? 14400)} onChange={handleNumberChange} min={300} max={86400} />
           </GroupCard>
 
           {/* Notifications */}
           <GroupCard
-            icon={<Bell size={16} className="text-amber-400" />}
+            icon={<Bell size={16} className="text-slate-400" />}
             title="Notifications"
             description="ntfy push notifications and the Discord webhook"
 
           >
-            <div className="flex items-center gap-2 py-3 border-b border-white/[0.03]">
-              <span className="text-sm font-medium text-slate-200">Status</span>
-              <span className="ml-auto">
-                {cfg.ntfy_configured ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Configured
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                    Not Configured
-                  </span>
-                )}
-              </span>
-            </div>
+            <Row label="Status">
+              {cfg.ntfy_configured ? <StatePill tone="ok">Configured</StatePill> : <StatePill tone="off">Not configured</StatePill>}
+            </Row>
             <SectionLabel>ntfy push</SectionLabel>
             <TextRow
-              label="NTFY Server URL"
-              description="URL of your NTFY server (e.g., https://ntfy.sh)"
+              label="ntfy server URL"
+              description="URL of your ntfy server, for example https://ntfy.sh"
               configKey="NTFY_URL"
               value={String(edits.NTFY_URL ?? cfg.ntfy_url ?? '')}
               onChange={handleStringChange}
@@ -838,7 +878,7 @@ export default function Config() {
             />
             <TextRow
               label="Topic"
-              description="NTFY topic name to publish notifications to"
+              description="ntfy topic to publish notifications to"
               configKey="NTFY_TOPIC"
               value={String(edits.NTFY_TOPIC ?? cfg.ntfy_topic ?? '')}
               onChange={handleStringChange}
@@ -886,60 +926,44 @@ export default function Config() {
               options={['min', 'low', 'default', 'high', 'urgent']}
               onChange={handleStringChange}
             />
-            <TextRow label="Notification Stacks" description="Comma-separated stacks to notify about (empty = all)" configKey="NOTIFICATION_STACKS" value={String(edits.NOTIFICATION_STACKS ?? '')} onChange={handleStringChange} placeholder="core-infrastructure,web-applications" />
+            <TextRow label="Notification stacks" description="Comma-separated stacks to notify about (empty = all)" configKey="NOTIFICATION_STACKS" value={String(edits.NOTIFICATION_STACKS ?? '')} onChange={handleStringChange} placeholder="core-infrastructure,web-applications" />
             <TextRow label="Portainer URL" description="Portainer dashboard link for notification buttons" configKey="PORTAINER_URL" value={String(edits.PORTAINER_URL ?? '')} onChange={handleStringChange} placeholder="https://portainer.example.com" />
-            <TextRow label="Dashboard Icon URL" description="Custom icon URL for notification action buttons" configKey="DASHBOARD_ICON_URL" value={String(edits.DASHBOARD_ICON_URL ?? '')} onChange={handleStringChange} />
+            <TextRow label="Dashboard icon URL" description="Custom icon URL for notification action buttons" configKey="DASHBOARD_ICON_URL" value={String(edits.DASHBOARD_ICON_URL ?? '')} onChange={handleStringChange} />
           </GroupCard>
 
           {/* Security */}
           <GroupCard
-            icon={<Shield size={16} className="text-rose-400" />}
+            icon={<Shield size={16} className="text-slate-400" />}
             title="Security"
             description="Access control and safety settings"
 
           >
-            <div className="py-3 border-b border-white/[0.03]">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-sm font-medium text-slate-200">Config Protection</span>
-                  <p className="text-xs text-slate-500 mt-0.5">Configuration changes are backed up before being applied</p>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-400">
-                  <Check size={10} />
-                  Active
-                </span>
-              </div>
-            </div>
-            <div className="py-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-sm font-medium text-slate-200">API Whitelist</span>
-                  <p className="text-xs text-slate-500 mt-0.5">Only whitelisted configuration keys can be modified via API</p>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-400">
-                  <Check size={10} />
-                  Active
-                </span>
-              </div>
-            </div>
-            <ToggleRow label="TLS Enabled" description="Direct TLS termination on the API server" configKey="API_TLS_ENABLED" value={Boolean(edits.API_TLS_ENABLED)} onChange={handleBoolChange} />
-            <ToggleRow label="Behind TLS Proxy" description="API is behind a TLS-terminating proxy (enables HSTS)" configKey="API_BEHIND_TLS_PROXY" value={Boolean(edits.API_BEHIND_TLS_PROXY)} onChange={handleBoolChange} />
+            <Row label="Config protection" description="Configuration changes are backed up before being applied">
+              <StatePill tone="ok">Active</StatePill>
+            </Row>
+            <Row label="API whitelist" description="Only whitelisted configuration keys can be modified via the API">
+              <StatePill tone="ok">Active</StatePill>
+            </Row>
+            <ToggleRow label="TLS enabled" description="Direct TLS termination on the API server" configKey="API_TLS_ENABLED" value={Boolean(edits.API_TLS_ENABLED)} onChange={handleBoolChange} />
+            <ToggleRow label="Behind TLS proxy" description="API is behind a TLS-terminating proxy (enables HSTS)" configKey="API_BEHIND_TLS_PROXY" value={Boolean(edits.API_BEHIND_TLS_PROXY)} onChange={handleBoolChange} />
           </GroupCard>
 
           {/* ── Traefik / DNS ── */}
           <GroupCard
-            icon={<Network size={16} className="text-cyan-400" />}
+            icon={<Network size={16} className="text-slate-400" />}
             title="Traefik & DNS"
             description="Reverse proxy, ACME certificates, and dynamic DNS"
 
           >
-            <TextRow label="Traefik Domain" description="Primary domain for auto-routing" configKey="TRAEFIK_DOMAIN" value={String(edits.TRAEFIK_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
-            <TextRow label="ACME Email" description="Email for Let's Encrypt certificates" configKey="TRAEFIK_ACME_EMAIL" value={String(edits.TRAEFIK_ACME_EMAIL ?? '')} onChange={handleStringChange} placeholder="admin@example.com" />
-            <ToggleRow label="Cloudflare DNS Token" description={cfg?.cf_dns_api_token_set ? 'A Cloudflare API token is configured' : 'No Cloudflare token set — configure via .env'} configKey="_CF_TOKEN_SET" value={cfg?.cf_dns_api_token_set ?? false} onChange={() => {}} disabled />
-            <ToggleRow label="DDNS Enabled" description="Periodically update DNS A records with current public IP" configKey="DDNS_ENABLED" value={Boolean(edits.DDNS_ENABLED)} onChange={handleBoolChange} />
-            <NumberRow label="DDNS Interval" description="Seconds between DDNS update checks" configKey="DDNS_INTERVAL" value={Number(edits.DDNS_INTERVAL ?? 300)} onChange={handleNumberChange} min={60} max={3600} />
+            <TextRow label="Traefik domain" description="Primary domain for auto-routing" configKey="TRAEFIK_DOMAIN" value={String(edits.TRAEFIK_DOMAIN ?? '')} onChange={handleStringChange} placeholder="example.com" />
+            <TextRow label="ACME email" description="Email for Let's Encrypt certificates" configKey="TRAEFIK_ACME_EMAIL" value={String(edits.TRAEFIK_ACME_EMAIL ?? '')} onChange={handleStringChange} placeholder="admin@example.com" />
+            <Row label="Cloudflare DNS token" description={cfg?.cf_dns_api_token_set ? 'A Cloudflare API token is configured' : 'No Cloudflare token set — configure via .env'}>
+              {cfg?.cf_dns_api_token_set ? <StatePill tone="ok">Set</StatePill> : <StatePill tone="off">Not set</StatePill>}
+            </Row>
+            <ToggleRow label="DDNS enabled" description="Periodically update DNS A records with current public IP" configKey="DDNS_ENABLED" value={Boolean(edits.DDNS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="DDNS interval" description="Seconds between DDNS update checks" configKey="DDNS_INTERVAL" value={Number(edits.DDNS_INTERVAL ?? 300)} onChange={handleNumberChange} min={60} max={3600} />
             <TextRow label="Trusted LAN" description="CIDR subnet for Traefik IP-based access rules" configKey="TRAEFIK_TRUSTED_LAN" value={String(edits.TRAEFIK_TRUSTED_LAN ?? '')} onChange={handleStringChange} placeholder="192.168.1.0/24" />
-            <TextRow label="DDNS Subdomains" description="DNS records to update (@ = root, * = wildcard)" configKey="DDNS_SUBDOMAINS" value={String(edits.DDNS_SUBDOMAINS ?? '@')} onChange={handleStringChange} />
+            <TextRow label="DDNS subdomains" description="DNS records to update (@ = root, * = wildcard)" configKey="DDNS_SUBDOMAINS" value={String(edits.DDNS_SUBDOMAINS ?? '@')} onChange={handleStringChange} />
             <SectionLabel>Traefik in another VM or machine (route feed)</SectionLabel>
             <ToggleRow label="Publish routes as a feed" description="The Traefik that fronts this host runs elsewhere — the networking VM of a Proxmox layout, or a friend's proxy box. It pulls every route DCS makes with its HTTP provider; nothing to install there" configKey="TRAEFIK_FEED_ENABLED" value={Boolean(edits.TRAEFIK_FEED_ENABLED)} onChange={handleBoolChange} />
             <TextRow label="Target host" description={`How that Traefik reaches this machine (empty = ${cfg?.traefik_feed_detected_host || 'the detected LAN IP'})`} configKey="TRAEFIK_FEED_TARGET_HOST" value={String(edits.TRAEFIK_FEED_TARGET_HOST ?? '')} onChange={handleStringChange} placeholder={cfg?.traefik_feed_detected_host || '192.168.1.10'} />
@@ -954,13 +978,13 @@ export default function Config() {
 
           {/* ── Proxmox ── */}
           <GroupCard
-            icon={<Server size={16} className="text-amber-400" />}
+            icon={<Server size={16} className="text-slate-400" />}
             title="Proxmox"
             description="Show and power the VMs and containers of a Proxmox host or cluster"
           >
             <TextRow label="Proxmox URL" description="The web UI address, port included" configKey="PROXMOX_URL" value={String(edits.PROXMOX_URL ?? '')} onChange={handleStringChange} placeholder="https://pve.example.com:8006" />
             <TextRow label="API token ID" description="Datacenter → Permissions → API Tokens (user@realm!name); needs VM.Audit, VM.PowerMgmt, Sys.Audit on /" configKey="PROXMOX_TOKEN_ID" value={String(edits.PROXMOX_TOKEN_ID ?? '')} onChange={handleStringChange} placeholder="dcs@pve!dcs" />
-            <TextRow label="Token secret" description={cfg?.proxmox_token_secret_source === 'secret' ? 'Kept in the secret store (Secrets page); type a new one to replace it' : cfg?.proxmox_token_secret_source === 'env' ? 'Kept in .env — type it again and Save moves it to the secret store' : 'Shown once when the token was made; Save keeps it in the secret store, never in .env'} configKey="PROXMOX_TOKEN_SECRET" value={String(edits.PROXMOX_TOKEN_SECRET ?? '')} onChange={handleStringChange} placeholder={cfg?.proxmox_token_secret_set ? '••••••••' : 'xxxxxxxx-xxxx-…'} type="password" />
+            <TextRow label="Token secret" description={cfg?.proxmox_token_secret_source === 'secret' ? `Kept in the secret store (${pageLabel('secrets')} page); type a new one to replace it` : cfg?.proxmox_token_secret_source === 'env' ? 'Kept in .env — type it again and Save moves it to the secret store' : 'Shown once when the token was made; Save keeps it in the secret store, never in .env'} configKey="PROXMOX_TOKEN_SECRET" value={String(edits.PROXMOX_TOKEN_SECRET ?? '')} onChange={handleStringChange} placeholder={cfg?.proxmox_token_secret_set ? '••••••••' : 'xxxxxxxx-xxxx-…'} type="password" />
             <ToggleRow label="Verify certificate" description="Off for the self-signed certificate Proxmox ships with" configKey="PROXMOX_VERIFY_TLS" value={Boolean(edits.PROXMOX_VERIFY_TLS ?? true)} onChange={handleBoolChange} />
             <TextRow label="Only this node" description="Optional: hide the other nodes of a cluster" configKey="PROXMOX_NODE" value={String(edits.PROXMOX_NODE ?? '')} onChange={handleStringChange} placeholder="pve" />
             <ProxmoxTestPanel url={String(edits.PROXMOX_URL ?? '')} tokenId={String(edits.PROXMOX_TOKEN_ID ?? '')} tokenSecret={String(edits.PROXMOX_TOKEN_SECRET ?? '')} verifyTls={Boolean(edits.PROXMOX_VERIFY_TLS ?? true)} secretSource={cfg?.proxmox_token_secret_source ?? ''} onOpenSecrets={() => setCurrentPage('secrets')} />
@@ -968,99 +992,99 @@ export default function Config() {
 
           {/* ── Docker ── */}
           <GroupCard
-            icon={<Container size={16} className="text-cyan-400" />}
+            icon={<Container size={16} className="text-slate-400" />}
             title="Docker"
             description="Container engine and stack management"
 
           >
-            <NumberRow label="Service Start Delay" description="Seconds to wait between starting each stack" configKey="SERVICE_START_DELAY" value={Number(edits.SERVICE_START_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
-            <NumberRow label="Service Stop Delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
-            <SelectRow label="Compose Version" description="Docker Compose version detection mode" configKey="DOCKER_COMPOSE_VERSION" value={String(edits.DOCKER_COMPOSE_VERSION ?? 'auto')} onChange={handleStringChange} options={['auto', 'v1', 'v2']} />
-            <TextRow label="Stack Startup Order" description="Space-separated stack names defining startup sequence" configKey="DOCKER_STACKS" value={String(edits.DOCKER_STACKS ?? '')} onChange={handleStringChange} />
+            <NumberRow label="Service start delay" description="Seconds to wait between starting each stack" configKey="SERVICE_START_DELAY" value={Number(edits.SERVICE_START_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
+            <NumberRow label="Service stop delay" description="Seconds to wait between stopping each stack" configKey="SERVICE_STOP_DELAY" value={Number(edits.SERVICE_STOP_DELAY ?? 0)} onChange={handleNumberChange} min={0} max={30} />
+            <SelectRow label="Compose version" description="Docker Compose version detection mode" configKey="DOCKER_COMPOSE_VERSION" value={String(edits.DOCKER_COMPOSE_VERSION ?? 'auto')} onChange={handleStringChange} options={['auto', 'v1', 'v2']} />
+            <TextRow label="Stack startup order" description="Space-separated stack names defining startup sequence" configKey="DOCKER_STACKS" value={String(edits.DOCKER_STACKS ?? '')} onChange={handleStringChange} />
           </GroupCard>
 
           {/* ── Health & Monitoring ── */}
           <GroupCard
-            icon={<HeartPulse size={16} className="text-rose-400" />}
-            title="Health & Monitoring"
+            icon={<HeartPulse size={16} className="text-slate-400" />}
+            title="Health & monitoring"
             description="Health checks and container prioritization"
 
           >
-            <ToggleRow label="Post-Startup Health Check" description="Run a health check after all stacks start" configKey="ENABLE_POST_STARTUP_HEALTH_CHECK" value={Boolean(edits.ENABLE_POST_STARTUP_HEALTH_CHECK)} onChange={handleBoolChange} />
-            <NumberRow label="Health Check Delay" description="Seconds to wait before the health check" configKey="HEALTH_CHECK_DELAY" value={Number(edits.HEALTH_CHECK_DELAY ?? 10)} onChange={handleNumberChange} min={0} max={120} />
-            <TextRow label="Critical Containers" description="Comma-separated names — unhealthy triggers critical alerts" configKey="CRITICAL_CONTAINERS" value={String(edits.CRITICAL_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="traefik,pihole" />
-            <TextRow label="Important Containers" description="Comma-separated names — unhealthy triggers warnings" configKey="IMPORTANT_CONTAINERS" value={String(edits.IMPORTANT_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="plex,nextcloud" />
+            <ToggleRow label="Post-startup health check" description="Run a health check after all stacks start" configKey="ENABLE_POST_STARTUP_HEALTH_CHECK" value={Boolean(edits.ENABLE_POST_STARTUP_HEALTH_CHECK)} onChange={handleBoolChange} />
+            <NumberRow label="Health check delay" description="Seconds to wait before the health check" configKey="HEALTH_CHECK_DELAY" value={Number(edits.HEALTH_CHECK_DELAY ?? 10)} onChange={handleNumberChange} min={0} max={120} />
+            <TextRow label="Critical containers" description="Comma-separated names — unhealthy triggers critical alerts" configKey="CRITICAL_CONTAINERS" value={String(edits.CRITICAL_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="traefik,pihole" />
+            <TextRow label="Important containers" description="Comma-separated names — unhealthy triggers warnings" configKey="IMPORTANT_CONTAINERS" value={String(edits.IMPORTANT_CONTAINERS ?? '')} onChange={handleStringChange} placeholder="plex,nextcloud" />
           </GroupCard>
 
           {/* ── Metrics & Features ── */}
           <GroupCard
-            icon={<Activity size={16} className="text-violet-400" />}
-            title="Metrics & Features"
+            icon={<Activity size={16} className="text-slate-400" />}
+            title="Metrics & features"
             description="Optional subsystems — metrics, scheduler, plugins, rollback"
 
           >
-            <ToggleRow label="Metrics Collection" description="Collect CPU, memory, disk metrics at regular intervals" configKey="METRICS_ENABLED" value={Boolean(edits.METRICS_ENABLED)} onChange={handleBoolChange} />
-            <NumberRow label="Metrics Interval" description="Seconds between metrics snapshots" configKey="METRICS_COLLECT_INTERVAL" value={Number(edits.METRICS_COLLECT_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={600} />
+            <ToggleRow label="Metrics collection" description="Collect CPU, memory, disk metrics at regular intervals" configKey="METRICS_ENABLED" value={Boolean(edits.METRICS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="Metrics interval" description="Seconds between metrics snapshots" configKey="METRICS_COLLECT_INTERVAL" value={Number(edits.METRICS_COLLECT_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={600} />
             <ToggleRow label="Rollback" description="Snapshot compose files before changes for one-click rollback" configKey="ROLLBACK_ENABLED" value={Boolean(edits.ROLLBACK_ENABLED)} onChange={handleBoolChange} />
             <ToggleRow label="Plugins" description="Load plugins from .plugins/ directory" configKey="PLUGINS_ENABLED" value={Boolean(edits.PLUGINS_ENABLED)} onChange={handleBoolChange} />
-            <ToggleRow label="Plugin Hooks" description="Fire plugin hooks on stack start/stop/update events" configKey="PLUGINS_HOOKS_ENABLED" value={Boolean(edits.PLUGINS_HOOKS_ENABLED)} onChange={handleBoolChange} />
-            <NumberRow label="Metrics Retention Days" description="Days of metrics history to keep" configKey="METRICS_RETENTION_DAYS" value={Number(edits.METRICS_RETENTION_DAYS ?? 7)} onChange={handleNumberChange} min={1} max={90} />
-            <NumberRow label="Rollback Max Snapshots" description="Maximum compose snapshots per stack" configKey="ROLLBACK_MAX_SNAPSHOTS" value={Number(edits.ROLLBACK_MAX_SNAPSHOTS ?? 10)} onChange={handleNumberChange} min={1} max={50} />
-            <NumberRow label="Scheduler Check Interval" description="Seconds between scheduler checks" configKey="SCHEDULER_CHECK_INTERVAL" value={Number(edits.SCHEDULER_CHECK_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
+            <ToggleRow label="Plugin hooks" description="Fire plugin hooks on stack start/stop/update events" configKey="PLUGINS_HOOKS_ENABLED" value={Boolean(edits.PLUGINS_HOOKS_ENABLED)} onChange={handleBoolChange} />
+            <NumberRow label="Metrics retention days" description="Days of metrics history to keep" configKey="METRICS_RETENTION_DAYS" value={Number(edits.METRICS_RETENTION_DAYS ?? 7)} onChange={handleNumberChange} min={1} max={90} />
+            <NumberRow label="Rollback max snapshots" description="Maximum compose snapshots per stack" configKey="ROLLBACK_MAX_SNAPSHOTS" value={Number(edits.ROLLBACK_MAX_SNAPSHOTS ?? 10)} onChange={handleNumberChange} min={1} max={50} />
+            <NumberRow label="Scheduler check interval" description="Seconds between scheduler checks" configKey="SCHEDULER_CHECK_INTERVAL" value={Number(edits.SCHEDULER_CHECK_INTERVAL ?? 60)} onChange={handleNumberChange} min={10} max={3600} />
           </GroupCard>
 
           {/* ── Backup ── */}
           <GroupCard
-            icon={<HardDrive size={16} className="text-amber-400" />}
+            icon={<HardDrive size={16} className="text-slate-400" />}
             title="Backup"
             description="Automated backup source, destination, and retention"
 
           >
-            <TextRow label="Source Directory" description="Path to back up (typically your Stacks or App-Data)" configKey="BACKUP_SOURCE_DIR" value={String(edits.BACKUP_SOURCE_DIR ?? '')} onChange={handleStringChange} placeholder="/opt/docker" />
-            <TextRow label="Destination Directory" description="Where backups are stored" configKey="BACKUP_DEST_DIR" value={String(edits.BACKUP_DEST_DIR ?? '')} onChange={handleStringChange} placeholder="/mnt/backup" />
-            <NumberRow label="Retention Count" description="Number of backup copies to keep" configKey="BACKUP_RETENTION_COUNT" value={Number(edits.BACKUP_RETENTION_COUNT ?? 7)} onChange={handleNumberChange} min={1} max={90} />
+            <TextRow label="Source directory" description="Path to back up (typically your Stacks or App-Data)" configKey="BACKUP_SOURCE_DIR" value={String(edits.BACKUP_SOURCE_DIR ?? '')} onChange={handleStringChange} placeholder="/opt/docker" />
+            <TextRow label="Destination directory" description="Where backups are stored" configKey="BACKUP_DEST_DIR" value={String(edits.BACKUP_DEST_DIR ?? '')} onChange={handleStringChange} placeholder="/mnt/backup" />
+            <NumberRow label="Retention count" description="Number of backup copies to keep" configKey="BACKUP_RETENTION_COUNT" value={Number(edits.BACKUP_RETENTION_COUNT ?? 7)} onChange={handleNumberChange} min={1} max={90} />
           </GroupCard>
 
           {/* ── Recovery bundle ── */}
           <GroupCard
-            icon={<LifeBuoy size={16} className="text-rose-300" />}
-            title="Recovery Bundle"
-            description="One encrypted archive that rebuilds this install anywhere (Backup page creates it)"
+            icon={<LifeBuoy size={16} className="text-slate-400" />}
+            title="Recovery bundle"
+            description={`One encrypted archive that rebuilds this install anywhere (the ${pageLabel('backup')} page creates it)`}
           >
-            <TextRow label="Destination Directory" description="Where bundles are written (default: backup destination/recovery, else .data/recovery)" configKey="RECOVERY_DEST_DIR" value={String(edits.RECOVERY_DEST_DIR ?? cfg.recovery_dest_dir ?? '')} onChange={handleStringChange} placeholder="/mnt/backup/recovery" />
-            <TextRow label="Off-box Copy" description="rsync target (user@nas:/backups/dcs) or a mounted path that receives every bundle" configKey="RECOVERY_REMOTE" value={String(edits.RECOVERY_REMOTE ?? cfg.recovery_remote ?? '')} onChange={handleStringChange} placeholder="user@nas:/backups/dcs" />
-            <NumberRow label="Bundles to Keep" description="Older bundles are removed" configKey="RECOVERY_RETENTION_COUNT" value={Number(edits.RECOVERY_RETENTION_COUNT ?? cfg.recovery_retention_count ?? 10)} onChange={handleNumberChange} min={1} max={100} />
+            <TextRow label="Destination directory" description="Where bundles are written (default: backup destination/recovery, else .data/recovery)" configKey="RECOVERY_DEST_DIR" value={String(edits.RECOVERY_DEST_DIR ?? cfg.recovery_dest_dir ?? '')} onChange={handleStringChange} placeholder="/mnt/backup/recovery" />
+            <TextRow label="Off-box copy" description="rsync target (user@nas:/backups/dcs) or a mounted path that receives every bundle" configKey="RECOVERY_REMOTE" value={String(edits.RECOVERY_REMOTE ?? cfg.recovery_remote ?? '')} onChange={handleStringChange} placeholder="user@nas:/backups/dcs" />
+            <NumberRow label="Bundles to keep" description="Older bundles are removed" configKey="RECOVERY_RETENTION_COUNT" value={Number(edits.RECOVERY_RETENTION_COUNT ?? cfg.recovery_retention_count ?? 10)} onChange={handleNumberChange} min={1} max={100} />
           </GroupCard>
 
           {/* ── Power (UPS) ── */}
           <GroupCard
-            icon={<BatteryCharging size={16} className="text-lime-400" />}
+            icon={<BatteryCharging size={16} className="text-slate-400" />}
             title="Power (UPS)"
             description="Watch a UPS, alert on battery, stop the stacks cleanly before it runs out"
           >
-            <ToggleRow label="UPS Watch" description="Poll the UPS from the API (restart the API after changing these settings)" configKey="UPS_ENABLED" value={Boolean(edits.UPS_ENABLED ?? cfg.ups_enabled)} onChange={handleBoolChange} />
+            <ToggleRow label="UPS watch" description="Poll the UPS from the API (restart the API after changing these settings)" configKey="UPS_ENABLED" value={Boolean(edits.UPS_ENABLED ?? cfg.ups_enabled)} onChange={handleBoolChange} />
             <SelectRow label="Source" description="auto tries a NUT server first, then apcupsd" configKey="UPS_SOURCE" value={String(edits.UPS_SOURCE ?? cfg.ups_source ?? 'auto')} options={['auto', 'nut', 'apcupsd']} onChange={handleStringChange} />
-            <TextRow label="NUT Host" description="NUT server address (the nut-upsd template listens on this host)" configKey="UPS_NUT_HOST" value={String(edits.UPS_NUT_HOST ?? cfg.ups_nut_host ?? '127.0.0.1')} onChange={handleStringChange} placeholder="127.0.0.1" />
-            <NumberRow label="NUT Port" description="NUT server port" configKey="UPS_NUT_PORT" value={Number(edits.UPS_NUT_PORT ?? cfg.ups_nut_port ?? 3493)} onChange={handleNumberChange} min={1} max={65535} />
-            <TextRow label="UPS Name" description="Name of the UPS on the NUT server" configKey="UPS_NAME" value={String(edits.UPS_NAME ?? cfg.ups_name ?? 'ups')} onChange={handleStringChange} placeholder="ups" />
-            <NumberRow label="Poll Interval" description="Seconds between readings" configKey="UPS_POLL_INTERVAL" value={Number(edits.UPS_POLL_INTERVAL ?? cfg.ups_poll_interval ?? 15)} onChange={handleNumberChange} min={5} max={300} />
-            <NumberRow label="Stop at Charge %" description="On battery and at or below this charge, stop every stack" configKey="UPS_SHUTDOWN_CHARGE" value={Number(edits.UPS_SHUTDOWN_CHARGE ?? cfg.ups_shutdown_charge ?? 20)} onChange={handleNumberChange} min={1} max={99} />
-            <NumberRow label="Stop at Runtime (s)" description="On battery and at or below this many seconds left, stop every stack" configKey="UPS_SHUTDOWN_RUNTIME" value={Number(edits.UPS_SHUTDOWN_RUNTIME ?? cfg.ups_shutdown_runtime ?? 300)} onChange={handleNumberChange} min={30} max={7200} />
-            <SelectRow label="On Low Battery" description="stop-stacks runs ./stop.sh --force in order; none only alerts" configKey="UPS_ON_BATTERY_ACTION" value={String(edits.UPS_ON_BATTERY_ACTION ?? cfg.ups_on_battery_action ?? 'stop-stacks')} options={['stop-stacks', 'none']} onChange={handleStringChange} />
-            <TextRow label="Host Shutdown Command" description="Run after the stacks stopped (needs a sudo rule), for example: sudo /sbin/shutdown -h now" configKey="UPS_HOST_SHUTDOWN_CMD" value={String(edits.UPS_HOST_SHUTDOWN_CMD ?? cfg.ups_host_shutdown_cmd ?? '')} onChange={handleStringChange} placeholder="leave empty to keep the host running" />
-            <ToggleRow label="Start Again on Mains" description="Run ./start.sh when power returns after a low-battery stop" configKey="UPS_START_ON_POWER" value={Boolean(edits.UPS_START_ON_POWER ?? cfg.ups_start_on_power)} onChange={handleBoolChange} />
+            <TextRow label="NUT host" description="NUT server address (the nut-upsd template listens on this host)" configKey="UPS_NUT_HOST" value={String(edits.UPS_NUT_HOST ?? cfg.ups_nut_host ?? '127.0.0.1')} onChange={handleStringChange} placeholder="127.0.0.1" />
+            <NumberRow label="NUT port" description="NUT server port" configKey="UPS_NUT_PORT" value={Number(edits.UPS_NUT_PORT ?? cfg.ups_nut_port ?? 3493)} onChange={handleNumberChange} min={1} max={65535} />
+            <TextRow label="UPS name" description="Name of the UPS on the NUT server" configKey="UPS_NAME" value={String(edits.UPS_NAME ?? cfg.ups_name ?? 'ups')} onChange={handleStringChange} placeholder="ups" />
+            <NumberRow label="Poll interval" description="Seconds between readings" configKey="UPS_POLL_INTERVAL" value={Number(edits.UPS_POLL_INTERVAL ?? cfg.ups_poll_interval ?? 15)} onChange={handleNumberChange} min={5} max={300} />
+            <NumberRow label="Stop at charge %" description="On battery and at or below this charge, stop every stack" configKey="UPS_SHUTDOWN_CHARGE" value={Number(edits.UPS_SHUTDOWN_CHARGE ?? cfg.ups_shutdown_charge ?? 20)} onChange={handleNumberChange} min={1} max={99} />
+            <NumberRow label="Stop at runtime (s)" description="On battery and at or below this many seconds left, stop every stack" configKey="UPS_SHUTDOWN_RUNTIME" value={Number(edits.UPS_SHUTDOWN_RUNTIME ?? cfg.ups_shutdown_runtime ?? 300)} onChange={handleNumberChange} min={30} max={7200} />
+            <SelectRow label="On low battery" description="stop-stacks runs ./stop.sh --force in order; none only alerts" configKey="UPS_ON_BATTERY_ACTION" value={String(edits.UPS_ON_BATTERY_ACTION ?? cfg.ups_on_battery_action ?? 'stop-stacks')} options={['stop-stacks', 'none']} onChange={handleStringChange} />
+            <TextRow label="Host shutdown command" description="Run after the stacks stopped (needs a sudo rule), for example: sudo /sbin/shutdown -h now" configKey="UPS_HOST_SHUTDOWN_CMD" value={String(edits.UPS_HOST_SHUTDOWN_CMD ?? cfg.ups_host_shutdown_cmd ?? '')} onChange={handleStringChange} placeholder="leave empty to keep the host running" />
+            <ToggleRow label="Start again on mains" description="Run ./start.sh when power returns after a low-battery stop" configKey="UPS_START_ON_POWER" value={Boolean(edits.UPS_START_ON_POWER ?? cfg.ups_start_on_power)} onChange={handleBoolChange} />
           </GroupCard>
 
           {/* ── Unattended updates ── */}
           <GroupCard
-            icon={<ArrowUpCircle size={16} className="text-emerald-400" />}
-            title="Unattended Updates"
+            icon={<ArrowUpCircle size={16} className="text-slate-400" />}
+            title="Unattended updates"
             description="What a dcs-update schedule does after it applied a release"
           >
-            <ToggleRow label="Auto Rollback" description="Return to the backup tag when the health score drops after the update" configKey="UPDATE_AUTO_ROLLBACK" value={Boolean(edits.UPDATE_AUTO_ROLLBACK ?? cfg.update_auto_rollback ?? true)} onChange={handleBoolChange} />
-            <NumberRow label="Health Grace (s)" description="Seconds to wait before the health score is compared" configKey="UPDATE_HEALTH_GRACE" value={Number(edits.UPDATE_HEALTH_GRACE ?? cfg.update_health_grace ?? 120)} onChange={handleNumberChange} min={30} max={3600} />
-            <NumberRow label="Rollback Drop" description="Points the health score may fall before a rollback" configKey="UPDATE_ROLLBACK_DROP" value={Number(edits.UPDATE_ROLLBACK_DROP ?? cfg.update_rollback_drop ?? 15)} onChange={handleNumberChange} min={1} max={100} />
-            <ToggleRow label="Pull Images on Boot" description="Pull image updates during an unattended boot (slower, otherwise the Updates page and schedules do it)" configKey="UPDATE_ON_BOOT" value={Boolean(edits.UPDATE_ON_BOOT)} onChange={handleBoolChange} />
+            <ToggleRow label="Auto rollback" description="Return to the backup tag when the health score drops after the update" configKey="UPDATE_AUTO_ROLLBACK" value={Boolean(edits.UPDATE_AUTO_ROLLBACK ?? cfg.update_auto_rollback ?? true)} onChange={handleBoolChange} />
+            <NumberRow label="Health grace (s)" description="Seconds to wait before the health score is compared" configKey="UPDATE_HEALTH_GRACE" value={Number(edits.UPDATE_HEALTH_GRACE ?? cfg.update_health_grace ?? 120)} onChange={handleNumberChange} min={30} max={3600} />
+            <NumberRow label="Rollback drop" description="Points the health score may fall before a rollback" configKey="UPDATE_ROLLBACK_DROP" value={Number(edits.UPDATE_ROLLBACK_DROP ?? cfg.update_rollback_drop ?? 15)} onChange={handleNumberChange} min={1} max={100} />
+            <ToggleRow label="Pull images on boot" description={`Pull image updates during an unattended boot (slower, otherwise the ${pageLabel('updates')} page and schedules do it)`} configKey="UPDATE_ON_BOOT" value={Boolean(edits.UPDATE_ON_BOOT)} onChange={handleBoolChange} />
           </GroupCard>
         </div>
       )}

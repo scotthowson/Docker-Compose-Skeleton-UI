@@ -11,7 +11,16 @@ import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { EmptyState, ErrorState } from '../components/common/PageState'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, BTN_SHEET_DANGER,
+  TONE_OK, TONE_QUIET, TONE_GHOST, TONE_GHOST_DANGER,
+} from '../lib/ui'
 import { fetchSecretReferences } from '../api/endpoints'
 import type { SecretEntry, SecretReferencesResponse } from '../../shared/types'
 import ModalOverlay from '../components/common/ModalOverlay'
@@ -44,31 +53,29 @@ function formatDate(iso: string): string {
 const GUIDE_SECTIONS = [
   {
     icon: Lock,
-    color: 'text-amber-400',
     title: 'How it works',
     body: (
       <>
         <p>Each value is encrypted on the server with <span className="text-slate-300">AES-256-CBC</span> and a 256-bit master key stored at <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.secrets/.master-key</code> (mode 600). Values are write-only: you can replace or delete a secret, never read it back from the UI.</p>
-        <p>The same store is used by the API, <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">start.sh</code>, the stack manager and scheduled tasks, so a stack behaves the same however it is started.</p>
+        <p>The same store is used by the API, <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">start.sh</code>, the {pageLabel('stacks')} page and scheduled tasks, so a stack behaves the same however it is started.</p>
         <p>Back up <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.master-key</code> separately: backups and snapshots carry only the encrypted files.</p>
       </>
     ),
   },
   {
     icon: Terminal,
-    color: 'text-emerald-400',
     title: 'Reference a secret',
     body: (
       <>
-        <p>Use the placeholder shown on each card, <span className="text-amber-400 font-mono">{'${SECRETS_NAME}'}</span>, in a compose file or in a stack&apos;s <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.env</code>:</p>
+        <p>Use the placeholder shown on each card, <span className="text-cyan-300 font-mono">{'${SECRETS_NAME}'}</span>, in a compose file or in a stack&apos;s <code className="text-slate-500 bg-white/5 px-1 rounded font-mono text-[10px]">.env</code>:</p>
         <div className="bg-slate-950/60 rounded-lg p-3 font-mono text-[10px] space-y-1 border border-white/5">
           <p className="text-slate-500"># docker-compose.yml</p>
           <p className="text-slate-400">services:</p>
           <p className="text-slate-400">{'  '}homarr:</p>
           <p className="text-slate-400">{'    '}environment:</p>
-          <p className="text-slate-300">{'      '}- DB_PASSWORD=<span className="text-amber-400">{'${SECRETS_HOMARR_PASSWORD}'}</span></p>
+          <p className="text-slate-300">{'      '}- DB_PASSWORD=<span className="text-cyan-300">{'${SECRETS_HOMARR_PASSWORD}'}</span></p>
           <p className="text-slate-500 pt-1"># Stacks/web-applications/.env</p>
-          <p className="text-slate-300">API_KEY=<span className="text-amber-400">{'${SECRETS_STRIPE_KEY}'}</span></p>
+          <p className="text-slate-300">API_KEY=<span className="text-cyan-300">{'${SECRETS_STRIPE_KEY}'}</span></p>
         </div>
         <p>Names are letters, digits and underscores (UPPER_SNAKE is easiest to read) and must match exactly.</p>
       </>
@@ -76,7 +83,6 @@ const GUIDE_SECTIONS = [
   },
   {
     icon: FileKey,
-    color: 'text-cyan-400',
     title: 'What happens at start',
     body: (
       <>
@@ -93,6 +99,7 @@ export default function Secrets() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const [search, setSearch] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
@@ -100,7 +107,6 @@ export default function Secrets() {
   const [newValue, setNewValue] = useState('')
   const [showValue, setShowValue] = useState(false)
   const [confirmReplace, setConfirmReplace] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [keyError, setKeyError] = useState('')
   const [showGuide, setShowGuide] = useState(false)
   const [guideSection, setGuideSection] = useState<number | null>(null)
@@ -110,18 +116,6 @@ export default function Secrets() {
 
   const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
   useEffect(() => { if (isConnected) fetchSecrets(scope) }, [fetchSecrets, isConnected, scope])
-
-  // Close the topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (deleteTarget) { setDeleteTarget(null); return }
-      if (showAddModal) { closeAdd(); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deleteTarget, showAddModal])
 
   const filtered = useMemo(
     () => entries.filter((e) => e.key.toLowerCase().includes(search.toLowerCase())),
@@ -162,15 +156,20 @@ export default function Secrets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyValid, keyExists, confirmReplace, newValue, trimmedKey, setSecret, addToast, scope, scopeMember])
 
+  /** Delete: ask first (the shared confirmation, focus on Cancel), then remove it from the server that keeps it */
   const handleDelete = useCallback(async (entry: SecretEntry) => {
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
-    const ok = await deleteSecret(entry.key, scopeMember)
-    if (ok) addToast({ type: 'success', message: `Deleted ${entry.key}` })
-    setDeleteTarget(null)
-  }, [deleteSecret, addToast, scope, scopeMember])
-
-  // the row the delete dialog is about (deleteTarget holds its row key)
-  const deleteEntry = deleteTarget ? entries.find((e) => secretKey(e) === deleteTarget) ?? null : null
+    const where = entry.member !== undefined && entry.member ? ` on the VM ${entry.member_name ?? entry.member}` : ''
+    const ok = await confirm({
+      title: 'Delete this secret?',
+      message: `Delete ${entry.key}${where}? Stacks that reference it will refuse to start. This cannot be undone.`,
+      confirmLabel: 'Delete secret',
+      danger: true,
+    })
+    if (!ok) return
+    const done = await deleteSecret(entry.key, scopeMember)
+    if (done) addToast({ type: 'success', message: `Deleted ${entry.key}` })
+  }, [deleteSecret, addToast, scope, scopeMember, confirm])
 
   const copyReference = async (entry: SecretEntry) => {
     const id = secretKey(entry)
@@ -197,71 +196,78 @@ export default function Secrets() {
     }
   }
 
-  const inputClass = 'w-full px-3 py-2 rounded-lg glass text-sm text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/40'
+  /** the fields of the add dialog: mono, one focus ring */
+  const inputClass = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-200 font-mono placeholder-slate-600 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-            <KeyRound className="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Secrets</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && entries.length > 0} /></div>}
-            <p className="text-sm text-slate-400">
-              {entries.length > 0 ? `${entries.length} encrypted value${entries.length === 1 ? '' : 's'} · injected into stacks at start` : 'Encrypted key-value storage for stacks'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => fetchSecrets(scope)} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50">
+      <PageHeader
+        page="secrets"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        subtitle={entries.length > 0 ? `${entries.length} encrypted value${entries.length === 1 ? '' : 's'} · injected into stacks at start` : undefined}
+        actions={<>
+          <button type="button" aria-label="Refresh" onClick={() => fetchSecrets(scope)} disabled={loading} className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-          <button onClick={() => setShowGuide(!showGuide)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${showGuide ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' : 'text-slate-300 bg-white/5 border-white/5 hover:bg-white/10'}`}>
-            <BookOpen size={14} />
-            <span className="hidden sm:inline">Usage Guide</span>
-          </button>
+          <Hint label={showGuide ? 'Hide the guide' : 'Show the guide'}>
+            <button
+              type="button"
+              aria-label="Guide"
+              aria-expanded={showGuide}
+              onClick={() => setShowGuide(!showGuide)}
+              className={`${BTN_TOOLBAR} ${showGuide ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <BookOpen size={14} />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          </Hint>
           {isAdmin && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
-              <Plus size={14} /> Add Secret
+            <button type="button" onClick={() => setShowAddModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              <Plus size={14} /> Add secret
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && entries.length > 0} />}
+      </PageHeader>
 
       {/* Guide */}
       {showGuide && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden animate-fade-in">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <section aria-label={`${pageLabel('secrets')} guide`} className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Shield size={16} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-white">Secrets Manager Guide</h2>
+              <BookOpen size={16} className="text-slate-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">{pageLabel('secrets')} guide</h2>
             </div>
-            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
-              <X size={14} className="text-slate-400" />
-            </button>
+            <Hint label="Close the guide">
+              <button type="button" aria-label="Close the guide" onClick={() => setShowGuide(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-slate-400">
-              Store passwords, API keys and tokens once, reference them as <span className="text-amber-400 font-mono text-xs">{'${SECRETS_NAME}'}</span> anywhere, and let DCS inject them when a stack starts. Only admins can manage secrets.
+              Store passwords, API keys and tokens once, reference them as <span className="text-cyan-300 font-mono text-xs">{'${SECRETS_NAME}'}</span> anywhere, and let DCS inject them when a stack starts. Only admins can manage secrets.
             </p>
             {GUIDE_SECTIONS.map((section, i) => {
               const Icon = section.icon
               const open = guideSection === i
               return (
                 <div key={section.title} className="border border-white/[0.03] rounded-lg overflow-hidden">
-                  <button onClick={() => setGuideSection(open ? null : i)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors">
-                    {open ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                    <Icon size={14} className={section.color} />
-                    <span className="text-xs font-medium text-slate-200">{section.title}</span>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setGuideSection(open ? null : i)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
+                  >
+                    <Icon size={14} className="text-slate-400 shrink-0" aria-hidden />
+                    <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
+                    {open ? <ChevronDown size={14} className="text-slate-500" aria-hidden /> : <ChevronRight size={14} className="text-slate-500" aria-hidden />}
                   </button>
                   {open && (
-                    <div className="px-4 pb-3 text-[11px] text-slate-400 space-y-2 border-t border-white/[0.03] pt-3 ml-8 animate-fade-in">
+                    <div className="px-4 pb-4 pt-3 text-[11px] text-slate-400 space-y-2 border-t border-white/[0.03] animate-fade-in">
                       {section.body}
                     </div>
                   )}
@@ -269,32 +275,45 @@ export default function Secrets() {
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search secrets..." className="w-full pl-10 pr-9 py-2.5 rounded-lg glass text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/30" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" aria-hidden />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search the secrets"
+          placeholder="Search secrets…"
+          className="w-full h-11 pl-10 pr-11 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-500 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        />
         {search && (
-          <button aria-label="Clear the search" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+          <button type="button" aria-label="Clear the search" onClick={() => setSearch('')} className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${BTN_ICON_SM} ${TONE_GHOST}`}>
             <X size={14} />
           </button>
         )}
       </div>
 
-      {error && <div className="glass rounded-lg p-3 text-rose-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
+      {error && <ErrorState title="Something went wrong with the secrets" error={error} onRetry={() => fetchSecrets(scope)} />}
 
       {/* Cards */}
       {loading && entries.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <div key={i} className="glass rounded-xl p-4 h-24 skeleton" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" role="status" aria-label="Reading the secrets">
+          {[1, 2, 3].map((i) => <div key={i} className="glass rounded-xl p-4 h-24 skeleton" aria-hidden />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="glass rounded-xl p-12 text-center">
-          <KeyRound className="w-12 h-12 text-slate-500 mx-auto mb-3" />
-          <p className="text-slate-400">{search ? 'No secrets match your search' : 'No secrets stored yet'}</p>
-          <p className="text-sm text-slate-500 mt-1">{isAdmin ? 'Add a secret, then reference it as ${SECRETS_NAME} in a compose file or .env' : 'An admin can add secrets here'}</p>
+        <div className="glass rounded-xl border border-white/5">
+          <EmptyState
+            icon={<KeyRound size={32} />}
+            title={search ? 'No secrets match your search' : 'No secrets stored yet'}
+            hint={isAdmin ? 'Add a secret, then reference it as ${SECRETS_NAME} in a compose file or .env' : 'An admin can add secrets here'}
+            action={isAdmin && !search ? (
+              <button type="button" onClick={() => setShowAddModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                <Plus size={14} /> Add secret
+              </button>
+            ) : undefined}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
@@ -303,28 +322,40 @@ export default function Secrets() {
             const r = refs[id]
             const open = refsFor === id
             return (
-              <div key={id} className="glass rounded-xl p-4 group hover:border-amber-500/20 border border-transparent transition-all animate-fade-in">
+              <div key={id} className="glass rounded-xl p-4 border border-white/5 hover:border-white/10 transition-colors animate-fade-in">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <Shield className="w-4 h-4 text-amber-400" />
+                    <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0" aria-hidden>
+                      <Shield className="w-4 h-4 text-slate-300" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-mono text-white truncate">{entry.key}{entry.member !== undefined && <span className="ml-2 align-middle"><VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} /></span>}</p>
+                      <p className="text-sm font-mono text-slate-100 truncate" title={entry.key}>{entry.key}{entry.member !== undefined && <span className="ml-2 align-middle"><VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} /></span>}</p>
                       <p className="text-[10px] text-slate-500 truncate">{entry.modified ? `Updated ${formatDate(entry.modified)}` : 'Encrypted'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    <button onClick={() => copyReference(entry)} title="Copy the placeholder for compose and .env files" className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
-                      {copied === id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    <button onClick={() => toggleReferences(entry)} title="Where is this secret used?" className={`p-1.5 rounded-lg transition-all ${open ? 'text-cyan-400 bg-cyan-500/10' : 'text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10'}`}>
-                      <Link2 className="w-4 h-4" />
-                    </button>
-                    {isAdmin && (
-                      <button onClick={() => setDeleteTarget(id)} title="Delete" className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                        <Trash2 className="w-4 h-4" />
+                    <Hint label="Copy the placeholder for compose and .env files">
+                      <button type="button" onClick={() => copyReference(entry)} aria-label={`Copy the placeholder of ${entry.key}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                        {copied === id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       </button>
+                    </Hint>
+                    <Hint label="Where is this secret used?">
+                      <button
+                        type="button"
+                        onClick={() => toggleReferences(entry)}
+                        aria-label={`${open ? 'Hide' : 'Show'} where ${entry.key} is used`}
+                        aria-expanded={open}
+                        className={`${BTN_ICON_SM} ${open ? 'text-cyan-400 bg-cyan-500/10' : TONE_GHOST}`}
+                      >
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    </Hint>
+                    {isAdmin && (
+                      <Hint label="Delete">
+                        <button type="button" onClick={() => handleDelete(entry)} disabled={saving} aria-label={`Delete ${entry.key}`} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </Hint>
                     )}
                   </div>
                 </div>
@@ -332,17 +363,17 @@ export default function Secrets() {
                 {open && (
                   <div className="mt-2 pt-2 border-t border-white/5 text-[11px] animate-fade-in">
                     {r === 'loading' || !r ? (
-                      <p className="text-slate-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Looking for references…</p>
+                      <p className="text-slate-500 flex items-center gap-1.5" role="status"><Loader2 size={11} className="animate-spin" /> Looking for references…</p>
                     ) : r === 'error' ? (
                       <p className="text-rose-400">Could not load references</p>
                     ) : r.stacks.length === 0 && !r.root_env ? (
-                      <p className="text-slate-500">Not referenced yet. Add <span className="font-mono text-amber-400">{r.reference}</span> to a compose file or .env.</p>
+                      <p className="text-slate-500">Not referenced yet. Add <span className="font-mono text-cyan-300">{r.reference}</span> to a compose file or .env.</p>
                     ) : (
                       <div className="space-y-1">
-                        <p className="text-slate-400 flex items-center gap-1.5"><Layers size={11} className="text-cyan-400" /> Used by</p>
+                        <p className="text-slate-400 flex items-center gap-1.5"><Layers size={11} className="text-slate-400" aria-hidden /> Used by</p>
                         <div className="flex flex-wrap gap-1">
-                          {r.stacks.map((s) => (
-                            <span key={s} className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono text-[10px]">{s}</span>
+                          {r.stacks.map((st) => (
+                            <span key={st} className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono text-[10px]">{st}</span>
                           ))}
                           {r.root_env && <span className="px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 font-mono text-[10px]">root .env</span>}
                         </div>
@@ -357,24 +388,26 @@ export default function Secrets() {
         </div>
       )}
 
-      {/* Add modal */}
+      {/* Add dialog */}
       {showAddModal && createPortal(
         <ModalOverlay onClose={closeAdd} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeAdd}>
-          <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 max-h-[92vh] overflow-y-auto border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Add Secret</h2>
-              <button aria-label="Close" onClick={closeAdd} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
+              <h2 className="text-lg font-semibold text-slate-100">Add secret</h2>
+              <button type="button" aria-label="Close" onClick={closeAdd} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleAdd() }} className="space-y-4">
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Name</label>
+                <label htmlFor="secret-name" className="block text-sm text-slate-400 mb-1">Name</label>
                 <input
+                  id="secret-name"
                   value={newKey}
                   onChange={(e) => { setNewKey(e.target.value.replace(/[\s-]+/g, '_')); setKeyError(''); setConfirmReplace(false) }}
                   placeholder="HOMARR_PASSWORD"
                   autoFocus
                   spellCheck={false}
-                  className={`${inputClass} ${trimmedKey && !keyValid ? 'border-rose-500/40' : ''}`}
+                  autoComplete="off"
+                  className={`${inputClass} ${trimmedKey && !keyValid ? '!border-rose-500/40' : ''}`}
                 />
                 <p className="text-[10px] text-slate-500 mt-1 font-mono truncate">
                   {trimmedKey ? (keyValid ? `Reference: ${referenceFor(trimmedKey)}` : 'Letters, digits and underscores only, starting with a letter') : 'Letters, digits and underscores — UPPER_SNAKE reads best'}
@@ -382,63 +415,44 @@ export default function Secrets() {
                 {keyExists && <p className="text-[10px] text-amber-400 mt-1">A secret with this name exists; saving replaces its value.</p>}
               </div>
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm text-slate-400">Value</label>
-                  <button type="button" onClick={handleGenerate} className="flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label htmlFor="secret-value" className="text-sm text-slate-400">Value</label>
+                  <button type="button" onClick={handleGenerate} className="flex items-center gap-1 h-8 px-2 rounded-lg text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
                     <Wand2 size={12} /> Generate {GENERATED_LENGTH}-character value
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea aria-label="Value"
+                  <textarea
+                    id="secret-value"
                     value={newValue}
                     onChange={(e) => setNewValue(e.target.value)}
                     rows={3}
                     spellCheck={false}
-                    className={`${inputClass} pr-10 resize-none ${showValue ? '' : 'text-security-disc'}`}
+                    autoComplete="off"
+                    className={`${inputClass} pr-11 resize-none ${showValue ? '' : 'text-security-disc'}`}
                     style={showValue ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
                   />
-                  <button type="button" onClick={() => setShowValue(!showValue)} className="absolute right-2 top-2 p-1 rounded text-slate-500 hover:text-slate-300" title={showValue ? 'Hide' : 'Show'}>
-                    {showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                  <Hint label={showValue ? 'Hide the value' : 'Show the value'}>
+                    <button type="button" onClick={() => setShowValue(!showValue)} aria-label={showValue ? 'Hide the value' : 'Show the value'} aria-pressed={showValue} className={`absolute right-1.5 top-1.5 ${BTN_ICON_SM} ${TONE_GHOST}`}>
+                      {showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </Hint>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">Stored encrypted; never shown again after saving.</p>
               </div>
-              {keyError && <p className="text-sm text-rose-400">{keyError}</p>}
+              {keyError && <p className="text-sm text-rose-400" role="alert">{keyError}</p>}
               {confirmReplace && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300" role="alert">
                   Replace the existing value of <span className="font-mono">{trimmedKey}</span>? Stacks that use it keep the old value until they are restarted.
                 </div>
               )}
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeAdd} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5 transition-colors">Cancel</button>
-                <button type="submit" disabled={saving || !trimmedKey || !newValue} className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${confirmReplace ? 'bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25'}`}>
+                <button type="button" onClick={closeAdd} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+                <button type="submit" disabled={saving || !trimmedKey || !newValue} className={`${confirmReplace ? BTN_SHEET_DANGER : BTN_SHEET_PRIMARY} flex-1`}>
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {confirmReplace ? 'Replace' : 'Save'}
                 </button>
               </div>
             </form>
-          </div>
-        </ModalOverlay>,
-        document.body,
-      )}
-
-      {/* Delete confirmation */}
-      {deleteEntry && createPortal(
-        <ModalOverlay onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
-          <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-rose-400" /></div>
-              <div>
-                <h3 className="text-white font-semibold">Delete Secret</h3>
-                <p className="text-sm text-slate-400">Stacks that reference it will refuse to start</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-300 mb-4">Delete <span className="font-mono text-white">{deleteEntry.key}</span>{deleteEntry.member !== undefined && <span className="ml-2 align-middle"><VmCapsule member={deleteEntry.member} name={deleteEntry.member_name} vmid={deleteEntry.vmid} size="xs" /></span>}? This cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2 rounded-lg glass text-sm text-slate-300 hover:bg-white/5">Cancel</button>
-              <button onClick={() => handleDelete(deleteEntry)} disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
-              </button>
-            </div>
           </div>
         </ModalOverlay>,
         document.body,

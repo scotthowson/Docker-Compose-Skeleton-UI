@@ -4,16 +4,22 @@
 // restore one, upload one from another box.
 // =============================================================================
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { LifeBuoy, Download, Loader2, Upload, RotateCcw, KeyRound, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { usePolling } from '../../hooks/usePolling'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
+import Hint from '../common/Hint'
+import { pageLabel } from '../../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, BTN_ICON_SM, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_DANGER } from '../../lib/ui'
 import { apiClient } from '../../api/client'
 import { fetchRecovery, createRecoveryBundle, restoreRecoveryBundle, uploadRecoveryBundle, setSecret } from '../../api/endpoints'
 import type { RecoveryBundleEntry } from '../../../shared/types'
+
+/** the fields of this card: one look, one focus ring */
+const FIELD = 'h-[34px] px-3 rounded-lg text-xs bg-white/5 border border-white/10 text-slate-200 placeholder-slate-500 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
 
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -37,6 +43,7 @@ export default function RecoveryBundleCard() {
   const [restoreTarget, setRestoreTarget] = useState<RecoveryBundleEntry | null>(null)
   const [restorePass, setRestorePass] = useState('')
   const [result, setResult] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const create = useCallback(async () => {
     if (busy) return
@@ -53,7 +60,7 @@ export default function RecoveryBundleCard() {
       setPassphrase('')
       refetch()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Bundle failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not write the bundle' })
     } finally {
       setBusy(null)
     }
@@ -64,7 +71,7 @@ export default function RecoveryBundleCard() {
     try {
       const token = apiClient.getAuthToken()
       const res = await fetch(`${apiClient.getBaseUrl()}/recovery/${encodeURIComponent(entry.file)}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+      if (!res.ok) throw new Error(`The download failed (${res.status})`)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -72,7 +79,7 @@ export default function RecoveryBundleCard() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Download failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The download failed' })
     } finally {
       setBusy(null)
     }
@@ -87,7 +94,7 @@ export default function RecoveryBundleCard() {
       addToast({ type: 'success', message: `Uploaded ${res.file}` })
       refetch()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The upload failed' })
     } finally {
       setBusy(null)
     }
@@ -95,7 +102,7 @@ export default function RecoveryBundleCard() {
 
   const restore = useCallback(async () => {
     if (!restoreTarget || busy) return
-    if (!(await confirm({ title: 'Restore this bundle', message: `Restore ${restoreTarget.file}?\n\nThe configuration on this server is replaced (a pre-restore snapshot is kept under .snapshots). Running containers are not touched; start the stacks afterwards.`, confirmLabel: 'Restore', danger: true }))) return
+    if (!(await confirm({ title: 'Restore this bundle?', message: `Restore ${restoreTarget.file}?\n\nThe configuration on this server is replaced (a pre-restore snapshot is kept under .snapshots). Running containers are not touched; start the stacks afterwards.`, confirmLabel: 'Restore', danger: true }))) return
     setBusy('restore')
     try {
       const res = await restoreRecoveryBundle(restoreTarget.file, restorePass, true)
@@ -105,7 +112,7 @@ export default function RecoveryBundleCard() {
       setRestorePass('')
       if (res.restart_scheduled) setTimeout(() => window.location.reload(), 8000)
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Restore failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The restore failed' })
     } finally {
       setBusy(null)
     }
@@ -114,12 +121,16 @@ export default function RecoveryBundleCard() {
   if (!isAdmin) return null
 
   return (
-    <div className="glass rounded-xl overflow-hidden">
+    <section aria-labelledby="recovery-bundle-title" className="glass rounded-xl border border-white/5 overflow-hidden">
       <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-        <LifeBuoy size={16} className="text-rose-300" />
-        <h3 className="text-sm font-semibold text-slate-200">Recovery Bundle</h3>
-        <span className="text-[10px] text-slate-500 ml-1">rebuilds this install anywhere</span>
-        <button onClick={() => refetch()} className="ml-auto text-slate-500 hover:text-slate-300" title="Refresh"><RefreshCw size={13} /></button>
+        <LifeBuoy size={16} className="text-slate-400" aria-hidden />
+        <h2 id="recovery-bundle-title" className="text-sm font-semibold text-slate-200">Recovery bundle</h2>
+        <span className="text-[10px] text-slate-500 ml-1 hidden sm:inline">rebuilds this install anywhere</span>
+        <Hint label="Refresh the list">
+          <button type="button" onClick={() => refetch()} aria-label="Refresh the list of bundles" className={`${BTN_ICON_SM} ${TONE_GHOST} ml-auto`}>
+            <RefreshCw size={13} />
+          </button>
+        </Hint>
       </div>
       <div className="p-5 space-y-4">
         <p className="text-xs text-slate-400 leading-relaxed">
@@ -134,7 +145,7 @@ export default function RecoveryBundleCard() {
             </div>
             <div className="glass border border-white/5 rounded-lg p-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Off-box copy</p>
-              <p className="text-xs font-mono text-slate-300 truncate mt-1" title={data.remote || 'not set'}>{data.remote || <span className="text-slate-500">not set (Server Config → Recovery)</span>}</p>
+              <p className="text-xs font-mono text-slate-300 truncate mt-1" title={data.remote || 'not set'}>{data.remote || <span className="text-slate-500">not set ({pageLabel('config')} → Recovery bundle)</span>}</p>
             </div>
             <div className="glass border border-white/5 rounded-lg p-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Passphrase</p>
@@ -146,27 +157,30 @@ export default function RecoveryBundleCard() {
         <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <KeyRound size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <KeyRound size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
               <input
                 type="password"
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.target.value)}
+                aria-label="Passphrase for the bundle"
                 placeholder={data?.passphrase_set ? 'Stored passphrase is used (type one to override)' : 'Passphrase for the bundle (8+ characters)'}
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
+                autoComplete="new-password"
+                className={`${FIELD} w-full pl-9`}
               />
             </div>
             <button
+              type="button"
               onClick={create}
               disabled={busy !== null || (!data?.passphrase_set && passphrase.length < 8)}
-              className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-rose-500/90 text-white hover:bg-rose-400 disabled:opacity-50 transition-all press"
+              className={`${BTN_TOOLBAR} ${TONE_OK} justify-center`}
             >
-              {busy === 'create' ? <Loader2 size={13} className="animate-spin" /> : <LifeBuoy size={13} />}
+              {busy === 'create' ? <Loader2 size={14} className="animate-spin" /> : <LifeBuoy size={14} />}
               {busy === 'create' ? 'Writing…' : 'Create bundle now'}
             </button>
           </div>
           {!data?.passphrase_set && (
             <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-              <input type="checkbox" checked={storePass} onChange={(e) => setStorePass(e.target.checked)} className="accent-rose-500" />
+              <input type="checkbox" checked={storePass} onChange={(e) => setStorePass(e.target.checked)} className="accent-emerald-500" />
               Store it as the secret RECOVERY_PASSPHRASE so a schedule can make bundles on its own
             </label>
           )}
@@ -178,8 +192,9 @@ export default function RecoveryBundleCard() {
                   <button
                     key={s}
                     type="button"
+                    aria-pressed={appData.has(s)}
                     onClick={() => setAppData((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n })}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all ${appData.has(s) ? 'bg-rose-500/15 border-rose-500/30 text-rose-200' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
+                    className={`h-8 sm:h-7 px-2.5 rounded-lg text-[10px] font-mono border transition-colors ${appData.has(s) ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
                   >
                     {s}
                   </button>
@@ -187,56 +202,62 @@ export default function RecoveryBundleCard() {
               </div>
             </div>
           )}
-          {result && <p className="text-[11px] text-emerald-300">{result}</p>}
+          {result && <p role="status" className="text-[11px] text-emerald-300">{result}</p>}
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between gap-3 mb-2">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">Bundles on this box{data ? ` (${data.bundles.length}, keeps ${data.retention})` : ''}</p>
-            <label className={`flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
-              {busy === 'upload' ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />} Upload a bundle
-              <input type="file" accept=".enc,application/octet-stream" className="hidden" onChange={(e) => { upload(e.target.files?.[0] ?? null); e.target.value = '' }} />
-            </label>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null} className={BTN_CARD_QUIET}>
+              {busy === 'upload' ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />} Upload a bundle
+            </button>
+            <input ref={fileRef} type="file" accept=".enc,application/octet-stream" className="hidden" onChange={(e) => { upload(e.target.files?.[0] ?? null); e.target.value = '' }} />
           </div>
           {data && data.bundles.length === 0 && <p className="text-xs text-slate-500">No bundle yet.</p>}
           <div className="space-y-1.5">
             {data?.bundles.map((b) => (
-              <div key={b.file} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2">
+              <div key={b.file} className="flex items-center gap-2 rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-mono text-slate-200 truncate" title={b.file}>{b.file}</p>
                   <p className="text-[10px] text-slate-500">{b.size_human}{b.created ? ` · ${new Date(b.created).toLocaleString()}` : ''}{b.checksum ? ' · sha256' : ''}</p>
                 </div>
-                <button onClick={() => download(b)} disabled={busy !== null} title="Download" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 disabled:opacity-50">
-                  {busy === `dl:${b.file}` ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                </button>
-                <button onClick={() => { setRestoreTarget(b); setRestorePass('') }} disabled={busy !== null} title="Restore this bundle here" className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
-                  <RotateCcw size={13} />
-                </button>
+                <Hint label="Download">
+                  <button type="button" onClick={() => download(b)} disabled={busy !== null} aria-label={`Download ${b.file}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                    {busy === `dl:${b.file}` ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                  </button>
+                </Hint>
+                <Hint label="Restore this bundle here">
+                  <button type="button" onClick={() => { setRestoreTarget(b); setRestorePass('') }} disabled={busy !== null} aria-label={`Restore ${b.file} here`} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}>
+                    <RotateCcw size={13} />
+                  </button>
+                </Hint>
               </div>
             ))}
           </div>
         </div>
 
         {restoreTarget && (
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-4 space-y-3 animate-fade-in">
-            <p className="text-xs text-amber-200">Restore <span className="font-mono">{restoreTarget.file}</span> on this server. Settings, accounts, secrets and stack files are replaced (a pre-restore snapshot is kept); running containers are not touched.</p>
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.05] p-4 space-y-3 animate-fade-in">
+            <p className="text-xs text-rose-200">Restore <span className="font-mono">{restoreTarget.file}</span> on this server. Settings, accounts, secrets and stack files are replaced (a pre-restore snapshot is kept); running containers are not touched.</p>
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="password"
                 value={restorePass}
                 onChange={(e) => setRestorePass(e.target.value)}
+                aria-label="Passphrase of this bundle"
                 placeholder={data?.passphrase_set ? 'Passphrase (stored one is used when empty)' : 'Passphrase of this bundle'}
-                className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/40"
+                autoComplete="off"
+                className={`${FIELD} flex-1`}
               />
-              <button onClick={restore} disabled={busy !== null || (!data?.passphrase_set && !restorePass)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500 text-slate-900 hover:bg-amber-400 disabled:opacity-50 press">
-                {busy === 'restore' ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+              <button type="button" onClick={restore} disabled={busy !== null || (!data?.passphrase_set && !restorePass)} className={`${BTN_TOOLBAR} ${TONE_DANGER} justify-center`}>
+                {busy === 'restore' ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
                 Restore
               </button>
-              <button onClick={() => setRestoreTarget(null)} className="px-3 py-2 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10">Cancel</button>
+              <button type="button" onClick={() => setRestoreTarget(null)} className={`${BTN_TOOLBAR_QUIET} justify-center`}>Cancel</button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }

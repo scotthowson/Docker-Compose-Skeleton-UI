@@ -1,9 +1,15 @@
 // =============================================================================
-// Updates — System + Image Update Checker with registry check and bulk updates
+// Updates — everything that can be updated, in two blocks: DCS and Docker (the
+// framework on this server, this dashboard, the Docker engine, the VMs of a hub)
+// and Docker images (which are stale, which have a newer digest, pull them).
+//
+// Colour: emerald = up to date, cyan = an update is available (information; its
+// button is the emerald "go"), amber = needs attention (diverged, edits in the
+// way, a container on an old copy), rose = failed, violet = the fleet (a VM).
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { Switch, Tooltip } from '@mantine/core'
+import { Switch } from '@mantine/core'
 import {
   Download,
   RefreshCw,
@@ -22,16 +28,25 @@ import {
   Power,
   Info,
   Boxes,
+  Container,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useFleetRole } from '../hooks/useFleetRole'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import DockerEngineCard from '../components/updates/DockerEngineCard'
 import AutoImageUpdates from '../components/updates/AutoImageUpdates'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { LoadingState, EmptyState } from '../components/common/PageState'
+import { Pill, Fact, CardIcon, StatusLine, formatRelativeTime, TONE_ATTN, type Tone } from '../components/updates/updateBits'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_SHEET_PRIMARY, TONE_OK } from '../lib/ui'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory, fetchFleetVersions, updateFleet, fetchFleetImages, checkFleetImageRegistry } from '../api/endpoints'
@@ -39,34 +54,14 @@ import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, Sy
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
 // ---------------------------------------------------------------------------
-// Staleness Badge
+// Staleness: how old an image is
 // ---------------------------------------------------------------------------
 
-const STALENESS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  current: {
-    bg: 'bg-emerald-500/15',
-    text: 'text-emerald-400',
-    dot: 'bg-emerald-400',
-  },
-  aging: {
-    bg: 'bg-amber-500/15',
-    text: 'text-amber-400',
-    dot: 'bg-amber-400',
-  },
-  stale: {
-    bg: 'bg-rose-500/15',
-    text: 'text-rose-400',
-    dot: 'bg-rose-400',
-  },
-  unknown: {
-    bg: 'bg-slate-500/15',
-    text: 'text-slate-400',
-    dot: 'bg-slate-400',
-  },
-}
+/** how old an image is: fresh, getting old, old — and unknown */
+const STALENESS_TONE: Record<string, Tone> = { current: 'emerald', aging: 'amber', stale: 'rose', unknown: 'slate' }
+const STALENESS_LABEL: Record<string, string> = { current: 'Current', aging: 'Aging', stale: 'Stale', unknown: 'Unknown' }
 
-/** Registry path, repository and tag rendered as one readable reference that
- *  wraps at path boundaries instead of mid-word */
+/** "5 min ago", "2 h ago", "3 d ago" for an ISO date */
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   if (!Number.isFinite(diff) || diff < 0) return 'just now'
@@ -78,6 +73,8 @@ function formatRelative(iso: string): string {
   return `${Math.floor(h / 24)} d ago`
 }
 
+/** Registry path, repository and tag rendered as one readable reference that
+ *  wraps at path boundaries instead of mid-word */
 function ImageRef({ image }: { image: string }) {
   const at = image.indexOf('@')
   const base = at >= 0 ? image.slice(0, at) : image
@@ -104,15 +101,7 @@ function ImageRef({ image }: { image: string }) {
 }
 
 function StalenessBadge({ staleness }: { staleness: string }) {
-  const style = STALENESS_STYLES[staleness] ?? STALENESS_STYLES.unknown
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${style.bg} ${style.text}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-      {staleness}
-    </span>
-  )
+  return <Pill tone={STALENESS_TONE[staleness] ?? 'slate'} dot>{STALENESS_LABEL[staleness] ?? staleness}</Pill>
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +112,7 @@ function SkeletonRow() {
   return (
     <tr className="border-b border-white/[0.03]">
       {[...Array(6)].map((_, i) => (
-        <td key={i} className="px-4 py-3">
+        <td key={i} className="px-3 py-3">
           <div className="h-3 w-20 rounded skeleton" />
         </td>
       ))}
@@ -155,13 +144,13 @@ function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
     <div
       className={`bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 ${GLOW_MAP[color] ?? ''}`}
     >
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="flex-shrink-0" aria-hidden>{icon}</div>
       <div>
         <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>
         {loading ? (
           <div className="h-6 w-10 rounded skeleton mt-1" />
         ) : (
-          <p className="text-xl font-bold text-white">{value ?? 0}</p>
+          <p className="text-xl font-bold text-white tabular-nums">{value ?? 0}</p>
         )}
       </div>
     </div>
@@ -172,105 +161,48 @@ function SummaryCard({ icon, label, value, color, loading }: SummaryCardProps) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** A row's identity in the fleet view: the image on its DCS (the hub's rows have no member) */
 /** Shown when the API is not back after a restart: what to look at on the server (systemd's reason is in its journal; on Fedora/RHEL
  *  the usual one is the SELinux label of a script an update replaced) */
 const RESTART_FAILED = 'The API did not answer after the restart. On the server, "journalctl -u dcs-api -n 30" says why. On Fedora/RHEL (SELinux) the usual cause is the label of the updated script: "sudo restorecon -v <install dir>/.scripts/api-server.sh" and "sudo systemctl restart dcs-api" bring it back.'
+/** A row's identity in the fleet view: the image on its DCS (the hub's rows have no member) */
 const rowKey = (img: ImageUpdateInfo) => `${img.member ?? ''}|${img.image}`
 /** the Compose containers of a row that still run an older copy of its image (pulled earlier, never recreated): what Update recreates */
 const outdatedOf = (img: ImageUpdateInfo) => (img.containers_outdated ?? '').split(',').map((c) => c.trim()).filter(Boolean)
 /** …and those started by hand, which DCS cannot recreate */
 const manualOf = (img: ImageUpdateInfo) => (img.containers_outdated_manual ?? '').split(',').map((c) => c.trim()).filter(Boolean)
 
-function formatRelativeTime(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000)
-  if (diff < 10) return 'just now'
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
-}
+/** a column header of the images table (the same static look as the Containers table's) */
+const TH = 'px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400'
 
-// ---------------------------------------------------------------------------
-// Updates Page Component
-// ---------------------------------------------------------------------------
-
-// One line every card shares: up to date or not, when it was checked, when it last changed
-function StatusLine({ ok, okText, warnText, checkedAt, updatedAt, updatedLabel = 'Last updated', tone = 'amber' }: {
-  ok: boolean; okText: string; warnText: string
-  checkedAt?: number | string | null; updatedAt?: number | string | null; updatedLabel?: string; tone?: 'amber' | 'rose'
-}) {
-  const toMs = (v?: number | string | null) => (!v ? 0 : typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(v) || 0)
-  const c = toMs(checkedAt); const u = toMs(updatedAt)
-  const warn = tone === 'rose' ? 'text-rose-300 bg-rose-500/10 border-rose-500/20' : 'text-amber-200 bg-amber-500/10 border-amber-500/20'
+/** the heading of a block of this page: its icon, its name, one line under it, its buttons on the right */
+function SectionHead({ icon, title, sub, actions }: { icon: React.ReactNode; title: string; sub?: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[10px] text-slate-500">
-      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-semibold ${ok ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : warn}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : tone === 'rose' ? 'bg-rose-400' : 'bg-amber-400'}`} />
-        {ok ? okText : warnText}
-      </span>
-      <span title={c ? new Date(c).toLocaleString() : undefined}>Checked {c ? formatRelativeTime(c) : 'never'}</span>
-      <span title={u ? new Date(u).toLocaleString() : undefined}>{updatedLabel} {u ? new Date(u).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}</span>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400" aria-hidden>{icon}</span>
+          <h2 className="text-sm font-semibold text-slate-200">{title}</h2>
+        </div>
+        {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2 flex-wrap sm:justify-end">{actions}</div>}
     </div>
   )
 }
 
 function UpdateStatusBadge({ res }: { res: SystemUpdateCheckResponse }) {
-  if (res.state === 'member') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-200 bg-amber-500/10 px-2 py-0.5 rounded-full" title={res.note}>
-        <Boxes size={10} />
-        Updated by its hub
-      </span>
-    )
-  }
-  if (res.state === 'manual') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-300 bg-white/[0.06] px-2 py-0.5 rounded-full" title={res.note}>
-        <Info size={10} />
-        Installed without git
-      </span>
-    )
-  }
-  if (res.checked === false) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full">
-        <AlertTriangle size={10} />
-        Check failed
-      </span>
-    )
-  }
-  if (res.available) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        {res.latest_name ? `${res.latest_name} available` : 'Update available'}
-      </span>
-    )
-  }
-  if (res.state === 'ahead') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full" title="This checkout has commits newer than the release">
-        <GitBranch size={10} />
-        Ahead of the release
-      </span>
-    )
-  }
-  if (res.state === 'diverged') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-full">
-        <AlertTriangle size={10} />
-        Diverged
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
-      <CheckCircle size={10} />
-      Up to date
-    </span>
-  )
+  if (res.state === 'member') return <Pill tone="violet" icon={<Boxes size={10} />} title={res.note}>Updated by its hub</Pill>
+  if (res.state === 'manual') return <Pill tone="slate" icon={<Info size={10} />} title={res.note}>Installed without git</Pill>
+  if (res.checked === false) return <Pill tone="rose" icon={<AlertTriangle size={10} />}>Check failed</Pill>
+  if (res.available) return <Pill tone="cyan" dot>{res.latest_name ? `${res.latest_name} available` : 'Update available'}</Pill>
+  if (res.state === 'ahead') return <Pill tone="cyan" icon={<GitBranch size={10} />} title="This checkout has commits newer than the release">Ahead of the release</Pill>
+  if (res.state === 'diverged') return <Pill tone="amber" icon={<AlertTriangle size={10} />}>Diverged</Pill>
+  return <Pill tone="emerald" icon={<CheckCircle size={10} />}>Up to date</Pill>
 }
+
+// ---------------------------------------------------------------------------
+// Updates Page Component
+// ---------------------------------------------------------------------------
 
 export default function Updates() {
   const connStatus = useConnectionStore((s) => s.status)
@@ -278,6 +210,7 @@ export default function Updates() {
   const userRole = useAuthStore((s) => s.userRole)
   const isAdmin = userRole === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const autoCheckUpdates = useSettingsStore((s) => s.autoCheckUpdates)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
@@ -393,13 +326,13 @@ export default function Updates() {
       } else if (result.available) {
         addToast({ type: 'info', message: `DCS ${result.latest_version || result.latest_name || ''} is available (${result.commits_behind} commit${result.commits_behind !== 1 ? 's' : ''})` })
       } else if (result.ui_update?.available) {
-        addToast({ type: 'info', message: 'DCS Manager UI update available' })
+        addToast({ type: 'info', message: 'A DCS Manager update is available' })
       } else {
         addToast({ type: 'success', message: 'Everything is up to date' })
       }
     } catch (err) {
-      setSysCheckError(err instanceof Error ? err.message : 'Failed to check for updates')
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates' })
+      setSysCheckError(err instanceof Error ? err.message : 'Could not check for updates')
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not check for updates' })
     } finally {
       setSysChecking(false)
     }
@@ -448,7 +381,7 @@ export default function Updates() {
         ingestCheck(fresh)
       }
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Update failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The update failed' })
     } finally {
       setSysApplying(false)
     }
@@ -456,7 +389,13 @@ export default function Updates() {
 
   const handleRollback = useCallback(async () => {
     if (sysRollingBack || !lastBackupTag) return
-    if (!window.confirm(`Roll back to ${lastBackupTag}?\n\nYour stack, template and plugin files are kept as they are.`)) return
+    const sure = await confirm({
+      title: `Roll back to ${lastBackupTag}?`,
+      message: 'Your stack, template and plugin files are kept as they are.',
+      confirmLabel: 'Roll back',
+      danger: true,
+    })
+    if (!sure) return
     setSysRollingBack(true)
     setRestartHint(null)
     try {
@@ -476,18 +415,24 @@ export default function Updates() {
           ingestCheck(fresh)
         }
       } else {
-        addToast({ type: 'error', message: result.message || 'Rollback failed' })
+        addToast({ type: 'error', message: result.message || 'The rollback failed' })
       }
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Rollback failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The rollback failed' })
     } finally {
       setSysRollingBack(false)
     }
-  }, [sysRollingBack, lastBackupTag, restartAfter, addToast, ingestCheck, waitForApi])
+  }, [sysRollingBack, lastBackupTag, restartAfter, addToast, ingestCheck, waitForApi, confirm])
 
   const handleRestartApi = useCallback(async () => {
     if (restartingApi) return
-    if (!window.confirm('Restart the API now?\n\nOpen pages reconnect by themselves. A deploy, backup or image pull running at this moment would be interrupted.')) return
+    const sure = await confirm({
+      title: 'Restart the API now?',
+      message: 'Open pages reconnect by themselves. A deploy, backup or image pull running at this moment would be interrupted.',
+      confirmLabel: 'Restart API',
+      danger: true,
+    })
+    if (!sure) return
     setRestartHint(null)
     try {
       const res = await restartApiServer()
@@ -502,9 +447,9 @@ export default function Updates() {
       addToast(back ? { type: 'success', message: 'API restarted' } : { type: 'error', message: RESTART_FAILED, duration: 30000 })
     } catch (err) {
       setRestartingApi(null)
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Restart failed' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The restart failed' })
     }
-  }, [restartingApi, addToast, waitForApi])
+  }, [restartingApi, addToast, waitForApi, confirm])
 
   const conflicts = sysUpdate?.local_changes?.conflicts ?? []
   const userEdits = sysUpdate?.local_changes?.user.length ?? 0
@@ -564,8 +509,12 @@ export default function Updates() {
   const scopeRef = useRef<string | null>(null)
   useEffect(() => {
     if (scopeRef.current === imgScope) return
+    const first = scopeRef.current === null
     scopeRef.current = imgScope
-    if (data) { setSwitching(true); setBulkResults({}); refresh() }
+    if (first) return
+    // (also while the first answer is still on its way: it belongs to the scope the page opened with)
+    if (data) { setSwitching(true); setBulkResults({}) }
+    refresh()
   }, [imgScope, data, refresh])
   useEffect(() => { setSwitching(false) }, [data])
 
@@ -635,7 +584,7 @@ export default function Updates() {
     } catch (err) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Registry check failed',
+        message: err instanceof Error ? err.message : 'The registry check failed',
       })
     } finally {
       setRegistryChecking(false)
@@ -668,12 +617,12 @@ export default function Updates() {
           setBulkResults((prev) => ({ ...prev, [key]: 'done' }))
           refresh()
         } else {
-          addToast({ type: 'error', message: `Failed to update ${img.image}${where}` })
+          addToast({ type: 'error', message: `Could not update ${img.image}${where}` })
         }
       } catch (err) {
         addToast({
           type: 'error',
-          message: err instanceof Error ? err.message : `Failed to update ${img.image}${where}`,
+          message: err instanceof Error ? err.message : `Could not update ${img.image}${where}`,
         })
       } finally {
         setUpdatingImages((prev) => {
@@ -746,24 +695,16 @@ export default function Updates() {
 
   // ---- Disconnected ----
   if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in text-center px-6">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          {connStatus === 'connecting' ? <Loader2 size={24} className="text-slate-500 animate-spin" /> : <ArrowUpCircle size={24} className="text-slate-500" />}
-        </div>
-        <p className="text-sm text-slate-400">
-          {connStatus === 'connecting'
-            ? 'Connecting to the DCS API…'
-            : connStatus === 'error'
-              ? 'The DCS API is not answering'
-              : 'Connect to a server to see its updates'}
-        </p>
-        <p className="text-xs text-slate-500 max-w-sm">
-          {connStatus === 'error'
-            ? 'This page (system updates, Docker Engine, VMs and image updates) returns on its own as soon as the API answers again. If it stays away, check the dcs-api service on the server.'
-            : 'System, Docker Engine and image updates are shown for the server you are connected to.'}
-        </p>
-      </div>
+    return connStatus === 'connecting' ? (
+      <LoadingState label="Connecting to the DCS API…" hint="System, Docker Engine and image updates are shown for the server you are connected to." />
+    ) : (
+      <EmptyState
+        icon={<ArrowUpCircle size={32} />}
+        title={connStatus === 'error' ? 'The DCS API is not answering' : 'Connect to a server to see its updates'}
+        hint={connStatus === 'error'
+          ? 'This page (system updates, Docker Engine, VMs and image updates) returns on its own as soon as the API answers again. If it stays away, check the dcs-api service on the server.'
+          : 'System, Docker Engine and image updates are shown for the server you are connected to.'}
+      />
     )
   }
 
@@ -771,50 +712,42 @@ export default function Updates() {
   const isInitialLoad = loading && !data
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
+      <PageHeader page="updates" />
 
       {/* ══════════════════════════════════════════════════════════════════════
-          System & Framework Updates
+          DCS and Docker: the framework, this dashboard, the engine, the VMs
           ══════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 hover:border-white/10 rounded-xl p-4 md:p-6 gradient-border transition-all duration-200">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/10 flex items-center justify-center">
-              <Server size={20} className="text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight"><span className="text-gradient">System Updates</span></h2>
-              <p className="text-xs text-slate-500">DCS framework and application version management</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
+      <section aria-label="DCS and Docker" className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+        <SectionHead
+          icon={<Server size={16} />}
+          title="DCS and Docker"
+          sub="The framework on this server, this dashboard, the Docker engine and the VMs"
+          actions={<>
             {lastChecked && (
               <span className="text-[10px] text-slate-500">
                 Last checked {formatRelativeTime(lastChecked)}
               </span>
             )}
-            <button
-              onClick={handleCheckSystemUpdate}
-              disabled={sysChecking}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 disabled:opacity-50 press"
-            >
+            <button type="button" onClick={handleCheckSystemUpdate} disabled={sysChecking} className={BTN_TOOLBAR_QUIET}>
               {sysChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Check for Updates
+              Check for updates
             </button>
-          </div>
-        </div>
+          </>}
+        />
 
         {/* Auto-check settings */}
-        <div className="flex items-center gap-3 mt-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
-          <div className="flex-1">
-            <p className="text-xs font-medium text-slate-300">Auto-check for updates</p>
+        <div className="flex flex-wrap items-center gap-3 mt-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.03]">
+          <div className="flex-1 min-w-[12rem]">
+            <label htmlFor="auto-check-updates" className="block text-xs font-medium text-slate-300">Auto-check for updates</label>
             <p className="text-[10px] text-slate-500 mt-0.5">Periodically check for DCS framework and image updates</p>
           </div>
-          <select aria-label="Auto-check for updates"
+          <select
+            id="auto-check-updates"
             value={autoCheckUpdates}
             onChange={(e) => updateSetting('autoCheckUpdates', Number(e.target.value))}
-            className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+            className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
           >
             <option value={0}>Off</option>
             <option value={3600000}>Every hour</option>
@@ -824,83 +757,67 @@ export default function Updates() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mt-5">
-          {/* DCS Backend */}
+          {/* DCS framework */}
           <div className={`rounded-xl border p-5 transition-all duration-300 ${
             sysUpdate?.available
-              ? 'bg-emerald-500/[0.04] border-emerald-500/15 glow-emerald'
+              ? 'bg-cyan-500/[0.05] border-cyan-500/15 glow-cyan'
               : 'bg-white/[0.03] border-white/5'
           }`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
-                <GitBranch size={16} className="text-emerald-400" />
-              </div>
+              <CardIcon><GitBranch size={16} /></CardIcon>
               <div>
-                <p className="text-sm font-semibold text-slate-200">DCS Framework</p>
+                <h3 className="text-sm font-semibold text-slate-200">DCS Framework</h3>
                 <p className="text-[10px] text-slate-500">DCS Orchestrator server</p>
               </div>
             </div>
 
             {sysUpdate ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Installed</span>
+                <Fact label="Installed">
                   <span className="text-xs font-mono text-slate-300">
                     {sysUpdate.current_version}
                     {sysUpdate.current_commit && <span className="text-slate-500"> · {sysUpdate.current_commit}</span>}
                   </span>
-                </div>
+                </Fact>
                 {sysUpdate.available && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
-                    <span className="text-xs font-mono text-emerald-400">
+                  <Fact label="Available">
+                    <span className="text-xs font-mono text-cyan-300">
                       {sysUpdate.latest_version || sysUpdate.latest_name}
-                      {sysUpdate.latest_commit && <span className="text-emerald-500/60"> · {sysUpdate.latest_commit}</span>}
+                      {sysUpdate.latest_commit && <span className="text-cyan-400/60"> · {sysUpdate.latest_commit}</span>}
                     </span>
-                  </div>
+                  </Fact>
                 )}
                 {sysUpdate.state === 'member' || sysUpdate.state === 'manual' ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Updated by</span>
+                  <Fact label="Updated by">
                     <span className="text-xs text-slate-300 text-right" title={sysUpdate.hub?.url || sysUpdate.note}>
                       {sysUpdate.state === 'member' ? `its hub${sysUpdate.hub?.name ? ` · ${sysUpdate.hub.name}` : ''}${sysUpdate.hub?.version ? ` (DCS ${sysUpdate.hub.version})` : ''}` : 'by hand — no git here'}
                     </span>
-                  </div>
+                  </Fact>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">Channel</span>
-                    <span className="text-xs font-mono text-slate-400" title="Change it under Server Config → Environment → Update Channel">
+                  <Fact label="Channel">
+                    <span className="text-xs font-mono text-slate-400" title={`Change it under ${pageLabel('config')} → Environment → Update channel`}>
                       {sysUpdate.channel || 'stable'}
                       <span className="text-slate-600"> · {(sysUpdate.branch || '').replace(/^heads\//, '')}</span>
                     </span>
-                  </div>
+                  </Fact>
                 )}
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
+                <Fact label="Status">
                   <UpdateStatusBadge res={sysUpdate} />
-                </div>
+                </Fact>
                 <StatusLine
                   ok={!sysUpdate.available && sysUpdate.checked !== false}
                   okText={sysUpdate.state === 'member' ? 'Follows the hub' : sysUpdate.state === 'manual' ? 'Nothing fetched here' : 'Up to date'}
                   warnText={sysUpdate.checked === false ? 'Check failed' : `${sysUpdate.latest_version || sysUpdate.latest_name || 'A release'} available`}
                   checkedAt={lastChecked}
                   updatedAt={sysUpdate.last_updated_at}
-                  tone={sysUpdate.checked === false ? 'rose' : 'amber'}
+                  tone={sysUpdate.checked === false ? 'rose' : 'cyan'}
                 />
 
                 {apiVersionInfo && (
                   <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider">API Version</span>
-                      <span className="text-xs font-mono text-slate-300">{apiVersionInfo.api_version}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider">Docker</span>
-                      <span className="text-xs font-mono text-slate-300">{apiVersionInfo.docker_version}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider">Compose</span>
-                      <span className="text-xs font-mono text-slate-300">{apiVersionInfo.compose_version}</span>
-                    </div>
+                    <Fact label="API version"><span className="text-xs font-mono text-slate-300">{apiVersionInfo.api_version}</span></Fact>
+                    <Fact label="Docker"><span className="text-xs font-mono text-slate-300">{apiVersionInfo.docker_version}</span></Fact>
+                    <Fact label="Compose"><span className="text-xs font-mono text-slate-300">{apiVersionInfo.compose_version}</span></Fact>
                   </>
                 )}
 
@@ -947,7 +864,7 @@ export default function Updates() {
                 )}
                 {sysUpdate.available && sysUpdate.changelog.length > 0 && (
                   <details className="mt-2">
-                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400">
+                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
                       {sysUpdate.changelog.length} commit{sysUpdate.changelog.length !== 1 ? 's' : ''}
                     </summary>
                     <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin mt-2">
@@ -975,23 +892,24 @@ export default function Updates() {
                     </label>
                     {isHub && fleetMembers.length > 0 && (
                       <label className="flex items-start gap-2 text-[10px] text-slate-400 cursor-pointer" title="Once the hub runs the new version, every VM fetches its code and restarts its API in place (data and stacks stay)">
-                        <input type="checkbox" checked={fleetAfter} onChange={(e) => setFleetAfter(e.target.checked)} className="accent-amber-500 mt-0.5" />
+                        <input type="checkbox" checked={fleetAfter} onChange={(e) => setFleetAfter(e.target.checked)} className="accent-emerald-500 mt-0.5" />
                         <span>Then update the {fleetMembers.length} VM{fleetMembers.length === 1 ? '' : 's'} to the same version{!restartAfter && <span className="text-amber-400/80"> — after the API is restarted</span>}</span>
                       </label>
                     )}
                     <button
+                      type="button"
                       onClick={handleApplySystemUpdate}
                       disabled={sysApplying || !!restartingApi || (conflicts.length > 0 && !replaceLocal)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all duration-200 press"
+                      className={`${BTN_SHEET_PRIMARY} w-full`}
                     >
-                      {sysApplying ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                      {sysApplying ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                       {sysApplying ? 'Updating…' : `Update to ${sysUpdate.latest_version || sysUpdate.latest_name || 'latest'}`}
                     </button>
                   </div>
                 )}
 
                 {restartingApi && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 text-[11px] text-emerald-300">
+                  <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 text-[11px] text-emerald-300">
                     <Loader2 size={12} className="animate-spin shrink-0" />
                     {restartingApi}
                   </div>
@@ -1016,7 +934,7 @@ export default function Updates() {
                       <p>Replaced (copies in <span className="font-mono">{applyReport.backup_dir}</span>): <span className="font-mono">{applyReport.replaced_local?.join(', ')}</span></p>
                     )}
                     {(applyReport.new_settings?.length ?? 0) > 0 && (
-                      <p>New settings in Server Config: <span className="font-mono">{applyReport.new_settings?.join(', ')}</span> (defaults apply until you set them)</p>
+                      <p>New settings on the {pageLabel('config')} page: <span className="font-mono">{applyReport.new_settings?.join(', ')}</span> (defaults apply until you set them)</p>
                     )}
                     {applyReport.service_definition_changed && (
                       <p className="text-amber-300">The systemd unit template changed — run <span className="font-mono">sudo .scripts/install-service.sh</span> once to refresh it.</p>
@@ -1026,7 +944,7 @@ export default function Updates() {
 
                 {isAdmin && updHistory && (updHistory.running || updHistory.entries.length > 0) && (
                   <details className="mt-3 pt-3 border-t border-white/[0.03]">
-                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400">
+                    <summary className="text-[10px] text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-400 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
                       Unattended updates{updHistory.running ? ' · running now' : ''} ({updHistory.entries.length})
                     </summary>
                     <div className="space-y-1.5 mt-2 max-h-40 overflow-y-auto scrollbar-thin">
@@ -1040,12 +958,12 @@ export default function Updates() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-[9px] text-slate-500 mt-2">Auto-rollback {updHistory.auto_rollback ? `on: ${updHistory.rollback_drop} points within ${updHistory.health_grace} s` : 'off'} · schedule a “DCS Self-Update” under Schedules</p>
+                    <p className="text-[9px] text-slate-500 mt-2">Auto-rollback {updHistory.auto_rollback ? `on: ${updHistory.rollback_drop} points within ${updHistory.health_grace} s` : 'off'} · schedule a “DCS self-update” on the {pageLabel('schedules')} page</p>
                   </details>
                 )}
 
                 {isAdmin && (
-                  <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/[0.03]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-white/[0.03]">
                     <div className="min-w-0">
                       {lastBackupTag ? (
                         <>
@@ -1061,50 +979,47 @@ export default function Updates() {
                     <div className="flex items-center gap-2 shrink-0">
                       {lastBackupTag && (
                         <button
+                          type="button"
                           onClick={handleRollback}
                           disabled={sysRollingBack || !!restartingApi}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 disabled:opacity-50 transition-all press"
+                          className={`${BTN_CARD} ${TONE_ATTN}`}
                         >
-                          {sysRollingBack ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                          {sysRollingBack ? 'Rolling back…' : 'Rollback'}
+                          {sysRollingBack ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                          {sysRollingBack ? 'Rolling back…' : 'Roll back'}
                         </button>
                       )}
-                      <button
-                        onClick={handleRestartApi}
-                        disabled={!!restartingApi || sysApplying}
-                        title="Restart the API listener now"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all press"
-                      >
-                        <Power size={13} />
-                        Restart API
-                      </button>
+                      <Hint label="Restart the API listener now">
+                        <button
+                          type="button"
+                          onClick={handleRestartApi}
+                          disabled={!!restartingApi || sysApplying}
+                          className={BTN_CARD_QUIET}
+                        >
+                          <Power size={12} />
+                          Restart API
+                        </button>
+                      </Hint>
                     </div>
                   </div>
                 )}
               </div>
             ) : sysCheckError ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Installed</span>
-                  <span className="text-xs font-mono text-slate-300">{apiVersionInfo?.framework_version || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full"><AlertTriangle size={10} /> Check failed</span>
-                </div>
+                <Fact label="Installed"><span className="text-xs font-mono text-slate-300">{apiVersionInfo?.framework_version || '—'}</span></Fact>
+                <Fact label="Status"><Pill tone="rose" icon={<AlertTriangle size={10} />}>Check failed</Pill></Fact>
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.06] border border-rose-500/15">
                   <Info size={12} className="text-rose-400 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-rose-200 break-words">{sysCheckError}</p>
                 </div>
                 <StatusLine ok={false} okText="" warnText="Not checked" checkedAt={lastChecked} updatedAt={null} tone="rose" />
-                <button onClick={handleCheckSystemUpdate} disabled={sysChecking} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all">
-                  {sysChecking ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Try again
+                <button type="button" onClick={handleCheckSystemUpdate} disabled={sysChecking} className={BTN_CARD_QUIET}>
+                  {sysChecking ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Try again
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-2.5" role="status" aria-label="Reading the framework version">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between">
+                  <div key={i} className="flex items-center justify-between" aria-hidden>
                     <div className="h-3 w-16 rounded skeleton" />
                     <div className="h-3 w-20 rounded skeleton" />
                   </div>
@@ -1113,67 +1028,48 @@ export default function Updates() {
             )}
           </div>
 
-          {/* UI Application */}
+          {/* This dashboard */}
           <div className="rounded-xl bg-white/[0.03] border border-white/5 p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
-                <Monitor size={16} className="text-cyan-400" />
-              </div>
+              <CardIcon><Monitor size={16} /></CardIcon>
               <div>
-                <p className="text-sm font-semibold text-slate-200">DCS Manager</p>
-                <p className="text-[10px] text-slate-500">Desktop application</p>
+                <h3 className="text-sm font-semibold text-slate-200">DCS Manager</h3>
+                <p className="text-[10px] text-slate-500">This dashboard</p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Version</span>
-                <span className="text-xs font-mono text-slate-300">{appVersion}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Build Date</span>
-                <span className="text-xs text-slate-400">{BUILD_DATE}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Platform</span>
-                <span className="text-xs text-slate-400">{window.electronAPI ? 'Electron Desktop' : 'Web Interface (Docker)'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Status</span>
-                {uiUpdateAvailable ? (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full">
-                    <ArrowUpCircle size={10} />
-                    Update Available
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
-                    <CheckCircle size={10} />
-                    Current
-                  </span>
-                )}
-              </div>
+              <Fact label="Version"><span className="text-xs font-mono text-slate-300">{appVersion}</span></Fact>
+              <Fact label="Build date"><span className="text-xs text-slate-400">{BUILD_DATE}</span></Fact>
+              <Fact label="Platform"><span className="text-xs text-slate-400">{window.electronAPI ? 'Electron desktop' : 'Web interface (Docker)'}</span></Fact>
+              <Fact label="Status">
+                {uiUpdateAvailable
+                  ? <Pill tone="cyan" icon={<ArrowUpCircle size={10} />}>Update available</Pill>
+                  : <Pill tone="emerald" icon={<CheckCircle size={10} />}>Current</Pill>}
+              </Fact>
               <StatusLine ok={!uiUpdateAvailable} okText="Up to date" warnText="Update available" checkedAt={lastChecked} updatedAt={BUILD_DATE} updatedLabel="Built" />
             </div>
             {uiUpdateAvailable && (
               <div className="mt-3 pt-3 border-t border-white/[0.03]">
                 <button
+                  type="button"
                   onClick={async () => {
                     setUiUpdating(true)
-                    addToast({ type: 'info', message: 'Updating DCS Manager UI...', duration: 3000 })
+                    addToast({ type: 'info', message: 'Updating DCS Manager…', duration: 3000 })
                     try {
                       await applyUiUpdate()
-                      addToast({ type: 'success', message: 'UI updated — reconnecting...', duration: 5000 })
+                      addToast({ type: 'success', message: 'DCS Manager updated — reconnecting…', duration: 5000 })
                       setTimeout(() => window.location.reload(), 8000)
                     } catch (err) {
-                      addToast({ type: 'error', message: err instanceof Error ? err.message : 'UI update failed' })
+                      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The DCS Manager update failed' })
                     }
                     setUiUpdating(false)
                   }}
                   disabled={uiUpdating}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/20 disabled:opacity-50 transition-all press"
+                  className={`${BTN_SHEET_PRIMARY} w-full`}
                 >
-                  {uiUpdating ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                  {uiUpdating ? 'Updating...' : 'Update DCS Manager'}
+                  {uiUpdating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {uiUpdating ? 'Updating…' : 'Update DCS Manager'}
                 </button>
               </div>
             )}
@@ -1191,10 +1087,10 @@ export default function Updates() {
                 href="https://github.com/scotthowson/dcs-orchestrator-ui/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 hover:bg-slate-800/70 transition-colors group/apk"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 hover:bg-slate-800/70 transition-colors group/apk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                 title="Every release ships an Android APK and desktop installers"
               >
-                <Download size={12} className="text-cyan-400 shrink-0" />
+                <Download size={12} className="text-slate-400 shrink-0" />
                 <span className="text-[10px] text-slate-400 group-hover/apk:text-slate-200 leading-relaxed">
                   Android app and desktop installers: download from the latest GitHub release
                 </span>
@@ -1208,14 +1104,12 @@ export default function Updates() {
 
         {/* The VMs: a hub keeps them on its own DCS version */}
         {isHub && fv && fleetMembers.length > 0 && (
-          <div className={`rounded-xl border p-5 mt-4 transition-all duration-300 ${fv.behind > 0 ? 'bg-amber-500/[0.04] border-amber-500/15' : 'bg-white/[0.03] border-white/5'}`}>
+          <div className={`rounded-xl border p-5 mt-4 transition-all duration-300 ${fv.behind > 0 ? 'bg-cyan-500/[0.05] border-cyan-500/15' : 'bg-white/[0.03] border-white/5'}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
-                  <Boxes size={16} className="text-amber-400" />
-                </div>
+                <CardIcon tone="violet"><Boxes size={16} /></CardIcon>
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">The VMs</p>
+                  <h3 className="text-sm font-semibold text-slate-200">The VMs</h3>
                   <p className="text-[10px] text-slate-500">
                     {fv.behind > 0
                       ? `${fv.behind} of ${fleetMembers.length} behind the hub (DCS ${fv.hub.version})`
@@ -1226,31 +1120,33 @@ export default function Updates() {
                 </div>
               </div>
               {isAdmin && (
-                <button
-                  onClick={() => handleUpdateFleet('all')}
-                  disabled={fleetUpdating || fv.pending || fleetMembers.every((m) => !m.reachable)}
-                  title="Every answering VM fetches the hub's code, keeps its data and stacks, and restarts its API in place"
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-200 border border-amber-500/25 hover:bg-amber-500/25 disabled:opacity-50 transition-all duration-200 shrink-0"
-                >
-                  {fleetUpdating ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                  {fleetUpdating ? 'Updating the VMs…' : fv.pending ? 'Queued after the restart' : fv.behind > 0 ? `Update ${fv.behind} VM${fv.behind === 1 ? '' : 's'}` : 'Update all VMs'}
-                </button>
+                <Hint label="Every answering VM fetches the hub's code, keeps its data and stacks, and restarts its API in place">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateFleet('all')}
+                    disabled={fleetUpdating || fv.pending || fleetMembers.every((m) => !m.reachable)}
+                    className={`${BTN_TOOLBAR} ${TONE_OK} shrink-0`}
+                  >
+                    {fleetUpdating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    {fleetUpdating ? 'Updating the VMs…' : fv.pending ? 'Queued after the restart' : fv.behind > 0 ? `Update ${fv.behind} VM${fv.behind === 1 ? '' : 's'}` : 'Update all VMs'}
+                  </button>
+                </Hint>
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {fleetMembers.map((m) => {
                 const r = fleetReport?.results.find((x) => x.id === m.id)
                 return (
-                  <span
+                  <Pill
                     key={m.id}
+                    dot
+                    tone={!m.reachable ? 'slate' : m.behind ? 'cyan' : 'emerald'}
                     title={!m.reachable ? 'not answering' : m.behind ? `DCS ${m.version} — the hub runs ${fv.hub.version}` : `DCS ${m.version}${m.vmid ? ` · VM #${m.vmid}` : ''}`}
-                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border ${!m.reachable ? 'border-white/[0.06] text-slate-500' : m.behind ? 'bg-amber-500/10 border-amber-500/25 text-amber-200' : 'bg-emerald-500/[0.06] border-emerald-500/15 text-emerald-200/90'}`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${!m.reachable ? 'bg-slate-600' : m.behind ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                     {m.name}
-                    <span className="font-mono text-[10px] opacity-80">{m.version || '?'}</span>
-                    {r && (r.success ? <CheckCircle size={11} className="text-emerald-400" /> : <AlertTriangle size={11} className="text-rose-400" />)}
-                  </span>
+                    <span className="font-mono text-[10px] opacity-80 ml-1.5">{m.version || '?'}</span>
+                    {r && (r.success ? <CheckCircle size={11} className="text-emerald-400 ml-1" aria-label="updated" /> : <AlertTriangle size={11} className="text-rose-400 ml-1" aria-label="failed" />)}
+                  </Pill>
                 )
               })}
             </div>
@@ -1259,6 +1155,7 @@ export default function Updates() {
                 ok={fv.behind === 0 && fv.unreachable === 0}
                 okText={`All ${fleetMembers.length} VM${fleetMembers.length === 1 ? '' : 's'} up to date`}
                 warnText={fv.behind > 0 ? `${fv.behind} VM${fv.behind === 1 ? '' : 's'} behind` : `${fv.unreachable} not answering`}
+                tone={fv.behind > 0 ? 'cyan' : 'amber'}
                 checkedAt={fv.checked_at}
                 updatedAt={fleetReport?.at ?? fv.last_round?.at}
               />
@@ -1285,448 +1182,349 @@ export default function Updates() {
             </p>
           </div>
         )}
-      </div>
+      </section>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          Image Updates (existing section)
+          Docker images: which are old, which have a newer digest, pull them
           ══════════════════════════════════════════════════════════════════════ */}
-
-      {/* ---- Header ---- */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/10 flex items-center justify-center text-cyan-400">
-            <ArrowUpCircle size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-100">Image Updates</h2>
-            <p className="text-xs text-slate-500">
-              {imgScope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* What happens after a pull */}
-          {isAdmin && (
-            <Tooltip label="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them.">
-              <div className="flex items-center px-3 py-2 rounded-lg font-medium text-slate-400 bg-white/[0.03] border border-white/5 hover:text-slate-200 hover:border-white/10 transition-all">
-                <Switch size="xs" checked={recreate} onChange={(e) => setRecreate(e.currentTarget.checked)} label="Recreate containers" styles={{ label: { fontSize: 11, paddingInlineStart: 8 } }} />
-              </div>
-            </Tooltip>
-          )}
-
-          {/* Update All — prioritizes images with confirmed registry updates */}
-          {isAdmin && bulkTargets.length > 0 && (
-            <button
-              onClick={handleUpdateAllStale}
-              disabled={bulkUpdating}
-              title={recreate ? 'Pulls each image and recreates the Compose services that use it' : 'Pulls each image; the containers are not recreated'}
-              className={`
-                flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
-                border backdrop-blur-sm transition-all duration-200
-                ${bulkUpdating
-                  ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400/50 cursor-not-allowed'
-                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
-                }
-              `}
-            >
-              {bulkUpdating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              {bulkProgress
-                ? `Updating ${bulkProgress.done + 1}/${bulkProgress.total}…`
-                : updatableImages.length > 0
-                  ? `Update All (${bulkTargets.length})`
-                  : staleImages.length > 0
-                    ? `Update All Stale (${bulkTargets.length})`
-                    : `Recreate Outdated (${bulkTargets.length})`}
-            </button>
-          )}
-
-          {/* Check Registry */}
-          <button
-            onClick={handleCheckRegistry}
-            disabled={registryChecking}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
-              border backdrop-blur-sm transition-all duration-200
-              ${registryChecking
-                ? 'bg-cyan-500/5 border-cyan-500/10 text-cyan-400/50 cursor-not-allowed'
-                : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/30 press'
-              }
-            `}
-          >
-            {registryChecking ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Check Registry for Updates
-          </button>
-          {data?.registry_checked_at && (
-            <span className="text-[10px] text-slate-500 whitespace-nowrap" title={new Date(data.registry_checked_at).toLocaleString()}>
-              Registry checked {formatRelative(data.registry_checked_at)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ---- Whose images: everywhere, the hub, or one VM — and the one-line status ---- */}
-      <div className="flex flex-col gap-2">
-        {hasFleet && <FleetScopeChips scope={imgScope} members={scopeMembers} onChange={setImgScope} label="Images on" busy={switching} />}
-        {data && (
-          <StatusLine
-            ok={counts.updates === 0}
-            okText={data.registry_checked_at ? `All ${counts.total} image${counts.total === 1 ? '' : 's'} up to date` : `No updates known for ${counts.total} image${counts.total === 1 ? '' : 's'} — check the registry`}
-            warnText={`${counts.updates} image update${counts.updates === 1 ? '' : 's'} available`}
-            checkedAt={data.registry_checked_at}
-            updatedAt={data.last_update_at}
-            updatedLabel="Last pulled"
-          />
-        )}
-        {outdatedImages.length > 0 && (
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 text-[11px] text-amber-100/90">
-            <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
-            <span className="flex-1 leading-relaxed">
-              {outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0)} container{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? '' : 's'} still run{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? 's' : ''} an older copy of {outdatedImages.length === 1 ? 'an image' : `${outdatedImages.length} images`} that was pulled since (an update that only pulled, or one from an earlier version that did not recreate them). Update recreates them on the current copy.
-            </span>
+      <section aria-label="Docker images" className="space-y-5">
+        <SectionHead
+          icon={<Container size={16} />}
+          title="Docker images"
+          sub={imgScope === 'all' ? `Every image on the hub and its ${scopeMembers.length} VM${scopeMembers.length === 1 ? '' : 's'} — checked and pulled where each one runs` : scopeMember ? `The images inside the VM ${scopeName} — checked and pulled there` : 'Check Docker images for available updates and apply them'}
+          actions={<>
+            {/* What happens after a pull */}
             {isAdmin && (
-              <button
-                onClick={handleUpdateAllStale}
-                disabled={bulkUpdating || !recreate}
-                title={recreate ? 'Recreate the Compose services on the current copy of their image' : 'Turn on "Recreate containers" first'}
-                className="shrink-0 px-3 py-1 rounded-lg text-[11px] font-medium bg-amber-500/15 border border-amber-500/25 text-amber-200 hover:bg-amber-500/25 disabled:opacity-50 disabled:cursor-not-allowed press"
-              >
-                Recreate now
-              </button>
+              <Hint label="On: the Compose services that use an image are recreated right after it is pulled. Off: pull only — the containers keep the old image until you recreate them.">
+                <div className="flex items-center h-[34px] px-3 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:text-slate-200 hover:border-white/15 transition-colors">
+                  <Switch size="xs" checked={recreate} onChange={(e) => setRecreate(e.currentTarget.checked)} label="Recreate containers" styles={{ label: { fontSize: 11, paddingInlineStart: 8 } }} />
+                </div>
+              </Hint>
             )}
-          </div>
-        )}
-        {isAdmin && <AutoImageUpdates scope={imgScope} members={scopeMembers} recreateDefault={recreate} />}
-      </div>
 
-      {/* ---- Summary stat cards ---- */}
-      <div className={`grid grid-cols-2 ${counts.updates > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3 stagger-children`}>
-        <SummaryCard
-          icon={<Package className="h-4 w-4 text-cyan-400" />}
-          label="Total Images"
-          value={counts.total}
-          color="cyan"
-          loading={isInitialLoad}
+            {/* Update all — prioritizes images with confirmed registry updates */}
+            {isAdmin && bulkTargets.length > 0 && (
+              <Hint label={recreate ? 'Pulls each image and recreates the Compose services that use it' : 'Pulls each image; the containers are not recreated'}>
+                <button type="button" onClick={handleUpdateAllStale} disabled={bulkUpdating} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                  {bulkUpdating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {bulkProgress
+                    ? `Updating ${bulkProgress.done + 1}/${bulkProgress.total}…`
+                    : updatableImages.length > 0
+                      ? `Update all (${bulkTargets.length})`
+                      : staleImages.length > 0
+                        ? `Update all stale (${bulkTargets.length})`
+                        : `Recreate outdated (${bulkTargets.length})`}
+                </button>
+              </Hint>
+            )}
+
+            {/* Check the registry */}
+            <button type="button" onClick={handleCheckRegistry} disabled={registryChecking} className={BTN_TOOLBAR_QUIET}>
+              {registryChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Check registry for updates
+            </button>
+            {data?.registry_checked_at && (
+              <span className="text-[10px] text-slate-500 whitespace-nowrap" title={new Date(data.registry_checked_at).toLocaleString()}>
+                Registry checked {formatRelative(data.registry_checked_at)}
+              </span>
+            )}
+          </>}
         />
-        <SummaryCard
-          icon={<CheckCircle className="h-4 w-4 text-emerald-400" />}
-          label="Current"
-          value={counts.current}
-          color="emerald"
-          loading={isInitialLoad}
-        />
-        <SummaryCard
-          icon={<Clock className="h-4 w-4 text-amber-400" />}
-          label="Aging"
-          value={counts.aging}
-          color="amber"
-          loading={isInitialLoad}
-        />
-        <SummaryCard
-          icon={<AlertTriangle className="h-4 w-4 text-rose-400" />}
-          label="Stale"
-          value={counts.stale}
-          color="rose"
-          loading={isInitialLoad}
-        />
-        {counts.updates > 0 && (
+
+        {/* ---- Whose images: everywhere, the hub, or one VM — and the one-line status ---- */}
+        <div className="flex flex-col gap-2">
+          {hasFleet && <FleetScopeChips scope={imgScope} members={scopeMembers} onChange={setImgScope} label="Images on" busy={switching} />}
+          {data && (
+            <StatusLine
+              ok={counts.updates === 0}
+              okText={data.registry_checked_at ? `All ${counts.total} image${counts.total === 1 ? '' : 's'} up to date` : `No updates known for ${counts.total} image${counts.total === 1 ? '' : 's'} — check the registry`}
+              warnText={`${counts.updates} image update${counts.updates === 1 ? '' : 's'} available`}
+              checkedAt={data.registry_checked_at}
+              updatedAt={data.last_update_at}
+              updatedLabel="Last pulled"
+            />
+          )}
+          {outdatedImages.length > 0 && (
+            <div className="flex flex-wrap items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 text-[11px] text-amber-100/90">
+              <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
+              <span className="flex-1 min-w-[12rem] leading-relaxed">
+                {outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0)} container{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? '' : 's'} still run{outdatedImages.reduce((n, i) => n + outdatedOf(i).length, 0) === 1 ? 's' : ''} an older copy of {outdatedImages.length === 1 ? 'an image' : `${outdatedImages.length} images`} that was pulled since (an update that only pulled, or one from an earlier version that did not recreate them). Update recreates them on the current copy.
+              </span>
+              {isAdmin && (
+                <Hint label={recreate ? 'Recreate the Compose services on the current copy of their image' : 'Turn on "Recreate containers" first'}>
+                  <span className="inline-flex shrink-0">
+                    <button type="button" onClick={handleUpdateAllStale} disabled={bulkUpdating || !recreate} className={`${BTN_CARD} ${TONE_ATTN} disabled:cursor-not-allowed`}>
+                      Recreate now
+                    </button>
+                  </span>
+                </Hint>
+              )}
+            </div>
+          )}
+          {isAdmin && <AutoImageUpdates scope={imgScope} members={scopeMembers} recreateDefault={recreate} />}
+        </div>
+
+        {/* ---- Summary stat cards ---- */}
+        <div className={`grid grid-cols-2 ${counts.updates > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3 stagger-children`}>
           <SummaryCard
-            icon={<ArrowUpCircle className="h-4 w-4 text-emerald-400" />}
-            label="Updates"
-            value={counts.updates}
+            icon={<Package className="h-4 w-4 text-cyan-400" />}
+            label="Total images"
+            value={counts.total}
+            color="cyan"
+            loading={isInitialLoad}
+          />
+          <SummaryCard
+            icon={<CheckCircle className="h-4 w-4 text-emerald-400" />}
+            label="Current"
+            value={counts.current}
             color="emerald"
             loading={isInitialLoad}
           />
-        )}
-      </div>
-
-      {/* ---- Image Table ---- */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-200">
-            Tracked Images{imgScope === 'all' && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-medium text-cyan-200 align-middle">Hub + {scopeMembers.length} VM{scopeMembers.length === 1 ? '' : 's'}</span>}{scopeMember && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 align-middle">VM · {scopeName}</span>}
-          </h3>
-          <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
-            Age shows when the image was built. Click "Check Registry" to compare digests against upstream — this shows definitive "Update" or "Latest" badges without pulling images.
-          </p>
+          <SummaryCard
+            icon={<Clock className="h-4 w-4 text-amber-400" />}
+            label="Aging"
+            value={counts.aging}
+            color="amber"
+            loading={isInitialLoad}
+          />
+          <SummaryCard
+            icon={<AlertTriangle className="h-4 w-4 text-rose-400" />}
+            label="Stale"
+            value={counts.stale}
+            color="rose"
+            loading={isInitialLoad}
+          />
+          {counts.updates > 0 && (
+            <SummaryCard
+              icon={<ArrowUpCircle className="h-4 w-4 text-cyan-400" />}
+              label="To update"
+              value={counts.updates}
+              color="cyan"
+              loading={isInitialLoad}
+            />
+          )}
         </div>
 
-        {/* Initial loading skeleton */}
-        {isInitialLoad ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/5">
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Image</th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Container(s)</th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider hidden sm:table-cell">Stack</th>
-                  <th className="text-right px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Age (days)</th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Staleness</th>
-                  <th className="text-right px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...Array(6)].map((_, i) => (
-                  <SkeletonRow key={i} />
-                ))}
-              </tbody>
-            </table>
+        {/* ---- Image table ---- */}
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-200">
+              Tracked images
+              {imgScope === 'all' && <Pill tone="cyan">Hub + {scopeMembers.length} VM{scopeMembers.length === 1 ? '' : 's'}</Pill>}
+              {scopeMember && <VmCapsule member={scopeMember} name={scopeName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} />}
+            </h3>
+            <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
+              Age shows when the image was built. Press “Check registry for updates” to compare digests against upstream — this shows definitive “Update” or “Latest” badges without pulling images.
+            </p>
           </div>
-        ) : images.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-            <Package className="h-10 w-10 text-slate-500 mb-3" />
-            <p className="text-sm text-slate-400 font-medium">No images found</p>
-            <p className="text-xs text-slate-500 mt-1">
-              {isConnected
+
+          {/* Initial loading skeleton */}
+          {isInitialLoad ? (
+            <div className="overflow-x-auto" role="status" aria-label="Reading the images">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th scope="col" className={`${TH} text-left`}>Image</th>
+                    <th scope="col" className={`${TH} text-left`}>Container(s)</th>
+                    <th scope="col" className={`${TH} text-left hidden sm:table-cell`}>Stack</th>
+                    <th scope="col" className={`${TH} text-right`}>Age (days)</th>
+                    <th scope="col" className={`${TH} text-left`}>Staleness</th>
+                    <th scope="col" className={`${TH} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...Array(6)].map((_, i) => (
+                    <SkeletonRow key={i} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : images.length === 0 ? (
+            /* Empty state */
+            <EmptyState
+              icon={<Package size={32} />}
+              title="No images found"
+              hint={isConnected
                 ? 'Run a registry check to discover images and their update status.'
                 : 'Connect to the API server to view image update information.'}
-            </p>
-            {isConnected && (
-              <button
-                onClick={handleCheckRegistry}
-                disabled={registryChecking}
-                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 press"
-              >
-                {registryChecking ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Check Registry
-              </button>
-            )}
-          </div>
-        ) : (
-          /* Image table */
-          <div className="overflow-x-auto -mx-4 md:-mx-6">
-            <table className="w-full text-sm min-w-[480px]">
-              <thead>
-                <tr className="border-b border-white/5">
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                    Image
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                    Container(s)
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider hidden sm:table-cell">
-                    Stack
-                  </th>
-                  {imgScope === 'all' && (
-                    <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                      Where
-                    </th>
-                  )}
-                  <th className="text-right px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                    Age (days)
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                    Staleness
-                  </th>
-                  <th className="text-right px-4 py-2 text-xs text-slate-500 uppercase tracking-wider">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y divide-white/[0.03] transition-opacity ${switching ? 'opacity-40' : ''}`}>
-                {images.map((img: ImageUpdateInfo) => {
-                  // Only the image being pulled right now is "updating"; the rest
-                  // of a bulk run is queued, finished or failed
-                  const key = rowKey(img)
-                  const isUpdating = updatingImages.has(key) || bulkProgress?.current === key
-                  const bulkState = bulkResults[key]
-                  const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => rowKey(t) === key)
-                  const oldCopy = outdatedOf(img)
-                  const byHand = manualOf(img)
-                  // the image is current but some containers were never moved onto it
-                  const needsRecreate = oldCopy.length > 0 && img.update_available !== true && img.staleness === 'current'
-                  return (
-                    <tr
-                      key={key}
-                      className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors duration-150"
-                    >
-                      {/* Image name */}
-                      <td className="px-4 py-3 min-w-[240px]">
-                        <ImageRef image={img.image} />
-                        {img.size && (
-                          <span className="block text-[10px] text-slate-500 mt-0.5">
-                            {img.size}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Container(s) — one chip per container */}
-                      <td className="px-4 py-3">
-                        {(img.containers && img.containers !== '-') || oldCopy.length > 0 || byHand.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 max-w-[380px]">
-                            {(img.containers && img.containers !== '-' ? img.containers : '').split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
-                              <span key={c} className="inline-flex rounded-md bg-white/[0.05] border border-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-slate-300 whitespace-nowrap">
-                                {c}
-                              </span>
-                            ))}
-                            {oldCopy.map((c) => (
-                              <span key={`old-${c}`} title={`${c} was started from an older copy of this image and was not recreated since`} className="inline-flex rounded-md bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 text-[10px] font-mono text-amber-200 whitespace-nowrap">
-                                {c} · old copy
-                              </span>
-                            ))}
-                            {byHand.map((c) => (
-                              <span key={`hand-${c}`} title={`${c} runs an older copy of this image but was not started by Compose, so DCS cannot recreate it — recreate it yourself`} className="inline-flex rounded-md bg-white/[0.04] border border-amber-500/15 px-1.5 py-0.5 text-[10px] font-mono text-amber-200/70 whitespace-nowrap">
-                                {c} · old copy, by hand
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-500">-</span>
-                        )}
-                      </td>
-
-                      {/* Where it runs (the fleet view) */}
-                      {imgScope === 'all' && (
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {img.member ? (
-                            <button
-                              onClick={() => setImgScope(img.member as string)}
-                              title={`Only the images of the VM ${img.member_name || img.member}`}
-                              className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 hover:bg-amber-500/20"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                              VM · {img.member_name || img.member}
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setImgScope('hub')}
-                              title="Only the hub's own images"
-                              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-200/90 hover:bg-emerald-500/20"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              Hub
-                            </button>
+              action={isConnected ? (
+                <button type="button" onClick={handleCheckRegistry} disabled={registryChecking} className={BTN_TOOLBAR_QUIET}>
+                  {registryChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Check registry
+                </button>
+              ) : undefined}
+            />
+          ) : (
+            /* Image table */
+            <div className="overflow-x-auto -mx-4 md:-mx-6">
+              <table className="w-full text-sm min-w-[480px]">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th scope="col" className={`${TH} text-left`}>Image</th>
+                    <th scope="col" className={`${TH} text-left`}>Container(s)</th>
+                    <th scope="col" className={`${TH} text-left hidden sm:table-cell`}>Stack</th>
+                    {imgScope === 'all' && <th scope="col" className={`${TH} text-left`}>Where</th>}
+                    <th scope="col" className={`${TH} text-right`}>Age (days)</th>
+                    <th scope="col" className={`${TH} text-left`}>Staleness</th>
+                    <th scope="col" className={`${TH} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y divide-white/[0.03] transition-opacity ${switching ? 'opacity-40' : ''}`}>
+                  {images.map((img: ImageUpdateInfo) => {
+                    // Only the image being pulled right now is "updating"; the rest
+                    // of a bulk run is queued, finished or failed
+                    const key = rowKey(img)
+                    const isUpdating = updatingImages.has(key) || bulkProgress?.current === key
+                    const bulkState = bulkResults[key]
+                    const queued = bulkUpdating && !isUpdating && !bulkState && bulkTargets.some((t) => rowKey(t) === key)
+                    const oldCopy = outdatedOf(img)
+                    const byHand = manualOf(img)
+                    // the image is current but some containers were never moved onto it
+                    const needsRecreate = oldCopy.length > 0 && img.update_available !== true && img.staleness === 'current'
+                    const rowTone = img.update_available === true
+                      ? TONE_OK
+                      : needsRecreate
+                        ? TONE_ATTN
+                        : img.staleness === 'current'
+                          ? 'bg-white/[0.03] border border-white/5 text-slate-500 cursor-default'
+                          : TONE_OK
+                    const rowHint = needsRecreate
+                      ? (recreate ? `${oldCopy.join(', ')} still run${oldCopy.length === 1 ? 's' : ''} an older copy of this image — recreate ${oldCopy.length === 1 ? 'it' : 'them'} on the current one` : 'Turn on "Recreate containers" to move the containers onto the current copy')
+                      : img.update_available === true
+                        ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated')
+                        : img.staleness === 'stale'
+                          ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated')
+                          : 'Nothing newer is known for this tag'
+                    return (
+                      <tr
+                        key={key}
+                        className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors duration-150"
+                      >
+                        {/* Image name */}
+                        <td className="px-3 py-3 min-w-[240px]">
+                          <ImageRef image={img.image} />
+                          {img.size && (
+                            <span className="block text-[10px] text-slate-500 mt-0.5">
+                              {img.size}
+                            </span>
                           )}
                         </td>
-                      )}
 
-                      {/* Stack (hidden on mobile) */}
-                      <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
-                        {img.stack ? (
-                          <span className="inline-flex rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-slate-300 whitespace-nowrap">
-                            {img.stack}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500">-</span>
+                        {/* Container(s) — one chip per container */}
+                        <td className="px-3 py-3">
+                          {(img.containers && img.containers !== '-') || oldCopy.length > 0 || byHand.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-[380px]">
+                              {(img.containers && img.containers !== '-' ? img.containers : '').split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
+                                <span key={c} className="inline-flex rounded-md bg-white/[0.05] border border-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-slate-300 whitespace-nowrap">
+                                  {c}
+                                </span>
+                              ))}
+                              {oldCopy.map((c) => (
+                                <span key={`old-${c}`} title={`${c} was started from an older copy of this image and was not recreated since`} className="inline-flex rounded-md bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 text-[10px] font-mono text-amber-200 whitespace-nowrap">
+                                  {c} · old copy
+                                </span>
+                              ))}
+                              {byHand.map((c) => (
+                                <span key={`hand-${c}`} title={`${c} runs an older copy of this image but was not started by Compose, so DCS cannot recreate it — recreate it yourself`} className="inline-flex rounded-md bg-white/[0.04] border border-amber-500/15 px-1.5 py-0.5 text-[10px] font-mono text-amber-200/70 whitespace-nowrap">
+                                  {c} · old copy, by hand
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500">-</span>
+                          )}
+                        </td>
+
+                        {/* Stack (hidden on mobile) */}
+                        <td className="px-3 py-3 hidden sm:table-cell whitespace-nowrap">
+                          {img.stack ? <Pill tone="slate">{img.stack}</Pill> : <span className="text-xs text-slate-500">-</span>}
+                        </td>
+
+                        {/* Where it runs (the fleet view) */}
+                        {imgScope === 'all' && (
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <VmCapsule
+                              member={img.member}
+                              name={img.member_name}
+                              vmid={img.vmid}
+                              size="xs"
+                              onClick={() => setImgScope(img.member ?? 'hub')}
+                            />
+                          </td>
                         )}
-                      </td>
 
-                      {/* Age (days) */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <span className="text-xs font-mono text-slate-300">
-                          {img.age_days >= 0 ? img.age_days : '-'}
-                        </span>
-                      </td>
-
-                      {/* Staleness badge + update indicator */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <StalenessBadge staleness={img.staleness} />
-                          {img.update_available === true && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400">
-                              <ArrowUpCircle size={10} />
-                              Update
-                            </span>
-                          )}
-                          {img.update_available === false && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
-                              <CheckCircle size={10} />
-                              Latest
-                            </span>
-                          )}
-                          {bulkState === 'done' && !isUpdating && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 animate-fade-in" title={recreate ? 'Pulled and recreated in this run' : 'Pulled in this run (containers not recreated)'}>
-                              <CheckCircle size={10} />
-                              Updated
-                            </span>
-                          )}
-                          {bulkState === 'failed' && !isUpdating && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-rose-500/15 text-rose-400 animate-fade-in">
-                              Failed
-                            </span>
-                          )}
-                          {queued && (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.04] text-slate-500">
-                              Queued
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Update button */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        {isAdmin ? (
-                          <button
-                            onClick={() => handleUpdateImage(img)}
-                            disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true && !needsRecreate)}
-                            title={needsRecreate ? (recreate ? `${oldCopy.join(', ')} still run${oldCopy.length === 1 ? 's' : ''} an older copy of this image — recreate ${oldCopy.length === 1 ? 'it' : 'them'} on the current one` : 'Turn on "Recreate containers" to move the containers onto the current copy') : img.update_available === true ? (recreate ? 'A newer digest is published — pull it and recreate the containers' : 'A newer digest is published — pull it; the containers are not recreated') : img.staleness === 'stale' ? (recreate ? 'Pull the tag again and recreate the containers' : 'Pull the tag again; the containers are not recreated') : 'Nothing newer is known for this tag'}
-                            className={`
-                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap
-                              transition-all duration-200
-                              ${img.update_available === true
-                                ? isUpdating
-                                  ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
-                                  : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 hover:border-emerald-500/35 press shadow-sm shadow-emerald-500/10'
-                                : needsRecreate
-                                  ? (isUpdating ? 'bg-amber-500/5 text-amber-300/50 border border-amber-500/10 cursor-not-allowed' : 'bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/35 press')
-                                : img.staleness === 'current'
-                                  ? 'bg-white/[0.03] text-slate-500 border border-white/[0.03] cursor-default'
-                                  : isUpdating
-                                    ? 'bg-emerald-500/5 text-emerald-400/50 border border-emerald-500/10 cursor-not-allowed'
-                                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 press'
-                              }
-                            `}
-                          >
-                            {isUpdating ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : img.staleness === 'current' && !needsRecreate ? (
-                              <CheckCircle className="h-3 w-3" />
-                            ) : needsRecreate ? (
-                              <RotateCcw className="h-3 w-3" />
-                            ) : (
-                              <Download className="h-3 w-3" />
-                            )}
-                            {isUpdating
-                              ? 'Updating...'
-                              : queued
-                                ? 'Queued'
-                                : needsRecreate
-                                  ? 'Recreate'
-                                  : img.staleness === 'current'
-                                    ? 'Up to date'
-                                    : 'Update'}
-                          </button>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-500">
-                            {img.staleness === 'current' ? (
-                              <><CheckCircle className="h-3 w-3" /> Up to date</>
-                            ) : (
-                              <StalenessBadge staleness={img.staleness} />
-                            )}
+                        {/* Age (days) */}
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <span className="text-xs font-mono text-slate-300 tabular-nums">
+                            {img.age_days >= 0 ? img.age_days : '-'}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                        </td>
+
+                        {/* Staleness badge + update indicator */}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <StalenessBadge staleness={img.staleness} />
+                            {img.update_available === true && <Pill tone="cyan" icon={<ArrowUpCircle size={10} />}>Update</Pill>}
+                            {img.update_available === false && <Pill tone="slate" icon={<CheckCircle size={10} />}>Latest</Pill>}
+                            {bulkState === 'done' && !isUpdating && (
+                              <Pill tone="emerald" icon={<CheckCircle size={10} />} title={recreate ? 'Pulled and recreated in this run' : 'Pulled in this run (containers not recreated)'}>Updated</Pill>
+                            )}
+                            {bulkState === 'failed' && !isUpdating && <Pill tone="rose">Failed</Pill>}
+                            {queued && <Pill tone="slate">Queued</Pill>}
+                          </div>
+                        </td>
+
+                        {/* Update button */}
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          {isAdmin ? (
+                            <Hint label={rowHint}>
+                              <span className="inline-flex">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateImage(img)}
+                                  disabled={isUpdating || queued || (img.staleness === 'current' && img.update_available !== true && !needsRecreate)}
+                                  className={`${BTN_CARD} ${rowTone}`}
+                                >
+                                  {isUpdating ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : img.staleness === 'current' && !needsRecreate ? (
+                                    <CheckCircle size={12} />
+                                  ) : needsRecreate ? (
+                                    <RotateCcw size={12} />
+                                  ) : (
+                                    <Download size={12} />
+                                  )}
+                                  {isUpdating
+                                    ? 'Updating…'
+                                    : queued
+                                      ? 'Queued'
+                                      : needsRecreate
+                                        ? 'Recreate'
+                                        : img.staleness === 'current'
+                                          ? 'Up to date'
+                                          : 'Update'}
+                                </button>
+                              </span>
+                            </Hint>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-500">
+                              {img.staleness === 'current' ? (
+                                <><CheckCircle size={12} /> Up to date</>
+                              ) : (
+                                <StalenessBadge staleness={img.staleness} />
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

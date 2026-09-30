@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react'
+// =============================================================================
+// Schedules — tasks DCS runs by itself on a timer: backups, pruning, health checks,
+// updates. Create one, pause it, run it now, read its history.
+// (The server's own crontab is the Cron Jobs page.)
+// =============================================================================
+
+import React, { useState, useEffect, useCallback, useId } from 'react'
 import { createPortal } from 'react-dom'
+import { Badge } from '@mantine/core'
 import {
   CalendarClock, Plus, Trash2, Play, Pause, Clock, History, RefreshCw,
   Archive, Wrench, HeartPulse, RotateCcw, X, Loader2, ChevronDown,
-  ChevronRight, CheckCircle, XCircle, AlertTriangle, Pencil, Activity, Zap, ArrowUpCircle, LifeBuoy,
+  ChevronRight, CheckCircle, XCircle, Pencil, Activity, Zap, ArrowUpCircle, LifeBuoy,
 } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
 import { useFleetScope } from '../hooks/useFleetScope'
@@ -12,8 +19,17 @@ import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import ModalOverlay from '../components/common/ModalOverlay'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { EmptyState, ErrorState } from '../components/common/PageState'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY,
+  TONE_OK, TONE_QUIET, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
+} from '../lib/ui'
 
 const actionIcons: Record<string, React.ElementType> = {
   backup: Archive, update: RefreshCw, prune: Wrench, 'health-check': HeartPulse,
@@ -21,15 +37,15 @@ const actionIcons: Record<string, React.ElementType> = {
   'dcs-update': ArrowUpCircle, recovery: LifeBuoy,
 }
 const actionLabels: Record<string, string> = {
-  backup: 'Backup', update: 'Update Stack', prune: 'Docker Prune',
-  'health-check': 'Health Check', restart: 'Restart Stack',
-  'metrics-snapshot': 'Metrics Snapshot', custom: 'Custom Script',
-  'dcs-update': 'DCS Self-Update', recovery: 'Recovery Bundle',
+  backup: 'Backup', update: 'Update stack', prune: 'Docker prune',
+  'health-check': 'Health check', restart: 'Restart stack',
+  'metrics-snapshot': 'Metrics snapshot', custom: 'Custom script',
+  'dcs-update': 'DCS self-update', recovery: 'Recovery bundle',
 }
 /** What the target field means per action (empty: no target) */
 const actionTargetHints: Record<string, string> = {
   'dcs-update': 'Leave empty, or "images" to pull image updates for every stack as well. Rolls back by itself when the health score drops.',
-  recovery: 'No target. Needs the RECOVERY_PASSPHRASE secret (Backup page); copies to RECOVERY_REMOTE when set.',
+  recovery: `No target. Needs the RECOVERY_PASSPHRASE secret (${pageLabel('backup')} page); copies to RECOVERY_REMOTE when set.`,
 }
 
 const scheduleOptions = [
@@ -45,32 +61,96 @@ const scheduleOptions = [
 
 const actionOptions = ['backup', 'update', 'prune', 'health-check', 'restart', 'metrics-snapshot', 'dcs-update', 'recovery', 'custom']
 
+/** the fields of the schedule dialog: one look, one focus ring */
+const FIELD = 'w-full h-11 px-3 rounded-xl bg-white/5 text-sm text-slate-200 placeholder-slate-500 border border-white/10 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+
+type ScheduleFormState = { name: string; schedule: string; action: string; target: string }
+
+/** The dialog that creates a schedule or edits one: the same fields, the same words */
+function ScheduleDialog({ mode, form, setForm, saving, onSubmit, onClose }: {
+  mode: 'create' | 'edit'
+  form: ScheduleFormState
+  setForm: (f: ScheduleFormState) => void
+  saving: boolean
+  onSubmit: () => void
+  onClose: () => void
+}) {
+  const uid = useId()
+  const needsTarget = form.action === 'update' || form.action === 'restart'
+  return createPortal(
+    <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 max-h-[92vh] overflow-y-auto border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center" aria-hidden>
+              {mode === 'create' ? <Plus size={16} className="text-slate-300" /> : <Pencil size={14} className="text-slate-300" />}
+            </div>
+            <h2 className="text-base font-semibold text-slate-100">{mode === 'create' ? 'New schedule' : 'Edit schedule'}</h2>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit() }} className="space-y-4">
+          <div>
+            <label htmlFor={`${uid}-name`} className="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
+            <input id={`${uid}-name`} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Daily backup" autoComplete="off" className={FIELD} autoFocus />
+          </div>
+          <div>
+            <label htmlFor={`${uid}-schedule`} className="block text-xs font-medium text-slate-400 mb-1.5">Schedule</label>
+            <select id={`${uid}-schedule`} value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} className={FIELD}>
+              {scheduleOptions.map((o) => <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor={`${uid}-action`} className="block text-xs font-medium text-slate-400 mb-1.5">Action</label>
+            <select id={`${uid}-action`} value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value })} className={FIELD}>
+              {actionOptions.map((a) => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
+            </select>
+            {actionTargetHints[form.action] && (
+              <p className="text-[10px] text-slate-500 mt-1.5">{actionTargetHints[form.action]}</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor={`${uid}-target`} className="block text-xs font-medium text-slate-400 mb-1.5">
+              Target {needsTarget ? <span className="text-rose-400" title="Required">*</span> : <span className="text-slate-500">(optional)</span>}
+            </label>
+            <input
+              id={`${uid}-target`}
+              value={form.target}
+              onChange={(e) => setForm({ ...form, target: e.target.value })}
+              placeholder={form.action === 'custom' ? '/path/to/script.sh' : needsTarget ? 'Stack name, e.g. media-services' : 'Leave empty for all'}
+              autoComplete="off"
+              className={FIELD}
+            />
+            {form.action === 'custom' && <p className="text-[10px] text-slate-500 mt-1">Path to an executable script on the server</p>}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+            <button type="submit" disabled={saving || !form.name} className={`${BTN_SHEET_PRIMARY} flex-1`}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : mode === 'create' ? <Plus size={14} /> : <CheckCircle size={14} />} {mode === 'create' ? 'Create' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </ModalOverlay>,
+    document.body,
+  )
+}
+
 export default function Schedules() {
   const { schedules, history, loading, saving, error, fetchSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runSchedule, fetchHistory } = useScheduleStore()
   const [showCreate, setShowCreate] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', schedule: '', action: '', target: '' })
+  const [editForm, setEditForm] = useState<ScheduleFormState>({ name: '', schedule: '', action: '', target: '' })
   const [runningId, setRunningId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', schedule: '@daily', action: 'backup', target: '' })
+  const [form, setForm] = useState<ScheduleFormState>({ name: '', schedule: '@daily', action: 'backup', target: '' })
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
   useEffect(() => { if (isConnected) fetchSchedules(scope) }, [fetchSchedules, isConnected, scope])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (deleteTarget) { setDeleteTarget(null); return }
-      if (showCreate) { setShowCreate(false); return }
-      if (editingId) { setEditingId(null); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [deleteTarget, showCreate, editingId])
 
   const handleCreate = useCallback(async () => {
     if (!form.name) return
@@ -90,12 +170,26 @@ export default function Schedules() {
     setRunningId(id)
     const result = await runSchedule(id, schedules.find((x) => x.id === id)?.member ?? scopeMember)
     if (result) {
-      addToast({ type: result.success ? 'success' : 'error', message: result.success ? `Ran successfully` : `Failed: ${result.output}` })
+      addToast({ type: result.success ? 'success' : 'error', message: result.success ? `Ran successfully` : `The run failed: ${result.output}` })
     } else {
-      addToast({ type: 'error', message: 'Failed to run schedule' })
+      addToast({ type: 'error', message: 'Could not run the schedule' })
     }
     setRunningId(null)
   }, [runSchedule, addToast, schedules, scopeMember])
+
+  /** Delete: ask first (the shared confirmation, focus on Cancel) */
+  const handleDelete = useCallback(async (id: string) => {
+    const s = schedules.find((x) => x.id === id)
+    const ok = await confirm({
+      title: 'Delete this schedule?',
+      message: `${s?.name ? `"${s.name}" is removed` : 'This scheduled task is removed'} together with its execution history. This cannot be undone.`,
+      confirmLabel: 'Delete schedule',
+      danger: true,
+    })
+    if (!ok) return
+    const done = await deleteSchedule(id, s?.member ?? scopeMember)
+    if (done) addToast({ type: 'success', message: 'Schedule deleted' })
+  }, [schedules, confirm, deleteSchedule, scopeMember, addToast])
 
   const handleExpand = (id: string) => {
     if (expandedId === id) { setExpandedId(null); return }
@@ -108,273 +202,161 @@ export default function Schedules() {
     setEditForm({ name: s.name, schedule: s.schedule || s.cron || '@daily', action: s.action, target: s.target || '' })
   }
 
+  const activeCount = schedules.filter((s) => s.enabled).length
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/10 flex items-center justify-center">
-            <CalendarClock className="w-5 h-5 text-violet-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-gradient">Scheduled Tasks</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && schedules.length > 0} /></div>}
-            <p className="text-sm text-slate-400">
-              {schedules.length > 0 ? `${schedules.filter(s => s.enabled).length} active of ${schedules.length} schedule${schedules.length !== 1 ? 's' : ''}` : 'Automated tasks on a schedule'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => fetchSchedules(scope)} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all press">
+      <PageHeader
+        page="schedules"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        subtitle={schedules.length > 0 ? `${activeCount} active of ${schedules.length} schedule${schedules.length !== 1 ? 's' : ''}` : undefined}
+        actions={<>
+          <button type="button" aria-label="Refresh" onClick={() => fetchSchedules(scope)} disabled={loading} className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           {isAdmin && (
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all press">
-              <Plus size={14} /> New Schedule
+            <button type="button" onClick={() => setShowCreate(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              <Plus size={14} /> New schedule
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && schedules.length > 0} />}
+      </PageHeader>
 
-      {error && <div className="glass rounded-lg p-3 text-rose-400 text-sm">{error}</div>}
+      {error && <ErrorState title="Something went wrong with the schedules" error={error} onRetry={() => fetchSchedules(scope)} />}
 
       {loading && schedules.length === 0 ? (
-        <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="glass rounded-xl p-4 h-16 skeleton" />)}</div>
+        <div className="space-y-3" role="status" aria-label="Reading the schedules">{[1, 2, 3].map((i) => <div key={i} className="glass rounded-xl p-4 h-16 skeleton" aria-hidden />)}</div>
       ) : schedules.length === 0 ? (
-        <div className="glass rounded-xl p-12 text-center">
-          <CalendarClock className="w-12 h-12 text-slate-500 mx-auto mb-3" />
-          <p className="text-slate-400 font-medium">No scheduled tasks</p>
-          <p className="text-sm text-slate-500 mt-1">Create a schedule to automate backups, pruning, and more</p>
+        <div className="glass rounded-xl border border-white/5">
+          <EmptyState
+            icon={<CalendarClock size={32} />}
+            title="No scheduled tasks"
+            hint="Create a schedule to automate backups, pruning and more"
+            action={isAdmin ? (
+              <button type="button" onClick={() => setShowCreate(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                <Plus size={14} /> New schedule
+              </button>
+            ) : undefined}
+          />
         </div>
       ) : (
-        <div className="space-y-3">
-          {schedules.map(s => {
+        <ul className="space-y-3">
+          {schedules.map((s) => {
             const Icon = actionIcons[s.action] || Play
             const isExpanded = expandedId === s.id
             const isRunning = runningId === s.id
-            const schedLabel = scheduleOptions.find(o => o.value === (s.schedule || s.cron))?.label || s.schedule || s.cron || '—'
+            const schedLabel = scheduleOptions.find((o) => o.value === (s.schedule || s.cron))?.label || s.schedule || s.cron || '—'
 
             return (
-              <div key={s.id} className="glass rounded-xl overflow-hidden border border-transparent hover:border-violet-500/20 transition-all animate-fade-in">
-                <div className="p-4 flex items-center gap-4">
-                  {/* Icon */}
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${s.enabled ? 'bg-violet-500/20' : 'bg-slate-700/50'}`}>
-                    <Icon className={`w-4 h-4 ${s.enabled ? 'text-violet-400' : 'text-slate-500'}`} />
+              <li key={s.id} className="glass rounded-xl overflow-hidden border border-white/5 hover:border-white/10 transition-colors animate-fade-in">
+                <div className="p-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+                  {/* Icon: emerald while it runs on its timer */}
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${s.enabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-slate-500'}`} aria-hidden>
+                    <Icon className="w-4 h-4" />
                   </div>
 
                   {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-white truncate">{s.name}</span>
+                  <div className="flex-1 min-w-[12rem]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-slate-100 truncate">{s.name}</span>
                       {s.member !== undefined && <VmCapsule member={s.member} name={s.member_name} vmid={s.vmid} size="xs" onClick={() => setScope(s.member ?? 'hub')} />}
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${s.enabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-500'}`}>
-                        {s.enabled ? 'Active' : 'Paused'}
-                      </span>
+                      <Badge component="span" color={s.enabled ? 'emerald' : 'slate'}>{s.enabled ? 'Active' : 'Paused'}</Badge>
                     </div>
-                    <div className="flex items-center gap-4 mt-1 text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{schedLabel}</span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" aria-hidden />{schedLabel}</span>
                       <span className="text-slate-400">{actionLabels[s.action] || s.action}{s.target ? ` → ${s.target}` : ''}</span>
                       {s.last_run && <span>Last: {new Date(s.last_run).toLocaleString()}</span>}
-                      {(s.run_count ?? 0) > 0 && <span className="text-slate-600">{s.run_count} runs</span>}
+                      {(s.run_count ?? 0) > 0 && <span className="text-slate-500">{s.run_count} runs</span>}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Run Now */}
                     {isAdmin && (
-                      <button
-                        onClick={() => handleRunNow(s.id)}
-                        disabled={isRunning}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/15 hover:bg-cyan-500/20 disabled:opacity-50 transition-all press"
-                        title="Run now"
-                      >
-                        {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-                        <span className="hidden md:inline">Run</span>
-                      </button>
+                      <Hint label="Run now">
+                        <button
+                          type="button"
+                          onClick={() => handleRunNow(s.id)}
+                          disabled={isRunning}
+                          aria-label={`Run ${s.name} now`}
+                          className={`${BTN_CARD} ${TONE_QUIET}`}
+                        >
+                          {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                          <span className="hidden md:inline">Run</span>
+                        </button>
+                      </Hint>
                     )}
-                    {/* Toggle */}
-                    <button
-                      onClick={() => toggleSchedule(s.id, s.member ?? scopeMember)}
-                      className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                      title={s.enabled ? 'Pause' : 'Resume'}
-                    >
-                      {s.enabled ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
-                    </button>
-                    {/* Edit */}
-                    {isAdmin && (
+                    <Hint label={s.enabled ? 'Pause' : 'Resume'}>
                       <button
-                        onClick={() => startEdit(s)}
-                        className="p-1.5 rounded-lg hover:bg-white/5 text-slate-500 hover:text-violet-400 transition-colors"
-                        title="Edit"
+                        type="button"
+                        onClick={() => toggleSchedule(s.id, s.member ?? scopeMember)}
+                        aria-label={`${s.enabled ? 'Pause' : 'Resume'} ${s.name}`}
+                        className={`${BTN_ICON_SM} ${s.enabled ? TONE_GHOST : TONE_GHOST_OK}`}
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        {s.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                       </button>
+                    </Hint>
+                    {isAdmin && (
+                      <Hint label="Edit">
+                        <button type="button" onClick={() => startEdit(s)} aria-label={`Edit ${s.name}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </Hint>
                     )}
-                    {/* Expand */}
-                    <button aria-label={isExpanded ? 'Hide the runs' : 'Show the runs'} aria-expanded={isExpanded} onClick={() => handleExpand(s.id)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
-                      {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                    </button>
-                    {/* Delete */}
-                    {isAdmin && (
-                      <button
-                        onClick={() => setDeleteTarget(s.id)}
-                        className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                    <Hint label={isExpanded ? 'Hide the runs' : 'Show the runs'}>
+                      <button type="button" aria-label={isExpanded ? 'Hide the runs' : 'Show the runs'} aria-expanded={isExpanded} onClick={() => handleExpand(s.id)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </button>
+                    </Hint>
+                    {isAdmin && (
+                      <Hint label="Delete">
+                        <button type="button" onClick={() => handleDelete(s.id)} disabled={saving} aria-label={`Delete ${s.name}`} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </Hint>
                     )}
                   </div>
                 </div>
 
                 {/* History */}
                 {isExpanded && (
-                  <div className="border-t border-white/5 p-4 bg-black/20">
+                  <div className="border-t border-white/5 p-4 bg-white/[0.02]">
                     <div className="flex items-center gap-2 mb-3">
-                      <History className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-300 font-medium">Execution History</span>
+                      <History className="w-4 h-4 text-slate-400" aria-hidden />
+                      <h3 className="text-sm text-slate-300 font-medium">Run history</h3>
                     </div>
                     {!history[s.id] || history[s.id].length === 0 ? (
-                      <p className="text-sm text-slate-500">No execution history yet</p>
+                      <p className="text-sm text-slate-500">No runs yet</p>
                     ) : (
                       <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
                         {history[s.id].map((h) => (
-                          <div key={h.timestamp} className="flex items-center gap-3 text-xs">
-                            {h.success ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                          <div key={h.timestamp} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            {h.success ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-label="Succeeded" /> : <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" aria-label="Failed" />}
                             <span className="text-slate-500">{new Date(h.timestamp).toLocaleString()}</span>
                             <span className="text-slate-400">{actionLabels[h.action] || h.action}</span>
-                            {h.trigger === 'manual' && <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[9px]">manual</span>}
-                            {h.duration_ms != null && <span className="text-slate-600">{h.duration_ms}ms</span>}
+                            {h.trigger === 'manual' && <Badge component="span" color="slate">manual</Badge>}
+                            {h.duration_ms != null && <span className="text-slate-500 tabular-nums">{h.duration_ms} ms</span>}
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
                 )}
-              </div>
+              </li>
             )
           })}
-        </div>
+        </ul>
       )}
 
-      {/* Create Modal */}
-      {showCreate && createPortal(
-        <ModalOverlay onClose={() => setShowCreate(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowCreate(false)}>
-          <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center"><Plus size={16} className="text-emerald-400" /></div>
-                <h2 className="text-base font-semibold text-white">New Schedule</h2>
-              </div>
-              <button aria-label="Close" onClick={() => setShowCreate(false)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleCreate() }} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Daily backup" className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all" autoFocus />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Schedule</label>
-                <select aria-label="Schedule" value={form.schedule} onChange={e => setForm({ ...form, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
-                  {scheduleOptions.map(o => <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Action</label>
-                <select aria-label="Action" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none bg-transparent">
-                  {actionOptions.map(a => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
-                </select>
-                {actionTargetHints[form.action] && (
-                  <p className="text-[10px] text-slate-500 mt-1.5">{actionTargetHints[form.action]}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Target {(form.action === 'update' || form.action === 'restart') ? <span className="text-rose-400">*</span> : <span className="text-slate-600">(optional)</span>}
-                </label>
-                <input value={form.target} onChange={e => setForm({ ...form, target: e.target.value })} placeholder={form.action === 'custom' ? '/path/to/script.sh' : form.action === 'update' || form.action === 'restart' ? 'Stack name (e.g. media-services)' : 'Leave empty for all'} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all" />
-                {form.action === 'custom' && <p className="text-[10px] text-slate-500 mt-1">Path to an executable script on the server</p>}
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
-                <button type="submit" disabled={saving || !form.name} className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Create
-                </button>
-              </div>
-            </form>
-          </div>
-        </ModalOverlay>,
-        document.body,
+      {showCreate && (
+        <ScheduleDialog mode="create" form={form} setForm={setForm} saving={saving} onSubmit={handleCreate} onClose={() => setShowCreate(false)} />
       )}
-
-      {/* Edit Modal */}
-      {editingId && createPortal(
-        <ModalOverlay onClose={() => setEditingId(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditingId(null)}>
-          <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center"><Pencil size={14} className="text-violet-400" /></div>
-                <h2 className="text-base font-semibold text-white">Edit Schedule</h2>
-              </div>
-              <button aria-label="Close" onClick={() => setEditingId(null)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleEdit() }} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
-                <input aria-label="Name" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" autoFocus />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Schedule</label>
-                <select aria-label="Schedule" value={editForm.schedule} onChange={e => setEditForm({ ...editForm, schedule: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
-                  {scheduleOptions.map(o => <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Action</label>
-                <select aria-label="Action" value={editForm.action} onChange={e => setEditForm({ ...editForm, action: e.target.value })} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white border border-white/10 focus:border-violet-500/50 focus:outline-none bg-transparent">
-                  {actionOptions.map(a => <option key={a} value={a} className="bg-slate-900">{actionLabels[a] || a}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Target {(editForm.action === 'update' || editForm.action === 'restart') ? <span className="text-rose-400">*</span> : <span className="text-slate-600">(optional)</span>}
-                </label>
-                <input value={editForm.target} onChange={e => setEditForm({ ...editForm, target: e.target.value })} placeholder={editForm.action === 'custom' ? '/path/to/script.sh' : editForm.action === 'update' || editForm.action === 'restart' ? 'Stack name (e.g. media-services)' : 'Leave empty for all'} className="w-full px-3 py-2.5 rounded-lg bg-white/5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 transition-all" />
-                {editForm.action === 'custom' && <p className="text-[10px] text-slate-500 mt-1">Path to an executable script on the server</p>}
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setEditingId(null)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-violet-500 text-white hover:bg-violet-400 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-lg shadow-violet-500/20">
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Save
-                </button>
-              </div>
-            </form>
-          </div>
-        </ModalOverlay>,
-        document.body,
-      )}
-
-      {/* Delete Confirmation */}
-      {deleteTarget && createPortal(
-        <ModalOverlay onClose={() => setDeleteTarget(null)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDeleteTarget(null)}>
-          <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4 border border-rose-500/20 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-rose-400" /></div>
-              <div>
-                <h3 className="text-white font-semibold">Delete Schedule</h3>
-                <p className="text-xs text-slate-500">This action cannot be undone</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-400 mb-4">This will permanently remove this scheduled task and its execution history.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2.5 rounded-lg text-sm text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all">Cancel</button>
-              <button onClick={async () => { await deleteSchedule(deleteTarget, schedules.find((x) => x.id === deleteTarget)?.member ?? scopeMember); setDeleteTarget(null); addToast({ type: 'success', message: 'Schedule deleted' }) }} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-rose-500 text-white hover:bg-rose-400 text-sm font-medium disabled:opacity-50 shadow-lg shadow-rose-500/20 transition-all">Delete</button>
-            </div>
-          </div>
-        </ModalOverlay>,
-        document.body,
+      {editingId && (
+        <ScheduleDialog mode="edit" form={editForm} setForm={setEditForm} saving={saving} onSubmit={handleEdit} onClose={() => setEditingId(null)} />
       )}
     </div>
   )

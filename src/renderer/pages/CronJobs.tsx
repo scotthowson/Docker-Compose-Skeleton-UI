@@ -1,8 +1,11 @@
 // =============================================================================
-// CronJobs — View and manage server crontab entries with human-readable schedules
+// CronJobs — the server's crontab: the entries of the user crontab (add, edit as
+// text, remove) and the system's, with what each schedule means in words
+// (The tasks DCS runs on its own timer are the Schedules page.)
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { Fragment, useState, useMemo, useCallback, useId } from 'react'
+import { SegmentedControl, Badge } from '@mantine/core'
 import {
   CalendarClock,
   Clock,
@@ -16,7 +19,6 @@ import {
   X,
   RefreshCw,
   Search,
-  Filter,
   FileText,
   AlertTriangle,
   Loader2,
@@ -32,9 +34,14 @@ import { usePolling } from '../hooks/usePolling'
 import { fetchCrontab, fetchSystemCrontab, updateCrontab } from '../api/endpoints'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_OK, TONE_QUIET, TONE_GHOST, TONE_GHOST_DANGER } from '../lib/ui'
 import type { CronEntry, CrontabResponse } from '../../shared/types'
-import { LoadingState, EmptyState } from '../components/common/PageState'
+import { EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
@@ -55,16 +62,19 @@ const PRESET_SCHEDULES: { label: string; cron: string }[] = [
   { label: 'Monthly (1st midnight)', cron: '0 0 1 * *' },
 ]
 
+/** a column header of the entries table (static) */
+const TH = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400'
+
+/** the fields of this page's forms: one look, one focus ring */
+const FIELD = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 font-mono placeholder-slate-600 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function sourceColor(source: CronEntry['source']): string {
-  switch (source) {
-    case 'user': return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
-    case 'system': return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-    case 'cron.d': return 'bg-violet-500/15 text-violet-400 border-violet-500/20'
-  }
+/** the user's own entries are the editable ones (emerald); the system's are neutral */
+function sourceTone(source: CronEntry['source']): 'emerald' | 'slate' {
+  return source === 'user' ? 'emerald' : 'slate'
 }
 
 function sourceIcon(source: CronEntry['source']) {
@@ -81,7 +91,7 @@ function sourceIcon(source: CronEntry['source']) {
 
 const CRON_GUIDE_SECTIONS = [
   {
-    title: 'Cron Expression Syntax',
+    title: 'Cron expression syntax',
     icon: Clock,
     content: `┌───────── minute (0-59)
 │ ┌─────── hour (0-23)
@@ -98,7 +108,7 @@ Special characters:
   /     Step (*/15 = every 15)`,
   },
   {
-    title: 'Common Schedules',
+    title: 'Common schedules',
     icon: CalendarClock,
     content: `* * * * *        Every minute
 */5 * * * *      Every 5 minutes
@@ -112,14 +122,14 @@ Special characters:
 0 0 1 1 *        Yearly on January 1st`,
   },
   {
-    title: 'User vs System Crontabs',
+    title: 'User and system crontabs',
     icon: User,
-    content: `User Crontab (editable)
+    content: `User crontab (editable)
   Your personal cron schedule. Edit directly
-  from this page or via the Raw Editor.
+  from this page or via the Raw editor.
   Location: crontab -e
 
-System Crontab (read-only)
+System cron (read-only)
   System-wide scheduled tasks managed by
   the OS and installed packages.
   Location: /etc/crontab, /etc/cron.d/
@@ -128,7 +138,7 @@ Only user crontab entries can be added,
 edited, or deleted from this interface.`,
   },
   {
-    title: 'Example: Nightly Backup',
+    title: 'Example: nightly backup',
     icon: Terminal,
     content: `Schedule:  0 2 * * *
 Command:   /opt/dcs/backup.sh >> /var/log/backup.log 2>&1
@@ -150,6 +160,8 @@ Tips:
 export default function CronJobs() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
+  const confirm = useConfirm()
+  const uid = useId()
 
   const [activeTab, setActiveTab] = useState<TabId>('user')
   const [search, setSearch] = useState('')
@@ -159,21 +171,10 @@ export default function CronJobs() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newSchedule, setNewSchedule] = useState('0 * * * *')
   const [newCommand, setNewCommand] = useState('')
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
-
-  // Close topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (showRawEditor) { setShowRawEditor(false); return }
-      if (showAddForm) { setShowAddForm(false); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [showRawEditor, showAddForm])
 
   // Polling
   const { data: userData, loading: userLoading, refresh: refreshUser } = usePolling<CrontabResponse>(
@@ -200,11 +201,11 @@ export default function CronJobs() {
     )
   }, [data, search])
 
-  // Copy cron expression
-  const handleCopy = useCallback((text: string, idx: number) => {
+  // Copy a schedule or a command
+  const handleCopy = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text)
-    setCopiedIdx(idx)
-    setTimeout(() => setCopiedIdx(null), 2000)
+    setCopied(key)
+    setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000)
   }, [])
 
   // Open raw editor
@@ -219,14 +220,14 @@ export default function CronJobs() {
     try {
       const res = await updateCrontab(rawContent)
       if (res.success) {
-        addToast({ type: 'success', message: 'Crontab updated successfully' })
+        addToast({ type: 'success', message: 'Crontab saved' })
         setShowRawEditor(false)
         refreshUser()
       } else {
-        addToast({ type: 'error', message: res.message || 'Failed to update crontab' })
+        addToast({ type: 'error', message: res.message || 'Could not save the crontab' })
       }
     } catch {
-      addToast({ type: 'error', message: 'Failed to update crontab' })
+      addToast({ type: 'error', message: 'Could not save the crontab' })
     } finally {
       setSaving(false)
     }
@@ -248,18 +249,25 @@ export default function CronJobs() {
         setNewSchedule('0 * * * *')
         refreshUser()
       } else {
-        addToast({ type: 'error', message: res.message || 'Failed to add entry' })
+        addToast({ type: 'error', message: res.message || 'Could not add the entry' })
       }
     } catch {
-      addToast({ type: 'error', message: 'Failed to add cron entry' })
+      addToast({ type: 'error', message: 'Could not add the cron entry' })
     } finally {
       setSaving(false)
     }
   }, [newSchedule, newCommand, userData, addToast, refreshUser])
 
-  // Delete cron entry
-  const handleDeleteEntry = useCallback(async (idx: number) => {
+  // Delete cron entry (asks first)
+  const handleDeleteEntry = useCallback(async (idx: number, command: string) => {
     if (!userData?.raw) return
+    const ok = await confirm({
+      title: 'Remove this cron entry?',
+      message: `${command}\n\nIt is taken out of the user crontab and stops running.`,
+      confirmLabel: 'Remove entry',
+      danger: true,
+    })
+    if (!ok) return
     const lines = userData.raw.split('\n')
     // Find the actual line index for this entry (skip comments/blanks)
     let entryCount = -1
@@ -276,105 +284,85 @@ export default function CronJobs() {
         addToast({ type: 'success', message: 'Cron entry removed' })
         refreshUser()
       } else {
-        addToast({ type: 'error', message: res.message || 'Failed to remove entry' })
+        addToast({ type: 'error', message: res.message || 'Could not remove the entry' })
       }
     } catch {
-      addToast({ type: 'error', message: 'Failed to remove cron entry' })
+      addToast({ type: 'error', message: 'Could not remove the cron entry' })
     } finally {
       setSaving(false)
     }
-  }, [userData, addToast, refreshUser])
+  }, [userData, addToast, refreshUser, confirm])
 
   // -------------------------------------------------------------------------
   // Disconnected state
   // -------------------------------------------------------------------------
 
   if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <WifiOff size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to view cron jobs</p>
-      </div>
-    )
+    return <EmptyState icon={<WifiOff size={32} />} title="Connect to a server to view cron jobs" />
   }
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
-  return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
-      <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/10 flex items-center justify-center text-violet-400">
-            <CalendarClock size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Cron Jobs</span></h2>
-            <p className="text-xs text-slate-500">
-              {entries.length} cron {entries.length === 1 ? 'entry' : 'entries'}
-              {activeTab === 'user' ? ' (user)' : ' (system)'}
-            </p>
-          </div>
-        </div>
+  const colCount = activeTab === 'user' ? 6 : 5
 
-        <div className="flex items-center gap-2">
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <DisconnectedBanner />
+      <PageHeader
+        page="cronjobs"
+        subtitle={`${entries.length} cron ${entries.length === 1 ? 'entry' : 'entries'}${activeTab === 'user' ? ' (user)' : ' (system)'}`}
+        actions={<>
           {activeTab === 'user' && (
             <>
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors press"
-              >
+              <button type="button" aria-label="Add entry" onClick={() => setShowAddForm(!showAddForm)} aria-expanded={showAddForm} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
                 <Plus size={14} />
-                <span className="hidden sm:inline">Add Entry</span>
+                <span className="hidden sm:inline">Add entry</span>
               </button>
-              <button
-                onClick={handleOpenRawEditor}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
-              >
+              <button type="button" aria-label="Raw editor" onClick={handleOpenRawEditor} className={BTN_TOOLBAR_QUIET}>
                 <Edit3 size={14} />
-                <span className="hidden sm:inline">Raw Editor</span>
+                <span className="hidden sm:inline">Raw editor</span>
               </button>
             </>
           )}
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors"
-          >
-            <BookOpen size={14} />
-            <span className="hidden sm:inline">Guide</span>
-          </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
-          >
+          <Hint label={showGuide ? 'Hide the guide' : 'Show the guide'}>
+            <button
+              type="button"
+              aria-label="Guide"
+              aria-expanded={showGuide}
+              onClick={() => setShowGuide(!showGuide)}
+              className={`${BTN_TOOLBAR} ${showGuide ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <BookOpen size={14} />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          </Hint>
+          <button type="button" aria-label="Refresh" onClick={refresh} disabled={loading} className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
-      {/* Cron Guide (collapsible) */}
+      {/* Cron guide (collapsible) */}
       {showGuide && (
-        <div className="glass rounded-xl overflow-hidden animate-fade-in">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <section aria-label={`${pageLabel('cronjobs')} guide`} className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <BookOpen size={16} className="text-violet-400" />
-              <h2 className="text-sm font-semibold text-white">Cron Schedule Guide</h2>
+              <BookOpen size={16} className="text-slate-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">{pageLabel('cronjobs')} guide</h2>
             </div>
-            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
-              <X size={14} className="text-slate-400" />
-            </button>
+            <Hint label="Close the guide">
+              <button type="button" aria-label="Close the guide" onClick={() => setShowGuide(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-slate-400 mb-4">
               Scheduled tasks run commands at specific intervals using cron expressions.
-              Use the <code className="text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded text-xs">User</code> tab to manage your own cron entries, or view <code className="text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded text-xs">System</code> entries for read-only OS schedules.
+              Use the <code className="text-slate-200 bg-white/10 px-1.5 py-0.5 rounded text-xs">User crontab</code> tab to manage your own cron entries, or view <code className="text-slate-200 bg-white/10 px-1.5 py-0.5 rounded text-xs">System cron</code> for the read-only OS schedules.
             </p>
             {CRON_GUIDE_SECTIONS.map((section, i) => {
               const isExpanded = expandedGuide === i
@@ -382,14 +370,16 @@ export default function CronJobs() {
               return (
                 <div key={section.title} className="border border-white/[0.03] rounded-lg overflow-hidden">
                   <button
+                    type="button"
+                    aria-expanded={isExpanded}
                     onClick={() => setExpandedGuide(isExpanded ? null : i)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
                   >
-                    <Icon size={14} className="text-violet-400 shrink-0" />
+                    <Icon size={14} className="text-slate-400 shrink-0" aria-hidden />
                     <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
                     {isExpanded
-                      ? <ChevronDown size={14} className="text-slate-500" />
-                      : <ChevronRight size={14} className="text-slate-500" />
+                      ? <ChevronDown size={14} className="text-slate-500" aria-hidden />
+                      : <ChevronRight size={14} className="text-slate-500" aria-hidden />
                     }
                   </button>
                   {isExpanded && (
@@ -403,91 +393,93 @@ export default function CronJobs() {
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Tab bar + search */}
+      {/* Which crontab + search */}
       <div className="flex items-center flex-wrap gap-4">
-        {/* Tabs */}
-        <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
-          {([
-            { id: 'user' as TabId, label: 'User Crontab', icon: <User size={13} /> },
-            { id: 'system' as TabId, label: 'System Cron', icon: <Server size={13} /> },
-          ]).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-white/10 text-slate-200 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-400'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          aria-label="Which crontab"
+          value={activeTab}
+          onChange={(v) => { setActiveTab(v as TabId); setExpandedIdx(null) }}
+          data={[
+            { value: 'user', label: <span className="flex items-center gap-1.5"><User size={13} aria-hidden />User crontab</span> },
+            { value: 'system', label: <span className="flex items-center gap-1.5"><Server size={13} aria-hidden />System cron</span> },
+          ]}
+        />
 
         {/* Search */}
-        <div className="flex-1 relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <div className="flex-1 min-w-[12rem] relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter by schedule, command, or user..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+            aria-label="Filter the entries"
+            placeholder="Filter by schedule, command or user…"
+            className="w-full h-[34px] pl-9 pr-3 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
           />
         </div>
       </div>
 
       {/* Add entry form */}
       {showAddForm && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-emerald-500/15 rounded-xl p-4 animate-scale-in">
-          <h3 className="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
-            <Plus size={14} className="text-emerald-400" />
-            New Cron Entry
-          </h3>
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleAddEntry() }}
+          className="glass border border-white/5 rounded-xl p-4 animate-scale-in"
+        >
+          <h2 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <Plus size={14} className="text-slate-400" aria-hidden />
+            New cron entry
+          </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-3 mb-3">
             {/* Schedule input */}
             <div>
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Schedule</label>
+              <label htmlFor={`${uid}-schedule`} className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Schedule</label>
               <input
+                id={`${uid}-schedule`}
                 type="text"
                 value={newSchedule}
                 onChange={(e) => setNewSchedule(e.target.value)}
-                className="w-48 px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className={`${FIELD} sm:w-48`}
                 placeholder="* * * * *"
+                autoComplete="off"
+                spellCheck={false}
               />
             </div>
 
             {/* Command input */}
             <div>
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Command</label>
+              <label htmlFor={`${uid}-command`} className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Command</label>
               <input
+                id={`${uid}-command`}
                 type="text"
                 value={newCommand}
                 onChange={(e) => setNewCommand(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className={FIELD}
                 placeholder="/usr/bin/my-script.sh --arg"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
               />
             </div>
           </div>
 
           {/* Preset schedule buttons */}
           <div className="mb-3">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Quick Presets</label>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Quick presets</p>
             <div className="flex flex-wrap gap-1.5">
               {PRESET_SCHEDULES.map((p) => (
                 <button
                   key={p.cron}
+                  type="button"
+                  aria-pressed={newSchedule === p.cron}
                   onClick={() => setNewSchedule(p.cron)}
-                  className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${
+                  className={`h-8 sm:h-7 px-2.5 rounded-lg text-[11px] font-medium border transition-colors ${
                     newSchedule === p.cron
-                      ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
-                      : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5 hover:text-slate-400'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-white/[0.03] text-slate-400 border-white/5 hover:bg-white/5 hover:text-slate-300'
                   }`}
                 >
                   {p.label}
@@ -498,168 +490,192 @@ export default function CronJobs() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleAddEntry}
-              disabled={saving || !newCommand.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-              Add Entry
+            <button type="submit" disabled={saving || !newCommand.trim()} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Add entry
             </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-400 transition-colors"
-            >
+            <button type="button" onClick={() => setShowAddForm(false)} className={BTN_TOOLBAR_QUIET}>
               Cancel
             </button>
+          </div>
+        </form>
+      )}
+
+      {/* Loading: the table's shape */}
+      {loading && !data && (
+        <div className="glass border border-white/5 rounded-xl overflow-hidden" role="status" aria-label="Reading the cron entries">
+          <div className="px-4 py-3 border-b border-white/5"><div className="skeleton h-3 w-48 rounded" /></div>
+          <div className="divide-y divide-white/[0.03]" aria-hidden>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="px-4 py-3.5 flex items-center gap-6">
+                <div className="skeleton h-5 w-28 rounded" />
+                <div className="skeleton h-3 w-36 rounded" />
+                <div className="skeleton h-3 flex-1 max-w-sm rounded" />
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Loading */}
-      {loading && !data && <LoadingState label="Loading cron entries…" />}
-
       {/* Empty state */}
       {data && entries.length === 0 && (
-        <EmptyState
-          icon={<CalendarClock size={32} />}
-          title={search ? 'No entries match your filter' : 'No cron entries found'}
-          hint={search
-            ? 'Try adjusting your search query or clearing the filter.'
-            : activeTab === 'user'
-              ? 'Add an entry here, or schedule a task from the Scheduled Tasks page.'
-              : 'System cron entries appear here once tasks are scheduled on the server.'}
-          action={!search && activeTab === 'user' ? (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-            >
-              <Plus size={14} />
-              Add Entry
-            </button>
-          ) : undefined}
-        />
+        <div className="glass border border-white/5 rounded-xl">
+          <EmptyState
+            icon={<CalendarClock size={32} />}
+            title={search ? 'No entries match your filter' : 'No cron entries found'}
+            hint={search
+              ? 'Try adjusting your search query or clearing the filter.'
+              : activeTab === 'user'
+                ? `Add an entry here, or schedule a task on the ${pageLabel('schedules')} page.`
+                : 'System cron entries appear here once tasks are scheduled on the server.'}
+            action={!search && activeTab === 'user' ? (
+              <button type="button" onClick={() => setShowAddForm(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                <Plus size={14} />
+                Add entry
+              </button>
+            ) : undefined}
+          />
+        </div>
       )}
 
       {/* Cron entries table */}
       {entries.length > 0 && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/[0.05] rounded-xl overflow-hidden">
+        <div className="glass border border-white/5 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 w-8"><span className="sr-only">Details</span></th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Schedule</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Human Readable</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Command</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Source</th>
-                {activeTab === 'user' && (
-                  <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 w-20">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, idx) => (
-                <tr
-                  key={`${entry.schedule}-${entry.command}`}
-                  className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors group"
-                >
-                  {/* Expand toggle */}
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
-                      aria-label={expandedIdx === idx ? 'Hide the details' : 'Show the details'}
-                      aria-expanded={expandedIdx === idx}
-                      className="text-slate-500 hover:text-slate-400 transition-colors"
-                    >
-                      {expandedIdx === idx ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                  </td>
-
-                  {/* Schedule (monospace) */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/15">
-                        {entry.schedule}
-                      </code>
-                      <button
-                        onClick={() => handleCopy(entry.schedule, idx)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-400 transition-all"
-                        title="Copy schedule"
-                      >
-                        {copiedIdx === idx ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      </button>
-                    </div>
-                  </td>
-
-                  {/* Human readable */}
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                      <Clock size={12} className="text-slate-500 shrink-0" />
-                      {entry.human_readable}
-                    </span>
-                  </td>
-
-                  {/* Command */}
-                  <td className="px-4 py-3">
-                    <code className="text-xs font-mono text-slate-300 truncate block max-w-[400px]" title={entry.command}>
-                      {entry.command}
-                    </code>
-                  </td>
-
-                  {/* Source badge */}
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${sourceColor(entry.source)}`}>
-                      {sourceIcon(entry.source)}
-                      {entry.source}
-                    </span>
-                    {entry.user && (
-                      <span className="text-[10px] text-slate-500 ml-1.5">{entry.user}</span>
-                    )}
-                  </td>
-
-                  {/* Actions (user crontab only) */}
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th scope="col" className={`${TH} text-left w-8`}><span className="sr-only">Details</span></th>
+                  <th scope="col" className={`${TH} text-left`}>Schedule</th>
+                  <th scope="col" className={`${TH} text-left`}>In words</th>
+                  <th scope="col" className={`${TH} text-left`}>Command</th>
+                  <th scope="col" className={`${TH} text-left`}>Source</th>
                   {activeTab === 'user' && (
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleDeleteEntry(idx)}
-                        disabled={saving}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all disabled:opacity-50"
-                        title="Delete entry"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
+                    <th scope="col" className={`${TH} text-right w-20`}>Actions</th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {entries.map((entry, idx) => {
+                  const open = expandedIdx === idx
+                  return (
+                    <Fragment key={`${idx}-${entry.schedule}-${entry.command}`}>
+                      <tr className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors">
+                        {/* Expand toggle */}
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedIdx(open ? null : idx)}
+                            aria-label={open ? 'Hide the details' : 'Show the details'}
+                            aria-expanded={open}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                          >
+                            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        </td>
+
+                        {/* Schedule (monospace) */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <code className="text-xs font-mono text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/15 whitespace-nowrap">
+                              {entry.schedule}
+                            </code>
+                            <Hint label="Copy the schedule">
+                              <button type="button" onClick={() => handleCopy(entry.schedule, `s${idx}`)} aria-label={`Copy the schedule ${entry.schedule}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                                {copied === `s${idx}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                              </button>
+                            </Hint>
+                          </div>
+                        </td>
+
+                        {/* In words */}
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <Clock size={12} className="text-slate-500 shrink-0" aria-hidden />
+                            {entry.human_readable}
+                          </span>
+                        </td>
+
+                        {/* Command */}
+                        <td className="px-4 py-3">
+                          <code className="text-xs font-mono text-slate-300 truncate block max-w-[400px]" title={entry.command}>
+                            {entry.command}
+                          </code>
+                        </td>
+
+                        {/* Source badge */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge component="span" color={sourceTone(entry.source)} leftSection={sourceIcon(entry.source)}>{entry.source}</Badge>
+                          {entry.user && (
+                            <span className="text-[10px] text-slate-500 ml-1.5">{entry.user}</span>
+                          )}
+                        </td>
+
+                        {/* Actions (user crontab only) */}
+                        {activeTab === 'user' && (
+                          <td className="px-4 py-3 text-right">
+                            <Hint label="Remove the entry">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEntry(idx, entry.command)}
+                                disabled={saving}
+                                aria-label={`Remove the entry ${entry.command}`}
+                                className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </Hint>
+                          </td>
+                        )}
+                      </tr>
+
+                      {/* The details: the whole command, wrapped */}
+                      {open && (
+                        <tr className="border-b border-white/[0.03] bg-white/[0.02]">
+                          <td colSpan={colCount} className="px-4 py-3">
+                            <div className="flex items-start gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Command</p>
+                                <code className="block text-xs font-mono text-slate-200 whitespace-pre-wrap break-all">{entry.command}</code>
+                                <p className="mt-2 text-[11px] text-slate-500">
+                                  {entry.human_readable} · <span className="font-mono">{entry.schedule}</span> · {entry.source}{entry.user ? ` (${entry.user})` : ''}
+                                </p>
+                              </div>
+                              <button type="button" onClick={() => handleCopy(entry.command, `c${idx}`)} className={`${BTN_CARD} ${TONE_QUIET}`}>
+                                {copied === `c${idx}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                Copy command
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Raw Editor Overlay */}
+      {/* Raw editor */}
       {showRawEditor && createPortal(
         <ModalOverlay onClose={() => setShowRawEditor(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[80vh] glass border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
               <div className="flex items-center gap-2">
-                <Terminal size={16} className="text-violet-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Raw Crontab Editor</h3>
+                <Terminal size={16} className="text-slate-400" aria-hidden />
+                <h2 className="text-sm font-semibold text-slate-200">Raw crontab editor</h2>
               </div>
-              <button aria-label="Close"
-                onClick={() => setShowRawEditor(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-              >
+              <button type="button" aria-label="Close" onClick={() => setShowRawEditor(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                 <X size={16} />
               </button>
             </div>
 
             {/* Warning */}
             <div className="mx-5 mt-4 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
-              <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+              <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" aria-hidden />
               <p className="text-[11px] text-amber-400/90">
                 Editing the raw crontab directly. Invalid syntax may cause crontab installation to fail. Changes are applied immediately.
               </p>
@@ -668,33 +684,27 @@ export default function CronJobs() {
             {/* Editor */}
             <div className="flex-1 overflow-auto p-5">
               <textarea
+                aria-label="Contents of the user crontab"
                 value={rawContent}
                 onChange={(e) => setRawContent(e.target.value)}
-                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs font-mono text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:border-emerald-500/50 transition-colors leading-relaxed"
+                className="w-full h-full min-h-[300px] px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs font-mono text-slate-300 placeholder-slate-600 resize-none transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40 leading-relaxed"
                 placeholder="# min hour day month weekday command"
                 spellCheck={false}
               />
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-white/5">
-              <span className="text-[10px] text-slate-500">
-                Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-t border-white/5">
+              <span className="text-[10px] text-slate-500 hidden sm:inline">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[9px] font-mono text-slate-400">Esc</kbd> to close
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowRawEditor(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-                >
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button type="button" onClick={() => setShowRawEditor(false)} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
                   Cancel
                 </button>
-                <button
-                  onClick={handleSaveRaw}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
-                >
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                  Save Crontab
+                <button type="button" onClick={handleSaveRaw} disabled={saving} className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}>
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Save crontab
                 </button>
               </div>
             </div>

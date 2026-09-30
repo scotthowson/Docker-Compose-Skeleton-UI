@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { Badge } from '@mantine/core'
 import {
   Wrench, RefreshCw, Loader2, Trash2, RotateCcw, AlertTriangle,
   CheckCircle2, Box, Image, HardDrive, Network, FileText, Scissors,
@@ -32,8 +33,12 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import { BTN_TOOLBAR, BTN_ICON_SM, BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_DANGER, TONE_OK, TONE_QUIET, TONE_DANGER, TONE_GHOST } from '../lib/ui'
 import type { FleetTarget, MemberOutcome, FleetMaintenanceReport, FleetOrphanReport, FleetDiskAnalysis } from '../../shared/fleetScopedOps'
-import { LoadingState } from '../components/common/PageState'
+import { EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
@@ -42,6 +47,9 @@ import ModalOverlay from '../components/common/ModalOverlay'
 
 /** a row key: the resource on its DCS (one server's rows share one member) */
 const rowKey = (member: string | null, id: string) => `${member ?? ''}|${id}`
+
+/** a column header of the tables (static) */
+const TH = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400'
 
 /** who answered and who did not, for the Everywhere strip */
 function answered(members: MemberOutcome<unknown>[]): { ok: number; failed: MemberOutcome<unknown>[] } {
@@ -54,7 +62,7 @@ function answered(members: MemberOutcome<unknown>[]): { ok: number; failed: Memb
 
 const MAINTENANCE_GUIDE_SECTIONS = [
   {
-    title: 'Safe Prune',
+    title: 'Safe prune',
     icon: Trash2,
     content: `Removes stopped containers and unused networks.
 This is the safest cleanup option and won't
@@ -66,7 +74,7 @@ Safe to run regularly — it only cleans up
 resources that are already stopped or detached.`,
   },
   {
-    title: 'Image Prune',
+    title: 'Image prune',
     icon: Image,
     content: `Removes dangling images (untagged layers left
 over from builds and updates).
@@ -79,7 +87,7 @@ just dangling ones. Configure with the
 AGGRESSIVE_IMAGE_PRUNE flag in your .env file.`,
   },
   {
-    title: 'Deep Prune',
+    title: 'Deep prune',
     icon: AlertTriangle,
     content: `WARNING: Aggressive cleanup that removes:
 
@@ -96,7 +104,7 @@ remove data you want to keep. Always backup
 important volumes before running deep prune.`,
   },
   {
-    title: 'Log Rotation',
+    title: 'Log rotation',
     icon: FileText,
     content: `Archives the current DCS log file and starts fresh.
 
@@ -128,19 +136,19 @@ A VM that does not answer is left out and
 named in the strip under the header.`,
   },
   {
-    title: 'Orphan Detection',
+    title: 'Orphan detection',
     icon: Search,
     content: `Scans for unused Docker resources:
 
-Orphaned Containers
+Orphaned containers
   Exited containers no longer managed by any
   stack's docker-compose.yml
 
-Dangling Images
+Dangling images
   Untagged image layers from builds/updates
   that are no longer referenced
 
-Dangling Volumes
+Dangling volumes
   Named volumes not attached to any container
 
 Review orphans before pruning to ensure nothing
@@ -213,16 +221,6 @@ export default function Maintenance() {
   const [showGuide, setShowGuide] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
 
-  // Close topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (showDeepPruneModal) { setShowDeepPruneModal(false); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [showDeepPruneModal])
-
   // ---- Action handlers: one server, or on Everywhere the hub and every VM at once ----
   type ActionResult = { success: boolean; output?: string; message?: string }
   const runAction = useCallback(async (opts: {
@@ -257,14 +255,14 @@ export default function Maintenance() {
         const where = whereLabel ? ` on ${whereLabel}` : ''
         addToast({
           type: res.success ? 'success' : 'error',
-          message: res.success ? `${done}${where}` : (res.message || res.output || `${verb} failed`),
+          message: res.success ? `${done}${where}` : (res.message || res.output || `The ${verb.toLowerCase()} failed`),
         })
       }
       refreshReport()
       refreshOrphans()
       refreshDisk()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : `${verb} failed` })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `The ${verb.toLowerCase()} failed` })
     } finally {
       setBusy(false)
     }
@@ -300,26 +298,31 @@ export default function Maintenance() {
   // ---- Who answered (Everywhere) ----
   const reportAnswered = reportData ? answered(reportData.members) : null
 
+  const dot = (c: string) => <span className={`h-1.5 w-1.5 rounded-full ${c}`} />
+  const anyActionBusy = pruning || imagePruning || deepPruning || rotating
+  const notAnswering = scopeMembers.filter((m) => !m.reachable)
+
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Deep Prune Confirmation Modal */}
+
+      {/* Deep prune confirmation */}
       {showDeepPruneModal && createPortal(
         <ModalOverlay onClose={() => setShowDeepPruneModal(false)}
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => setShowDeepPruneModal(false)}
         >
           <div
-            className="relative w-full max-w-md mx-4 glass p-6 animate-scale-in"
+            className="relative w-full max-w-md mx-4 max-h-[92vh] overflow-y-auto glass rounded-2xl border border-white/10 p-6 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/10" aria-hidden>
                 <AlertTriangle size={18} className="text-rose-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-100">Deep Prune</h3>
-                <p className="text-[10px] text-slate-500">Destructive action</p>
+                <h2 className="text-base font-semibold text-slate-100">Deep prune</h2>
+                <p className="text-[11px] text-slate-500">Destructive action</p>
               </div>
             </div>
 
@@ -342,23 +345,17 @@ export default function Maintenance() {
             </p>
 
             {hasFleet && (
-              <p className="text-[11px] text-amber-200/90 mb-4 flex items-center gap-1.5">
-                <Boxes size={12} className="shrink-0" />
+              <p className="text-[11px] text-slate-400 mb-4 flex items-center gap-1.5">
+                <Boxes size={12} className="shrink-0 text-violet-300" aria-hidden />
                 {everywhere ? `Runs on the hub and on ${vmCount} VM${vmCount === 1 ? '' : 's'}, each cleaning its own Docker.` : `Runs on ${whereLabel} only.`}
               </p>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setShowDeepPruneModal(false)}
-                className="h-10 inline-flex items-center justify-center rounded-lg text-sm font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
-              >
+              <button type="button" onClick={() => setShowDeepPruneModal(false)} className={BTN_SHEET_QUIET}>
                 Cancel
               </button>
-              <button
-                onClick={handleDeepPrune}
-                className="h-10 inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium text-white bg-rose-500 border border-rose-400/40 hover:bg-rose-400 transition-all press whitespace-nowrap"
-              >
+              <button type="button" onClick={handleDeepPrune} className={`${BTN_SHEET_DANGER} whitespace-nowrap`}>
                 <Trash2 size={14} />
                 {everywhere ? 'Delete everywhere' : 'Delete everything'}
               </button>
@@ -368,69 +365,54 @@ export default function Maintenance() {
         document.body,
       )}
 
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <Wrench size={20} className="text-amber-400" />
-            <h2 className="text-base md:text-xl font-bold"><span className="text-gradient">Maintenance</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
-          </div>
-          {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={reportLoading && !!reportData} /></div>}
-          <p className="mt-0.5 text-sm text-slate-500">
-            {hasFleet ? (everywhere ? 'Docker cleanup on the hub and every VM: numbers added up, actions run on all of them' : `Docker cleanup on ${whereLabel}`) : 'Docker system maintenance and cleanup'}
-          </p>
+      <PageHeader
+        page="maintenance"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        subtitle={hasFleet ? (everywhere ? 'Docker cleanup on the hub and every VM: numbers added up, actions run on all of them' : `Docker cleanup on ${whereLabel}`) : undefined}
+        actions={<>
+          <Hint label={showGuide ? 'Hide the guide' : 'Show the guide'}>
+            <button
+              type="button"
+              aria-label="Guide"
+              aria-expanded={showGuide}
+              onClick={() => setShowGuide((v) => !v)}
+              className={`${BTN_TOOLBAR} ${showGuide ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <BookOpen size={14} />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          </Hint>
+          <button type="button" aria-label="Refresh" onClick={handleRefreshAll} disabled={isAnyLoading} className={`${BTN_TOOLBAR} ${TONE_QUIET}`}>
+            <RefreshCw size={14} className={isAnyLoading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        </>}
+      >
+        <div className="space-y-2">
+          {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={reportLoading && !!reportData} />}
           {everywhere && reportAnswered && (
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500">
               {reportAnswered.ok} of {targets.length} server{targets.length === 1 ? '' : 's'} answered
-              {scopeMembers.some((m) => !m.reachable) && <span> · {scopeMembers.filter((m) => !m.reachable).length} VM{scopeMembers.filter((m) => !m.reachable).length === 1 ? '' : 's'} not answering ({scopeMembers.filter((m) => !m.reachable).map((m) => m.name).join(', ')})</span>}
+              {notAnswering.length > 0 && <span> · {notAnswering.length} VM{notAnswering.length === 1 ? '' : 's'} not answering ({notAnswering.map((m) => m.name).join(', ')})</span>}
               {reportAnswered.failed.length > 0 && <span className="text-amber-300/80"> · no report from {reportAnswered.failed.map((m) => m.name).join(', ')}</span>}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowGuide((v) => !v)}
-            className={`
-              flex items-center gap-2 rounded-lg px-3 py-2
-              text-xs font-medium
-              border transition-all duration-200
-              ${showGuide
-                ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20'
-                : 'text-slate-300 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
-              }
-            `}
-          >
-            <BookOpen size={14} />
-            Guide
-          </button>
-          <button
-            onClick={handleRefreshAll}
-            disabled={isAnyLoading}
-            className="
-              flex items-center gap-2 rounded-lg px-3 py-2
-              text-xs font-medium text-slate-300
-              bg-white/5 border border-white/10
-              hover:bg-white/10 hover:border-white/15
-              disabled:opacity-50 transition-all duration-200
-            "
-          >
-            <RefreshCw size={14} className={isAnyLoading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-        </div>
-      </div>
+      </PageHeader>
 
       {/* Guide Panel */}
       {showGuide && (
-        <div className="glass rounded-xl overflow-hidden animate-fade-in">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <section aria-label={`${pageLabel('maintenance')} guide`} className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <BookOpen size={16} className="text-cyan-400" />
-              <h2 className="text-sm font-semibold text-white">Maintenance Guide</h2>
+              <BookOpen size={16} className="text-slate-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">{pageLabel('maintenance')} guide</h2>
             </div>
-            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
-              <X size={14} className="text-slate-400" />
-            </button>
+            <Hint label="Close the guide">
+              <button type="button" aria-label="Close the guide" onClick={() => setShowGuide(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-slate-400 mb-4">
@@ -442,14 +424,16 @@ export default function Maintenance() {
               return (
                 <div key={section.title} className="border border-white/[0.03] rounded-lg overflow-hidden">
                   <button
+                    type="button"
+                    aria-expanded={isExpanded}
                     onClick={() => setExpandedGuide(isExpanded ? null : i)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
                   >
-                    <Icon size={14} className="text-cyan-400 shrink-0" />
+                    <Icon size={14} className="text-slate-400 shrink-0" aria-hidden />
                     <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
                     {isExpanded
-                      ? <ChevronDown size={14} className="text-slate-500" />
-                      : <ChevronRight size={14} className="text-slate-500" />
+                      ? <ChevronDown size={14} className="text-slate-500" aria-hidden />
+                      : <ChevronRight size={14} className="text-slate-500" aria-hidden />
                     }
                   </button>
                   {isExpanded && (
@@ -463,92 +447,51 @@ export default function Maintenance() {
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* ================================================================== */}
       {/* 1. Actions */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Actions{hasFleet && <span className="text-[11px] font-normal text-slate-500">{everywhere ? `on the hub and ${vmCount} VM${vmCount === 1 ? '' : 's'}` : `on ${whereLabel}`}</span>}</h3>
+      <section aria-labelledby="maint-actions-title" className="glass rounded-xl p-5 border border-white/5">
+        <h2 id="maint-actions-title" className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Actions{hasFleet && <span className="text-[11px] font-normal text-slate-500">{everywhere ? `on the hub and ${vmCount} VM${vmCount === 1 ? '' : 's'}` : `on ${whereLabel}`}</span>}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* Safe Prune */}
-          <button
-            onClick={handleSafePrune}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-cyan-500/10 text-cyan-400 border border-cyan-500/20
-              hover:bg-cyan-500/20 hover:border-cyan-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
+          {/* Safe prune: nothing to lose (emerald) */}
+          <button type="button" onClick={handleSafePrune} disabled={anyActionBusy} className={`${BTN_SHEET} ${TONE_OK}`}>
             {pruning ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
-            Safe Prune
+            Safe prune
           </button>
 
-          {/* Image Prune */}
-          <button
-            onClick={handleImagePrune}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-amber-500/10 text-amber-400 border border-amber-500/20
-              hover:bg-amber-500/20 hover:border-amber-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
+          {/* Image prune */}
+          <button type="button" onClick={handleImagePrune} disabled={anyActionBusy} className={`${BTN_SHEET} ${TONE_QUIET}`}>
             {imagePruning ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
-            Image Prune
+            Image prune
           </button>
 
-          {/* Deep Prune */}
-          <button
-            onClick={() => setShowDeepPruneModal(true)}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-rose-500/10 text-rose-400 border border-rose-500/20
-              hover:bg-rose-500/20 hover:border-rose-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
+          {/* Deep prune: destructive (rose) */}
+          <button type="button" onClick={() => setShowDeepPruneModal(true)} disabled={anyActionBusy} className={`${BTN_SHEET} ${TONE_DANGER}`}>
             {deepPruning ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Deep Prune
+            Deep prune
           </button>
 
-          {/* Rotate Logs */}
-          <button
-            onClick={handleLogRotate}
-            disabled={pruning || imagePruning || deepPruning || rotating}
-            className="
-              flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-              text-sm font-medium
-              bg-violet-500/10 text-violet-400 border border-violet-500/20
-              hover:bg-violet-500/20 hover:border-violet-500/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
-            "
-          >
+          {/* Rotate logs */}
+          <button type="button" onClick={handleLogRotate} disabled={anyActionBusy} className={`${BTN_SHEET} ${TONE_QUIET}`}>
             {rotating ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-            Rotate Logs
+            Rotate logs
           </button>
         </div>
-      </div>
+      </section>
 
-      {/* 2. System Report */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">System Report{everywhere && <span className="text-[11px] font-normal text-slate-500">added up across {targets.length} server{targets.length === 1 ? '' : 's'}</span>}</h3>
+      {/* 2. System report */}
+      {/* ================================================================== */}
+      <section aria-labelledby="maint-report-title" className="glass rounded-xl p-5 border border-white/5">
+        <h2 id="maint-report-title" className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">System report{everywhere && <span className="text-[11px] font-normal text-slate-500">added up across {targets.length} server{targets.length === 1 ? '' : 's'}</span>}</h2>
 
         {reportLoading && !report ? (
-          <LoadingState compact label="Loading…" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" role="status" aria-label="Reading the report">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-[88px] rounded-lg" aria-hidden />)}
+          </div>
         ) : report ? (
           <div className="space-y-4">
             {/* 2x4 stat grid */}
@@ -556,40 +499,28 @@ export default function Maintenance() {
               {/* Containers */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Box size={12} className="text-cyan-400" />
+                  <Box size={12} className="text-slate-400" aria-hidden />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Containers</span>
                 </div>
-                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.containers.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{report.containers.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    {report.containers.running}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-                    {report.containers.stopped}
-                  </span>
+                  <Badge component="span" color="emerald" leftSection={dot('bg-emerald-400')} title="Running">{report.containers.running}</Badge>
+                  <Badge component="span" color="rose" leftSection={dot('bg-rose-400')} title="Stopped">{report.containers.stopped}</Badge>
                 </div>
               </div>
 
               {/* Images */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Image size={12} className="text-violet-400" />
+                  <Image size={12} className="text-slate-400" aria-hidden />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Images</span>
                 </div>
-                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.images.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{report.images.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   {report.images.dangling > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      {report.images.dangling} dangling
-                    </span>
+                    <Badge component="span" color="amber" leftSection={dot('bg-amber-400')}>{report.images.dangling} dangling</Badge>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      clean
-                    </span>
+                    <Badge component="span" color="emerald" leftSection={dot('bg-emerald-400')}>clean</Badge>
                   )}
                 </div>
               </div>
@@ -597,21 +528,15 @@ export default function Maintenance() {
               {/* Volumes */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <HardDrive size={12} className="text-amber-400" />
+                  <HardDrive size={12} className="text-slate-400" aria-hidden />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Volumes</span>
                 </div>
-                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.volumes.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{report.volumes.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   {report.volumes.dangling > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      {report.volumes.dangling} dangling
-                    </span>
+                    <Badge component="span" color="amber" leftSection={dot('bg-amber-400')}>{report.volumes.dangling} dangling</Badge>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      clean
-                    </span>
+                    <Badge component="span" color="emerald" leftSection={dot('bg-emerald-400')}>clean</Badge>
                   )}
                 </div>
               </div>
@@ -619,82 +544,77 @@ export default function Maintenance() {
               {/* Networks */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Network size={12} className="text-emerald-400" />
+                  <Network size={12} className="text-slate-400" aria-hidden />
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">Networks</span>
                 </div>
-                <p className="text-xl md:text-2xl font-bold text-slate-100">{report.networks.total}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-100 tabular-nums">{report.networks.total}</p>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-400">
-                    {report.networks.custom} custom
-                  </span>
+                  <Badge component="span" color="cyan">{report.networks.custom} custom</Badge>
                 </div>
               </div>
 
-              {/* App Data Size */}
+              {/* App data size */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3 sm:col-span-2">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <HardDrive size={12} className="text-cyan-400" />
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">App Data</span>
+                  <HardDrive size={12} className="text-slate-400" aria-hidden />
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">App data</span>
                 </div>
                 <p className="text-lg font-bold text-slate-100 font-mono">{report.app_data_size}</p>
               </div>
 
-              {/* Log Size */}
+              {/* Log size */}
               <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3 sm:col-span-2">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <FileText size={12} className="text-violet-400" />
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Log Size</span>
+                  <FileText size={12} className="text-slate-400" aria-hidden />
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Log size</span>
                 </div>
                 <p className="text-lg font-bold text-slate-100 font-mono">{report.log_size}</p>
               </div>
             </div>
           </div>
         ) : null}
-      </div>
+      </section>
 
       {/* ================================================================== */}
-      {/* 3. Orphan Detection */}
+      {/* 3. Orphan detection */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/5">
+      <section aria-labelledby="maint-orphans-title" className="glass rounded-xl p-5 border border-white/5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-200">Orphan Detection</h3>
+          <h2 id="maint-orphans-title" className="text-sm font-semibold text-slate-200">Orphan detection</h2>
           {!orphansLoading && orphans && allClean && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
-              <CheckCircle2 size={12} />
-              All Clean
-            </span>
+            <Badge component="span" color="emerald" leftSection={<CheckCircle2 size={10} />}>All clean</Badge>
           )}
         </div>
 
         {orphansLoading && !orphans ? (
-          <LoadingState compact label="Loading…" />
+          <div className="space-y-2" role="status" aria-label="Looking for orphans">
+            {[0, 1, 2].map((i) => <div key={i} className="skeleton h-8 rounded-lg" aria-hidden />)}
+          </div>
         ) : orphans ? (
           <div className="space-y-4">
-            {/* Orphaned Containers */}
+            {/* Orphaned containers */}
             {orphanContainers.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
-                  <Box size={12} className="text-rose-400" />
-                  Orphaned Containers ({orphanContainers.length})
-                </p>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                  <Box size={12} className="text-slate-400" aria-hidden />
+                  Orphaned containers ({orphanContainers.length})
+                </h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b border-white/5">
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Image</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                        <th scope="col" className={`${TH} text-left`}>Name</th>
+                        <th scope="col" className={`${TH} text-left`}>Image</th>
+                        <th scope="col" className={`${TH} text-left`}>Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {orphanContainers.map((c) => (
                         <tr key={rowKey(c.member, c.name)} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{c.name}{everywhere && <VmCapsule member={c.member} name={c.member_name} vmid={c.vmid} size="xs" onClick={() => setScope(c.member ?? 'hub')} />}</span></td>
+                          <td className={`px-4 py-2 font-mono text-slate-200 text-xs whitespace-nowrap ${everywhere ? 'min-w-[17rem]' : ''}`}><span className="inline-flex items-center gap-2">{c.name}{everywhere && <VmCapsule member={c.member} name={c.member_name} vmid={c.vmid} size="xs" onClick={() => setScope(c.member ?? 'hub')} />}</span></td>
                           <td className="px-4 py-2 font-mono text-slate-400 text-xs">{c.image}</td>
                           <td className="px-4 py-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-400">
-                              {c.status}
-                            </span>
+                            <Badge component="span" color="rose">{c.status}</Badge>
                           </td>
                         </tr>
                       ))}
@@ -704,27 +624,27 @@ export default function Maintenance() {
               </div>
             )}
 
-            {/* Dangling Images */}
+            {/* Dangling images */}
             {danglingImages.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
-                  <Image size={12} className="text-amber-400" />
-                  Dangling Images ({danglingImages.length})
-                </p>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                  <Image size={12} className="text-slate-400" aria-hidden />
+                  Dangling images ({danglingImages.length})
+                </h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b border-white/5">
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">ID</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Size</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Created</th>
+                        <th scope="col" className={`${TH} text-left`}>ID</th>
+                        <th scope="col" className={`${TH} text-left`}>Size</th>
+                        <th scope="col" className={`${TH} text-left`}>Created</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {danglingImages.map((img) => (
                         <tr key={rowKey(img.member, img.id)} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{img.id.slice(0, 12)}{everywhere && <VmCapsule member={img.member} name={img.member_name} vmid={img.vmid} size="xs" onClick={() => setScope(img.member ?? 'hub')} />}</span></td>
-                          <td className="px-4 py-2 font-mono text-amber-400 text-xs">{img.size}</td>
+                          <td className={`px-4 py-2 font-mono text-slate-200 text-xs whitespace-nowrap ${everywhere ? 'min-w-[17rem]' : ''}`}><span className="inline-flex items-center gap-2">{img.id.slice(0, 12)}{everywhere && <VmCapsule member={img.member} name={img.member_name} vmid={img.vmid} size="xs" onClick={() => setScope(img.member ?? 'hub')} />}</span></td>
+                          <td className="px-4 py-2 font-mono text-slate-300 text-xs">{img.size}</td>
                           <td className="px-4 py-2 text-slate-400 text-xs">{img.created}</td>
                         </tr>
                       ))}
@@ -734,29 +654,27 @@ export default function Maintenance() {
               </div>
             )}
 
-            {/* Dangling Volumes */}
+            {/* Dangling volumes */}
             {danglingVolumes.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
-                  <HardDrive size={12} className="text-amber-400" />
-                  Dangling Volumes ({danglingVolumes.length})
-                </p>
+                <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                  <HardDrive size={12} className="text-slate-400" aria-hidden />
+                  Dangling volumes ({danglingVolumes.length})
+                </h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b border-white/5">
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Driver</th>
+                        <th scope="col" className={`${TH} text-left`}>Name</th>
+                        <th scope="col" className={`${TH} text-left`}>Driver</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {danglingVolumes.map((vol) => (
                         <tr key={rowKey(vol.member, vol.name)} className="hover:bg-white/[0.03] transition-colors duration-150">
-                          <td className="px-4 py-2 font-mono text-slate-200 text-xs"><span className="inline-flex items-center gap-2">{vol.name}{everywhere && <VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" onClick={() => setScope(vol.member ?? 'hub')} />}</span></td>
+                          <td className={`px-4 py-2 font-mono text-slate-200 text-xs whitespace-nowrap ${everywhere ? 'min-w-[17rem]' : ''}`}><span className="inline-flex items-center gap-2">{vol.name}{everywhere && <VmCapsule member={vol.member} name={vol.member_name} vmid={vol.vmid} size="xs" onClick={() => setScope(vol.member ?? 'hub')} />}</span></td>
                           <td className="px-4 py-2">
-                            <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-medium text-cyan-400">
-                              {vol.driver}
-                            </span>
+                            <Badge component="span" color="slate">{vol.driver}</Badge>
                           </td>
                         </tr>
                       ))}
@@ -768,39 +686,40 @@ export default function Maintenance() {
 
             {/* All clean message */}
             {allClean && (
-              <div className="flex items-center justify-center py-6">
-                <div className="text-center">
-                  <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-300">No orphaned resources detected{whereLabel ? ` ${everywhere ? 'anywhere' : `on ${whereLabel}`}` : ''}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{everywhere ? 'Every server that answered is tidy' : 'Your Docker environment is tidy'}</p>
-                </div>
-              </div>
+              <EmptyState
+                compact
+                icon={<CheckCircle2 size={28} className="text-emerald-400" />}
+                title={`No orphaned resources detected${whereLabel ? ` ${everywhere ? 'anywhere' : `on ${whereLabel}`}` : ''}`}
+                hint={everywhere ? 'Every server that answered is tidy' : 'Your Docker environment is tidy'}
+              />
             )}
           </div>
         ) : null}
-      </div>
+      </section>
 
       {/* ================================================================== */}
-      {/* 4. Disk Analysis */}
+      {/* 4. Disk usage */}
       {/* ================================================================== */}
-      <div className="glass rounded-xl p-5 border border-white/5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Disk Analysis{everywhere && <span className="text-[11px] font-normal text-slate-500">every server&apos;s stacks; Docker&apos;s table added up per type</span>}</h3>
+      <section aria-labelledby="maint-disk-title" className="glass rounded-xl p-5 border border-white/5">
+        <h2 id="maint-disk-title" className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">Disk usage{everywhere && <span className="text-[11px] font-normal text-slate-500">every server&apos;s stacks; Docker&apos;s table added up per type</span>}</h2>
 
         {diskLoading && !disk ? (
-          <LoadingState compact label="Loading…" />
+          <div className="space-y-3" role="status" aria-label="Measuring the disk">
+            {[0, 1, 2].map((i) => <div key={i} className="skeleton h-5 rounded" aria-hidden />)}
+          </div>
         ) : disk ? (
           <div className="space-y-5">
             {/* Total app data */}
             <div className="flex items-center gap-2">
-              <HardDrive size={14} className="text-cyan-400" />
-              <span className="text-xs text-slate-400">Total App Data:</span>
+              <HardDrive size={14} className="text-slate-400" aria-hidden />
+              <span className="text-xs text-slate-400">Total app data:</span>
               <span className="text-sm font-bold text-slate-100 font-mono">{disk.total_app_data}</span>
             </div>
 
             {/* Per-stack sizes as horizontal bars */}
             {stackSizes.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-slate-400 mb-3">Per-Stack App-Data</p>
+                <h3 className="text-xs font-medium text-slate-400 mb-3">App-Data per stack</h3>
                 <div className="space-y-2">
                   {stackSizes.map((entry) => {
                     const pct = Math.max(((parseSizeBytes(entry.size) ?? 0) / maxStackBytes) * 100, 2)
@@ -810,9 +729,9 @@ export default function Maintenance() {
                           <span className="text-xs text-slate-300 font-mono truncate mr-3 inline-flex items-center gap-2 min-w-0"><span className="truncate">{entry.name}</span>{everywhere && <VmCapsule member={entry.member} name={entry.member_name} vmid={entry.vmid} size="xs" onClick={() => setScope(entry.member ?? 'hub')} />}</span>
                           <span className="text-xs text-slate-400 font-mono shrink-0">{entry.size}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                        <div className="h-2 rounded-full bg-slate-800 overflow-hidden" aria-hidden>
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all duration-500"
+                            className="h-full rounded-full bg-cyan-500/80 transition-all duration-500"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -826,29 +745,27 @@ export default function Maintenance() {
             {/* Docker system df table */}
             {disk.docker_df.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-slate-400 mb-3">Docker System Disk Usage</p>
+                <h3 className="text-xs font-medium text-slate-400 mb-3">Docker disk usage</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b border-white/5">
-                        <th className="text-left px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
-                        <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
-                        <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Active</th>
-                        <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Size</th>
-                        <th className="text-right px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Reclaimable</th>
+                        <th scope="col" className={`${TH} text-left`}>Type</th>
+                        <th scope="col" className={`${TH} text-right`}>Total</th>
+                        <th scope="col" className={`${TH} text-right`}>Active</th>
+                        <th scope="col" className={`${TH} text-right`}>Size</th>
+                        <th scope="col" className={`${TH} text-right`}>Reclaimable</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
                       {disk.docker_df.map((row) => (
                         <tr key={row.type} className="hover:bg-white/[0.03] transition-colors duration-150">
                           <td className="px-4 py-2 text-slate-200 font-medium text-xs">{row.type}</td>
-                          <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs">{row.total}</td>
-                          <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs">{row.active}</td>
+                          <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs tabular-nums">{row.total}</td>
+                          <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs tabular-nums">{row.active}</td>
                           <td className="px-4 py-2 text-right font-mono text-slate-300 text-xs">{row.size}</td>
                           <td className="px-4 py-2 text-right">
-                            <span className="inline-flex rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
-                              {row.reclaimable}
-                            </span>
+                            <Badge component="span" color="cyan">{row.reclaimable}</Badge>
                           </td>
                         </tr>
                       ))}
@@ -859,9 +776,7 @@ export default function Maintenance() {
             )}
           </div>
         ) : null}
-      </div>
-
-      {/* ================================================================== */}
+      </section>
     </div>
   )
 }

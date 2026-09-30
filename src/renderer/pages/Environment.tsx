@@ -5,16 +5,21 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { SegmentedControl } from '@mantine/core'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import {
   FileCode, Save, CheckCircle, AlertTriangle, RefreshCw,
-  ChevronDown, Eye, Pencil,
+  ChevronDown, Eye, EyeOff, Pencil,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_ICON_SM, TONE_OK, TONE_QUIET, TONE_GHOST } from '../lib/ui'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { fetchStacks } from '../api/endpoints'
 import {
   fetchRootEnvScoped, saveRootEnvScoped, validateEnvScoped,
@@ -26,7 +31,7 @@ import type {
   RootEnvResponse, StackEnvResponse, StackListResponse,
   EnvValidateResponse,
 } from '../../shared/types'
-import { LoadingState, EmptyState } from '../components/common/PageState'
+import { EmptyState } from '../components/common/PageState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,6 +63,9 @@ type ViewMode = 'table' | 'raw'
 // Env Table (parsed key-value view)
 // ---------------------------------------------------------------------------
 
+/** a column header of the variables table (static: the file's own order is the point) */
+const TH = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400'
+
 function EnvTable({
   variables,
 }: {
@@ -83,15 +91,9 @@ function EnvTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/5">
-            <th className="text-right px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider w-14">
-              Line
-            </th>
-            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-              Key
-            </th>
-            <th className="text-left px-4 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-              Value
-            </th>
+            <th scope="col" className={`${TH} text-right w-14`}>Line</th>
+            <th scope="col" className={`${TH} text-left`}>Key</th>
+            <th scope="col" className={`${TH} text-left`}>Value</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.03]">
@@ -108,7 +110,7 @@ function EnvTable({
                 <td className="text-right px-4 py-2 text-xs text-slate-500 font-mono tabular-nums">
                   {v.line}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-cyan-400 whitespace-nowrap">
+                <td className="px-4 py-2 font-mono text-xs text-cyan-300 whitespace-nowrap">
                   {v.key}
                   {v.comment && (
                     <span className="ml-2 text-slate-500 italic text-[10px] font-sans">
@@ -120,19 +122,23 @@ function EnvTable({
                   <div className="flex items-center gap-2">
                     <span
                       className={`font-mono text-xs break-all ${
-                        sensitive && !isRevealed ? 'text-slate-500' : 'text-emerald-400'
+                        sensitive && !isRevealed ? 'text-slate-500' : 'text-slate-200'
                       }`}
                     >
-                      {displayValue || <span className="text-slate-500 italic">(empty)</span>}
+                      {displayValue || (v.key ? <span className="text-slate-500 italic">(empty)</span> : null)}
                     </span>
                     {sensitive && (
-                      <button
-                        onClick={() => toggleReveal(v.key)}
-                        className="shrink-0 p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-                        title={isRevealed ? 'Hide value' : 'Reveal value'}
-                      >
-                        <Eye size={12} />
-                      </button>
+                      <Hint label={isRevealed ? 'Hide the value' : 'Show the value'}>
+                        <button
+                          type="button"
+                          onClick={() => toggleReveal(v.key)}
+                          aria-label={`${isRevealed ? 'Hide' : 'Show'} the value of ${v.key}`}
+                          aria-pressed={isRevealed}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                        >
+                          {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      </Hint>
                     )}
                   </div>
                 </td>
@@ -141,6 +147,24 @@ function EnvTable({
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/** the table's shape while a file is read */
+function EnvSkeleton({ label }: { label: string }) {
+  return (
+    <div className="glass rounded-xl border border-white/5 overflow-hidden" role="status" aria-label={label}>
+      <div className="px-4 py-3 border-b border-white/5"><div className="skeleton h-3 w-40 rounded" /></div>
+      <div className="divide-y divide-white/[0.03]" aria-hidden>
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="px-4 py-2.5 flex items-center gap-6">
+            <div className="skeleton h-3 w-6 rounded" />
+            <div className="skeleton h-3 w-40 rounded" />
+            <div className="skeleton h-3 w-32 rounded" />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -162,7 +186,7 @@ function RawEditor({
   const lineCount = lines.length
 
   return (
-    <div className="relative flex rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden focus-within:border-emerald-500/40 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
+    <div className="relative flex rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden focus-within:border-emerald-500/40 focus-within:ring-2 focus-within:ring-emerald-500/40 transition-all">
       {/* Line numbers gutter */}
       <div
         className="shrink-0 select-none py-3 pr-2 text-right border-r border-white/5 bg-slate-950/30"
@@ -180,6 +204,7 @@ function RawEditor({
 
       {/* Textarea */}
       <textarea
+        aria-label="Contents of the .env file"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         readOnly={readOnly}
@@ -317,12 +342,12 @@ export default function Environment() {
         addToast({ type: 'success', message: `Root .env saved${whereLabel ? ` on ${whereLabel}` : ''} (backup created)` })
         setTimeout(refreshRoot, 500)
       } else {
-        addToast({ type: 'error', message: result.message || 'Failed to save' })
+        addToast({ type: 'error', message: result.message || 'Could not save' })
       }
     } catch (err) {
       addToast({
         type: 'error',
-        message: `Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        message: `Could not save: ${err instanceof Error ? err.message : 'Unknown error'}`,
       })
     } finally {
       setRootSaving(false)
@@ -409,12 +434,12 @@ export default function Environment() {
         setStackOriginal(stackRaw)
         addToast({ type: 'success', message: `${selectedStack} .env saved${whereLabel ? ` on ${whereLabel}` : ''}` })
       } else {
-        addToast({ type: 'error', message: result.message || 'Failed to save' })
+        addToast({ type: 'error', message: result.message || 'Could not save' })
       }
     } catch (err) {
       addToast({
         type: 'error',
-        message: `Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        message: `Could not save: ${err instanceof Error ? err.message : 'Unknown error'}`,
       })
     } finally {
       setStackSaving(false)
@@ -432,168 +457,95 @@ export default function Environment() {
     setScope(next)
   }, [pageScope, hasChanges, confirm, setScope])
 
-  // ---- Tab definitions ----
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'root', label: 'Root .env' },
-    { id: 'stack', label: 'Stack .env' },
-  ]
+  const stackRefreshing = activeTab === 'stack' && stackEnvLoading
+  const refreshing = (activeTab === 'root' && rootLoading) || stackRefreshing
+  const refreshCurrent = activeTab === 'root' ? refreshRoot : () => {
+    if (selectedStack) {
+      setStackEnvLoading(true)
+      fetchStackEnvScoped(member, selectedStack)
+        .then((data) => {
+          setStackEnvData(data)
+          setStackRaw(data.raw)
+          setStackOriginal(data.raw)
+        })
+        .finally(() => setStackEnvLoading(false))
+    }
+  }
+
+  /** the Table / Editor switch of a file */
+  const viewSwitch = (value: ViewMode, onChange: (v: ViewMode) => void, label: string) => (
+    <SegmentedControl
+      aria-label={label}
+      value={value}
+      onChange={(v) => onChange(v as ViewMode)}
+      data={[
+        { value: 'table', label: <span className="flex items-center gap-1.5"><Eye size={12} aria-hidden />Table</span> },
+        { value: 'raw', label: <span className="flex items-center gap-1.5"><Pencil size={12} aria-hidden />Editor</span> },
+      ]}
+    />
+  )
+
+  /** a Save button: emerald while there is something to save */
+  const saveButton = (changes: boolean, saving: boolean, onClick: () => void) => (
+    <button type="button" onClick={onClick} disabled={saving || !changes} className={`${BTN_TOOLBAR} ${changes ? TONE_OK : TONE_QUIET} disabled:cursor-not-allowed`}>
+      {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+      {saving ? 'Saving…' : 'Save'}
+    </button>
+  )
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/5 shrink-0">
-            <FileCode size={24} className="text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold"><span className="text-gradient">Environment Variables</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={(s) => void handleScopeChange(s)} label=".env of" busy={rootLoading && !!rootEnvData} everywhere={false} /></div>}
-            <p className="text-sm text-slate-400 mt-0.5">{hasFleet ? `The root and per-stack .env files on ${whereLabel}` : 'Manage root and per-stack .env configuration'}</p>
-          </div>
-        </div>
-        <button
-          onClick={activeTab === 'root' ? refreshRoot : () => {
-            if (selectedStack) {
-              setStackEnvLoading(true)
-              fetchStackEnvScoped(member, selectedStack)
-                .then((data) => {
-                  setStackEnvData(data)
-                  setStackRaw(data.raw)
-                  setStackOriginal(data.raw)
-                })
-                .finally(() => setStackEnvLoading(false))
-            }
-          }}
-          disabled={(activeTab === 'root' && rootLoading) || (activeTab === 'stack' && stackEnvLoading)}
-          className="
-            flex items-center gap-2 rounded-lg px-3 py-2
-            text-xs font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200 self-start sm:self-auto shrink-0
-          "
-        >
-          <RefreshCw
-            size={14}
-            className={(activeTab === 'root' && rootLoading) || (activeTab === 'stack' && stackEnvLoading) ? 'animate-spin' : ''}
-          />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        page="environment"
+        badge={member ? <VmCapsule member={member} name={memberName} vmid={scopeMembers.find((m) => m.id === member)?.vmid} /> : undefined}
+        subtitle={hasFleet ? `The root and per-stack .env files on ${whereLabel}` : undefined}
+        actions={
+          <button type="button" aria-label="Refresh" onClick={refreshCurrent} disabled={refreshing} className={BTN_TOOLBAR_QUIET}>
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        }
+      >
+        {hasFleet && <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={(s) => void handleScopeChange(s)} label=".env of" busy={rootLoading && !!rootEnvData} everywhere={false} />}
+      </PageHeader>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-white/[0.03] backdrop-blur-lg rounded-xl p-1 border border-white/5">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center gap-2 flex-1 justify-center
-                rounded-lg px-4 py-2.5 text-sm font-medium
-                transition-all duration-200
-                ${
-                  isActive
-                    ? 'bg-white/10 text-slate-100 shadow-sm border border-white/10'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
-                }
-              `}
-            >
-              <FileCode size={16} className={isActive ? 'text-emerald-400' : 'text-slate-500'} />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+      {/* Which file: the root .env or a stack's */}
+      <SegmentedControl
+        fullWidth
+        aria-label="Which .env file"
+        value={activeTab}
+        onChange={(v) => setActiveTab(v as TabId)}
+        data={[
+          { value: 'root', label: <span className="flex items-center justify-center gap-2 py-1"><FileCode size={16} aria-hidden />Root .env</span> },
+          { value: 'stack', label: <span className="flex items-center justify-center gap-2 py-1"><FileCode size={16} aria-hidden />Stack .env</span> },
+        ]}
+      />
 
       {/* ================================================================= */}
-      {/* Root .env Tab                                                     */}
+      {/* Root .env                                                         */}
       {/* ================================================================= */}
       {activeTab === 'root' && (
         <div className="space-y-4">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* View mode toggle */}
-            <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/5 p-1">
-              <button
-                onClick={() => setViewMode('table')}
-                className={`
-                  flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
-                  ${viewMode === 'table'
-                    ? 'bg-white/10 text-slate-100 border border-white/10'
-                    : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                  }
-                `}
-              >
-                <Eye size={12} />
-                Table
-              </button>
-              <button
-                onClick={() => setViewMode('raw')}
-                className={`
-                  flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
-                  ${viewMode === 'raw'
-                    ? 'bg-white/10 text-slate-100 border border-white/10'
-                    : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                  }
-                `}
-              >
-                <Pencil size={12} />
-                Editor
-              </button>
-            </div>
+            {viewSwitch(viewMode, setViewMode, 'View of the root .env')}
 
             {/* Action buttons */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleRootValidate}
-                disabled={rootValidating || rootLoading}
-                className="
-                  flex items-center gap-2 rounded-lg px-3 py-2
-                  text-xs font-medium text-cyan-400
-                  bg-cyan-500/10 border border-cyan-500/20
-                  hover:bg-cyan-500/20 hover:border-cyan-500/30
-                  disabled:opacity-50 transition-all duration-200
-                "
-              >
-                {rootValidating ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <CheckCircle size={14} />
-                )}
+              <button type="button" onClick={handleRootValidate} disabled={rootValidating || rootLoading} className={BTN_TOOLBAR_QUIET}>
+                {rootValidating ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                 Validate
               </button>
-              <button
-                onClick={handleRootSave}
-                disabled={rootSaving || !rootHasChanges}
-                className={`
-                  flex items-center gap-2 rounded-lg px-3 py-2
-                  text-xs font-medium transition-all duration-200
-                  ${rootHasChanges
-                    ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
-                    : 'text-slate-500 bg-white/5 border border-white/10 cursor-not-allowed'
-                  }
-                  disabled:opacity-50
-                `}
-              >
-                {rootSaving ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                {rootSaving ? 'Saving...' : 'Save'}
-              </button>
+              {saveButton(rootHasChanges, rootSaving, handleRootSave)}
             </div>
           </div>
 
           {/* Validation results */}
           {rootValidation && <ValidationResults result={rootValidation} />}
 
-          {/* Loading */}
-          {rootLoading && !rootEnvData && <LoadingState label="Loading environment variables…" />}
+          {/* Loading: the shape of the table */}
+          {rootLoading && !rootEnvData && <EnvSkeleton label="Reading the root .env" />}
 
           {/* Content */}
           {rootEnvData && (
@@ -613,13 +565,13 @@ export default function Environment() {
               )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-white/5">
                 <span className="text-[11px] text-slate-500 font-mono">
                   {rootEnvData.variables.length} variable{rootEnvData.variables.length !== 1 ? 's' : ''}{whereLabel ? ` · root .env on ${whereLabel}` : ''}
                 </span>
                 {rootHasChanges && (
                   <span className="flex items-center gap-1.5 text-[11px] text-amber-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" aria-hidden />
                     Unsaved changes
                   </span>
                 )}
@@ -630,30 +582,22 @@ export default function Environment() {
       )}
 
       {/* ================================================================= */}
-      {/* Stack .env Tab                                                    */}
+      {/* A stack's .env                                                    */}
       {/* ================================================================= */}
       {activeTab === 'stack' && (
         <div className="space-y-4">
           {/* Stack selector + toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="relative flex-1 sm:max-w-sm">
-              <select aria-label="Stack"
+              <select
+                aria-label="Stack"
                 value={selectedStack}
                 onChange={(e) => setSelectedStack(e.target.value)}
                 disabled={stacksLoading && stacks.length === 0}
-                className="
-                  w-full appearance-none
-                  rounded-lg bg-white/[0.03] border border-white/10
-                  px-4 py-2.5 pr-10
-                  text-sm text-slate-200
-                  font-medium
-                  focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20
-                  disabled:opacity-50
-                  transition-all
-                "
+                className="w-full appearance-none h-[34px] rounded-lg bg-white/5 border border-white/10 pl-3 pr-9 text-xs font-medium text-slate-200 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:opacity-50"
               >
                 <option value="" className="bg-slate-900 text-slate-400">
-                  {stacksLoading && stacks.length === 0 ? 'Loading stacks...' : stacks.length === 0 ? `No stacks${whereLabel ? ` on ${whereLabel}` : ''}` : `Select a stack${whereLabel ? ` on ${whereLabel}` : ''}...`}
+                  {stacksLoading && stacks.length === 0 ? 'Loading stacks…' : stacks.length === 0 ? `No stacks${whereLabel ? ` on ${whereLabel}` : ''}` : `Select a stack${whereLabel ? ` on ${whereLabel}` : ''}…`}
                 </option>
                 {stacks.map((s) => (
                   <option key={s.name} value={s.name} className="bg-slate-900 text-slate-200">
@@ -665,95 +609,54 @@ export default function Environment() {
               <ChevronDown
                 size={14}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                aria-hidden
               />
             </div>
 
             {/* Actions (when a stack is selected) */}
             {selectedStack && (
               <div className="flex items-center gap-2">
-                {/* View mode toggle */}
-                <div className="flex items-center gap-1 rounded-lg bg-white/[0.03] border border-white/5 p-1">
-                  <button
-                    onClick={() => setStackViewMode('table')}
-                    className={`
-                      flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
-                      ${stackViewMode === 'table'
-                        ? 'bg-white/10 text-slate-100 border border-white/10'
-                        : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                      }
-                    `}
-                  >
-                    <Eye size={12} />
-                    Table
-                  </button>
-                  <button
-                    onClick={() => setStackViewMode('raw')}
-                    className={`
-                      flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all
-                      ${stackViewMode === 'raw'
-                        ? 'bg-white/10 text-slate-100 border border-white/10'
-                        : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                      }
-                    `}
-                  >
-                    <Pencil size={12} />
-                    Editor
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleStackSave}
-                  disabled={stackSaving || !stackHasChanges}
-                  className={`
-                    flex items-center gap-2 rounded-lg px-3 py-2
-                    text-xs font-medium transition-all duration-200
-                    ${stackHasChanges
-                      ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
-                      : 'text-slate-500 bg-white/5 border border-white/10 cursor-not-allowed'
-                    }
-                    disabled:opacity-50
-                  `}
-                >
-                  {stackSaving ? (
-                    <RefreshCw size={14} className="animate-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  {stackSaving ? 'Saving...' : 'Save'}
-                </button>
+                {viewSwitch(stackViewMode, setStackViewMode, `View of the .env of ${selectedStack}`)}
+                {saveButton(stackHasChanges, stackSaving, handleStackSave)}
               </div>
             )}
           </div>
 
           {/* No stack selected */}
           {!selectedStack && (
-            <div className="glass rounded-xl border border-white/5 p-12 text-center">
-              <FileCode size={32} className="text-slate-500 mx-auto mb-3" />
-              <p className="text-sm text-slate-400">
-                Select a stack from the dropdown to view its environment variables
-              </p>
+            <div className="glass rounded-xl border border-white/5">
+              <EmptyState
+                icon={<FileCode size={32} />}
+                title="Select a stack from the list to view its environment variables"
+              />
             </div>
           )}
 
           {/* Loading stack env */}
-          {selectedStack && stackEnvLoading && <LoadingState label="Loading stack environment…" />}
+          {selectedStack && stackEnvLoading && <EnvSkeleton label={`Reading the .env of ${selectedStack}`} />}
 
-          {/* No .env file */}
-          {selectedStack && !stackEnvLoading && stackEnvEmpty && (
-            <div className="glass rounded-xl border border-white/5 p-12 text-center">
-              <AlertTriangle size={28} className="text-amber-500 mx-auto mb-3" />
-              <p className="text-sm text-slate-300 font-medium mb-1">No .env file</p>
-              <p className="text-xs text-slate-500">
-                This stack does not have an .env file. Switch to the Editor view to create one.
-              </p>
+          {/* No .env file: the next step is the editor, where one can be written */}
+          {selectedStack && !stackEnvLoading && stackEnvEmpty && stackViewMode === 'table' && (
+            <div className="glass rounded-xl border border-white/5">
+              <EmptyState
+                icon={<FileCode size={32} />}
+                title="No .env file"
+                hint="This stack does not have an .env file. Open the editor to create one."
+                action={
+                  <button type="button" onClick={() => setStackViewMode('raw')} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                    <Pencil size={14} />
+                    Open the editor
+                  </button>
+                }
+              />
             </div>
           )}
 
           {/* Stack env content */}
-          {selectedStack && !stackEnvLoading && stackEnvData && !stackEnvEmpty && (
+          {selectedStack && !stackEnvLoading && (stackEnvData || stackEnvEmpty) && !(stackEnvEmpty && stackViewMode === 'table') && (
             <div className="glass rounded-xl border border-white/5 overflow-hidden">
               {stackViewMode === 'table' ? (
-                <EnvTable variables={stackEnvData.variables} />
+                <EnvTable variables={stackEnvData?.variables ?? []} />
               ) : (
                 <div className="p-4">
                   <RawEditor
@@ -764,14 +667,14 @@ export default function Environment() {
               )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-white/5">
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {stackEnvData.variables.length} variable{stackEnvData.variables.length !== 1 ? 's' : ''}
+                  {stackEnvData?.variables.length ?? 0} variable{(stackEnvData?.variables.length ?? 0) !== 1 ? 's' : ''}
                   {' '}&middot; {selectedStack}{whereLabel ? ` on ${whereLabel}` : ''}
                 </span>
                 {stackHasChanges && (
                   <span className="flex items-center gap-1.5 text-[11px] text-amber-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" aria-hidden />
                     Unsaved changes
                   </span>
                 )}
@@ -789,6 +692,7 @@ export default function Environment() {
           else { setStackRaw(stackOriginal) }
         }}
         saving={activeTab === 'root' ? rootSaving : stackSaving}
+        savingLabel="Saving…"
       />
     </div>
   )
