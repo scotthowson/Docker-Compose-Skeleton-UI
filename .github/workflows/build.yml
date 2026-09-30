@@ -174,7 +174,7 @@ jobs:
             artifacts/**/*.exe
             artifacts/**/*.apk
           generate_release_notes: true
-          # v4.0.0-rc.1 is a pre-release: it is never the "latest release" and never reaches the ones on the stable channel
+          # A tag with a dash (vX.Y.Z-rc.N) is a pre-release: it is never the "latest release" and never reaches the ones on the stable channel
           prerelease: ${{ contains(github.ref_name, '-') }}
           draft: false
         env:
