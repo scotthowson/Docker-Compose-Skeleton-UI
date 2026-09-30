@@ -1,11 +1,15 @@
 // =============================================================================
-// Automations — Scheduled Actions & Automation Rules for Docker operations
+// Automations — rules that run an action by themselves: on a schedule (a cron
+// expression) or when a condition on the system is met (a container unhealthy,
+// a disk full). Create one, switch it on or off, run it now, read its history.
+// On a hub: Everywhere lists every server's rules, a rule lives on one server.
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useId } from 'react'
+import { Badge, SegmentedControl, Switch } from '@mantine/core'
 import {
   Zap, Plus, Trash2, Clock, Play, Pause, Loader2,
-  CalendarClock, RefreshCw, ToggleLeft, ToggleRight,
+  CalendarClock, RefreshCw,
   AlertTriangle, Box, Layers, HardDrive, Bell, Archive,
   X, History, CheckCircle, XCircle, ChevronDown, ChevronUp,
   BookOpen, ChevronRight, Terminal, Pencil, PlayCircle,
@@ -14,9 +18,17 @@ import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
-import { ErrorState } from '../components/common/PageState'
+import { EmptyState, ErrorState } from '../components/common/PageState'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY,
+  TONE_OK, TONE_QUIET, TONE_DANGER, TONE_GHOST,
+} from '../lib/ui'
 import {
   fetchAutomations,
   createAutomation,
@@ -38,47 +50,40 @@ import ModalOverlay from '../components/common/ModalOverlay'
 const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: 'Every minute (* * * * *)', cron: '* * * * *' },
   { label: 'Hourly (0 * * * *)', cron: '0 * * * *' },
-  { label: 'Daily midnight (0 0 * * *)', cron: '0 0 * * *' },
-  { label: 'Weekly Sunday (0 0 * * 0)', cron: '0 0 * * 0' },
+  { label: 'Daily at midnight (0 0 * * *)', cron: '0 0 * * *' },
+  { label: 'Weekly on Sunday (0 0 * * 0)', cron: '0 0 * * 0' },
   { label: 'Monthly (0 0 1 * *)', cron: '0 0 1 * *' },
 ]
 
 const CONDITION_OPTIONS = [
-  { value: 'container_unhealthy', label: 'Container Unhealthy' },
-  { value: 'container_stopped', label: 'Container Exited With An Error' },
-  { value: 'high_cpu', label: 'High CPU Usage (≥90%)' },
-  { value: 'high_memory', label: 'High Memory Usage (≥90%)' },
-  { value: 'disk_full', label: 'Disk Full (≥90%)' },
+  { value: 'container_unhealthy', label: 'Container unhealthy' },
+  { value: 'container_stopped', label: 'Container exited with an error' },
+  { value: 'high_cpu', label: 'High CPU usage (≥90%)' },
+  { value: 'high_memory', label: 'High memory usage (≥90%)' },
+  { value: 'disk_full', label: 'Disk full (≥90%)' },
 ]
 
 const ACTION_TYPES = [
-  { value: 'stack_restart', label: 'Restart Stack' },
-  { value: 'container_restart', label: 'Restart Container' },
-  { value: 'stack_start', label: 'Start Stack' },
-  { value: 'stack_stop', label: 'Stop Stack' },
-  { value: 'docker_prune', label: 'Docker Prune' },
-  { value: 'backup_trigger', label: 'Trigger Backup' },
-  { value: 'notification_send', label: 'Send Notification' },
+  { value: 'stack_restart', label: 'Restart stack' },
+  { value: 'container_restart', label: 'Restart container' },
+  { value: 'stack_start', label: 'Start stack' },
+  { value: 'stack_stop', label: 'Stop stack' },
+  { value: 'docker_prune', label: 'Docker prune' },
+  { value: 'backup_trigger', label: 'Start a backup' },
+  { value: 'notification_send', label: 'Send notification' },
 ]
 
-function actionBadgeColor(actionType: string): string {
+/** what an action does to the system decides its colour: start emerald, stop and prune rose, restart amber, the rest information */
+function actionTone(actionType: string): 'emerald' | 'rose' | 'amber' | 'cyan' | 'slate' {
   switch (actionType) {
-    case 'stack_start':
-      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+    case 'stack_start': return 'emerald'
     case 'stack_stop':
-      return 'bg-rose-500/15 text-rose-400 border-rose-500/20'
+    case 'docker_prune': return 'rose'
     case 'stack_restart':
-      return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
-    case 'container_restart':
-      return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-    case 'docker_prune':
-      return 'bg-violet-500/15 text-violet-400 border-violet-500/20'
+    case 'container_restart': return 'amber'
     case 'backup_trigger':
-      return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-    case 'notification_send':
-      return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
-    default:
-      return 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+    case 'notification_send': return 'cyan'
+    default: return 'slate'
   }
 }
 
@@ -122,9 +127,13 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`
 }
 
+/** the fields of the rule dialog: one look, one focus ring */
+const FIELD = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-600 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+const LABEL = 'text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold'
+
 const AUTOMATION_GUIDE_SECTIONS = [
   {
-    title: 'Schedule-Based Rules',
+    title: 'Schedule-based rules',
     icon: CalendarClock,
     content: `Schedule rules use cron expressions to run actions
 at specific intervals. Common patterns:
@@ -142,7 +151,7 @@ The DCS server evaluates every enabled rule once a
 minute in the server's time zone (TZ) — no crontab.`,
   },
   {
-    title: 'Condition-Based Rules',
+    title: 'Condition-based rules',
     icon: AlertTriangle,
     content: `Condition rules trigger when a monitored state
 changes. Available conditions:
@@ -160,29 +169,29 @@ With target "*", container actions apply to the
 containers that matched the condition.`,
   },
   {
-    title: 'Available Actions',
+    title: 'Available actions',
     icon: Zap,
     content: `stack_start          Start a specific stack
 stack_stop           Stop a specific stack
 stack_restart        Restart a specific stack
 container_restart    Restart a specific container
 docker_prune         Run Docker system prune
-backup_trigger       Trigger a configuration backup
+backup_trigger       Start a configuration backup
 notification_send    Send a notification alert
 
 Set target to * to apply to all, or specify
-a stack/container name. For "Send Notification"
+a stack/container name. For "Send notification"
 the target is the message text.
 
 "Run now" on a card executes the action immediately
 and records the outcome in its history.`,
   },
   {
-    title: 'Example: Nightly Cleanup',
+    title: 'Example: nightly cleanup',
     icon: Terminal,
-    content: `Name:        "Nightly Docker Prune"
+    content: `Name:        "Nightly Docker prune"
 Trigger:     Schedule → 0 3 * * *
-Action:      Docker Prune
+Action:      Docker prune
 Target:      *
 
 This runs docker system prune at 3 AM every night,
@@ -197,6 +206,8 @@ removing unused containers, images, and networks.`,
 export default function Automations() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { addToast } = useToast()
+  const confirm = useConfirm()
+  const uid = useId()
 
   // Modal & form state
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
@@ -211,9 +222,8 @@ export default function Automations() {
   const [formActionType, setFormActionType] = useState('stack_restart')
   const [formActionTarget, setFormActionTarget] = useState('')
 
-  // Delete confirmation
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  // Delete in progress (the question itself is the shared confirmation)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Toggle loading state
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -265,7 +275,7 @@ export default function Automations() {
       })
       refresh()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : `Failed to toggle ${rule.name}` })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `Could not switch ${rule.name}` })
     } finally {
       setTogglingId(null)
     }
@@ -278,26 +288,32 @@ export default function Automations() {
       addToast({ type: res.success ? 'success' : 'error', message: `${rule.name}: ${res.message || (res.success ? 'done' : 'failed')}` })
       refresh()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : `Failed to run ${rule.name}` })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : `Could not run ${rule.name}` })
     } finally {
       setRunningId(null)
     }
   }, [addToast, refresh, scopeMember])
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleDelete = useCallback(async (rule: AutomationRule) => {
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
-    setDeleting(true)
+    const ok = await confirm({
+      title: 'Delete this automation?',
+      message: `"${rule.name}" is removed together with its run history. This cannot be undone.`,
+      confirmLabel: 'Delete automation',
+      danger: true,
+    })
+    if (!ok) return
+    setDeletingId(rule.id)
     try {
-      await deleteAutomation(id, scopeMember)
+      await deleteAutomation(rule.id, scopeMember)
       addToast({ type: 'success', message: 'Automation rule deleted' })
-      setConfirmDeleteId(null)
       refresh()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to delete automation rule' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not delete the automation rule' })
     } finally {
-      setDeleting(false)
+      setDeletingId(null)
     }
-  }, [addToast, refresh, scope, scopeMember])
+  }, [addToast, refresh, scope, scopeMember, confirm])
 
   const handleCreate = useCallback(async () => {
     if (!formName.trim()) return
@@ -323,11 +339,12 @@ export default function Automations() {
       resetForm()
       refresh()
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to save automation rule' })
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not save the automation rule' })
     } finally {
       setCreating(false)
     }
-  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, editingId, addToast, refresh])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, editingId, addToast, refresh, scope, scopeMember])
 
   const resetForm = useCallback(() => {
     setEditingId(null)
@@ -366,7 +383,7 @@ export default function Automations() {
       const result = await fetchAutomationHistory(rule.id)
       setHistoryEntries(result.history ?? [])
     } catch {
-      addToast({ type: 'error', message: `Failed to load history for ${rule.name}` })
+      addToast({ type: 'error', message: `Could not load the history of ${rule.name}` })
     } finally {
       setHistoryLoading(false)
     }
@@ -378,31 +395,12 @@ export default function Automations() {
     setExpandedHistoryIdx(null)
   }, [])
 
-  // Close topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (historyRuleId) { closeHistory(); return }
-      if (confirmDeleteId) { setConfirmDeleteId(null); return }
-      if (showCreateModal) { setShowCreateModal(false); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [historyRuleId, confirmDeleteId, showCreateModal, closeHistory])
-
   // -------------------------------------------------------------------------
   // Disconnected state
   // -------------------------------------------------------------------------
 
   if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <Zap size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to manage automations</p>
-      </div>
-    )
+    return <EmptyState icon={<Zap size={32} />} title="Connect to a server to manage automations" />
   }
 
   // -------------------------------------------------------------------------
@@ -410,101 +408,88 @@ export default function Automations() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/10 flex items-center justify-center text-amber-400">
-            <Zap size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold"><span className="text-gradient">Automations</span>{scopeMember && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h2>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!data} /></div>}
-            <p className="text-xs text-slate-500">
-              Reactive rules — trigger actions based on system conditions
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="automations"
+        badge={scopeMember ? <VmCapsule member={scopeMember} name={memberName} vmid={scopeMembers.find((m) => m.id === scopeMember)?.vmid} /> : undefined}
+        subtitle={stats.total > 0 ? `${stats.active} active of ${stats.total} rule${stats.total === 1 ? '' : 's'} · they run on a schedule or when a condition is met` : 'Rules that run an action on a schedule or when a condition on the system is met'}
+        actions={<>
           {isAdmin && (
-<button
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-          >
-            <Plus size={14} />
-            Add Automation
-          </button>
-)}
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200"
-          >
-            <BookOpen size={14} />
-            <span className="hidden sm:inline">Guide</span>
-          </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 disabled:opacity-50 press"
-          >
+            <button type="button" onClick={openCreateModal} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              <Plus size={14} />
+              Add automation
+            </button>
+          )}
+          <Hint label={showGuide ? 'Hide the guide' : 'Show the guide'}>
+            <button
+              type="button"
+              aria-label="Guide"
+              aria-expanded={showGuide}
+              onClick={() => setShowGuide(!showGuide)}
+              className={`${BTN_TOOLBAR} ${showGuide ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
+            >
+              <BookOpen size={14} />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          </Hint>
+          <button type="button" aria-label="Refresh" onClick={refresh} disabled={loading} className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        {hasFleet && <FleetScopeChips scope={scope} members={scopeMembers} onChange={setScope} label="Show" busy={loading && !!data} />}
+      </PageHeader>
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
-        {/* Total */}
-        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
-            <Layers size={14} className="text-slate-400" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Rules</span>
+            <Layers size={14} className="text-slate-400" aria-hidden />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total rules</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{stats.total}</p>
+          <p className="text-2xl font-bold text-slate-100 tabular-nums">{stats.total}</p>
         </div>
 
-        {/* Active */}
-        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
-            <Zap size={14} className="text-emerald-400" />
+            <Zap size={14} className="text-emerald-400" aria-hidden />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Active</span>
           </div>
-          <p className="text-2xl font-bold text-emerald-400">{stats.active}</p>
+          <p className="text-2xl font-bold text-emerald-400 tabular-nums">{stats.active}</p>
         </div>
 
-        {/* Scheduled */}
-        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
-            <CalendarClock size={14} className="text-cyan-400" />
+            <CalendarClock size={14} className="text-slate-400" aria-hidden />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Scheduled</span>
           </div>
-          <p className="text-2xl font-bold text-cyan-400">{stats.scheduled}</p>
+          <p className="text-2xl font-bold text-slate-100 tabular-nums">{stats.scheduled}</p>
         </div>
 
-        {/* Condition-based */}
-        <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
+        <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle size={14} className="text-amber-400" />
+            <AlertTriangle size={14} className="text-slate-400" aria-hidden />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Condition</span>
           </div>
-          <p className="text-2xl font-bold text-amber-400">{stats.conditionBased}</p>
+          <p className="text-2xl font-bold text-slate-100 tabular-nums">{stats.conditionBased}</p>
         </div>
       </div>
 
-      {/* Automation Guide (collapsible) */}
+      {/* Automation guide (collapsible) */}
       {showGuide && (
-        <div className="glass rounded-xl overflow-hidden animate-fade-in">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <section aria-label={`${pageLabel('automations')} guide`} className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <BookOpen size={16} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-white">Automation Guide</h2>
+              <BookOpen size={16} className="text-slate-400" aria-hidden />
+              <h2 className="text-sm font-semibold text-slate-200">{pageLabel('automations')} guide</h2>
             </div>
-            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
-              <X size={14} className="text-slate-400" />
-            </button>
+            <Hint label="Close the guide">
+              <button type="button" aria-label="Close the guide" onClick={() => setShowGuide(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-slate-400 mb-4">
@@ -517,14 +502,16 @@ export default function Automations() {
               return (
                 <div key={section.title} className="border border-white/[0.03] rounded-lg overflow-hidden">
                   <button
+                    type="button"
+                    aria-expanded={isExpanded}
                     onClick={() => setExpandedGuide(isExpanded ? null : i)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
                   >
-                    <Icon size={14} className="text-amber-400 shrink-0" />
+                    <Icon size={14} className="text-slate-400 shrink-0" aria-hidden />
                     <span className="text-sm font-medium text-slate-200 flex-1">{section.title}</span>
                     {isExpanded
-                      ? <ChevronDown size={14} className="text-slate-500" />
-                      : <ChevronRight size={14} className="text-slate-500" />
+                      ? <ChevronDown size={14} className="text-slate-500" aria-hidden />
+                      : <ChevronRight size={14} className="text-slate-500" aria-hidden />
                     }
                   </button>
                   {isExpanded && (
@@ -538,216 +525,160 @@ export default function Automations() {
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Loading */}
+      {/* Loading: the shape of a rule card */}
       {loading && !data && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 size={24} className="animate-spin text-slate-500" />
+        <div className="space-y-3" role="status" aria-label="Reading the automations">
+          {[0, 1].map((i) => <div key={i} className="glass border border-white/5 rounded-xl h-40 skeleton" aria-hidden />)}
         </div>
       )}
       {error && !data && (
-        <ErrorState title="Could not load this page" error={error} onRetry={refresh} />
+        <ErrorState title="Could not load the automations" error={error} onRetry={refresh} />
       )}
 
       {/* Empty state */}
       {data && automations.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-            <Zap size={22} className="text-slate-500" />
-          </div>
-          <p className="text-sm text-slate-500 text-center max-w-sm">
-            No automation rules configured. Create your first rule to automate Docker operations.
-          </p>
-          <button
-            onClick={openCreateModal}
-            className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-          >
-            <Plus size={13} />
-            Create Rule
-          </button>
+        <div className="glass border border-white/5 rounded-xl">
+          <EmptyState
+            icon={<Zap size={32} />}
+            title="No automation rules yet"
+            hint="Create your first rule to automate Docker operations."
+            action={isAdmin ? (
+              <button type="button" onClick={openCreateModal} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                <Plus size={14} />
+                Add automation
+              </button>
+            ) : undefined}
+          />
         </div>
       )}
 
       {/* Rule cards */}
       {automations.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 stagger-children">
+        <ul className="grid grid-cols-1 gap-3 stagger-children">
           {automations.map((rule) => (
-            <div
+            <li
               key={rule.id}
-              className={`glass border rounded-xl p-4 md:p-6 transition-colors ${
+              className={`glass border rounded-xl p-4 md:p-5 transition-colors ${
                 rule.enabled
                   ? 'border-white/5'
-                  : 'border-white/[0.03] opacity-60'
+                  : 'border-white/[0.03] opacity-70'
               }`}
             >
-              {/* Top row: name + toggle */}
+              {/* Top row: name + switch */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-slate-100 truncate">{rule.name}</h3>
+                  <h2 className="text-sm font-bold text-slate-100 truncate">{rule.name}</h2>
                   {rule.member !== undefined && <div className="mt-1"><VmCapsule member={rule.member} name={rule.member_name} vmid={rule.vmid} size="xs" onClick={() => setScope(rule.member ?? 'hub')} /></div>}
                 </div>
-                <button
-                  onClick={() => isAdmin && handleToggle(rule)}
-                  disabled={togglingId === rule.id || !isAdmin}
-                  className="shrink-0 transition-colors"
-                  title={rule.enabled ? 'Disable rule' : 'Enable rule'}
-                  aria-label={rule.enabled ? 'Disable rule' : 'Enable rule'}
-                >
-                  {togglingId === rule.id ? (
-                    <Loader2 size={20} className="animate-spin text-slate-500" />
-                  ) : rule.enabled ? (
-                    <ToggleRight size={24} className="text-emerald-400" />
-                  ) : (
-                    <ToggleLeft size={24} className="text-slate-500" />
-                  )}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {togglingId === rule.id && <Loader2 size={14} className="animate-spin text-slate-500" aria-hidden />}
+                  {/* (not disabled while it saves: a disabled control drops the keyboard's focus) */}
+                  <Switch
+                    checked={rule.enabled}
+                    onChange={() => { if (isAdmin && !togglingId) handleToggle(rule) }}
+                    disabled={!isAdmin}
+                    aria-busy={togglingId === rule.id}
+                    aria-label={`Enable ${rule.name}`}
+                  />
+                </div>
               </div>
 
               {/* Trigger + action badges */}
               <div className="flex flex-wrap items-center gap-2 mb-3">
-                {/* Trigger badge */}
                 {rule.trigger_type === 'schedule' ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-cyan-500/15 text-cyan-400 border-cyan-500/20">
-                    <CalendarClock size={10} />
-                    Schedule
-                  </span>
+                  <Badge component="span" color="slate" leftSection={<CalendarClock size={10} />}>Schedule</Badge>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/15 text-amber-400 border-amber-500/20">
-                    <AlertTriangle size={10} />
-                    Condition
-                  </span>
+                  <Badge component="span" color="slate" leftSection={<AlertTriangle size={10} />}>Condition</Badge>
                 )}
 
-                {/* Action badge */}
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${actionBadgeColor(rule.action_type)}`}>
-                  {actionIcon(rule.action_type)}
+                <Badge component="span" color={actionTone(rule.action_type)} leftSection={actionIcon(rule.action_type)}>
                   {actionLabel(rule.action_type)}
-                </span>
+                </Badge>
               </div>
 
               {/* Detail rows */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs mb-3">
-                {/* Trigger value */}
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500 shrink-0 w-16">Trigger:</span>
-                  {rule.trigger_type === 'schedule' ? (
-                    <code className="font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/15 text-[11px]">
-                      {rule.trigger_value}
-                    </code>
-                  ) : (
-                    <span className="text-amber-400">{rule.trigger_value}</span>
-                  )}
+                  <dt className="text-slate-500 shrink-0 w-16">Trigger:</dt>
+                  <dd>
+                    {rule.trigger_type === 'schedule' ? (
+                      <code className="font-mono text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/15 text-[11px]">
+                        {rule.trigger_value}
+                      </code>
+                    ) : (
+                      <span className="text-slate-200">{CONDITION_OPTIONS.find((c) => c.value === rule.trigger_value)?.label ?? rule.trigger_value}</span>
+                    )}
+                  </dd>
                 </div>
 
-                {/* Action target */}
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 shrink-0 w-16">Target:</span>
-                  <span className="text-slate-300 font-mono text-[11px]">{rule.action_target || '*'}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <dt className="text-slate-500 shrink-0 w-16">Target:</dt>
+                  <dd className="text-slate-300 font-mono text-[11px] truncate">{rule.action_target || '*'}</dd>
                 </div>
 
-                {/* Last run */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500 shrink-0 w-16">Last run:</span>
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Clock size={11} className="text-slate-500" />
+                  <dt className="text-slate-500 shrink-0 w-16">Last run:</dt>
+                  <dd className="text-slate-400 flex items-center gap-1">
+                    <Clock size={11} className="text-slate-500" aria-hidden />
                     {relativeTime(rule.last_run)}
-                  </span>
+                  </dd>
                 </div>
 
-                {/* Run count */}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500 shrink-0 w-16">Runs:</span>
-                  <span className="text-slate-400">{rule.run_count}</span>
+                  <dt className="text-slate-500 shrink-0 w-16">Runs:</dt>
+                  <dd className="text-slate-400 tabular-nums">{rule.run_count}</dd>
                 </div>
-              </div>
+              </dl>
 
               {/* Actions row */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.03]">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-white/[0.03]">
+                <button type="button" onClick={() => openHistory(rule)} aria-label={`History of ${rule.name}`} className={`${BTN_CARD} ${TONE_QUIET} sm:mr-auto`}>
+                  <History size={12} />
+                  History
+                </button>
                 {isAdmin && (
                   <>
-                    <button
-                      onClick={() => handleRun(rule)}
-                      disabled={runningId === rule.id}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
-                      title="Run the action now"
-                    >
-                      {runningId === rule.id ? <Loader2 size={11} className="animate-spin" /> : <PlayCircle size={11} />}
-                      Run now
-                    </button>
-                    <button
-                      onClick={() => openEditModal(rule)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                    >
-                      <Pencil size={11} />
+                    <Hint label="Run the action now">
+                      <button type="button" onClick={() => handleRun(rule)} disabled={runningId === rule.id} aria-label={`Run ${rule.name} now`} className={`${BTN_CARD} ${TONE_QUIET}`}>
+                        {runningId === rule.id ? <Loader2 size={12} className="animate-spin" /> : <PlayCircle size={12} />}
+                        Run now
+                      </button>
+                    </Hint>
+                    <button type="button" onClick={() => openEditModal(rule)} aria-label={`Edit ${rule.name}`} className={`${BTN_CARD} ${TONE_QUIET}`}>
+                      <Pencil size={12} />
                       Edit
+                    </button>
+                    <button type="button" onClick={() => handleDelete(rule)} disabled={deletingId === rule.id} aria-label={`Delete ${rule.name}`} className={`${BTN_CARD} ${TONE_DANGER}`}>
+                      {deletingId === rule.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      Delete
                     </button>
                   </>
                 )}
-                {/* History button */}
-                <button
-                  onClick={() => openHistory(rule)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors mr-auto"
-                >
-                  <History size={11} />
-                  History
-                </button>
-                {isAdmin && (confirmDeleteId === rule.id ? (
-                  <>
-                    <span className="text-[11px] text-rose-400 mr-1">Delete this rule?</span>
-                    <button
-                      onClick={() => handleDelete(rule.id)}
-                      disabled={deleting}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
-                    >
-                      {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                      Confirm
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setConfirmDeleteId(rule.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                  >
-                    <Trash2 size={11} />
-                    Delete
-                  </button>
-                ))}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* Create Automation Modal                                              */}
-      {/* ------------------------------------------------------------------- */}
-      {/* ------------------------------------------------------------------- */}
-      {/* Automation History Panel                                             */}
+      {/* Run history                                                          */}
       {/* ------------------------------------------------------------------- */}
       {historyRuleId && createPortal(
         <ModalOverlay onClose={closeHistory} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+          <div className="w-full max-w-lg glass border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
-              <div className="flex items-center gap-2">
-                <History size={16} className="text-cyan-400" />
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-200">Run History</h3>
-                  <p className="text-[10px] text-slate-500">{historyRuleName}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <History size={16} className="text-slate-400 shrink-0" aria-hidden />
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-slate-200">Run history</h2>
+                  <p className="text-[11px] text-slate-500 truncate">{historyRuleName}</p>
                 </div>
               </div>
-              <button aria-label="Close"
-                onClick={closeHistory}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-              >
+              <button type="button" aria-label="Close" onClick={closeHistory} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                 <X size={16} />
               </button>
             </div>
@@ -755,19 +686,18 @@ export default function Automations() {
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-2">
               {historyLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={20} className="animate-spin text-slate-500" />
+                <div className="space-y-2" role="status" aria-label="Reading the history">
+                  {[0, 1, 2].map((i) => <div key={i} className="skeleton h-9 rounded-lg" aria-hidden />)}
                 </div>
               )}
 
               {!historyLoading && historyEntries.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <History size={24} className="text-slate-500" />
-                  <p className="text-xs text-slate-500">No run history yet</p>
-                  <p className="text-[10px] text-slate-500 text-center max-w-xs">
-                    History entries will appear here once this automation rule has been triggered.
-                  </p>
-                </div>
+                <EmptyState
+                  compact
+                  icon={<History size={28} />}
+                  title="No run history yet"
+                  hint="Entries appear here once this automation rule has been triggered."
+                />
               )}
 
               {!historyLoading && historyEntries.length > 0 && (
@@ -787,40 +717,27 @@ export default function Automations() {
                     return (
                       <div key={entry.timestamp} className="rounded-lg border border-white/[0.03] overflow-hidden">
                         <button
+                          type="button"
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandedHistoryIdx(isExpanded ? null : idx)}
-                          className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+                          className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
                         >
-                          {/* Status dot */}
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${
-                            entry.success ? 'bg-emerald-400' : 'bg-rose-400'
-                          }`} />
-
-                          {/* Status icon */}
                           {entry.success ? (
-                            <CheckCircle size={13} className="text-emerald-400 shrink-0" />
+                            <CheckCircle size={13} className="text-emerald-400 shrink-0" aria-hidden />
                           ) : (
-                            <XCircle size={13} className="text-rose-400 shrink-0" />
+                            <XCircle size={13} className="text-rose-400 shrink-0" aria-hidden />
                           )}
 
-                          {/* Timestamp */}
                           <span className="text-xs text-slate-400 font-mono tabular-nums flex-1">
                             {timeStr}
                           </span>
 
-                          {/* Status badge */}
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            entry.success
-                              ? 'bg-emerald-500/15 text-emerald-400'
-                              : 'bg-rose-500/15 text-rose-400'
-                          }`}>
-                            {entry.success ? 'Success' : 'Failed'}
-                          </span>
+                          <Badge component="span" color={entry.success ? 'emerald' : 'rose'}>{entry.success ? 'Success' : 'Failed'}</Badge>
 
-                          {/* Expand chevron */}
                           {isExpanded ? (
-                            <ChevronUp size={12} className="text-slate-500 shrink-0" />
+                            <ChevronUp size={12} className="text-slate-500 shrink-0" aria-hidden />
                           ) : (
-                            <ChevronDown size={12} className="text-slate-500 shrink-0" />
+                            <ChevronDown size={12} className="text-slate-500 shrink-0" aria-hidden />
                           )}
                         </button>
 
@@ -840,19 +757,11 @@ export default function Automations() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-white/5 shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-slate-500">
-                  {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
-                </span>
-              </div>
-              <button
-                onClick={closeHistory}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/5 shrink-0">
+              <span className="text-[11px] text-slate-500 tabular-nums">
+                {historyEntries.length} run{historyEntries.length !== 1 ? 's' : ''}
+              </span>
+              <button type="button" onClick={closeHistory} className={BTN_SHEET_QUIET + ' px-6'}>
                 Close
               </button>
             </div>
@@ -861,19 +770,22 @@ export default function Automations() {
         document.body,
       )}
 
+      {/* ------------------------------------------------------------------- */}
+      {/* Create or edit a rule                                                */}
+      {/* ------------------------------------------------------------------- */}
       {showCreateModal && createPortal(
         <ModalOverlay onClose={() => setShowCreateModal(false)} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]">
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleCreate() }}
+            className="w-full max-w-lg glass border border-white/10 rounded-2xl shadow-2xl shadow-black/40 flex flex-col animate-scale-in overflow-hidden max-h-[90vh]"
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
-                <Zap size={16} className="text-amber-400" />
-                <h3 className="text-sm font-semibold text-slate-200">{editingId ? 'Edit Automation' : 'New Automation Rule'}</h3>
+                <Zap size={16} className="text-slate-400" aria-hidden />
+                <h2 className="text-sm font-semibold text-slate-200">{editingId ? 'Edit automation' : 'New automation'}</h2>
               </div>
-              <button aria-label="Close"
-                onClick={() => setShowCreateModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-              >
+              <button type="button" aria-label="Close" onClick={() => setShowCreateModal(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                 <X size={16} />
               </button>
             </div>
@@ -882,74 +794,60 @@ export default function Automations() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Name */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                  Rule Name
-                </label>
+                <label htmlFor={`${uid}-name`} className={LABEL}>Rule name</label>
                 <input
+                  id={`${uid}-name`}
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. Nightly backup"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+                  autoComplete="off"
+                  className={FIELD}
+                  autoFocus
                 />
               </div>
 
               {/* Trigger type */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                  Trigger Type
-                </label>
-                <div className="flex rounded-lg bg-white/[0.03] border border-white/5 p-0.5">
-                  <button
-                    onClick={() => setFormTriggerType('schedule')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                      formTriggerType === 'schedule'
-                        ? 'bg-cyan-500/15 text-cyan-400 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-400'
-                    }`}
-                  >
-                    <CalendarClock size={13} />
-                    Schedule
-                  </button>
-                  <button
-                    onClick={() => setFormTriggerType('condition')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                      formTriggerType === 'condition'
-                        ? 'bg-amber-500/15 text-amber-400 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-400'
-                    }`}
-                  >
-                    <AlertTriangle size={13} />
-                    Condition
-                  </button>
-                </div>
+                <span className={LABEL}>Trigger type</span>
+                <SegmentedControl
+                  fullWidth
+                  aria-label="Trigger type"
+                  value={formTriggerType}
+                  onChange={(v) => setFormTriggerType(v as 'schedule' | 'condition')}
+                  data={[
+                    { value: 'schedule', label: <span className="flex items-center justify-center gap-1.5 py-0.5"><CalendarClock size={13} aria-hidden />Schedule</span> },
+                    { value: 'condition', label: <span className="flex items-center justify-center gap-1.5 py-0.5"><AlertTriangle size={13} aria-hidden />Condition</span> },
+                  ]}
+                />
               </div>
 
               {/* Schedule: cron input + presets */}
               {formTriggerType === 'schedule' && (
                 <div>
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                    Cron Expression
-                  </label>
+                  <label htmlFor={`${uid}-cron`} className={LABEL}>Cron expression</label>
                   <input
+                    id={`${uid}-cron`}
                     type="text"
                     value={formCron}
                     onChange={(e) => setFormCron(e.target.value)}
                     placeholder="* * * * *"
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors mb-2"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={`${FIELD} font-mono mb-2`}
                   />
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                    Quick Presets
-                  </label>
+                  <span className={LABEL}>Quick presets</span>
                   <div className="flex flex-wrap gap-1.5">
                     {CRON_PRESETS.map((p) => (
                       <button
                         key={p.cron}
+                        type="button"
+                        aria-pressed={formCron === p.cron}
                         onClick={() => setFormCron(p.cron)}
-                        className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${
+                        className={`h-8 sm:h-7 px-2.5 rounded-lg text-[11px] font-medium border transition-colors ${
                           formCron === p.cron
-                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                            : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5 hover:text-slate-400'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : 'bg-white/[0.03] text-slate-400 border-white/5 hover:bg-white/5 hover:text-slate-300'
                         }`}
                       >
                         {p.label}
@@ -962,13 +860,12 @@ export default function Automations() {
               {/* Condition: dropdown */}
               {formTriggerType === 'condition' && (
                 <div>
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                    Condition
-                  </label>
-                  <select aria-label="Condition"
+                  <label htmlFor={`${uid}-condition`} className={LABEL}>Condition</label>
+                  <select
+                    id={`${uid}-condition`}
                     value={formCondition}
                     onChange={(e) => setFormCondition(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                    className={`${FIELD} cursor-pointer`}
                   >
                     {CONDITION_OPTIONS.map((c) => (
                       <option key={c.value} value={c.value} className="bg-slate-900 text-slate-200">
@@ -981,13 +878,12 @@ export default function Automations() {
 
               {/* Action type */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                  Action Type
-                </label>
-                <select aria-label="Action Type"
+                <label htmlFor={`${uid}-action`} className={LABEL}>Action type</label>
+                <select
+                  id={`${uid}-action`}
                   value={formActionType}
                   onChange={(e) => setFormActionType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors appearance-none cursor-pointer"
+                  className={`${FIELD} cursor-pointer`}
                 >
                   {ACTION_TYPES.map((a) => (
                     <option key={a.value} value={a.value} className="bg-slate-900 text-slate-200">
@@ -999,15 +895,15 @@ export default function Automations() {
 
               {/* Action target */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block font-semibold">
-                  Action Target
-                </label>
+                <label htmlFor={`${uid}-target`} className={LABEL}>Action target</label>
                 <input
+                  id={`${uid}-target`}
                   type="text"
                   value={formActionTarget}
                   onChange={(e) => setFormActionTarget(e.target.value)}
                   placeholder='Stack name, container name, or "*" for all'
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.05] transition-colors"
+                  autoComplete="off"
+                  className={FIELD}
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Leave empty or use "*" to target all stacks/containers.
@@ -1016,28 +912,21 @@ export default function Automations() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-white/5 shrink-0">
-              <span className="text-[10px] text-slate-500">
-                Press <kbd className="px-1.5 py-0.5 rounded border border-white/5 bg-white/[0.03] text-[9px] font-mono text-slate-500">Esc</kbd> to close
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-t border-white/5 shrink-0">
+              <span className="text-[10px] text-slate-500 hidden sm:inline">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[9px] font-mono text-slate-400">Esc</kbd> to close
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-                >
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button type="button" onClick={() => setShowCreateModal(false)} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none sm:px-6`}>
                   Cancel
                 </button>
-                <button
-                  onClick={handleCreate}
-                  disabled={creating || !formName.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
-                >
-                  {creating ? <Loader2 size={13} className="animate-spin" /> : (editingId ? <Pencil size={13} /> : <Plus size={13} />)}
+                <button type="submit" disabled={creating || !formName.trim()} className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}>
+                  {creating ? <Loader2 size={14} className="animate-spin" /> : (editingId ? <Pencil size={14} /> : <Plus size={14} />)}
                   {editingId ? 'Save changes' : 'Create'}
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </ModalOverlay>,
         document.body,
       )}
