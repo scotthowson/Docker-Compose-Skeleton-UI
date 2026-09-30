@@ -49,7 +49,7 @@ const statusConfig: Record<ConnectionStatus, { color: string; ringColor: string;
     color: 'bg-rose-400',
     ringColor: 'ring-rose-400/30',
     pulse: true,
-    label: 'Connection Error',
+    label: 'Connection error',
   },
 }
 
@@ -237,7 +237,7 @@ function UserProfileDropdown({ onClose, onWhatsNew, hasUnseen }: { onClose: () =
   const menuItems = [
     {
       icon: UserCircle,
-      label: 'Edit Profile',
+      label: 'Edit profile',
       description: 'Name, email, avatar',
       onClick: () => { onClose(); setCurrentPage('settings') },
     },
@@ -343,14 +343,14 @@ function UserProfileDropdown({ onClose, onWhatsNew, hasUnseen }: { onClose: () =
           className="no-drag flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors duration-200 cursor-pointer"
         >
           <Lock size={14} />
-          <span className="text-xs font-medium">Lock Screen</span>
+          <span className="text-xs font-medium">Lock screen</span>
         </button>
         <button
           onClick={() => { onClose(); logout() }}
           className="no-drag flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors duration-200 cursor-pointer"
         >
           <LogOut size={14} />
-          <span className="text-xs font-medium">Sign Out</span>
+          <span className="text-xs font-medium">Sign out</span>
         </button>
       </div>
     </div>

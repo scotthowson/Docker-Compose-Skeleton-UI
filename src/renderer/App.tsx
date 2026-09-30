@@ -612,7 +612,7 @@ export default function App() {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center">
                   <Lock size={28} className="text-amber-400" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-100">Session Locked</h2>
+                <h2 className="text-xl font-bold text-slate-100">Session locked</h2>
                 <p className="text-sm text-slate-500 mt-1">Locked due to inactivity. Enter your password to continue.</p>
               </div>
               <form onSubmit={handleUnlock} className="space-y-4">

@@ -44,7 +44,7 @@ const steps: StepDef[] = [
   },
   {
     icon: <Server size={40} strokeWidth={1.5} />,
-    title: webMode ? 'Connected & Ready' : 'Connect to Your Server',
+    title: webMode ? 'Connected and ready' : 'Connect to your server',
     description: webMode
       ? 'Your DCS-UI is connected to the API server automatically. Manage server profiles and connection settings from the Settings page.'
       : 'Head to Settings and enter your DCS API server URL to get started. The default address is http://127.0.0.1:9876 for local servers.',
@@ -56,7 +56,7 @@ const steps: StepDef[] = [
   },
   {
     icon: <Rocket size={40} strokeWidth={1.5} />,
-    title: 'Deploy Your First Stack',
+    title: 'Deploy your first stack',
     description:
       'Visit the Templates page to browse pre-configured stack templates. Pick one, customize it, and deploy — all without touching a terminal.',
     details: [
@@ -67,7 +67,7 @@ const steps: StepDef[] = [
   },
   {
     icon: <Sparkles size={40} strokeWidth={1.5} />,
-    title: "You're Ready!",
+    title: "You're ready",
     description:
       'Explore the full suite of tools at your fingertips. From network visualization to automated maintenance, DCS Manager has you covered.',
     details: [
@@ -78,7 +78,7 @@ const steps: StepDef[] = [
   },
   {
     icon: <Puzzle size={40} strokeWidth={1.5} />,
-    title: 'Plugin Ecosystem & Compose Linting',
+    title: 'Plugins and compose linting',
     description:
       'Extend DCS with 14+ plugins for security auditing, deployment guards, network analysis, and more. The real-time compose linter validates your YAML with 24 rules — catching port conflicts, security issues, and missing health checks before deployment.',
     details: [

@@ -71,7 +71,7 @@ export default function KeyboardShortcutsPanel({ open, onClose }: Props) {
               <Keyboard size={16} className="text-violet-400" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-white">Keyboard Shortcuts</h2>
+              <h2 className="text-sm font-semibold text-white">Keyboard shortcuts</h2>
               <p className="text-[11px] text-slate-500">Quick reference for all shortcuts</p>
             </div>
           </div>
