@@ -1,5 +1,6 @@
 // =============================================================================
-// Settings — Premium settings with connection, appearance, disks, shortcuts
+// Settings — connection, profile, appearance, themes, preferences, security.
+// Its sections fold (SectionCard); one floating bar saves the ones that changed.
 // =============================================================================
 
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
@@ -11,7 +12,7 @@ import {
   Camera, Save, Key, AlertTriangle, XCircle, Plus, FolderPlus,
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
   Server, Copy, EyeOff, HeartPulse, Wifi, WifiOff, Loader2,
-  Star, CheckCircle,
+  Star, CheckCircle, ChevronDown,
 } from 'lucide-react'
 import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
@@ -26,11 +27,18 @@ import { useToast } from '../components/common/Toast'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useNotificationStore } from '../stores/notificationStore'
-import { Tooltip } from '../components/common/Tooltip'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM,
+  TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
+} from '../lib/ui'
+import { FIELD, INPUT, LABEL, FOCUS_RING as FOCUS, CHOICE, CHOICE_ON, CHOICE_OFF, SUBHEAD } from '../lib/fieldStyles'
 import { usePolling } from '../hooks/usePolling'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
 import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, fetchProfile, saveProfileToServer, updateConfig, fetchConfig } from '../api/endpoints'
-import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, ConnectionProfile, AlertThresholds } from '../../shared/types'
+import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, AlertThresholds, PageId } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Settings Dirty Context — single FloatingSaveBar for all sections
@@ -232,11 +240,7 @@ function ProfileSettings() {
           )}
           <button aria-label="Upload a profile picture"
             onClick={() => fileInputRef.current?.click()}
-            className="
-              absolute inset-0 rounded-2xl flex items-center justify-center
-              bg-black/50 opacity-0 group-hover:opacity-100
-              transition-opacity duration-200 cursor-pointer
-            "
+            className={`absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-200 cursor-pointer ${FOCUS}`}
           >
             <Camera size={20} className="text-white" />
           </button>
@@ -249,7 +253,7 @@ function ProfileSettings() {
           />
         </div>
         <div className="flex-1">
-          <h4 className="text-sm font-semibold text-slate-200 mb-1">Profile Picture</h4>
+          <h3 className="text-sm font-semibold text-slate-200 mb-1">Profile picture</h3>
           <p className="text-[11px] text-slate-500 mb-2">
             Choose a preset, upload an image, or paste a URL. Max 2MB for uploads.
           </p>
@@ -259,8 +263,9 @@ function ProfileSettings() {
               <button
                 key={emoji}
                 type="button"
+                aria-pressed={profile.icon === emoji}
                 onClick={() => { handleChange('icon', emoji); setAvatarPreview(emoji) }}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-base hover:bg-white/10 transition-all ${
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-base hover:bg-white/10 transition-all ${FOCUS} ${
                   profile.icon === emoji ? 'bg-emerald-500/20 ring-1 ring-emerald-500/40' : 'bg-white/5'
                 }`}
               >
@@ -269,132 +274,105 @@ function ProfileSettings() {
             ))}
           </div>
           <input
+            aria-label="Picture address"
             type="text"
             value={profile.icon}
             onChange={(e) => handleAvatarUrlChange(e.target.value)}
             placeholder="https://example.com/avatar.png"
-            className="
-              w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-              text-xs text-slate-200 placeholder-slate-600 font-mono
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-              transition-all
-            "
+            className={`${INPUT} font-mono`}
           />
         </div>
       </div>
 
       {/* Display Name */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <label htmlFor="profile-display-name" className={`flex items-center gap-1.5 ${LABEL}`}>
           <UserCircle size={12} />
-          Display Name
+          Display name
         </label>
         <input
+          id="profile-display-name"
           type="text"
           value={profile.displayName}
           onChange={(e) => handleChange('displayName', e.target.value)}
           placeholder={currentUser ?? 'Your name'}
-          className="
-            w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-            text-sm text-slate-200 placeholder-slate-600
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-            transition-all
-          "
+          className={INPUT}
         />
       </div>
 
       {/* Email */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <label htmlFor="profile-email" className={`flex items-center gap-1.5 ${LABEL}`}>
           <Mail size={12} />
-          Email Address
+          Email address
         </label>
         <input
+          id="profile-email"
           type="email"
           value={profile.email}
           onChange={(e) => handleChange('email', e.target.value)}
           placeholder="you@example.com"
-          className="
-            w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-            text-sm text-slate-200 placeholder-slate-600
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-            transition-all
-          "
+          className={INPUT}
         />
       </div>
 
       {/* Bio */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <label htmlFor="profile-bio" className={`flex items-center gap-1.5 ${LABEL}`}>
           <Pencil size={12} />
           Bio
         </label>
         <textarea
+          id="profile-bio"
           value={profile.bio}
           onChange={(e) => handleChange('bio', e.target.value)}
           placeholder="A short description about yourself..."
           rows={3}
-          className="
-            w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-            text-sm text-slate-200 placeholder-slate-600 resize-none
-            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-            transition-all
-          "
+          className={`${INPUT} resize-none`}
         />
       </div>
 
       {/* Status */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <label htmlFor="profile-status" className={`flex items-center gap-1.5 ${LABEL}`}>
           <Eye size={12} />
           Status
         </label>
         <div className="flex flex-col gap-2">
-          <select aria-label="Status"
+          <select id="profile-status"
             value={profile.statusEmoji}
             onChange={(e) => handleChange('statusEmoji', e.target.value)}
-            className="
-              w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-              text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
-              focus:ring-1 focus:ring-emerald-500/20 transition-all
-            "
+            className={INPUT}
           >
-            <option value="">Select status...</option>
+            <option value="">Select status…</option>
             <option value={'\uD83D\uDFE2'}>{'\uD83D\uDFE2'} Online</option>
             <option value={'\uD83D\uDFE1'}>{'\uD83D\uDFE1'} Away</option>
             <option value={'\uD83D\uDD34'}>{'\uD83D\uDD34'} Busy</option>
-            <option value={'\u26AB'}>{'\u26AB'} Do Not Disturb</option>
-            <option value={'\uD83D\uDFE3'}>{'\uD83D\uDFE3'} In a Meeting</option>
+            <option value={'\u26AB'}>{'\u26AB'} Do not disturb</option>
+            <option value={'\uD83D\uDFE3'}>{'\uD83D\uDFE3'} In a meeting</option>
             <option value={'\uD83D\uDCA4'}>{'\uD83D\uDCA4'} Offline</option>
           </select>
           <input
+            aria-label="What you are working on"
             type="text"
             value={profile.statusText}
             onChange={(e) => handleChange('statusText', e.target.value)}
             placeholder="What are you working on?"
-            className="
-              w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-              text-sm text-slate-200 placeholder-slate-600
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all
-            "
+            className={INPUT}
           />
         </div>
       </div>
 
       {/* Timezone */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <label htmlFor="profile-timezone" className={`flex items-center gap-1.5 ${LABEL}`}>
           <Clock size={12} />
           Timezone
         </label>
-        <select aria-label="Timezone"
+        <select id="profile-timezone"
           value={profile.timezone}
           onChange={(e) => handleChange('timezone', e.target.value)}
-          className="
-            w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg
-            text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50
-            focus:ring-1 focus:ring-emerald-500/20 transition-all
-          "
+          className={INPUT}
         >
           {Intl.supportedValuesOf('timeZone').filter((tz) =>
             tz.startsWith('America/') || tz.startsWith('Europe/') || tz.startsWith('Asia/') || tz.startsWith('Australia/') || tz.startsWith('Pacific/') || tz === 'UTC'
@@ -406,11 +384,11 @@ function ProfileSettings() {
 
       {/* Accent Color */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+        <span id="profile-accent-label" className={`flex items-center gap-1.5 ${LABEL}`}>
           <Palette size={12} />
-          Accent Color
-        </label>
-        <div className="flex items-center gap-2 flex-wrap">
+          Accent color
+        </span>
+        <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby="profile-accent-label">
           {[
             { id: 'emerald', label: 'Emerald', tw: 'bg-emerald-500' },
             { id: 'cyan', label: 'Cyan', tw: 'bg-cyan-500' },
@@ -421,18 +399,21 @@ function ProfileSettings() {
             { id: 'fuchsia', label: 'Fuchsia', tw: 'bg-fuchsia-500' },
             { id: 'lime', label: 'Lime', tw: 'bg-lime-500' },
           ].map((color) => (
-            <button
-              key={color.id}
-              onClick={() => handleChange('accentColor', color.id)}
-              title={color.label}
-              className={`
-                w-8 h-8 rounded-full ${color.tw} transition-all duration-200
-                ${profile.accentColor === color.id
-                  ? 'ring-2 ring-white/40 ring-offset-2 ring-offset-slate-900 scale-110'
-                  : 'opacity-60 hover:opacity-100 hover:scale-105'
-                }
-              `}
-            />
+            <Hint key={color.id} label={color.label}>
+              <button
+                type="button"
+                onClick={() => handleChange('accentColor', color.id)}
+                aria-label={color.label}
+                aria-pressed={profile.accentColor === color.id}
+                className={`
+                  w-8 h-8 rounded-full ${color.tw} transition-all duration-200 ${FOCUS}
+                  ${profile.accentColor === color.id
+                    ? 'ring-2 ring-white/40 ring-offset-2 ring-offset-slate-900 scale-110'
+                    : 'opacity-60 hover:opacity-100 hover:scale-105'
+                  }
+                `}
+              />
+            </Hint>
           ))}
         </div>
       </div>
@@ -449,7 +430,7 @@ function ProfileSettings() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock size={12} className="text-slate-500" />
-            <span className="text-xs text-slate-500">Local Time</span>
+            <span className="text-xs text-slate-500">Local time</span>
           </div>
           <span className="text-xs text-slate-300 font-mono">
             {new Date().toLocaleTimeString(undefined, { timeZone: profile.timezone, hour: '2-digit', minute: '2-digit', hour12: false })}
@@ -564,10 +545,10 @@ function DiskLabelManager() {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <HardDrive size={14} className="text-cyan-400" />
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Detected Drives</h4>
+          <h3 className={SUBHEAD}>Detected drives</h3>
         </div>
         <p className="text-[11px] text-slate-500 mb-3">
-          Rename server-detected drives for the Dashboard display.
+          Rename the drives the server found; the new names show on the {pageLabel('dashboard')} page.
         </p>
 
         {disks.length === 0 ? (
@@ -603,38 +584,43 @@ function DiskLabelManager() {
                   {isEditing ? (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <input
+                        aria-label={`Label for ${disk.mount}`}
                         type="text"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' ? handleSaveLabel(disk.mount) : e.key === 'Escape' ? setEditingMount(null) : null}
                         autoFocus
-                        placeholder="Custom label..."
-                        className="w-32 bg-slate-900/60 border border-emerald-500/30 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                        placeholder="Custom label…"
+                        className={`w-36 ${FIELD} !py-1 !text-xs`}
                       />
-                      <button aria-label="Save" onClick={() => handleSaveLabel(disk.mount)} className="text-emerald-400 hover:text-emerald-300 p-1">
+                      <Hint label="Save"><button aria-label={`Save the label of ${disk.mount}`} onClick={() => handleSaveLabel(disk.mount)} className={`${BTN_ICON_SM} ${TONE_GHOST_OK}`}>
                         <Check size={12} />
-                      </button>
-                      <button aria-label="Cancel" onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
+                      </button></Hint>
+                      <Hint label="Cancel"><button aria-label={`Cancel renaming ${disk.mount}`} onClick={() => setEditingMount(null)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                         <X size={12} />
-                      </button>
+                      </button></Hint>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => { setEditValue(diskLabels[disk.mount] ?? ''); setEditingMount(disk.mount) }}
-                        className="p-1 text-slate-500 hover:text-slate-400 transition-colors"
-                        title="Edit label"
-                      >
-                        <Pencil size={11} />
-                      </button>
-                      {hasLabel && (
+                      <Hint label="Edit label">
                         <button
-                          onClick={() => handleRemoveLabel(disk.mount)}
-                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-                          title="Remove label"
+                          onClick={() => { setEditValue(diskLabels[disk.mount] ?? ''); setEditingMount(disk.mount) }}
+                          aria-label={`Edit the label of ${disk.mount}`}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST}`}
                         >
-                          <Trash2 size={11} />
+                          <Pencil size={12} />
                         </button>
+                      </Hint>
+                      {hasLabel && (
+                        <Hint label="Remove label">
+                          <button
+                            onClick={() => handleRemoveLabel(disk.mount)}
+                            aria-label={`Remove the label of ${disk.mount}`}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </Hint>
                       )}
                     </div>
                   )}
@@ -652,16 +638,16 @@ function DiskLabelManager() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <FolderPlus size={14} className="text-violet-400" />
-            <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Custom Locations</h4>
+            <FolderPlus size={14} className="text-cyan-400" />
+            <h3 className={SUBHEAD}>Custom locations</h3>
           </div>
           {!showAddForm && (
             <button
               onClick={() => { setShowAddForm(true); setAddError('') }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/30 transition-all press"
+              className={BTN_CARD_QUIET}
             >
               <Plus size={12} />
-              Add Location
+              Add location
             </button>
           )}
         </div>
@@ -677,10 +663,10 @@ function DiskLabelManager() {
               return (
                 <div
                   key={custom.mount}
-                  className="flex items-center gap-3 rounded-lg bg-violet-500/[0.04] border border-violet-500/10 px-3 py-2.5 hover:border-violet-500/20 transition-all"
+                  className="flex items-center gap-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10 px-3 py-2.5 hover:border-cyan-500/20 transition-all"
                 >
-                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-violet-500/10 shrink-0">
-                    <FolderPlus size={11} className="text-violet-400" />
+                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-cyan-500/10 shrink-0">
+                    <FolderPlus size={11} className="text-cyan-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-slate-400 truncate" title={custom.mount}>
@@ -691,13 +677,14 @@ function DiskLabelManager() {
                     )}
                   </div>
 
-                  <span className="text-[10px] text-violet-400/60 shrink-0 px-1.5 py-0.5 rounded bg-violet-500/5 border border-violet-500/10">
+                  <span className="text-[10px] text-cyan-400 shrink-0 px-1.5 py-0.5 rounded bg-cyan-500/5 border border-cyan-500/10">
                     custom
                   </span>
 
                   {isEditing ? (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <input
+                        aria-label={`Label for ${custom.mount}`}
                         type="text"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
@@ -706,32 +693,36 @@ function DiskLabelManager() {
                           if (e.key === 'Escape') setEditingMount(null)
                         }}
                         autoFocus
-                        placeholder="Label..."
-                        className="w-32 bg-slate-900/60 border border-violet-500/30 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                        placeholder="Label…"
+                        className={`w-36 ${FIELD} !py-1 !text-xs`}
                       />
-                      <button aria-label="Save" onClick={() => handleEditCustomLabel(custom.mount, editValue.trim())} className="text-violet-400 hover:text-violet-300 p-1">
+                      <Hint label="Save"><button aria-label={`Save the label of ${custom.mount}`} onClick={() => handleEditCustomLabel(custom.mount, editValue.trim())} className={`${BTN_ICON_SM} ${TONE_GHOST_OK}`}>
                         <Check size={12} />
-                      </button>
-                      <button aria-label="Cancel" onClick={() => setEditingMount(null)} className="text-slate-500 hover:text-slate-300 p-1">
+                      </button></Hint>
+                      <Hint label="Cancel"><button aria-label={`Cancel renaming ${custom.mount}`} onClick={() => setEditingMount(null)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                         <X size={12} />
-                      </button>
+                      </button></Hint>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => { setEditValue(custom.label); setEditingMount(`custom:${custom.mount}`) }}
-                        className="p-1 text-slate-500 hover:text-violet-400 transition-colors"
-                        title="Edit label"
-                      >
-                        <Pencil size={11} />
-                      </button>
-                      <button
-                        onClick={() => handleRemoveCustom(custom.mount)}
-                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-                        title="Remove custom location"
-                      >
-                        <Trash2 size={11} />
-                      </button>
+                      <Hint label="Edit label">
+                        <button
+                          onClick={() => { setEditValue(custom.label); setEditingMount(`custom:${custom.mount}`) }}
+                          aria-label={`Edit the label of ${custom.mount}`}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </Hint>
+                      <Hint label="Remove custom location">
+                        <button
+                          onClick={() => handleRemoveCustom(custom.mount)}
+                          aria-label={`Remove the custom location ${custom.mount}`}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </Hint>
                     </div>
                   )}
                 </div>
@@ -742,48 +733,40 @@ function DiskLabelManager() {
 
         {/* Add custom location form */}
         {showAddForm && (
-          <div className="rounded-lg bg-violet-500/[0.04] border border-violet-500/15 p-4 space-y-3 animate-fade-in">
+          <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/15 p-4 space-y-3 animate-fade-in">
             <div className="flex items-center gap-2 mb-1">
-              <FolderPlus size={14} className="text-violet-400" />
-              <span className="text-xs font-semibold text-slate-200">New Custom Location</span>
+              <FolderPlus size={14} className="text-cyan-400" />
+              <h4 className="text-xs font-semibold text-slate-200">New custom location</h4>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                Mount Path <span className="text-rose-400">*</span>
+              <label htmlFor="disk-new-mount" className={LABEL}>
+                Mount path <span className="text-rose-400" aria-hidden>*</span>
               </label>
               <input
+                id="disk-new-mount"
                 type="text"
                 value={newMount}
                 onChange={(e) => { setNewMount(e.target.value); setAddError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
                 autoFocus
                 placeholder="/mnt/external-drive"
-                className="
-                  w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                  text-xs text-slate-200 placeholder-slate-600 font-mono
-                  focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/25
-                  transition-all
-                "
+                className={`${INPUT} font-mono`}
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                Display Label
+              <label htmlFor="disk-new-label" className={LABEL}>
+                Display label
               </label>
               <input
+                id="disk-new-label"
                 type="text"
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
                 placeholder="External Storage"
-                className="
-                  w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                  text-xs text-slate-200 placeholder-slate-600
-                  focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/25
-                  transition-all
-                "
+                className={INPUT}
               />
             </div>
 
@@ -798,14 +781,14 @@ function DiskLabelManager() {
               <button
                 onClick={handleAddCustom}
                 disabled={!newMount.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/20 press"
+                className={`${BTN_TOOLBAR} ${TONE_OK}`}
               >
-                <Plus size={12} />
-                Add Location
+                <Plus size={14} />
+                Add location
               </button>
               <button
                 onClick={() => { setShowAddForm(false); setNewMount(''); setNewLabel(''); setAddError('') }}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                className={BTN_TOOLBAR_QUIET}
               >
                 Cancel
               </button>
@@ -918,9 +901,9 @@ function AppearanceSettings() {
 
   const presetBackgrounds = [
     { label: 'None', value: '' },
-    { label: 'Dark Gradient', value: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
+    { label: 'Dark gradient', value: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
     { label: 'Mountains', value: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80' },
-    { label: 'Night Sky', value: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80' },
+    { label: 'Night sky', value: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80' },
     { label: 'Ocean', value: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80' },
   ]
 
@@ -930,40 +913,32 @@ function AppearanceSettings() {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Cog size={14} className="text-emerald-400" />
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Branding</h4>
+          <h3 className={SUBHEAD}>Branding</h3>
         </div>
         <p className="text-[11px] text-slate-500 mb-3">
-          Customize the app name shown in the sidebar and login screen.
+          Customize the app name shown in the sidebar and on the sign-in screen.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">App Name</label>
+            <label htmlFor="branding-name" className={LABEL}>App name</label>
             <input
+              id="branding-name"
               type="text"
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="DCS Manager"
-              className="
-                w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-xs text-slate-200 placeholder-slate-600
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                transition-all
-              "
+              className={INPUT}
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Subtitle</label>
+            <label htmlFor="branding-subtitle" className={LABEL}>Subtitle</label>
             <input
+              id="branding-subtitle"
               type="text"
               value={subtitleInput}
               onChange={(e) => setSubtitleInput(e.target.value)}
               placeholder="DCS Orchestrator"
-              className="
-                w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-xs text-slate-200 placeholder-slate-600
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                transition-all
-              "
+              className={INPUT}
             />
           </div>
         </div>
@@ -975,8 +950,8 @@ function AppearanceSettings() {
       {/* Mode: which look of the theme shows */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Palette size={16} className="text-violet-400" />
-          <h4 className="text-sm font-semibold text-slate-200">Mode</h4>
+          <Palette size={14} className="text-emerald-400" />
+          <h3 className={SUBHEAD}>Mode</h3>
         </div>
         <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Mode">
           {([
@@ -986,19 +961,14 @@ function AppearanceSettings() {
           ] as const).map((m) => (
             <button
               key={m.id}
+              type="button"
               role="radio"
               aria-checked={theme === m.id}
               onClick={() => updateSetting('theme', m.id)}
-              className={`
-                flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all
-                ${theme === m.id
-                  ? 'bg-slate-800 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/20'
-                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-                }
-              `}
+              className={`${CHOICE} ${theme === m.id ? CHOICE_ON : CHOICE_OFF}`}
             >
               {m.icon}
-              <span className="text-xs font-medium">{m.label}</span>
+              {m.label}
             </button>
           ))}
         </div>
@@ -1010,38 +980,28 @@ function AppearanceSettings() {
       {/* Background Image */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Image size={16} className="text-cyan-400" />
-          <h4 className="text-sm font-semibold text-slate-200">Background Image</h4>
+          <Image size={14} className="text-cyan-400" />
+          <h3 className={SUBHEAD}>Background image</h3>
         </div>
-        <p className="text-xs text-slate-500 mb-3">
+        <p className="text-[11px] text-slate-500 mb-3">
           Set a custom background image URL (Unsplash, direct URL, etc.)
         </p>
 
         <div className="flex items-center gap-2 mb-3">
           <input
+            aria-label="Background image address"
             type="text"
             value={bgInput}
             onChange={(e) => setBgInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleBgSave()}
             placeholder="https://images.unsplash.com/..."
-            className="
-              flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-              text-xs text-slate-200 placeholder-slate-600 font-mono
-              focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-              transition-all
-            "
+            className={`flex-1 min-w-0 ${FIELD} font-mono`}
           />
-          <button
-            onClick={handleBgSave}
-            className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-xs font-medium hover:bg-emerald-500/25 transition-all press"
-          >
+          <button onClick={handleBgSave} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
             Apply
           </button>
           {backgroundImage && (
-            <button
-              onClick={handleBgClear}
-              className="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-400 border border-rose-500/25 text-xs font-medium hover:bg-rose-500/25 transition-all press"
-            >
+            <button onClick={handleBgClear} className={`${BTN_TOOLBAR} ${TONE_DANGER}`}>
               Clear
             </button>
           )}
@@ -1052,14 +1012,10 @@ function AppearanceSettings() {
           {presetBackgrounds.map((p) => (
             <button
               key={p.label}
+              type="button"
+              aria-pressed={backgroundImage === p.value}
               onClick={() => { setBgInput(p.value); const prof = getProfileData(); saveProfileData({ ...prof, backgroundImage: p.value }); setBackgroundImage(p.value) }}
-              className={`
-                px-2.5 py-1.5 rounded-md text-[10px] font-medium border transition-all
-                ${backgroundImage === p.value
-                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                  : 'border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-                }
-              `}
+              className={`${CHOICE} ${backgroundImage === p.value ? CHOICE_ON : CHOICE_OFF}`}
             >
               {p.label}
             </button>
@@ -1097,21 +1053,17 @@ function AppearanceSettings() {
 // Keyboard Shortcuts reference
 // ---------------------------------------------------------------------------
 
+/** the pages Ctrl+1 … Ctrl+9 open, in the order App.tsx binds them (Ctrl+0 opens Settings) */
+const NUMBERED_PAGES: PageId[] = ['dashboard', 'stacks', 'containers', 'images', 'health', 'networks', 'volumes', 'uptime', 'bookmarks']
+
 function KeyboardShortcuts() {
   const shortcutGroups = [
     {
       group: 'Navigation',
       shortcuts: [
-        { keys: 'Ctrl + 1', description: 'Dashboard' },
-        { keys: 'Ctrl + 2', description: 'Stacks' },
-        { keys: 'Ctrl + 3', description: 'Containers' },
-        { keys: 'Ctrl + 4', description: 'Images' },
-        { keys: 'Ctrl + 5', description: 'Health Monitor' },
-        { keys: 'Ctrl + 6', description: 'Networks' },
-        { keys: 'Ctrl + 7', description: 'Logs' },
-        { keys: 'Ctrl + 8', description: 'System Info' },
-        { keys: 'Ctrl + 9', description: 'Server Config' },
-        { keys: 'Ctrl + 0', description: 'Settings' },
+        ...NUMBERED_PAGES.map((id, i) => ({ keys: `Ctrl + ${i + 1}`, description: pageLabel(id) })),
+        { keys: 'Ctrl + 0', description: pageLabel('settings') },
+        { keys: 'Ctrl + T', description: pageLabel('terminal') },
       ],
     },
     {
@@ -1121,7 +1073,8 @@ function KeyboardShortcuts() {
         { keys: 'Ctrl + R', description: 'Refresh all data' },
         { keys: 'Ctrl + B', description: 'Toggle sidebar' },
         { keys: 'Ctrl + D', description: 'Toggle dark / light mode' },
-        { keys: 'Ctrl + F', description: 'Search / Filter current page' },
+        { keys: 'Ctrl + F', description: 'Search / filter the current page' },
+        { keys: '?', description: 'Show the shortcuts panel' },
         { keys: 'Escape', description: 'Close dialogs and modals' },
       ],
     },
@@ -1229,24 +1182,24 @@ function TwoFactorSetup() {
     <div className="rounded-lg border border-white/[0.03] bg-white/[0.03] p-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-violet-500/10 shrink-0">
-            <Shield size={12} className="text-violet-400" />
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
+            <Shield size={12} className="text-cyan-400" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-200">Two-Factor Authentication</p>
+            <p className="text-xs font-semibold text-slate-200">Two-factor authentication</p>
             <p className="text-[10px] text-slate-500 mt-0.5">
               {status === 'enabled' ? 'Enabled — your account requires a code on login' : 'Add an extra layer of security with TOTP'}
             </p>
           </div>
         </div>
         {status === 'idle' && (
-          <button onClick={handleSetup} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/15 text-violet-400 border border-violet-500/20 hover:bg-violet-500/25 transition-all disabled:opacity-50">
-            {loading ? <Loader2 size={11} className="animate-spin" /> : <Shield size={11} />}
+          <button onClick={handleSetup} disabled={loading} className={`${BTN_CARD} ${TONE_OK}`}>
+            {loading ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
             Enable 2FA
           </button>
         )}
         {status === 'enabled' && (
-          <button onClick={() => setStatus('disabling')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/15 hover:bg-rose-500/20 transition-all">
+          <button onClick={() => setStatus('disabling')} className={`${BTN_CARD} ${TONE_DANGER}`}>
             Disable
           </button>
         )}
@@ -1259,26 +1212,27 @@ function TwoFactorSetup() {
             Open your authenticator app (Google Authenticator, Authy, etc.) and add this account manually using the secret below:
           </p>
           <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
-            <code className="flex-1 text-xs font-mono text-violet-300 tracking-wider break-all select-all">{secret}</code>
+            <code className="flex-1 text-xs font-mono text-cyan-300 tracking-wider break-all select-all">{secret}</code>
           </div>
           <p className="text-[11px] text-slate-500">Enter the 6-digit code from your app to verify:</p>
           <div className="flex items-center gap-2">
             <input
+              aria-label="6-digit code"
               type="text"
               inputMode="numeric"
               maxLength={6}
               value={code}
               onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
               placeholder="000000"
-              className="w-32 text-center font-mono text-lg tracking-[0.3em] px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-200 placeholder-slate-700 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20"
+              className={`w-32 text-center font-mono text-lg tracking-[0.3em] ${FIELD}`}
             />
             <button
               onClick={handleVerify}
               disabled={loading || code.length !== 6}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {loading ? <Loader2 size={12} className="animate-spin" /> : null}
-              Verify & Enable
+              {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+              Verify and enable
             </button>
           </div>
           {error && <p className="text-[10px] text-rose-400">{error}</p>}
@@ -1291,17 +1245,18 @@ function TwoFactorSetup() {
           <p className="text-[11px] text-slate-400">Enter your password to disable two-factor authentication:</p>
           <div className="flex items-center gap-2">
             <input
+              aria-label="Your password"
               type="password"
               value={disablePassword}
               onChange={(e) => { setDisablePassword(e.target.value); setError('') }}
               placeholder="Password"
-              className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20"
+              className={`flex-1 min-w-0 ${FIELD}`}
             />
-            <button onClick={handleDisable} disabled={loading || !disablePassword} className="px-4 py-2 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/15 hover:bg-rose-500/20 transition-all disabled:opacity-50">
-              {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+            <button onClick={handleDisable} disabled={loading || !disablePassword} className={`${BTN_TOOLBAR} ${TONE_DANGER}`}>
+              {loading ? <Loader2 size={14} className="animate-spin" /> : null}
               Disable 2FA
             </button>
-            <button onClick={() => { setStatus('enabled'); setError('') }} className="px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-400 transition-colors">
+            <button onClick={() => { setStatus('enabled'); setError('') }} className={BTN_TOOLBAR_QUIET}>
               Cancel
             </button>
           </div>
@@ -1358,29 +1313,29 @@ function SecuritySettings() {
                 <Lock size={12} className="text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-200">PBKDF2 Key Derivation</p>
+                <p className="text-xs font-semibold text-slate-200">PBKDF2 key derivation</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   100,000 iterations with random salt
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 shrink-0">
-                <Shield size={12} className="text-cyan-400" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 shrink-0">
+                <Shield size={12} className="text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-200">Rate-Limited Login</p>
+                <p className="text-xs font-semibold text-slate-200">Rate-limited sign-in</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   5 attempts before temporary lockout
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/10 shrink-0">
-                <Key size={12} className="text-amber-400" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 shrink-0">
+                <Key size={12} className="text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-200">Secure Sessions</p>
+                <p className="text-xs font-semibold text-slate-200">Secure sessions</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   Token-based with 4-hour expiry
                 </p>
@@ -1395,31 +1350,32 @@ function SecuritySettings() {
           <div className="flex items-center gap-2 pt-2">
             <button
               onClick={() => { clearError(); setSection('password') }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
+              className={BTN_TOOLBAR_QUIET}
             >
-              <Key size={12} />
-              Change Password
+              <Key size={14} />
+              Change password
             </button>
             {userRole === 'admin' ? (
-              <Tooltip content="Admin accounts cannot be deleted from here" position="bottom">
-                <button
-                  disabled
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/30 border border-white/[0.03] text-slate-500 cursor-not-allowed opacity-50"
-                >
-                  <Trash2 size={12} />
-                  Delete Account
-                </button>
-              </Tooltip>
+              <button
+                type="button"
+                disabled
+                aria-describedby="delete-account-note"
+                className={`${BTN_TOOLBAR} ${TONE_QUIET} cursor-not-allowed`}
+              >
+                <Trash2 size={14} />
+                Delete account
+              </button>
             ) : (
               <button
                 onClick={() => { clearError(); setSection('delete') }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500/5 border border-rose-500/15 text-rose-400 hover:bg-rose-500/10 transition-all press"
+                className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
               >
-                <Trash2 size={12} />
-                Delete Account
+                <Trash2 size={14} />
+                Delete account
               </button>
             )}
           </div>
+          {userRole === 'admin' && <p id="delete-account-note" className="text-[10px] text-slate-500">Admin accounts cannot be deleted from here.</p>}
         </>
       )}
 
@@ -1427,8 +1383,8 @@ function SecuritySettings() {
       {section === 'password' && (
         <div className="space-y-3 animate-fade-in">
           <div className="flex items-center gap-2 mb-1">
-            <Key size={14} className="text-amber-400" />
-            <h4 className="text-xs font-semibold text-slate-200">Change Password</h4>
+            <Key size={14} className="text-slate-400" />
+            <h3 className="text-xs font-semibold text-slate-200">Change password</h3>
           </div>
 
           {error && (
@@ -1445,27 +1401,31 @@ function SecuritySettings() {
           )}
 
           <input
+            aria-label="Current password"
             type="password"
             value={currentPw}
             onChange={(e) => setCurrentPw(e.target.value)}
             placeholder="Current password"
-            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+            autoComplete="current-password"
+            className={INPUT}
           />
           <input
+            aria-label="New password"
             type="password"
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
             placeholder="New password (min 6, uppercase + number)"
-            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+            autoComplete="new-password"
+            className={INPUT}
           />
           <input
+            aria-label="Confirm new password"
             type="password"
             value={confirmPw}
             onChange={(e) => setConfirmPw(e.target.value)}
             placeholder="Confirm new password"
-            className={`w-full px-3 py-2 bg-white/5 border rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none transition-all ${
-              confirmPw && confirmPw !== newPw ? 'border-rose-500/50' : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
-            }`}
+            autoComplete="new-password"
+            className={`${INPUT} ${confirmPw && confirmPw !== newPw ? '!border-rose-500/50 focus:!ring-rose-500/25' : ''}`}
           />
           {confirmPw && confirmPw !== newPw && (
             <p className="text-[10px] text-rose-400">Passwords do not match</p>
@@ -1475,14 +1435,14 @@ function SecuritySettings() {
             <button
               onClick={handleChangePassword}
               disabled={pwLoading || !currentPw || !newPw || newPw !== confirmPw}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20 press"
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {pwLoading ? <Save size={12} className="animate-spin" /> : <Check size={12} />}
-              Update Password
+              {pwLoading ? <Save size={14} className="animate-spin" /> : <Check size={14} />}
+              Update password
             </button>
             <button
               onClick={() => { setSection('info'); clearError(); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}
-              className="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+              className={BTN_TOOLBAR_QUIET}
             >
               Cancel
             </button>
@@ -1497,7 +1457,7 @@ function SecuritySettings() {
             <div className="flex items-start gap-2">
               <AlertTriangle size={14} className="text-rose-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs font-semibold text-rose-300">Danger Zone</p>
+                <p className="text-xs font-semibold text-rose-300">Danger zone</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">
                   This will permanently delete your account, profile data, and all settings. This action cannot be undone.
                 </p>
@@ -1513,25 +1473,27 @@ function SecuritySettings() {
           )}
 
           <input
+            aria-label="Your password"
             type="password"
             value={deletePw}
             onChange={(e) => setDeletePw(e.target.value)}
             placeholder="Enter your password to confirm"
-            className="w-full px-3 py-2 bg-white/5 border border-rose-500/20 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/25 transition-all"
+            autoComplete="current-password"
+            className={`${INPUT} !border-rose-500/20 focus:!border-rose-500/50 focus:!ring-rose-500/25`}
           />
 
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleDeleteAccount}
               disabled={!deletePw}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-50 transition-all press"
+              className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
             >
-              <Trash2 size={12} />
-              Delete My Account
+              <Trash2 size={14} />
+              Delete my account
             </button>
             <button
               onClick={() => { setSection('info'); clearError(); setDeletePw('') }}
-              className="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+              className={BTN_TOOLBAR_QUIET}
             >
               Cancel
             </button>
@@ -1577,31 +1539,28 @@ function AutoLockSettings() {
       {/* Auto-lock */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <LockKeyhole size={14} className="text-amber-400" />
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Auto-Lock</h4>
+          <LockKeyhole size={14} className="accent-text" />
+          <h3 id="autolock-label" className={SUBHEAD}>Auto-lock</h3>
         </div>
         <p className="text-[11px] text-slate-500 mb-3">
           Automatically lock the app after a period of inactivity. You'll need to sign in again.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="autolock-label">
           {lockOptions.map((opt) => (
             <button
               key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={autoLockMinutes === opt.value}
               onClick={() => updateSetting('autoLockMinutes', opt.value)}
-              className={`
-                px-3 py-2 rounded-lg text-xs font-medium border transition-all
-                ${autoLockMinutes === opt.value
-                  ? 'bg-amber-500/15 border-amber-500/25 text-amber-400 ring-1 ring-amber-500/15'
-                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-                }
-              `}
+              className={`${CHOICE} ${autoLockMinutes === opt.value ? CHOICE_ON : CHOICE_OFF}`}
             >
               {opt.label}
             </button>
           ))}
         </div>
         {autoLockMinutes > 0 && (
-          <p className="text-[10px] text-amber-400/60 mt-2 flex items-center gap-1.5">
+          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1.5">
             <Clock size={10} />
             Screen will lock after {autoLockMinutes} minute{autoLockMinutes !== 1 ? 's' : ''} of inactivity
           </p>
@@ -1614,36 +1573,33 @@ function AutoLockSettings() {
       {/* Session Duration */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Clock size={14} className="text-emerald-400" />
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Session Duration</h4>
+          <Clock size={14} className="accent-text" />
+          <h3 id="session-duration-label" className={SUBHEAD}>Session duration</h3>
         </div>
         <p className="text-[11px] text-slate-500 mb-3">
           How long your "Remember me" session stays active before requiring sign-in again.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="session-duration-label">
           {sessionOptions.map((opt) => (
             <button
               key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={sessionDurationMinutes === opt.value}
               onClick={() => updateSetting('sessionDurationMinutes', opt.value)}
-              className={`
-                px-3 py-2 rounded-lg text-xs font-medium border transition-all
-                ${sessionDurationMinutes === opt.value
-                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 ring-1 ring-emerald-500/15'
-                  : 'bg-white/[0.03] border-white/5 text-slate-500 hover:text-slate-300 hover:border-white/10'
-                }
-              `}
+              className={`${CHOICE} ${sessionDurationMinutes === opt.value ? CHOICE_ON : CHOICE_OFF}`}
             >
               {opt.label}
             </button>
           ))}
         </div>
         {sessionDurationMinutes > 0 ? (
-          <p className="text-[10px] text-emerald-400/60 mt-2 flex items-center gap-1.5">
+          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1.5">
             <Clock size={10} />
             Sessions expire after {sessionDurationMinutes >= 1440 ? `${Math.round(sessionDurationMinutes / 1440)} day${Math.round(sessionDurationMinutes / 1440) !== 1 ? 's' : ''}` : sessionDurationMinutes >= 60 ? `${sessionDurationMinutes / 60} hour${sessionDurationMinutes / 60 !== 1 ? 's' : ''}` : `${sessionDurationMinutes} minutes`}
           </p>
         ) : (
-          <p className="text-[10px] text-emerald-400/60 mt-2 flex items-center gap-1.5">
+          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1.5">
             <Clock size={10} />
             Sessions never expire — stay signed in indefinitely
           </p>
@@ -1659,7 +1615,7 @@ function AutoLockSettings() {
           <div className="flex items-center gap-2">
             <User size={14} className={rememberUsername ? 'text-emerald-400' : 'text-slate-500'} />
             <div>
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Remember Username</h4>
+              <h3 className={SUBHEAD}>Remember username</h3>
               <p className="text-[10px] text-slate-500 mt-0.5">Pre-fill your username on the login screen</p>
             </div>
           </div>
@@ -1688,7 +1644,7 @@ function AutoLockSettings() {
               <BellOff size={14} className="text-slate-500" />
             )}
             <div>
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Toast Notifications</h4>
+              <h3 className={SUBHEAD}>Toast notifications</h3>
               <p className="text-[10px] text-slate-500 mt-0.5">Show in-app notifications for actions and events</p>
             </div>
           </div>
@@ -1797,25 +1753,20 @@ function ExportImportSettings() {
         Backup your settings, disk labels, stack annotations, and profile data to a JSON file, or restore from a previous export.
       </p>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/15 hover:border-cyan-500/30 transition-all press"
-        >
-          <Download size={13} />
-          Export Settings
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={handleExport} className={BTN_TOOLBAR_QUIET}>
+          <Download size={14} />
+          Export settings
         </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all press"
-        >
-          <Upload size={13} />
-          Import Settings
+        <button onClick={() => fileInputRef.current?.click()} className={BTN_TOOLBAR_QUIET}>
+          <Upload size={14} />
+          Import settings
         </button>
         <input
           ref={fileInputRef}
           type="file"
           accept=".json"
+          aria-label="Settings file to import"
           onChange={handleImport}
           className="hidden"
         />
@@ -1919,7 +1870,7 @@ function ConnectionProfiles() {
 
       {/* Active server */}
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <div className="flex items-center gap-2 min-w-0">
             {connectionStatus === 'connected' ? <Wifi size={12} className="text-emerald-400 shrink-0" /> : <WifiOff size={12} className="text-slate-500 shrink-0" />}
             <span className="text-[11px] text-slate-500 shrink-0">Active</span>
@@ -1941,9 +1892,9 @@ function ConnectionProfiles() {
             const busy = busyId === profile.id
             const editing = editingId === profile.id
             return (
-              <div key={profile.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors ${isActive ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+              <div key={profile.id} className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 transition-colors ${isActive ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}>
                 <Server size={14} className={isActive ? 'text-emerald-400 shrink-0' : 'text-slate-500 shrink-0'} />
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[9rem]">
                   {editing ? (
                     <input aria-label="Profile name"
                       autoFocus
@@ -1951,12 +1902,12 @@ function ConnectionProfiles() {
                       onChange={(e) => setEditName(e.target.value)}
                       onBlur={() => commitRename(profile.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter') commitRename(profile.id); if (e.key === 'Escape') setEditingId(null) }}
-                      className="w-full px-2 py-0.5 rounded bg-black/30 border border-emerald-500/30 text-xs text-slate-100 focus:outline-none"
+                      className={`w-full ${FIELD} !py-1 !text-xs`}
                     />
                   ) : (
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="text-xs font-medium text-slate-200 truncate">{profile.name}</span>
-                      {profile.isDefault && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300 shrink-0">default</span>}
+                      {profile.isDefault && <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-300 shrink-0">default</span>}
                       {profile.apiToken && <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-400 shrink-0" title="A session is saved for this server">signed in{profile.username ? ` as ${profile.username}` : ''}</span>}
                     </div>
                   )}
@@ -1967,24 +1918,30 @@ function ConnectionProfiles() {
                     <button
                       onClick={() => handleSwitch(profile.id)}
                       disabled={busy}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-all"
+                      className={`${BTN_CARD} ${TONE_OK}`}
                     >
-                      {busy ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
+                      {busy ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
                       Connect
                     </button>
                   ) : (
-                    <span className="flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-400"><CheckCircle size={11} /> Connected</span>
+                    <span className="flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-400"><CheckCircle size={12} /> Connected</span>
                   )}
-                  <button onClick={() => { setEditingId(profile.id); setEditName(profile.name) }} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors" title="Rename">
-                    <Pencil size={12} />
-                  </button>
-                  <button onClick={() => useServerStore.getState().setDefaultServer(profile.id)} className={`p-1.5 rounded-md transition-colors ${profile.isDefault ? 'text-amber-300' : 'text-slate-500 hover:text-amber-300 hover:bg-white/5'}`} title="Use as the default server">
-                    <Star size={12} />
-                  </button>
-                  {servers.length > 1 && (
-                    <button onClick={() => useServerStore.getState().removeServer(profile.id)} className="p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Remove profile">
-                      <Trash2 size={12} />
+                  <Hint label="Rename">
+                    <button onClick={() => { setEditingId(profile.id); setEditName(profile.name) }} aria-label={`Rename ${profile.name}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                      <Pencil size={12} />
                     </button>
+                  </Hint>
+                  <Hint label={profile.isDefault ? 'The default server' : 'Use as the default server'}>
+                    <button onClick={() => useServerStore.getState().setDefaultServer(profile.id)} aria-label={profile.isDefault ? `${profile.name} is the default server` : `Use ${profile.name} as the default server`} aria-pressed={!!profile.isDefault} className={`${BTN_ICON_SM} ${profile.isDefault ? 'text-amber-300 hover:bg-white/10' : TONE_GHOST}`}>
+                      <Star size={12} className={profile.isDefault ? 'fill-current' : ''} />
+                    </button>
+                  </Hint>
+                  {servers.length > 1 && (
+                    <Hint label="Remove this server">
+                      <button onClick={() => useServerStore.getState().removeServer(profile.id)} aria-label={`Remove ${profile.name}`} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}>
+                        <Trash2 size={12} />
+                      </button>
+                    </Hint>
                   )}
                 </div>
               </div>
@@ -2001,19 +1958,21 @@ function ConnectionProfiles() {
             <span className="text-xs font-semibold text-slate-200">New server</span>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Name</label>
+            <label htmlFor="server-new-name" className={LABEL}>Name</label>
             <input
+              id="server-new-name"
               type="text"
               value={newName}
               onChange={(e) => { setNewName(e.target.value); setAddError('') }}
               placeholder="Home server"
               autoFocus
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className={INPUT}
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Address</label>
+            <label htmlFor="server-new-address" className={LABEL}>Address</label>
             <input
+              id="server-new-address"
               type="text"
               inputMode="url"
               value={newUrl}
@@ -2021,7 +1980,7 @@ function ConnectionProfiles() {
               onKeyDown={(e) => { if (e.key === 'Enter') void handleAdd(true) }}
               placeholder="192.168.1.10:9876 or https://ui.example.com"
               spellCheck={false}
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className={`${INPUT} font-mono`}
             />
             <p className="text-[10px] text-slate-500 mt-1">The API port, or the dashboard address behind Traefik — the address that answers is kept.</p>
           </div>
@@ -2035,33 +1994,30 @@ function ConnectionProfiles() {
             <button
               onClick={() => void handleAdd(true)}
               disabled={!newName.trim() || !newUrl.trim() || testing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50 transition-all"
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {testing ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
-              Save & connect
+              {testing ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
+              Save and connect
             </button>
             <button
               onClick={() => void handleAdd(false)}
               disabled={!newName.trim() || !newUrl.trim() || testing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-all"
+              className={BTN_TOOLBAR_QUIET}
             >
-              <Plus size={12} />
+              <Plus size={14} />
               Save for later
             </button>
             <button
               onClick={() => { setShowAdd(false); setNewName(''); setNewUrl(''); setAddError('') }}
-              className="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+              className={BTN_TOOLBAR_QUIET}
             >
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all"
-        >
-          <Plus size={12} />
+        <button onClick={() => setShowAdd(true)} className={BTN_TOOLBAR_QUIET}>
+          <Plus size={14} />
           Add server
         </button>
       )}
@@ -2079,28 +2035,28 @@ function NotificationPreferencesSection() {
   const toggleItems: { key: keyof typeof preferences; label: string; description: string; icon: React.ReactNode; color: string }[] = [
     {
       key: 'healthAlerts',
-      label: 'Health Alerts',
+      label: 'Health alerts',
       description: 'Notify when system health changes (healthy/degraded/critical)',
       icon: <HeartPulse size={12} />,
       color: 'text-rose-400',
     },
     {
       key: 'connectionAlerts',
-      label: 'Connection Alerts',
+      label: 'Connection alerts',
       description: 'Notify on server connection/disconnection events',
       icon: <Wifi size={12} />,
       color: 'text-emerald-400',
     },
     {
       key: 'containerCrashAlerts',
-      label: 'Container Crash Alerts',
+      label: 'Container crash alerts',
       description: 'Notify when containers stop unexpectedly',
       icon: <AlertTriangle size={12} />,
       color: 'text-amber-400',
     },
     {
       key: 'desktopNotifications',
-      label: window.electronAPI ? 'Desktop Notifications' : 'Browser Notifications',
+      label: window.electronAPI ? 'Desktop notifications' : 'Browser notifications',
       description: window.electronAPI ? 'Show OS-level notifications when the window is not focused' : 'Show browser notifications for important events',
       icon: <Monitor size={12} />,
       color: 'text-cyan-400',
@@ -2124,7 +2080,7 @@ function NotificationPreferencesSection() {
               className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-white/[0.03] transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className={`flex items-center justify-center w-7 h-7 rounded-lg bg-white/5 ${item.color}`}>
+                <div className={`flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-white/5 ${item.color}`}>
                   {item.icon}
                 </div>
                 <div>
@@ -2133,7 +2089,6 @@ function NotificationPreferencesSection() {
                 </div>
               </div>
               <MantineSwitch
-                size="sm"
                 aria-label={item.label}
                 checked={checked}
                 onChange={() => {
@@ -2156,12 +2111,12 @@ function NotificationPreferencesSection() {
       <div className="border-t border-white/[0.03] pt-4">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-xs font-medium text-slate-200">Disk Warning Threshold</p>
+            <p className="text-xs font-medium text-slate-200">Disk warning threshold</p>
             <p className="text-[10px] text-slate-500 mt-0.5">Alert when disk usage exceeds this percentage</p>
           </div>
           <span className="text-sm font-bold text-amber-400 font-mono">{preferences.diskWarningThreshold}%</span>
         </div>
-        <input aria-label="Disk Warning Threshold"
+        <input aria-label="Disk warning threshold"
           type="range"
           min={75}
           max={95}
@@ -2253,8 +2208,8 @@ function SessionInfo() {
   return (
     <div className="space-y-2 mb-4">
       <div className="flex items-center gap-2 mb-2">
-        <Clock size={14} className="text-emerald-400" />
-        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Session</h4>
+        <Clock size={14} className="accent-text" />
+        <h3 className={SUBHEAD}>Session</h3>
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between py-1.5">
@@ -2266,7 +2221,7 @@ function SessionInfo() {
         </div>
         {sessionData?.expiresAt && (
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-[11px] text-slate-500">Session Expiry</span>
+            <span className="text-[11px] text-slate-500">Session expiry</span>
             <span className={`text-[11px] font-mono ${
               timeLeft === 'Expired' ? 'text-rose-400' : 'text-slate-300'
             }`}>
@@ -2276,7 +2231,7 @@ function SessionInfo() {
         )}
         {lastLogin && (
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-[11px] text-slate-500">Last Login</span>
+            <span className="text-[11px] text-slate-500">Last sign-in</span>
             <span className="text-[11px] text-slate-300 font-mono">
               {new Date(lastLogin).toLocaleDateString()} {new Date(lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
@@ -2285,22 +2240,26 @@ function SessionInfo() {
         {token && (
           <div className="py-1.5">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] text-slate-500">Session Token</span>
+              <span className="text-[11px] text-slate-500">Session token</span>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setShowToken(!showToken)}
-                  className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
-                  title={showToken ? 'Hide token' : 'Show token'}
-                >
-                  {showToken ? <EyeOff size={11} /> : <Eye size={11} />}
-                </button>
-                <button
-                  onClick={handleCopyToken}
-                  className={`p-1 transition-colors ${copied ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}
-                  title="Copy token"
-                >
-                  {copied ? <Check size={11} /> : <Copy size={11} />}
-                </button>
+                <Hint label={showToken ? 'Hide token' : 'Show token'}>
+                  <button
+                    onClick={() => setShowToken(!showToken)}
+                    aria-label={showToken ? 'Hide the session token' : 'Show the session token'}
+                    className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                  >
+                    {showToken ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </Hint>
+                <Hint label="Copy token">
+                  <button
+                    onClick={handleCopyToken}
+                    aria-label="Copy the session token"
+                    className={`${BTN_ICON_SM} ${copied ? TONE_GHOST_OK : TONE_GHOST}`}
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                </Hint>
               </div>
             </div>
             <div className="bg-white/[0.03] border border-white/5 rounded px-2.5 py-1.5 overflow-x-auto">
@@ -2375,7 +2334,7 @@ function AlertThresholdsEditor() {
       <div className="flex items-center gap-3">
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-amber-400/50 w-10 shrink-0">Warn</span>
+            <span className="text-[10px] text-amber-400/80 w-10 shrink-0">Warn</span>
             <input aria-label={`${label} warning`}
               type="range" min={10} max={100} step={5}
               value={thresholds[warningKey]}
@@ -2386,11 +2345,11 @@ function AlertThresholdsEditor() {
               type="number" min={10} max={100} step={5}
               value={thresholds[warningKey]}
               onChange={(e) => updateField(warningKey, Number(e.target.value))}
-              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/5 rounded-lg text-amber-400 focus:outline-none focus:border-emerald-500/50"
+              className="w-14 px-2 py-1 text-xs text-center bg-white/5 border border-white/10 rounded-lg text-amber-400 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-rose-400/50 w-10 shrink-0">Crit</span>
+            <span className="text-[10px] text-rose-400/80 w-10 shrink-0">Crit</span>
             <input aria-label={`${label} critical`}
               type="range" min={10} max={100} step={5}
               value={thresholds[criticalKey]}
@@ -2401,7 +2360,7 @@ function AlertThresholdsEditor() {
               type="number" min={10} max={100} step={5}
               value={thresholds[criticalKey]}
               onChange={(e) => updateField(criticalKey, Number(e.target.value))}
-              className="w-14 px-2 py-1 text-xs text-center bg-slate-800/60 border border-white/5 rounded-lg text-rose-400 focus:outline-none focus:border-rose-500/30"
+              className="w-14 px-2 py-1 text-xs text-center bg-white/5 border border-white/10 rounded-lg text-rose-400 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20"
             />
           </div>
         </div>
@@ -2410,7 +2369,7 @@ function AlertThresholdsEditor() {
   )
 
   if (loading) {
-    return <div className="flex items-center gap-2 py-4"><Timer size={14} className="text-slate-500 animate-spin" /><span className="text-xs text-slate-500">Loading thresholds...</span></div>
+    return <div className="flex items-center gap-2 py-4" role="status"><Timer size={14} className="text-slate-500 animate-spin" /><span className="text-xs text-slate-500">Loading thresholds…</span></div>
   }
 
   return (
@@ -2419,24 +2378,24 @@ function AlertThresholdsEditor() {
         Configure when resource usage triggers warning and critical alerts on the dashboard.
       </p>
 
-      {sliderRow('CPU Usage', 'cpu_warning', 'cpu_critical')}
+      {sliderRow('CPU usage', 'cpu_warning', 'cpu_critical')}
       <div className="border-b border-white/[0.03]" />
-      {sliderRow('Memory Usage', 'memory_warning', 'memory_critical')}
+      {sliderRow('Memory usage', 'memory_warning', 'memory_critical')}
       <div className="border-b border-white/[0.03]" />
-      {sliderRow('Disk Usage', 'disk_warning', 'disk_critical')}
+      {sliderRow('Disk usage', 'disk_warning', 'disk_critical')}
       <div className="border-b border-white/[0.03]" />
 
       {/* Restart threshold */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-xs font-medium text-slate-400">Container Restart Threshold</span>
+          <span className="text-xs font-medium text-slate-400">Container restart threshold</span>
           <p className="text-[10px] text-slate-500">Alert when a container restarts more than this many times</p>
         </div>
-        <input aria-label="Container Restart Threshold"
+        <input aria-label="Container restart threshold"
           type="number" min={1} max={50} step={1}
           value={thresholds.restart_threshold}
           onChange={(e) => updateField('restart_threshold', Number(e.target.value))}
-          className="w-16 px-2 py-1.5 text-sm text-center bg-slate-800/60 border border-white/5 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500/30"
+          className="w-16 px-2 py-1.5 text-sm text-center bg-white/5 border border-white/10 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
         />
       </div>
 
@@ -2458,6 +2417,7 @@ function SettingsExportImport() {
   const [importData, setImportData] = useState<Record<string, unknown> | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
   const updateSetting = useSettingsStore((s) => s.updateSetting)
+  const pickRef = useRef<HTMLInputElement>(null)
 
   const handleExport = useCallback(() => {
     const settings = useSettingsStore.getState()
@@ -2543,45 +2503,38 @@ function SettingsExportImport() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all press"
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={handleExport} className={BTN_TOOLBAR_QUIET}>
           <Download size={14} />
-          Export Settings
+          Export settings
         </button>
 
-        <label className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all press cursor-pointer">
+        <button onClick={() => pickRef.current?.click()} className={BTN_TOOLBAR_QUIET}>
           <Upload size={14} />
-          Import Settings
-          <input
-            type="file"
-            accept=".json"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-        </label>
+          Import settings
+        </button>
+        <input
+          ref={pickRef}
+          type="file"
+          accept=".json"
+          aria-label="Settings export to import"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
       </div>
 
       {importPreview && (
         <div className="rounded-lg bg-cyan-500/[0.06] border border-cyan-500/15 p-4 animate-fade-in">
-          <p className="text-xs font-semibold text-cyan-300 mb-2">Import Preview</p>
+          <p className="text-xs font-semibold text-cyan-300 mb-2">Import preview</p>
           <div className="space-y-1 mb-3">
             <p className="text-[10px] text-slate-400">{importPreview.settingsCount} settings found</p>
             <p className="text-[10px] text-slate-400">Profile data: {importPreview.hasProfile ? 'Yes' : 'No'}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleImport}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-cyan-500 hover:bg-cyan-400 transition-all press"
-            >
-              Apply Import
+            <button onClick={handleImport} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              Apply import
             </button>
-            <button
-              onClick={cancelImport}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
-            >
+            <button onClick={cancelImport} className={BTN_TOOLBAR_QUIET}>
               Cancel
             </button>
           </div>
@@ -2606,10 +2559,9 @@ function SettingsExportImport() {
 // SectionCard
 // ---------------------------------------------------------------------------
 
-function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCollapsed }: {
+function SectionCard({ icon, title, children, fullWidth, defaultCollapsed }: {
   icon: React.ReactNode
   title: string
-  accentColor: string
   children: React.ReactNode
   fullWidth?: boolean
   defaultCollapsed?: boolean
@@ -2629,28 +2581,32 @@ function SectionCard({ icon, title, accentColor, children, fullWidth, defaultCol
     setCollapsed(next)
     try { localStorage.setItem(storageKey, String(next)) } catch { /* */ }
   }
+  const bodyId = `${storageKey}-body`
 
   return (
     <div className={`glass rounded-xl border border-white/5 overflow-hidden ${fullWidth ? 'lg:col-span-2' : ''} transition-all duration-300`}>
-      <button
-        onClick={toggleCollapse}
-        className="w-full px-5 py-4 border-b border-white/5 flex items-center gap-2.5 hover:bg-white/[0.03] transition-all text-left cursor-pointer"
-      >
-        {icon}
-        <h3 className="text-sm font-semibold text-slate-200 flex-1">{title}</h3>
-        <svg
-          className={`w-4 h-4 text-slate-500 transition-transform duration-300 ${collapsed ? '-rotate-90' : 'rotate-0'}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
+      <h2>
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          className={`w-full px-5 py-4 border-b border-white/5 flex items-center gap-2.5 hover:bg-white/[0.03] transition-all text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40`}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+          {icon}
+          <span className="text-sm font-semibold text-slate-200 flex-1">{title}</span>
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className={`text-slate-500 transition-transform duration-300 ${collapsed ? '-rotate-90' : 'rotate-0'}`}
+          />
+        </button>
+      </h2>
+      {/* a folded section is invisible, so its controls are out of the tab order too */}
       <div
+        id={bodyId}
         className={`transition-all duration-300 ease-in-out overflow-hidden ${
-          collapsed ? 'max-h-0 opacity-0' : 'max-h-[6000px] opacity-100'
+          collapsed ? 'max-h-0 opacity-0 invisible' : 'max-h-[6000px] opacity-100'
         }`}
       >
         <div className="p-5">{children}</div>
@@ -2769,16 +2725,7 @@ export default function Settings() {
   return (
     <SettingsDirtyContext.Provider value={ctxValue}>
     <div className="space-y-3 md:space-y-6">
-      {/* Page header */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 border border-white/5">
-          <Cog size={24} className="text-violet-400" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold"><span className="text-gradient">Settings</span></h1>
-          <p className="text-sm text-slate-400 mt-0.5">Configure connection, appearance, preferences, and more</p>
-        </div>
-      </div>
+      <PageHeader page="settings" />
 
       <div className="space-y-5">
         {/* Cards keep their natural height and flow into two columns (no stretched, half-empty cards);
@@ -2786,18 +2733,16 @@ export default function Settings() {
         <div className="lg:columns-2 lg:gap-5 [&>*]:break-inside-avoid [&>*]:mb-5 [&>*:last-child]:mb-0 lg:[&>*:last-child]:mb-5">
         {/* Row 1: User Profile + Server Connection (side by side) */}
         <SectionCard
-          icon={<UserCircle size={16} className="text-emerald-400" />}
-          title="User Profile"
-          accentColor="border-t-emerald-500"
+          icon={<UserCircle size={16} className="accent-text" />}
+          title="User profile"
         >
           <ProfileSettings />
         </SectionCard>
 
         {isAdmin && (
           <SectionCard
-            icon={<Server size={16} className="text-emerald-400" />}
-            title="Server Connection"
-            accentColor="border-t-emerald-500"
+            icon={<Server size={16} className="accent-text" />}
+            title="Server connection"
           >
             <ConnectionForm />
             <div className="border-t border-white/[0.03] mt-4 pt-4">
@@ -2809,9 +2754,8 @@ export default function Settings() {
         </div>
         {/* Row 2: Appearance (full-width) */}
         <SectionCard
-          icon={<Eye size={16} className="text-violet-400" />}
+          icon={<Eye size={16} className="accent-text" />}
           title="Appearance"
-          accentColor="border-t-violet-500"
           fullWidth
         >
           <AppearanceSettings />
@@ -2819,9 +2763,8 @@ export default function Settings() {
 
         {/* Row 3: App Preferences (full-width) */}
         <SectionCard
-          icon={<Timer size={16} className="text-amber-400" />}
-          title="Application Preferences"
-          accentColor="border-t-amber-500"
+          icon={<Timer size={16} className="accent-text" />}
+          title="Application preferences"
           fullWidth
         >
           <AppSettingsForm onDirtyChange={handleAppSettingsDirty} onRegisterSave={handleAppSettingsRegister} />
@@ -2831,9 +2774,8 @@ export default function Settings() {
         {/* Row 4: Keyboard Shortcuts (hidden on mobile) + Disk Config */}
         {!isMobileDevice && (
           <SectionCard
-            icon={<Keyboard size={16} className="text-violet-400" />}
-            title="Keyboard Shortcuts"
-            accentColor="border-t-violet-500"
+            icon={<Keyboard size={16} className="accent-text" />}
+            title="Keyboard shortcuts"
           >
             <KeyboardShortcuts />
           </SectionCard>
@@ -2841,9 +2783,8 @@ export default function Settings() {
 
         {isAdmin && (
           <SectionCard
-            icon={<HardDrive size={16} className="text-cyan-400" />}
-            title="Disk Configuration"
-            accentColor="border-t-cyan-500"
+            icon={<HardDrive size={16} className="accent-text" />}
+            title="Disk configuration"
           >
             <DiskLabelManager />
           </SectionCard>
@@ -2851,18 +2792,16 @@ export default function Settings() {
 
         {/* Row 5: Notification Preferences + Alert Thresholds */}
         <SectionCard
-          icon={<Bell size={16} className="text-cyan-400" />}
-          title="Notification Preferences"
-          accentColor="border-t-cyan-500"
+          icon={<Bell size={16} className="accent-text" />}
+          title="Notification preferences"
         >
           <NotificationPreferencesSection />
         </SectionCard>
 
         {isAdmin && (
           <SectionCard
-            icon={<Bell size={16} className="text-amber-400" />}
-            title="Alert Thresholds"
-            accentColor="border-t-amber-500"
+            icon={<AlertTriangle size={16} className="text-amber-400" />}
+            title="Alert thresholds"
           >
             <AlertThresholdsEditor />
           </SectionCard>
@@ -2870,18 +2809,16 @@ export default function Settings() {
 
         {/* Row 6: Lock + Backup (side by side) */}
         <SectionCard
-          icon={<LockKeyhole size={16} className="text-amber-400" />}
-          title="Lock & Session"
-          accentColor="border-t-amber-500"
+          icon={<LockKeyhole size={16} className="accent-text" />}
+          title="Lock & session"
         >
           <AutoLockSettings />
         </SectionCard>
 
         {isAdmin && (
           <SectionCard
-            icon={<Download size={16} className="text-cyan-400" />}
-            title="Backup & Restore"
-            accentColor="border-t-cyan-500"
+            icon={<Download size={16} className="accent-text" />}
+            title="Backup & restore"
           >
             <ExportImportSettings />
             <div className="border-t border-white/[0.03] mt-4 pt-4">
@@ -2893,9 +2830,8 @@ export default function Settings() {
         </div>
         {/* Themes — everyone picks their own; admins set the one every dashboard follows */}
         <SectionCard
-          icon={<Palette size={16} className="text-emerald-400" />}
+          icon={<Palette size={16} className="accent-text" />}
           title="Themes"
-          accentColor="border-t-emerald-500"
           fullWidth
         >
           <ThemesPanel />
@@ -2903,24 +2839,19 @@ export default function Settings() {
 
         {/* Custom CSS — admin only */}
         {isAdmin && <SectionCard
-          icon={<Palette size={16} className="text-violet-400" />}
+          icon={<Palette size={16} className="accent-text" />}
           title="Custom CSS"
-          accentColor="border-t-violet-500"
           fullWidth
         >
           <div className="space-y-4">
             <p className="text-[10px] text-slate-500">Add custom styles to personalize your dashboard. Changes are saved via the floating save bar.</p>
             <textarea
+              aria-label="Custom CSS"
               value={customCSSLocal}
               onChange={(e) => setCustomCSSLocal(e.target.value)}
               placeholder={"/* Add your custom CSS here */\n.glass { border-radius: 1rem; }"}
               rows={10}
-              className="
-                w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl
-                text-xs text-emerald-400 placeholder-slate-700 font-mono
-                focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-violet-500/15
-                resize-y transition-all leading-relaxed
-              "
+              className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-xs text-emerald-400 placeholder-slate-700 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 resize-y transition-all leading-relaxed"
               spellCheck={false}
             />
             <div className="flex items-center justify-between">
@@ -2929,7 +2860,7 @@ export default function Settings() {
               </span>
               <button
                 onClick={() => { setCustomCSSLocal(''); updateSetting('customCSS', '') }}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 bg-white/5 border border-white/10 hover:bg-white/10 transition-all press"
+                className={BTN_TOOLBAR_QUIET}
               >
                 Clear
               </button>
@@ -2942,14 +2873,13 @@ export default function Settings() {
 
         {/* Row 7: About + Security (side by side) */}
         <SectionCard
-          icon={<Info size={16} className="text-cyan-400" />}
+          icon={<Info size={16} className="accent-text" />}
           title="About"
-          accentColor="border-t-cyan-500"
         >
           <div className="space-y-0">
             {[
-              { label: 'App Version', value: appVersion },
-              { label: 'API Version', value: versionData?.api_version ?? '--' },
+              { label: 'App version', value: appVersion },
+              { label: 'API version', value: versionData?.api_version ?? '--' },
               { label: 'Framework', value: versionData?.framework_version ?? '--' },
               { label: 'Docker', value: versionData?.docker_version ?? '--' },
               { label: 'Compose', value: versionData?.compose_version ?? '--' },
@@ -2957,7 +2887,7 @@ export default function Settings() {
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-white/[0.03] last:border-b-0">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{item.label}</span>
-                <span className="text-sm text-slate-200 font-mono truncate max-w-[200px]" title={typeof item.value === 'string' ? item.value : undefined}>
+                <span className="text-sm text-slate-200 font-mono truncate max-w-[65%]" title={typeof item.value === 'string' ? item.value : undefined}>
                   {item.value}
                 </span>
               </div>
@@ -2971,18 +2901,17 @@ export default function Settings() {
                 localStorage.removeItem('onboarding_complete')
                 window.dispatchEvent(new Event('show-onboarding'))
               }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-all press"
+              className={BTN_TOOLBAR_QUIET}
             >
               <Info size={14} />
-              Show Onboarding Guide
+              Show onboarding guide
             </button>
           </div>
         </SectionCard>
 
         <SectionCard
           icon={<Shield size={16} className="text-rose-400" />}
-          title="Security & Account"
-          accentColor="border-t-rose-500"
+          title="Security & account"
         >
           <SessionInfo />
           <SecuritySettings />

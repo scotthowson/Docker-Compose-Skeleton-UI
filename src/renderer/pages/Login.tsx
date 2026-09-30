@@ -1,10 +1,13 @@
 // =============================================================================
-// Login / Initial Setup — Premium glassmorphic auth screen
+// Login — the sign-in screen: connect to a server, sign in (with a 2FA code
+// when the account has one), register with an invite code, or create the first
+// admin. Shown before anyone is signed in, so it has no page header: it is the
+// product's front door (DCS Manager, the dashboard of DCS Orchestrator).
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Shield, User, Lock, Eye, EyeOff, ArrowRight, Globe,
+  Shield, User, Lock, ArrowRight, Globe,
   Layers, Loader2, AlertCircle, Sparkles, Clock, KeyRound, UserPlus,
   Wifi, WifiOff, X,
 } from 'lucide-react'
@@ -15,21 +18,18 @@ import { useServerStore } from '../stores/serverStore'
 import { authRegister, authLogin, authSetup, authVerify, fetchSetupStatus, totpValidate } from '../api/endpoints'
 import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 import { discoverServer } from '../lib/discover'
+import Hint from '../components/common/Hint'
+import PasswordStrengthMeter from '../components/auth/PasswordStrength'
+import ShowPasswordButton from '../components/auth/ShowPasswordButton'
+import { BTN_ICON_SM, BTN_TOOLBAR_QUIET, BTN_SHEET_PRIMARY } from '../lib/ui'
+import { FOCUS_RING } from '../lib/fieldStyles'
 
-function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  let score = 0
-  if (pw.length >= 8) score++
-  if (pw.length >= 12) score++
-  if (/[A-Z]/.test(pw)) score++
-  if (/[0-9]/.test(pw)) score++
-  if (/[^A-Za-z0-9]/.test(pw)) score++
-
-  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-rose-500' }
-  if (score <= 2) return { score: 2, label: 'Fair', color: 'bg-amber-500' }
-  if (score <= 3) return { score: 3, label: 'Good', color: 'bg-yellow-500' }
-  if (score <= 4) return { score: 4, label: 'Strong', color: 'bg-emerald-500' }
-  return { score: 5, label: 'Excellent', color: 'bg-emerald-400' }
-}
+/** the fields of the sign-in card: 48 px, an icon on the left */
+const LOGIN_INPUT = 'w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-300'
+/** …with a button on the right (show the password) */
+const LOGIN_INPUT_PW = LOGIN_INPUT.replace('pr-4', 'pr-12')
+/** a small text button beside a line of words (Change, Have an invite code?) */
+const LINK_BTN = `rounded-md transition-colors ${FOCUS_RING}`
 
 export default function Login() {
   const {
@@ -37,7 +37,7 @@ export default function Login() {
     register, login, clearError, setApiToken, setUserRole,
   } = useAuthStore()
   const projectName = useSettingsStore((s) => s.projectName) || 'DCS Manager'
-  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'Server Management Dashboard'
+  const projectSubtitle = useSettingsStore((s) => s.projectSubtitle) || 'DCS Orchestrator'
   const lastUsername = useSettingsStore((s) => s.lastUsername)
   const sessionDurationMinutes = useSettingsStore((s) => s.sessionDurationMinutes)
   const setCurrentPage = useSettingsStore((s) => s.setCurrentPage)
@@ -61,14 +61,14 @@ export default function Login() {
   const settingsServerUrl = useSettingsStore((s) => s.serverUrl)
   const [serverUrl, setServerUrlLocal] = useState(settingsServerUrl || apiClient.getBaseUrl())
   const [serverAuthError, setServerAuthError] = useState<string | null>(null)
-  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
-    const reason = sessionStorage.getItem('logout-reason')
-    if (reason === 'session-expired') {
-      sessionStorage.removeItem('logout-reason')
-      return true
-    }
-    return false
-  })
+  // The reason is read without consuming it: App draws a dark frame between the dashboard and this screen, so
+  // this screen mounts twice (and twice in development, StrictMode), and the first mount used to take the reason
+  // away from the one that stays. It is forgotten when the screen goes away after having been on show.
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => sessionStorage.getItem('logout-reason') === 'session-expired')
+  useEffect(() => {
+    const shownAt = Date.now()
+    return () => { if (Date.now() - shownAt > 400) sessionStorage.removeItem('logout-reason') }
+  }, [])
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [connDetail, setConnDetail] = useState('')
   const connTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -579,16 +579,16 @@ export default function Login() {
               <div className="flex items-center gap-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-4 py-3 mb-6">
                 <Globe size={16} className="text-cyan-400 shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-cyan-300">Server Connection</p>
+                  <p className="text-xs font-semibold text-cyan-300">Server connection</p>
                   <p className="text-[10px] text-cyan-400/70 mt-0.5">
-                    Connect to your DCS server to get started
+                    Connect to your DCS Orchestrator server to get started
                   </p>
                 </div>
               </div>
 
               {/* Header */}
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-slate-100">Connect to Server</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Connect to a server</h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Your dashboard address or the API server — the port and the /api path are found automatically
                 </p>
@@ -601,10 +601,11 @@ export default function Login() {
                 if (serverUrl.trim()) checkServer(serverUrl)
               }}>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Address</label>
+                  <label htmlFor="connect-server-address" className="block text-xs font-medium text-slate-400 mb-1.5">Server address</label>
                   <div className="relative">
                     <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
+                      id="connect-server-address"
                       type="text"
                       inputMode="url"
                       value={serverUrl}
@@ -612,12 +613,7 @@ export default function Login() {
                       placeholder={window.electronAPI ? "192.168.1.100:9876 or https://ui.example.com" : "/api"}
                       autoFocus
                       autoComplete="url"
-                      className="
-                        w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
-                        transition-all duration-300
-                      "
+                      className={`${LOGIN_INPUT} !pr-10`}
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {connStatus === 'testing' && <Loader2 size={14} className="text-slate-500 animate-spin" />}
@@ -625,8 +621,8 @@ export default function Login() {
                       {connStatus === 'fail' && <WifiOff size={14} className="text-rose-400" />}
                     </div>
                   </div>
-                  {/* Fixed-height status line to prevent layout shift on state changes */}
-                  <p className={`text-[10px] mt-1 h-4 transition-colors duration-200 ${
+                  {/* One line tall until the message needs more (the unreachable hint wraps), so state changes barely shift the form */}
+                  <p aria-live="polite" className={`text-[10px] mt-1 min-h-[1rem] leading-snug transition-colors duration-200 ${
                     connStatus === 'ok' ? 'text-emerald-400/80'
                     : connStatus === 'fail' ? 'text-rose-400/80'
                     : connStatus === 'testing' ? 'text-cyan-400/80'
@@ -639,33 +635,26 @@ export default function Login() {
                   </p>
                 </div>
 
-                {/* Test Connection button */}
+                {/* Test connection button */}
                 <button
                   type="submit"
                   disabled={connStatus === 'testing' || connStatus === 'ok' || !serverUrl.trim()}
-                  className="
-                    w-full mt-4 h-11 rounded-lg text-sm font-medium
-                    transition-all duration-300 press
-                    bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
-                    hover:bg-cyan-500/30 hover:border-cyan-500/50
-                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/20
-                    flex items-center justify-center gap-2
-                  "
+                  className={`${BTN_SHEET_PRIMARY} w-full mt-4`}
                 >
                   {connStatus === 'testing' ? (
                     <>
-                      <Loader2 size={14} className="animate-spin" />
-                      Testing Connection…
+                      <Loader2 size={16} className="animate-spin" />
+                      Testing connection…
                     </>
                   ) : connStatus === 'ok' ? (
                     <>
-                      <Wifi size={14} />
+                      <Wifi size={16} />
                       Connected
                     </>
                   ) : (
                     <>
-                      <Wifi size={14} />
-                      Test Connection
+                      <Wifi size={16} />
+                      Test connection
                     </>
                   )}
                 </button>
@@ -685,7 +674,7 @@ export default function Login() {
               <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-3 mb-6">
                 <Sparkles size={16} className="text-emerald-400 shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-emerald-300">Initial Setup</p>
+                  <p className="text-xs font-semibold text-emerald-300">Initial setup</p>
                   <p className="text-[10px] text-emerald-400/70 mt-0.5">
                     Create your admin account to get started
                   </p>
@@ -701,7 +690,8 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
-                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                  aria-label="Change the server"
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -709,7 +699,7 @@ export default function Login() {
 
               {/* Header */}
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-slate-100">Create Admin Account</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Create admin account</h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Set up your credentials to secure the dashboard
                 </p>
@@ -729,12 +719,7 @@ export default function Login() {
                       placeholder="Enter username"
                       autoFocus
                       autoComplete="username"
-                      className="
-                        w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT}
                     />
                   </div>
                 </div>
@@ -751,22 +736,9 @@ export default function Login() {
                       onChange={(e) => { setPassword(e.target.value); clearError() }}
                       placeholder="Enter password"
                       autoComplete="new-password"
-                      className="
-                        w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT_PW}
                     />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword(!showPassword)} />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
                     Min 8 characters, must include an uppercase letter and a number
@@ -775,7 +747,7 @@ export default function Login() {
 
                 {/* Confirm Password */}
                 <div>
-                  <label htmlFor="setup-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                  <label htmlFor="setup-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
@@ -803,7 +775,7 @@ export default function Login() {
 
                 {/* Error */}
                 {(error || serverAuthError) && (
-                  <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+                  <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
                     <AlertCircle size={14} className="text-rose-400 shrink-0" />
                     <p className="text-xs text-rose-300">{serverAuthError || error}</p>
                   </div>
@@ -813,23 +785,14 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={submitting || !username.trim() || !password.trim() || password !== confirmPassword}
-                  className="
-                    flex items-center justify-center gap-2 w-full py-3 rounded-lg
-                    text-sm font-semibold
-                    bg-emerald-500 text-white
-                    hover:bg-emerald-400
-                    shadow-lg shadow-emerald-500/25
-                    hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98]
-                    transition-all duration-200
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className={`${BTN_SHEET_PRIMARY} w-full`}
                 >
                   {submitting ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <Sparkles size={16} />
                   )}
-                  {submitting ? 'Creating Account...' : 'Create Account & Start'}
+                  {submitting ? 'Creating account…' : 'Create account and start'}
                 </button>
               </form>
             </>
@@ -839,15 +802,16 @@ export default function Login() {
           {showTotpInput && (
             <div key="totp-mode" className="animate-fade-in">
               <div className="mb-6 text-center">
-                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/20 flex items-center justify-center">
-                  <Shield size={24} className="text-violet-400" />
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                  <Shield size={24} className="text-cyan-400" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-100">Two-Factor Authentication</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Two-factor authentication</h2>
                 <p className="text-xs text-slate-500 mt-1">Enter the 6-digit code from your authenticator app</p>
               </div>
               <form onSubmit={handleTotpSubmit} className="space-y-4">
                 <div className="flex justify-center">
                   <input
+                    aria-label="6-digit code"
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
@@ -857,17 +821,11 @@ export default function Login() {
                     placeholder="000000"
                     autoFocus
                     autoComplete="one-time-code"
-                    className="
-                      w-48 text-center text-2xl font-mono tracking-[0.5em]
-                      px-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                      text-slate-200 placeholder-slate-700
-                      focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20
-                      transition-all duration-300
-                    "
+                    className="w-48 text-center text-2xl font-mono tracking-[0.5em] px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-slate-200 placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-300"
                   />
                 </div>
                 {totpError && (
-                  <div className="flex items-center gap-2 justify-center rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
+                  <div role="alert" className="flex items-center gap-2 justify-center rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2">
                     <AlertCircle size={14} className="text-rose-400 shrink-0" />
                     <p className="text-xs text-rose-300">{totpError}</p>
                   </div>
@@ -875,23 +833,17 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={totpSubmitting || totpCode.length !== 6}
-                  className="
-                    flex items-center justify-center gap-2 w-full py-3 rounded-lg
-                    text-sm font-semibold bg-violet-500 text-white
-                    hover:bg-violet-400 shadow-lg shadow-violet-500/25
-                    transition-all duration-200
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className={`${BTN_SHEET_PRIMARY} w-full`}
                 >
                   {totpSubmitting ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
-                  {totpSubmitting ? 'Verifying...' : 'Verify Code'}
+                  {totpSubmitting ? 'Verifying…' : 'Verify code'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowTotpInput(false); setTotpCode(''); setTotpError(''); setTotpToken('') }}
-                  className="w-full py-2 text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                  className={`${BTN_TOOLBAR_QUIET} w-full justify-center`}
                 >
-                  Back to login
+                  Back to sign in
                 </button>
               </form>
             </div>
@@ -909,7 +861,8 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
-                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                  aria-label="Change the server"
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -920,18 +873,20 @@ export default function Login() {
                 <div className="flex items-center gap-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-3 mb-4 animate-fade-in">
                   <Clock size={15} className="text-amber-400 shrink-0" />
                   <div>
-                    <p className="text-xs font-semibold text-amber-300">Session Expired</p>
+                    <p className="text-xs font-semibold text-amber-300">Session expired</p>
                     <p className="text-[10px] text-amber-400/70 mt-0.5">Your session has expired. Please sign in again to continue.</p>
                   </div>
-                  <button aria-label="Dismiss" onClick={() => setSessionExpiredNotice(false)} className="p-1 rounded text-amber-500/50 hover:text-amber-400 transition-colors shrink-0 ml-auto">
-                    <X size={12} />
-                  </button>
+                  <Hint label="Dismiss">
+                    <button type="button" aria-label="Dismiss" onClick={() => setSessionExpiredNotice(false)} className={`${BTN_ICON_SM} text-amber-400 hover:bg-amber-500/10 shrink-0 ml-auto ${FOCUS_RING}`}>
+                      <X size={14} />
+                    </button>
+                  </Hint>
                 </div>
               )}
 
               {/* Header */}
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-slate-100">Welcome Back</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Welcome back</h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Enter your credentials to access the dashboard
                 </p>
@@ -951,12 +906,7 @@ export default function Login() {
                       placeholder="Enter username"
                       autoFocus
                       autoComplete="username"
-                      className="
-                        w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT}
                     />
                   </div>
                 </div>
@@ -973,35 +923,24 @@ export default function Login() {
                       onChange={(e) => { setPassword(e.target.value); clearError() }}
                       placeholder="Enter password"
                       autoComplete="current-password"
-                      className="
-                        w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT_PW}
                     />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword(!showPassword)} />
                   </div>
                 </div>
 
-                {/* Remember Me */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={rememberMe}
-                    aria-label={sessionLabel}
-                    onClick={() => setRememberMe(!rememberMe)}
+                {/* Remember me: the whole line is the check box */}
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={rememberMe}
+                  onClick={() => setRememberMe(!rememberMe)}
+                  className={`${LINK_BTN} flex items-center gap-2 min-h-[2rem] -my-1 py-1 pr-2 text-left`}
+                >
+                  <span
+                    aria-hidden
                     className={`
-                      flex items-center justify-center w-4 h-4 rounded border transition-all
+                      flex items-center justify-center w-4 h-4 rounded border transition-all shrink-0
                       ${rememberMe
                         ? 'bg-emerald-500 border-emerald-500'
                         : 'bg-white/5 border-white/20 hover:border-white/30'
@@ -1013,16 +952,16 @@ export default function Login() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     )}
-                  </button>
-                  <div className="flex items-center gap-1.5">
+                  </span>
+                  <span className="flex items-center gap-1.5">
                     <Clock size={11} className="text-slate-500" />
                     <span className="text-xs text-slate-400">{sessionLabel}</span>
-                  </div>
-                </div>
+                  </span>
+                </button>
 
                 {/* Error */}
                 {(error || serverAuthError) && (
-                  <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+                  <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
                     <AlertCircle size={14} className="text-rose-400 shrink-0" />
                     <p className="text-xs text-rose-300">{serverAuthError || error}</p>
                   </div>
@@ -1032,23 +971,14 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={submitting || !username.trim() || !password.trim()}
-                  className="
-                    flex items-center justify-center gap-2 w-full py-3 rounded-lg
-                    text-sm font-semibold
-                    bg-emerald-500 text-white
-                    hover:bg-emerald-400
-                    shadow-lg shadow-emerald-500/25
-                    hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98]
-                    transition-all duration-200
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className={`${BTN_SHEET_PRIMARY} w-full`}
                 >
                   {submitting ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <ArrowRight size={16} />
                   )}
-                  {submitting ? 'Signing In...' : 'Sign In'}
+                  {submitting ? 'Signing in…' : 'Sign in'}
                 </button>
               </form>
 
@@ -1057,9 +987,9 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => switchMode('register')}
-                  className="text-xs text-slate-500 hover:text-cyan-400 transition-colors duration-200"
+                  className={`${LINK_BTN} px-2 py-2 text-xs text-slate-500 hover:text-slate-300`}
                 >
-                  Have an invite code? <span className="font-medium text-cyan-400/80 hover:text-cyan-300">Register</span>
+                  Have an invite code? <span className="font-medium text-cyan-400">Register</span>
                 </button>
               </div>
             </div>
@@ -1077,7 +1007,8 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setConnected(false); setServerInitialized(false); setConnStatus('idle') }}
-                  className="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors shrink-0 ml-2"
+                  aria-label="Change the server"
+                  className={`${LINK_BTN} h-8 px-2.5 -mr-1.5 text-[11px] font-medium text-slate-400 hover:text-cyan-400 hover:bg-white/5 shrink-0 ml-2`}
                 >
                   Change
                 </button>
@@ -1087,7 +1018,7 @@ export default function Login() {
               <div className="flex items-center gap-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-4 py-3 mb-6">
                 <KeyRound size={16} className="text-cyan-400 shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-cyan-300">Invite Registration</p>
+                  <p className="text-xs font-semibold text-cyan-300">Invite registration</p>
                   <p className="text-[10px] text-cyan-400/70 mt-0.5">
                     Use an invite code to create your account
                   </p>
@@ -1096,7 +1027,7 @@ export default function Login() {
 
               {/* Header */}
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-slate-100">Create Account</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Create account</h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Enter your invite code and choose your credentials
                 </p>
@@ -1105,7 +1036,7 @@ export default function Login() {
               <form onSubmit={handleInviteRegister} className="space-y-4">
                 {/* Invite Code */}
                 <div>
-                  <label htmlFor="register-invite" className="block text-xs font-medium text-slate-400 mb-1.5">Invite Code</label>
+                  <label htmlFor="register-invite" className="block text-xs font-medium text-slate-400 mb-1.5">Invite code</label>
                   <div className="relative">
                     <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
@@ -1116,12 +1047,7 @@ export default function Login() {
                       placeholder="Enter invite code"
                       autoFocus
                       autoComplete="off"
-                      className="
-                        w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/25
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT}
                     />
                   </div>
                 </div>
@@ -1138,12 +1064,7 @@ export default function Login() {
                       onChange={(e) => { setUsername(e.target.value); setRegisterError(null) }}
                       placeholder="Choose a username"
                       autoComplete="username"
-                      className="
-                        w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT}
                     />
                   </div>
                 </div>
@@ -1160,22 +1081,9 @@ export default function Login() {
                       onChange={(e) => { setPassword(e.target.value); setRegisterError(null) }}
                       placeholder="Choose a password"
                       autoComplete="new-password"
-                      className="
-                        w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg
-                        text-sm text-slate-200 placeholder-slate-600
-                        focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20
-                        transition-all duration-300
-                      "
+                      className={LOGIN_INPUT_PW}
                     />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword(!showPassword)} />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
                     Min 8 characters, must include an uppercase letter and a number
@@ -1183,32 +1091,11 @@ export default function Login() {
                 </div>
 
                 {/* Password strength */}
-                {password && (
-                  <div className="space-y-1 animate-fade-in">
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4, 5].map((level) => {
-                        const strength = getPasswordStrength(password)
-                        return (
-                          <div
-                            key={level}
-                            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
-                              level <= strength.score ? strength.color : 'bg-slate-800'
-                            }`}
-                          />
-                        )
-                      })}
-                    </div>
-                    <p className={`text-[10px] ${
-                      getPasswordStrength(password).score <= 2 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {getPasswordStrength(password).label}
-                    </p>
-                  </div>
-                )}
+                {password && <PasswordStrengthMeter password={password} />}
 
                 {/* Confirm Password */}
                 <div>
-                  <label htmlFor="register-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                  <label htmlFor="register-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
@@ -1236,7 +1123,7 @@ export default function Login() {
 
                 {/* Error */}
                 {(registerError || error) && (
-                  <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+                  <div role="alert" className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
                     <AlertCircle size={14} className="text-rose-400 shrink-0" />
                     <p className="text-xs text-rose-300">{registerError || error}</p>
                   </div>
@@ -1246,23 +1133,14 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={submitting || !inviteCode.trim() || !username.trim() || !password.trim() || password !== confirmPassword}
-                  className="
-                    press flex items-center justify-center gap-2 w-full py-3 rounded-lg
-                    text-sm font-semibold
-                    bg-cyan-500 text-white
-                    hover:bg-cyan-400
-                    shadow-lg shadow-cyan-500/25
-                    hover:shadow-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]
-                    transition-all duration-200
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className={`${BTN_SHEET_PRIMARY} w-full`}
                 >
                   {submitting ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <UserPlus size={16} />
                   )}
-                  {submitting ? 'Creating Account...' : 'Register'}
+                  {submitting ? 'Creating account…' : 'Register'}
                 </button>
               </form>
 
@@ -1271,9 +1149,9 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => switchMode('login')}
-                  className="text-xs text-slate-500 hover:text-emerald-400 transition-colors duration-200"
+                  className={`${LINK_BTN} px-2 py-2 text-xs text-slate-500 hover:text-slate-300`}
                 >
-                  Already have an account? <span className="font-medium text-emerald-400/80 hover:text-emerald-300">Sign In</span>
+                  Already have an account? <span className="font-medium text-emerald-400">Sign in</span>
                 </button>
               </div>
             </div>

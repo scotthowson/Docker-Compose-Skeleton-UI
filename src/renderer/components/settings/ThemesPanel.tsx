@@ -23,6 +23,12 @@ import { useResolvedMode } from '../../lib/colorMode'
 import { CSS_SANITIZE_NOTE, sanitizeCss } from '../../lib/cssSanitize'
 import { ApiError } from '../../api/client'
 import { useModalA11y } from '../../hooks/useModalA11y'
+import Hint from '../common/Hint'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM,
+  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_OK, TONE_GHOST, TONE_GHOST_DANGER,
+} from '../../lib/ui'
+import { INPUT, LABEL, FOCUS_RING } from '../../lib/fieldStyles'
 import {
   type ContrastCheck,
   type PaletteKey,
@@ -52,13 +58,8 @@ import {
 // Bits
 // ---------------------------------------------------------------------------
 
-const BTN = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all press disabled:opacity-50 disabled:cursor-not-allowed'
-const BTN_PRIMARY = `${BTN} bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25`
-const BTN_GHOST = `${BTN} bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10`
-const BTN_QUIET = `${BTN} text-slate-400 hover:text-slate-200 hover:bg-white/5`
-const ICON_BTN = 'p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors'
-const INPUT = 'w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all'
-const LABEL = 'block text-[11px] font-medium text-slate-400 mb-1'
+/** an inline text button inside a strip of words (Follow the server, Clear for everyone) */
+const TEXT_BTN = `h-auto rounded font-medium ${FOCUS_RING}`
 /** a two- or three-way switch: the chosen option on a raised surface */
 const SEG = 'inline-flex items-center gap-0.5 rounded-lg bg-white/[0.03] border border-white/5 p-0.5'
 const SEG_ITEM = 'inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors'
@@ -185,7 +186,7 @@ function Sheet({ title, icon, onClose, children, footer, wide, keepOnBackdrop }:
         <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-white/5 shrink-0">
           {icon}
           <h3 className="text-sm font-semibold text-slate-100 flex-1 truncate">{title}</h3>
-          <button type="button" onClick={onClose} className={ICON_BTN} aria-label="Close"><X size={16} /></button>
+          <button type="button" onClick={onClose} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Close"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin px-5 py-4">{children}</div>
         {footer && <div className="px-5 py-3 border-t border-white/5 shrink-0 safe-area-bottom">{footer}</div>}
@@ -343,20 +344,24 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
 
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={() => setPreview((v) => !v)} className={`${BTN_QUIET} mr-auto`} aria-pressed={preview} title={preview ? 'The dashboard shows the draft; click to stop' : 'Show the draft on the dashboard'}>
-        {preview ? <Eye size={14} className="text-emerald-400" /> : <EyeOff size={14} />} {preview ? 'Previewing' : 'Preview off'}
-      </button>
-      <button type="button" onClick={onClose} className={BTN_QUIET}>Cancel</button>
-      <button type="button" onClick={copyJson} className={ICON_BTN} title="Copy the JSON" aria-label="Copy the JSON"><Copy size={14} /></button>
-      <button type="button" onClick={exportFile} className={ICON_BTN} title="Save as a file" aria-label="Save as a file"><Download size={14} /></button>
-      <button type="button" onClick={() => commit('local')} disabled={!!saving} className={isAdmin && serverOk ? BTN_GHOST : BTN_PRIMARY}>
-        {saving === 'local' ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />} Save on this device
-      </button>
-      {isAdmin && serverOk && (
-        <button type="button" onClick={() => commit('server')} disabled={!!saving} className={BTN_PRIMARY}>
-          {saving === 'server' ? <Loader2 size={14} className="animate-spin" /> : <Server size={14} />} Save to server
+      <div className="flex items-center gap-2 mr-auto">
+        <button type="button" onClick={() => setPreview((v) => !v)} className={`${BTN_TOOLBAR} ${TONE_GHOST}`} aria-pressed={preview} title={preview ? 'The dashboard shows the draft; click to stop' : 'Show the draft on the dashboard'}>
+          {preview ? <Eye size={14} className="text-emerald-400" /> : <EyeOff size={14} />} {preview ? 'Previewing' : 'Preview off'}
         </button>
-      )}
+        <Hint label="Copy the JSON"><button type="button" onClick={copyJson} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Copy the JSON"><Copy size={14} /></button></Hint>
+        <Hint label="Save as a file"><button type="button" onClick={exportFile} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Save as a file"><Download size={14} /></button></Hint>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-auto sm:flex-none`}>Cancel</button>
+        <button type="button" onClick={() => commit('local')} disabled={!!saving} className={`${isAdmin && serverOk ? BTN_SHEET_QUIET : BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
+          {saving === 'local' ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />} Save on this device
+        </button>
+        {isAdmin && serverOk && (
+          <button type="button" onClick={() => commit('server')} disabled={!!saving} className={`${BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
+            {saving === 'server' ? <Loader2 size={16} className="animate-spin" /> : <Server size={16} />} Save to server
+          </button>
+        )}
+      </div>
     </div>
   )
 
@@ -377,8 +382,9 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
         {/* Identity */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className={LABEL}>Title</label>
+            <label htmlFor="studio-title" className={LABEL}>Title</label>
             <input
+              id="studio-title"
               type="text"
               value={draft.title}
               placeholder="Midnight Teal"
@@ -390,8 +396,9 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
             />
           </div>
           <div>
-            <label className={LABEL}>Name <span className="text-slate-600">(a-z, 0-9, dashes)</span></label>
+            <label htmlFor="studio-name" className={LABEL}>Name <span className="text-slate-600">(a-z, 0-9, dashes)</span></label>
             <input
+              id="studio-name"
               type="text"
               value={draft.name}
               placeholder="midnight-teal"
@@ -401,8 +408,8 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
             />
           </div>
           <div className="sm:col-span-2">
-            <label className={LABEL}>Description</label>
-            <input type="text" value={draft.description} placeholder="One line about the mood" onChange={(e) => update('description', e.target.value)} className={INPUT} />
+            <label htmlFor="studio-description" className={LABEL}>Description</label>
+            <input id="studio-description" type="text" value={draft.description} placeholder="One line about the mood" onChange={(e) => update('description', e.target.value)} className={INPUT} />
           </div>
         </div>
 
@@ -410,7 +417,7 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className={SEG} role="tablist" aria-label="Look to edit">{(['dark', 'light'] as ThemeMode[]).map(lookTab)}</div>
-            <button type="button" onClick={() => setDerived(derived ? null : derivePalette(p, look))} className={BTN_QUIET} title={`Build the ${other} look from the ${look} one: same hues, the readable lightness for a ${other} page`}>
+            <button type="button" onClick={() => setDerived(derived ? null : derivePalette(p, look))} className={`${BTN_TOOLBAR} ${TONE_GHOST}`} title={`Build the ${other} look from the ${look} one: same hues, the readable lightness for a ${other} page`}>
               <Wand2 size={14} /> Make the {other} look from this one
             </button>
           </div>
@@ -429,8 +436,8 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] text-slate-400 mr-auto">{failing(checkContrast(derived)).length === 0 ? 'Every pair reaches AA contrast.' : `${failing(checkContrast(derived)).length} contrast warnings.`}</p>
-                <button type="button" onClick={() => setDerived(null)} className={BTN_QUIET}>Keep the current one</button>
-                <button type="button" onClick={applyDerived} className={BTN_PRIMARY}><Check size={14} /> Use it</button>
+                <button type="button" onClick={() => setDerived(null)} className={`${BTN_TOOLBAR} ${TONE_GHOST}`}>Keep the current one</button>
+                <button type="button" onClick={applyDerived} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Check size={14} /> Use it</button>
               </div>
             </div>
           )}
@@ -485,31 +492,31 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
         {/* Details */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className={LABEL}>Author</label>
-            <input type="text" value={draft.author} placeholder="Your name" onChange={(e) => update('author', e.target.value)} className={INPUT} />
+            <label htmlFor="studio-author" className={LABEL}>Author</label>
+            <input id="studio-author" type="text" value={draft.author} placeholder="Your name" onChange={(e) => update('author', e.target.value)} className={INPUT} />
           </div>
           <div>
-            <label className={LABEL}>Version</label>
-            <input type="text" value={draft.version} placeholder="1.0.0" onChange={(e) => update('version', e.target.value)} className={`${INPUT} font-mono`} />
+            <label htmlFor="studio-version" className={LABEL}>Version</label>
+            <input id="studio-version" type="text" value={draft.version} placeholder="1.0.0" onChange={(e) => update('version', e.target.value)} className={`${INPUT} font-mono`} />
           </div>
           <div>
-            <label className={LABEL}>Font <span className="text-slate-600">(installed on the device)</span></label>
-            <input type="text" value={draft.font} placeholder="Inter" onChange={(e) => update('font', e.target.value)} className={INPUT} />
+            <label htmlFor="studio-font" className={LABEL}>Font <span className="text-slate-600">(installed on the device)</span></label>
+            <input id="studio-font" type="text" value={draft.font} placeholder="Inter" onChange={(e) => update('font', e.target.value)} className={INPUT} />
           </div>
           <div>
-            <label className={LABEL}>Roundness</label>
-            <div className={`${SEG} w-full`}>
+            <span id="studio-roundness-label" className={LABEL}>Roundness</span>
+            <div className={`${SEG} w-full`} role="radiogroup" aria-labelledby="studio-roundness-label">
               {([...THEME_RADII] as ThemeRadius[]).map((r) => (
-                <button key={r} type="button" onClick={() => update('radius', r === 'lg' ? '' : r)} className={`${SEG_ITEM} flex-1 uppercase ${(draft.radius || 'lg') === r ? SEG_ON : SEG_OFF}`}>{r}</button>
+                <button key={r} type="button" role="radio" aria-checked={(draft.radius || 'lg') === r} onClick={() => update('radius', r === 'lg' ? '' : r)} className={`${SEG_ITEM} flex-1 uppercase ${(draft.radius || 'lg') === r ? SEG_ON : SEG_OFF}`}>{r}</button>
               ))}
             </div>
           </div>
           <div className="sm:col-span-2">
-            <label className={LABEL}>Main look</label>
+            <span id="studio-mainlook-label" className={LABEL}>Main look</span>
             <div className="flex flex-wrap items-center gap-2">
-              <div className={SEG}>
+              <div className={SEG} role="radiogroup" aria-labelledby="studio-mainlook-label">
                 {(['dark', 'light'] as ThemeMode[]).map((m) => (
-                  <button key={m} type="button" onClick={() => update('mode', m)} className={`${SEG_ITEM} ${draft.mode === m ? SEG_ON : SEG_OFF}`}>
+                  <button key={m} type="button" role="radio" aria-checked={draft.mode === m} onClick={() => update('mode', m)} className={`${SEG_ITEM} ${draft.mode === m ? SEG_ON : SEG_OFF}`}>
                     {m === 'dark' ? <Moon size={13} /> : <Sun size={13} />} {m === 'dark' ? 'Dark' : 'Light'}
                   </button>
                 ))}
@@ -521,8 +528,9 @@ function ThemeStudio({ initial, editing, isAdmin, serverOk, onClose, onSaved }: 
 
         {/* Extra CSS */}
         <div>
-          <label className={LABEL}>Extra CSS <span className="text-slate-600">(optional, up to 64 KB, both looks)</span></label>
+          <label htmlFor="studio-css" className={LABEL}>Extra CSS <span className="text-slate-600">(optional, up to 64 KB, both looks)</span></label>
           <textarea
+            id="studio-css"
             value={draft.css}
             onChange={(e) => update('css', e.target.value)}
             rows={5}
@@ -684,9 +692,9 @@ function InstallSheet({ isAdmin, serverOk, onClose, onInstalled }: InstallProps)
       ) : (
         <span className="text-[10px] text-slate-500 mr-auto inline-flex items-center gap-1"><Smartphone size={12} /> Installs on this device{isAdmin ? ' (this server cannot store themes)' : ''}</span>
       )}
-      <button type="button" onClick={onClose} className={BTN_QUIET}>Cancel</button>
-      <button type="button" onClick={install} disabled={busy} className={BTN_PRIMARY}>
-        {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Install
+      <button type="button" onClick={onClose} className={`${BTN_SHEET_QUIET} flex-auto sm:flex-none`}>Cancel</button>
+      <button type="button" onClick={install} disabled={busy} className={`${BTN_SHEET_PRIMARY} flex-auto sm:flex-none`}>
+        {busy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Install
       </button>
     </div>
   )
@@ -704,6 +712,7 @@ function InstallSheet({ isAdmin, serverOk, onClose, onInstalled }: InstallProps)
 
         {tab === 'paste' && (
           <textarea
+            aria-label="Theme JSON"
             value={text}
             onChange={(e) => { setText(e.target.value); setFileName('') }}
             rows={12}
@@ -729,8 +738,8 @@ function InstallSheet({ isAdmin, serverOk, onClose, onInstalled }: InstallProps)
 
         {tab === 'url' && (
           <div>
-            <label className={LABEL}>https address of the theme JSON</label>
-            <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/themes/midnight-teal.json" className={`${INPUT} font-mono`} />
+            <label htmlFor="install-url" className={LABEL}>https address of the theme JSON</label>
+            <input id="install-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/themes/midnight-teal.json" className={`${INPUT} font-mono`} />
             <p className="text-[10px] text-slate-500 mt-1">
               {where === 'server' ? 'The server fetches it (256 KB at most) and stores it.' : 'Fetched by this browser; the site must allow cross-origin reads.'}
             </p>
@@ -936,12 +945,14 @@ export default function ThemesPanel() {
         </p>
         <div className="flex items-center gap-2">
           {isConnected && supported !== false && (
-            <button type="button" onClick={() => refresh()} className={ICON_BTN} title="Read the server's themes again" aria-label="Refresh">
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <Hint label="Read the server's themes again">
+              <button type="button" onClick={() => refresh()} className={`${BTN_ICON} ${TONE_GHOST}`} aria-label="Refresh the server's themes">
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </Hint>
           )}
-          <button type="button" onClick={() => setInstallOpen(true)} className={BTN_GHOST}><Download size={14} /> Install</button>
-          <button type="button" onClick={() => setStudio({ theme: blankTheme(showing), editing: false })} className={BTN_PRIMARY}><Plus size={14} /> New theme</button>
+          <button type="button" onClick={() => setInstallOpen(true)} className={BTN_TOOLBAR_QUIET}><Download size={14} /> Install</button>
+          <button type="button" onClick={() => setStudio({ theme: blankTheme(showing), editing: false })} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Plus size={14} /> New theme</button>
         </div>
       </div>
 
@@ -958,11 +969,11 @@ export default function ThemesPanel() {
         {ownChoice && (
           <span className="inline-flex items-center gap-1.5 text-slate-400 sm:border-l sm:border-white/10 sm:pl-3">
             You wear <span className="text-slate-200 font-medium">{titleOf(themeName)}</span>
-            <button type="button" onClick={followServer} className="text-emerald-400 hover:text-emerald-300 font-medium">{serverThemeActive ? 'Follow the server' : 'Back to DCS Emerald'}</button>
+            <button type="button" onClick={followServer} className={`${TEXT_BTN} text-emerald-400 hover:text-emerald-300`}>{serverThemeActive ? 'Follow the server' : 'Back to DCS Emerald'}</button>
           </span>
         )}
         {isAdmin && serverOk && serverThemeActive && (
-          <button type="button" onClick={clearForEveryone} disabled={working === '__clear'} className="ml-auto text-slate-400 hover:text-rose-400 font-medium">Clear for everyone</button>
+          <button type="button" onClick={clearForEveryone} disabled={working === '__clear'} className={`${TEXT_BTN} ml-auto text-slate-400 hover:text-rose-400`}>Clear for everyone</button>
         )}
         {storeError && <span className="text-amber-400 w-full">Could not read the server's themes: {storeError}</span>}
       </div>
@@ -996,19 +1007,19 @@ export default function ThemesPanel() {
               <div className="mt-auto flex flex-wrap items-center gap-1.5">
                 {/* the worn card needs no button: the line above says how to go back */}
                 {!isEffective && (
-                  <button type="button" onClick={() => use(t.name)} className={BTN_PRIMARY}><Check size={14} /> Use</button>
+                  <button type="button" onClick={() => use(t.name)} className={`${BTN_CARD} ${TONE_OK}`} aria-label={`Use ${t.title}`}><Check size={12} /> Use</button>
                 )}
                 {isAdmin && serverOk && !isServerActive && (
-                  <button type="button" onClick={() => setForEveryone(entry)} disabled={busy} className={BTN_GHOST} title="Every dashboard on this server follows it">
-                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />} For everyone
+                  <button type="button" onClick={() => setForEveryone(entry)} disabled={busy} className={BTN_CARD_QUIET} aria-label={`Set ${t.title} for everyone`} title="Every dashboard on this server follows it">
+                    {busy ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />} For everyone
                   </button>
                 )}
                 <div className="ml-auto flex items-center">
-                  {canManage && <button type="button" onClick={() => edit(entry)} className={ICON_BTN} title="Edit" aria-label="Edit"><Pencil size={14} /></button>}
-                  <button type="button" onClick={() => duplicate(entry)} className={ICON_BTN} title="Duplicate into the studio" aria-label="Duplicate"><Plus size={14} /></button>
-                  <button type="button" onClick={() => copyJson(entry)} className={ICON_BTN} title="Copy the JSON" aria-label="Copy the JSON"><Copy size={14} /></button>
-                  <button type="button" onClick={() => exportJson(entry)} className={ICON_BTN} title="Save the JSON as a file" aria-label="Save the JSON as a file"><FileJson size={14} /></button>
-                  {canManage && <button type="button" onClick={() => remove(entry)} disabled={busy} className={`${ICON_BTN} hover:!text-rose-400`} title="Delete" aria-label="Delete"><Trash2 size={14} /></button>}
+                  {canManage && <Hint label="Edit"><button type="button" onClick={() => edit(entry)} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Edit ${t.title}`}><Pencil size={14} /></button></Hint>}
+                  <Hint label="Duplicate into the studio"><button type="button" onClick={() => duplicate(entry)} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Duplicate ${t.title}`}><Plus size={14} /></button></Hint>
+                  <Hint label="Copy the JSON"><button type="button" onClick={() => copyJson(entry)} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Copy the JSON of ${t.title}`}><Copy size={14} /></button></Hint>
+                  <Hint label="Save the JSON as a file"><button type="button" onClick={() => exportJson(entry)} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Save the JSON of ${t.title} as a file`}><FileJson size={14} /></button></Hint>
+                  {canManage && <Hint label="Delete"><button type="button" onClick={() => remove(entry)} disabled={busy} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`} aria-label={`Delete ${t.title}`}><Trash2 size={14} /></button></Hint>}
                 </div>
               </div>
             </div>

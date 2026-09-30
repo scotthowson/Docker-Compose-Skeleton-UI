@@ -1,12 +1,13 @@
 // =============================================================================
-// Notifications — NTFY Notification Center: rules, history, test, status
+// Notifications — ntfy and Discord: rules, history, test, status, webhooks
 // =============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { Switch } from '@mantine/core'
 import {
   Bell, Plus, Trash2, Send, CheckCircle, XCircle,
-  ToggleLeft, ToggleRight, Loader2, AlertTriangle,
+  Loader2, AlertTriangle, BookOpen, X,
   Clock, Shield, Cpu, HardDrive, Box, Layers, Package,
   Webhook, ExternalLink, Zap, ChevronDown, Play, Power,
   HeartPulse, Archive, Rocket, RefreshCw,
@@ -17,7 +18,16 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM,
+  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_OK, TONE_GHOST, TONE_GHOST_DANGER,
+} from '../lib/ui'
+import { INPUT, CAPTION as LABEL, FOCUS_RING } from '../lib/fieldStyles'
 import {
   fetchNotificationRules,
   createNotificationRule,
@@ -31,7 +41,7 @@ import {
   testWebhook,
 } from '../api/endpoints'
 import type { NotificationRule, NotificationHistoryEntry, Webhook as WebhookType } from '../../shared/types'
-import { LoadingState } from '../components/common/PageState'
+import { LoadingState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
 
 // ---------------------------------------------------------------------------
@@ -62,25 +72,25 @@ type TriggerType =
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
 const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
-  { value: 'container_unhealthy', label: 'Container Unhealthy' },
-  { value: 'container_stopped', label: 'Container Stopped' },
+  { value: 'container_unhealthy', label: 'Container unhealthy' },
+  { value: 'container_stopped', label: 'Container stopped' },
   { value: 'container_high_cpu', label: 'High CPU' },
-  { value: 'container_high_memory', label: 'High Memory' },
-  { value: 'disk_warning', label: 'Disk Warning' },
-  { value: 'stack_down', label: 'Stack Down' },
-  { value: 'image_stale', label: 'Image Stale' },
-  { value: 'deploy_complete', label: 'Deploy Complete' },
-  { value: 'update_available', label: 'Update Available' },
-  { value: 'stack_failed', label: 'Stack Failed' },
-  { value: 'health_change', label: 'Health Changed' },
-  { value: 'backup_complete', label: 'Backup Finished' },
-  { value: 'backup_failed', label: 'Backup Failed' },
-  { value: 'automation_run', label: 'Automation Ran' },
-  { value: 'proxmox_vm_stopped', label: 'VM Stopped On Its Own' },
-  { value: 'proxmox_vm_started', label: 'VM Started' },
-  { value: 'fleet_member_joined', label: 'Fleet Member Joined' },
-  { value: 'fleet_member_down', label: 'Fleet Member Stopped Answering' },
-  { value: 'fleet_member_up', label: 'Fleet Member Back' },
+  { value: 'container_high_memory', label: 'High memory' },
+  { value: 'disk_warning', label: 'Disk warning' },
+  { value: 'stack_down', label: 'Stack down' },
+  { value: 'image_stale', label: 'Image stale' },
+  { value: 'deploy_complete', label: 'Deploy complete' },
+  { value: 'update_available', label: 'Update available' },
+  { value: 'stack_failed', label: 'Stack failed' },
+  { value: 'health_change', label: 'Health changed' },
+  { value: 'backup_complete', label: 'Backup finished' },
+  { value: 'backup_failed', label: 'Backup failed' },
+  { value: 'automation_run', label: 'Automation ran' },
+  { value: 'proxmox_vm_stopped', label: 'VM stopped on its own' },
+  { value: 'proxmox_vm_started', label: 'VM started' },
+  { value: 'fleet_member_joined', label: 'Fleet member joined' },
+  { value: 'fleet_member_down', label: 'Fleet member stopped answering' },
+  { value: 'fleet_member_up', label: 'Fleet member back' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -120,7 +130,7 @@ interface PresetTemplate {
 
 const PRESET_TEMPLATES: PresetTemplate[] = [
   {
-    name: 'Container Health Alert',
+    name: 'Container health alert',
     description: 'Alert when any container becomes unhealthy',
     trigger: 'container_unhealthy',
     priority: 'urgent',
@@ -132,7 +142,7 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     iconText: 'text-rose-400',
   },
   {
-    name: 'Stack Down Alert',
+    name: 'Stack down alert',
     description: 'Notify when a stack is stopped or goes down',
     trigger: 'stack_down',
     priority: 'high',
@@ -144,7 +154,7 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     iconText: 'text-amber-400',
   },
   {
-    name: 'Container Stopped',
+    name: 'Container stopped',
     description: 'Alert when a container stops unexpectedly',
     trigger: 'container_stopped',
     priority: 'high',
@@ -152,11 +162,11 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '⏹️ {container} Stopped',
     message_template: '{container} in {stack} has stopped. Status: {status}.',
     icon: Box,
-    iconBg: 'bg-orange-500/10 border-orange-500/15',
-    iconText: 'text-orange-400',
+    iconBg: 'bg-amber-500/10 border-amber-500/15',
+    iconText: 'text-amber-400',
   },
   {
-    name: 'Disk Space Warning',
+    name: 'Disk space warning',
     description: 'Alert when disk usage exceeds threshold',
     trigger: 'disk_warning',
     priority: 'urgent',
@@ -164,23 +174,23 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '💾 Disk Space Critical',
     message_template: 'Disk usage on {hostname} is critically high. Free up space immediately.',
     icon: HardDrive,
-    iconBg: 'bg-red-500/10 border-red-500/15',
-    iconText: 'text-red-400',
+    iconBg: 'bg-rose-500/10 border-rose-500/15',
+    iconText: 'text-rose-400',
   },
   {
-    name: 'Image Update Available',
+    name: 'Image update available',
     description: 'Notify when container images have updates',
     trigger: 'image_stale',
     priority: 'low',
     tags: ['update', 'image'],
     title_template: '📦 Image Updates Available',
-    message_template: 'Container images have upstream updates available. Check the Updates page.',
+    message_template: `Container images have upstream updates available. Check the ${pageLabel('updates')} page.`,
     icon: Package,
     iconBg: 'bg-cyan-500/10 border-cyan-500/15',
     iconText: 'text-cyan-400',
   },
   {
-    name: 'Deploy Complete',
+    name: 'Deploy complete',
     description: 'Confirm when a template deployment finishes',
     trigger: 'deploy_complete',
     priority: 'default',
@@ -192,7 +202,7 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     iconText: 'text-emerald-400',
   },
   {
-    name: 'Health Changed',
+    name: 'Health changed',
     description: 'One message each time the server goes healthy, degraded or critical',
     trigger: 'health_change',
     priority: 'high',
@@ -204,7 +214,7 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     iconText: 'text-rose-400',
   },
   {
-    name: 'Backup Finished',
+    name: 'Backup finished',
     description: 'Know when a backup lands, with its name and size',
     trigger: 'backup_complete',
     priority: 'low',
@@ -212,17 +222,17 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     title_template: '💾 Backup finished',
     message_template: '{message}',
     icon: Archive,
-    iconBg: 'bg-violet-500/10 border-violet-500/15',
-    iconText: 'text-violet-400',
+    iconBg: 'bg-cyan-500/10 border-cyan-500/15',
+    iconText: 'text-cyan-400',
   },
   {
-    name: 'Stack Failed',
+    name: 'Stack failed',
     description: 'A start, restart or deploy left a stack broken',
     trigger: 'stack_failed',
     priority: 'urgent',
     tags: ['stack', 'failed'],
     title_template: '💥 {stack} failed to {action}',
-    message_template: 'Stack {stack} on {hostname} did not come up cleanly ({action}). Open its activity log on the Stacks page.',
+    message_template: `Stack {stack} on {hostname} did not come up cleanly ({action}). Open its activity log on the ${pageLabel('stacks')} page.`,
     icon: Zap,
     iconBg: 'bg-rose-500/10 border-rose-500/15',
     iconText: 'text-rose-400',
@@ -246,8 +256,8 @@ function triggerColor(trigger: string): string {
   switch (trigger) {
     case 'container_unhealthy': return 'bg-rose-500/15 text-rose-400 border-rose-500/20'
     case 'container_stopped': return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
-    case 'container_high_cpu': return 'bg-orange-500/15 text-orange-400 border-orange-500/20'
-    case 'container_high_memory': return 'bg-violet-500/15 text-violet-400 border-violet-500/20'
+    case 'container_high_cpu': return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
+    case 'container_high_memory': return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
     case 'disk_warning': return 'bg-amber-500/15 text-amber-400 border-amber-500/20'
     case 'stack_down': return 'bg-rose-500/15 text-rose-400 border-rose-500/20'
     case 'image_stale': return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
@@ -285,6 +295,13 @@ function statusCodeColor(code: number): string {
   return 'text-amber-400'
 }
 
+/** a link inside a sentence */
+const LINK_BTN = `h-auto text-cyan-400 hover:underline rounded ${FOCUS_RING}`
+/** the button that folds a section open and shut: it is the section's heading */
+const SECTION_TOGGLE = `flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 rounded transition-colors ${FOCUS_RING}`
+/** All · Essentials · None beside a list of choices */
+const MINI_LINK = `px-2 min-w-[2rem] h-8 sm:h-6 rounded hover:underline ${FOCUS_RING}`
+
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts)
@@ -308,6 +325,7 @@ export default function Notifications() {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const { addToast } = useToast()
+  const confirm = useConfirm()
 
   // UI state
   const [showAddModal, setShowAddModal] = useState(false)
@@ -315,7 +333,6 @@ export default function Notifications() {
   const [sendingTest, setSendingTest] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
   // Webhook state
@@ -326,19 +343,6 @@ export default function Notifications() {
   const [creatingWebhook, setCreatingWebhook] = useState(false)
   const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null)
-  const [confirmDeleteWebhookId, setConfirmDeleteWebhookId] = useState<string | null>(null)
-
-  // Close topmost modal on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (showAddModal) { setShowAddModal(false); return }
-      if (confirmDeleteId) { setConfirmDeleteId(null); return }
-      if (confirmDeleteWebhookId) { setConfirmDeleteWebhookId(null); return }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [showAddModal, confirmDeleteId, confirmDeleteWebhookId])
 
   // Add-rule form state
   const [newName, setNewName] = useState('')
@@ -410,19 +414,25 @@ export default function Notifications() {
     }
   }, [addToast, refreshRules])
 
-  const handleDeleteRule = useCallback(async (id: string) => {
-    setDeletingId(id)
+  const handleDeleteRule = useCallback(async (rule: NotificationRule) => {
+    const ok = await confirm({
+      title: 'Delete this rule?',
+      message: `"${rule.name}" stops sending notifications. This cannot be undone.`,
+      confirmLabel: 'Delete rule',
+      danger: true,
+    })
+    if (!ok) return
+    setDeletingId(rule.id)
     try {
-      await deleteNotificationRule(id)
+      await deleteNotificationRule(rule.id)
       addToast({ type: 'success', message: 'Notification rule deleted' })
-      setConfirmDeleteId(null)
       refreshRules()
     } catch {
       addToast({ type: 'error', message: 'Failed to delete rule' })
     } finally {
       setDeletingId(null)
     }
-  }, [addToast, refreshRules])
+  }, [addToast, confirm, refreshRules])
 
   const resetForm = useCallback(() => {
     setNewName('')
@@ -496,19 +506,25 @@ export default function Notifications() {
     }
   }, [webhookUrl, webhookEvents, creatingWebhook, addToast, refreshWebhooks])
 
-  const handleDeleteWebhook = useCallback(async (id: string) => {
-    setDeletingWebhookId(id)
+  const handleDeleteWebhook = useCallback(async (wh: WebhookType) => {
+    const ok = await confirm({
+      title: 'Delete this webhook?',
+      message: `${wh.url}\n\nNothing is sent to this address any more. This cannot be undone.`,
+      confirmLabel: 'Delete webhook',
+      danger: true,
+    })
+    if (!ok) return
+    setDeletingWebhookId(wh.id)
     try {
-      await deleteWebhook(id)
+      await deleteWebhook(wh.id)
       addToast({ type: 'success', message: 'Webhook deleted' })
-      setConfirmDeleteWebhookId(null)
       refreshWebhooks()
     } catch {
       addToast({ type: 'error', message: 'Failed to delete webhook' })
     } finally {
       setDeletingWebhookId(null)
     }
-  }, [addToast, refreshWebhooks])
+  }, [addToast, confirm, refreshWebhooks])
 
   const handleTestWebhook = useCallback(async (id: string) => {
     setTestingWebhookId(id)
@@ -541,11 +557,13 @@ export default function Notifications() {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-          <Bell size={24} className="text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500">Connect to a server to manage notifications</p>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader page="notifications" />
+        <EmptyState
+          icon={<Bell size={28} />}
+          title="Connect to a server to manage notifications"
+          hint={`Choose a server from the server menu in the sidebar, or add one on the ${pageLabel('settings')} page.`}
+        />
       </div>
     )
   }
@@ -557,98 +575,82 @@ export default function Notifications() {
   return (
     <div className="space-y-3 md:space-y-6 animate-fade-in">
       <DisconnectedBanner />
-      {/* ── Page Header ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-white/5">
-            <Bell size={24} className="text-amber-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Notification Center</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              {rules.length} {rules.length === 1 ? 'rule' : 'rules'} configured
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
+      <PageHeader
+        page="notifications"
+        subtitle={`${rules.length} ${rules.length === 1 ? 'rule' : 'rules'} configured`}
+        actions={<>
           <button
             onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 transition-all duration-200 press"
+            aria-expanded={showGuide}
+            aria-controls="notification-guide"
+            aria-label="Guide"
+            className={BTN_TOOLBAR_QUIET}
           >
-            <Archive size={14} />
+            <BookOpen size={14} />
             <span className="hidden sm:inline">Guide</span>
           </button>
           <button
             onClick={handleSendTest}
             disabled={sendingTest || (!ntfyConfigured && !discordConfigured)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 disabled:opacity-50 press"
+            aria-label="Send test"
+            className={BTN_TOOLBAR_QUIET}
             title={ntfyConfigured || discordConfigured ? 'Send a test notification on every configured channel' : 'No channel is configured yet'}
           >
             {sendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            <span className="hidden sm:inline">Send Test</span>
+            <span className="hidden sm:inline">Send test</span>
           </button>
           {isAdmin && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-            >
+            <button onClick={() => setShowAddModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
               <Plus size={14} />
-              Add Rule
+              Add rule
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
-      {/* ── Guide Section ──────────────────────────────────────────────── */}
+      {/* ── Guide ──────────────────────────────────────────────────────── */}
       {showGuide && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden animate-fade-in">
+        <div id="notification-guide" className="glass border border-white/5 rounded-xl overflow-hidden animate-fade-in">
           <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Zap size={14} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-white">Notification Guide</h2>
+              <BookOpen size={14} className="text-cyan-400" />
+              <h2 className="text-sm font-semibold text-slate-100">Notification guide</h2>
             </div>
-            <button aria-label="Close" onClick={() => setShowGuide(false)} className="p-1 rounded-lg hover:bg-white/5 transition-colors">
-              <XCircle size={14} className="text-slate-400" />
-            </button>
+            <Hint label="Close the guide">
+              <button aria-label="Close the guide" onClick={() => setShowGuide(false)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                <X size={14} />
+              </button>
+            </Hint>
           </div>
           <div className="p-5 space-y-4">
             <p className="text-sm text-slate-400">
-              Create notification rules that fire automatically when events occur. Customize the NTFY message title, body, priority, and tags. Use template variables to include dynamic context.
+              Create notification rules that fire automatically when events occur. Customize the ntfy message title, body, priority, and tags. Use template variables to include dynamic context.
             </p>
 
             {/* How it works */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-[10px] font-bold">1</div>
-                  <span className="text-xs font-medium text-slate-300">Create a Rule</span>
+              {[
+                { n: 1, title: 'Create a rule', text: 'Choose a trigger event, set priority, and write your notification message using template variables.' },
+                { n: 2, title: 'Event fires', text: 'When the trigger event occurs (container down, stack stopped, etc.), DCS evaluates all matching rules.' },
+                { n: 3, title: 'ntfy sends', text: 'Variables are substituted and the notification is pushed to your ntfy topic instantly.' },
+              ].map((step) => (
+                <div key={step.n} className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-md accent-bg-subtle accent-text flex items-center justify-center text-[10px] font-bold">{step.n}</div>
+                    <span className="text-xs font-medium text-slate-300">{step.title}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">{step.text}</p>
                 </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">Choose a trigger event, set priority, and write your notification message using template variables.</p>
-              </div>
-              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-amber-500/15 flex items-center justify-center text-amber-400 text-[10px] font-bold">2</div>
-                  <span className="text-xs font-medium text-slate-300">Event Fires</span>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">When the trigger event occurs (container down, stack stopped, etc.), DCS evaluates all matching rules.</p>
-              </div>
-              <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-cyan-500/15 flex items-center justify-center text-cyan-400 text-[10px] font-bold">3</div>
-                  <span className="text-xs font-medium text-slate-300">NTFY Sends</span>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">Variables are substituted and the notification is pushed to your NTFY topic instantly.</p>
-              </div>
+              ))}
             </div>
 
-            {/* Template Variables */}
+            {/* Template variables */}
             <div>
-              <h3 className="text-xs font-semibold text-slate-300 mb-2">Template Variables</h3>
+              <h3 className="text-xs font-semibold text-slate-300 mb-2">Template variables</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                 {TEMPLATE_VARIABLES.map((v) => (
                   <div key={v.var} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.03]">
-                    <code className="text-amber-400 text-[10px] font-mono font-medium bg-amber-500/10 px-1.5 py-0.5 rounded">{v.var}</code>
+                    <code className="text-cyan-400 text-[10px] font-mono font-medium bg-cyan-500/10 px-1.5 py-0.5 rounded">{v.var}</code>
                     <span className="text-[10px] text-slate-500 truncate">{v.desc}</span>
                   </div>
                 ))}
@@ -657,12 +659,12 @@ export default function Notifications() {
 
             {/* Example */}
             <div>
-              <h3 className="text-xs font-semibold text-slate-300 mb-2">Example Notification</h3>
+              <h3 className="text-xs font-semibold text-slate-300 mb-2">Example notification</h3>
               <div className="rounded-lg bg-slate-950/60 border border-white/5 p-3 font-mono text-[11px] space-y-1">
                 <p className="text-slate-500">Title:</p>
-                <p className="text-amber-300 ml-2">⚠️ {'{'}<span className="text-amber-400">container</span>{'}'} is Unhealthy</p>
+                <p className="text-slate-200 ml-2">⚠️ {'{'}<span className="text-cyan-400">container</span>{'}'} is Unhealthy</p>
                 <p className="text-slate-500 mt-2">Message:</p>
-                <p className="text-slate-300 ml-2">Container {'{'}<span className="text-amber-400">container</span>{'}'} in {'{'}<span className="text-amber-400">stack</span>{'}'} has become unhealthy at {'{'}<span className="text-amber-400">timestamp</span>{'}'}.</p>
+                <p className="text-slate-300 ml-2">Container {'{'}<span className="text-cyan-400">container</span>{'}'} in {'{'}<span className="text-cyan-400">stack</span>{'}'} has become unhealthy at {'{'}<span className="text-cyan-400">timestamp</span>{'}'}.</p>
                 <p className="text-slate-500 mt-2">Sends as:</p>
                 <p className="text-emerald-300 ml-2">⚠️ Plex is Unhealthy</p>
                 <p className="text-slate-300 ml-2">Container Plex in media-services has become unhealthy at 2026-03-30 21:15:00.</p>
@@ -672,23 +674,24 @@ export default function Notifications() {
         </div>
       )}
 
-      {/* ── Quick Add Presets ──────────────────────────────────────────── */}
-      <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-4 md:p-5">
+      {/* ── Quick add presets (adding a rule is for admins) ─────────────── */}
+      {isAdmin && <div className="glass border border-white/5 rounded-xl p-4 md:p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Zap size={14} className="text-amber-400" />
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick Add — Notification Presets</h3>
+          <Zap size={14} className="text-slate-400" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick add — notification presets</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {PRESET_TEMPLATES.map((preset) => {
             const PresetIcon = preset.icon
-            const alreadyExists = rules.some((r) => r.trigger === preset.trigger && r.name === preset.name)
+            // rules made before the names were written in sentence case still count
+            const alreadyExists = rules.some((r) => r.trigger === preset.trigger && r.name.toLowerCase() === preset.name.toLowerCase())
             return (
               <button
                 key={preset.name}
                 onClick={() => !alreadyExists && applyPreset(preset)}
                 disabled={alreadyExists}
                 className={`
-                  group text-left rounded-xl border p-3.5 transition-all duration-200
+                  group text-left rounded-xl border p-3.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40
                   ${alreadyExists
                     ? 'border-white/[0.03] bg-white/[0.01] opacity-50 cursor-default'
                     : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 cursor-pointer press'
@@ -701,7 +704,7 @@ export default function Notifications() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">{preset.name}</span>
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-slate-100 transition-colors">{preset.name}</span>
                       {alreadyExists && (
                         <span className="text-[9px] text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-full">Added</span>
                       )}
@@ -711,7 +714,7 @@ export default function Notifications() {
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${priorityColor(preset.priority)}`}>
                         {preset.priority}
                       </span>
-                      <span className="text-[9px] text-slate-600">{preset.tags.join(', ')}</span>
+                      <span className="text-[9px] text-slate-500">{preset.tags.join(', ')}</span>
                     </div>
                   </div>
                 </div>
@@ -719,11 +722,11 @@ export default function Notifications() {
             )
           })}
         </div>
-      </div>
+      </div>}
 
-      {/* ── Channels: NTFY and Discord, side by side ──────────────────── */}
+      {/* ── Channels: ntfy and Discord, side by side ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* ── NTFY Connection Status ──────────────────────────────────────── */}
+        {/* ── ntfy connection status ──────────────────────────────────────── */}
         <div className="glass border border-white/5 rounded-xl p-4 md:p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -734,11 +737,11 @@ export default function Notifications() {
                 )}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-200">NTFY Status</h3>
+                <h2 className="text-sm font-semibold text-slate-200">ntfy status</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {ntfyConfigured
                     ? 'Connected and ready to send notifications'
-                    : 'NTFY is not configured on this server'}
+                    : 'ntfy is not configured on this server'}
                 </p>
               </div>
             </div>
@@ -764,7 +767,7 @@ export default function Notifications() {
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
                 <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
                 <p className="text-[11px] text-amber-400/90">
-                  Configure NTFY_URL and NTFY_TOPIC in your server .env file to enable push notifications.
+                  Set <span className="font-mono">NTFY_URL</span> and <span className="font-mono">NTFY_TOPIC</span> under <button type="button" onClick={() => setCurrentPage('config')} className={LINK_BTN}>{pageLabel('config')} → Notifications</button> to enable push notifications.
                 </p>
               </div>
             </div>
@@ -782,7 +785,7 @@ export default function Notifications() {
                 )}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-200">Discord</h3>
+                <h2 className="text-sm font-semibold text-slate-200">Discord</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {discordConfigured
                     ? 'Every rule also posts a rich embed to your channel'
@@ -797,13 +800,13 @@ export default function Notifications() {
           <div className="mt-3 pt-3 border-t border-white/[0.03]">
             {discordConfigured ? (
               <p className="text-[11px] text-slate-500">
-                Each event lands as an embed with a colour and emoji per event, the stack, container and status as fields, your server as the author line and a link back here. Repeats are held back by the rule's cooldown. Name, avatar and cooldowns live under <button onClick={() => setCurrentPage('config')} className="text-cyan-400 hover:underline">Server Config → Notifications</button>; CrowdSec bans use the same webhook. Commands from Discord are the separate <button onClick={() => setCurrentPage('templates')} className="text-cyan-400 hover:underline">DCS Discord Bot</button> template — the full walkthrough is docs/DISCORD.md in the DCS repository.
+                Each event lands as an embed with a colour and emoji per event, the stack, container and status as fields, your server as the author line and a link back here. Repeats are held back by the rule's cooldown. Name, avatar and cooldowns live under <button type="button" onClick={() => setCurrentPage('config')} className={LINK_BTN}>{pageLabel('config')} → Notifications</button>; CrowdSec bans use the same webhook. Commands from Discord are the separate <button type="button" onClick={() => setCurrentPage('templates')} className={LINK_BTN}>DCS Discord Bot</button> template — the full walkthrough is docs/DISCORD.md in the DCS repository.
               </p>
             ) : (
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15">
                 <MessageCircle size={14} className="text-indigo-300 mt-0.5 shrink-0" />
                 <p className="text-[11px] text-indigo-200/90">
-                  In Discord: Server Settings → Integrations → Webhooks → New Webhook, copy its URL and paste it as <span className="font-mono">DISCORD_WEBHOOK_URL</span> under <button onClick={() => setCurrentPage('config')} className="text-cyan-300 hover:underline">Server Config → Notifications</button> (a <span className="font-mono">{'${SECRETS_…}'}</span> reference works too).
+                  In Discord: Server Settings → Integrations → Webhooks → New Webhook, copy its URL and paste it as <span className="font-mono">DISCORD_WEBHOOK_URL</span> under <button type="button" onClick={() => setCurrentPage('config')} className={LINK_BTN}>{pageLabel('config')} → Notifications</button> (a <span className="font-mono">{'${SECRETS_…}'}</span> reference works too).
                 </p>
               </div>
             )}
@@ -811,27 +814,32 @@ export default function Notifications() {
         </div>
       </div>
 
-      {/* ── Rule List ───────────────────────────────────────────────────── */}
+      {/* ── Rule list ───────────────────────────────────────────────────── */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Notification Rules</h3>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Notification rules</h2>
 
         {/* Loading */}
-        {rulesLoading && !rulesData && <LoadingState label="Loading notification rules…" />}
+        {rulesLoading && !rulesData && (
+          <div className="space-y-2" role="status" aria-label="Loading notification rules">
+            {[1, 2].map((i) => <div key={i} className="glass rounded-xl h-[72px] skeleton" />)}
+          </div>
+        )}
 
         {/* Empty state */}
         {rulesData && rules.length === 0 && (
-          <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center justify-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-              <Bell size={22} className="text-slate-500" />
-            </div>
-            <p className="text-sm text-slate-500">No notification rules yet</p>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 press"
-            >
-              <Plus size={13} />
-              Create First Rule
-            </button>
+          <div className="glass border border-white/5 rounded-xl">
+            <EmptyState
+              compact
+              icon={<Bell size={22} />}
+              title="No notification rules yet"
+              hint={isAdmin ? 'Pick a preset above to start, or write your own rule.' : 'An admin can add rules.'}
+              action={isAdmin ? (
+                <button onClick={() => setShowAddModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+                  <Plus size={14} />
+                  Create first rule
+                </button>
+              ) : undefined}
+            />
           </div>
         )}
 
@@ -868,52 +876,25 @@ export default function Notifications() {
                     </div>
                   </div>
 
-                  {/* Right: toggle + delete (admin only) */}
+                  {/* Right: on/off + delete (admin only) */}
                   {isAdmin && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Toggle */}
-                    <button
-                      onClick={() => handleToggleRule(rule)}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Switch
+                      aria-label={`Rule ${rule.name} enabled`}
+                      checked={rule.enabled}
                       disabled={togglingId === rule.id}
-                      className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
-                      title={rule.enabled ? 'Disable rule' : 'Enable rule'}
-                    >
-                      {togglingId === rule.id ? (
-                        <Loader2 size={18} className="animate-spin text-slate-500" />
-                      ) : rule.enabled ? (
-                        <ToggleRight size={22} className="text-emerald-400" />
-                      ) : (
-                        <ToggleLeft size={22} className="text-slate-500" />
-                      )}
-                    </button>
-
-                    {/* Delete */}
-                    {confirmDeleteId === rule.id ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleDeleteRule(rule.id)}
-                          disabled={deletingId === rule.id}
-                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
-                        >
-                          {deletingId === rule.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
+                      onChange={() => handleToggleRule(rule)}
+                    />
+                    <Hint label="Delete rule">
                       <button
-                        onClick={() => setConfirmDeleteId(rule.id)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
-                        title="Delete rule"
+                        onClick={() => handleDeleteRule(rule)}
+                        disabled={deletingId === rule.id}
+                        aria-label={`Delete rule ${rule.name}`}
+                        className={`${BTN_ICON} ${TONE_GHOST_DANGER}`}
                       >
-                        <Trash2 size={14} />
+                        {deletingId === rule.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
-                    )}
+                    </Hint>
                   </div>
                   )}
                 </div>
@@ -937,24 +918,22 @@ export default function Notifications() {
         )}
       </div>
 
-      {/* ── Notification History (Collapsible) ──────────────────────────── */}
+      {/* ── Notification history (collapsible) ───────────────────────────── */}
       <div>
-        <button
-          onClick={() => setHistoryExpanded(!historyExpanded)}
-          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors mb-3"
-        >
-          <Clock size={13} />
-          Notification History
-          <span className="text-[10px] font-normal normal-case text-slate-500">
-            ({history.length} {history.length === 1 ? 'entry' : 'entries'})
-          </span>
-          <svg
-            className={`w-3.5 h-3.5 ml-1 transition-transform ${historyExpanded ? 'rotate-180' : ''}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        <h2 className="mb-3">
+          <button
+            onClick={() => setHistoryExpanded(!historyExpanded)}
+            aria-expanded={historyExpanded}
+            className={SECTION_TOGGLE}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <Clock size={13} />
+            Notification history
+            <span className="text-[10px] font-normal normal-case text-slate-500">
+              ({history.length} {history.length === 1 ? 'entry' : 'entries'})
+            </span>
+            <ChevronDown size={14} className={`ml-1 transition-transform ${historyExpanded ? 'rotate-180' : ''}`} />
+          </button>
+        </h2>
 
         {historyExpanded && (
           <div className="animate-fade-in">
@@ -963,11 +942,13 @@ export default function Notifications() {
 
             {/* Empty state */}
             {historyData && history.length === 0 && (
-              <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center justify-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                  <Clock size={18} className="text-slate-500" />
-                </div>
-                <p className="text-sm text-slate-500">No notifications sent yet</p>
+              <div className="glass border border-white/5 rounded-xl">
+                <EmptyState
+                  compact
+                  icon={<Clock size={20} />}
+                  title="No notifications sent yet"
+                  hint="They appear here as your rules fire, or when you send a test."
+                />
               </div>
             )}
 
@@ -1024,22 +1005,22 @@ export default function Notifications() {
         )}
       </div>
 
-      {/* ── Webhooks Section ──────────────────────────────────────────── */}
+      {/* ── Webhooks ──────────────────────────────────────────────────── */}
       <div>
-        <button
-          onClick={() => setWebhooksExpanded(!webhooksExpanded)}
-          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-400 transition-colors mb-3"
-        >
-          <Webhook size={13} />
-          Webhooks
-          <span className="text-[10px] font-normal normal-case text-slate-500">
-            ({webhooks.length} {webhooks.length === 1 ? 'webhook' : 'webhooks'})
-          </span>
-          <ChevronDown
-            size={14}
-            className={`ml-1 transition-transform ${webhooksExpanded ? 'rotate-180' : ''}`}
-          />
-        </button>
+        <h2 className="mb-3">
+          <button
+            onClick={() => setWebhooksExpanded(!webhooksExpanded)}
+            aria-expanded={webhooksExpanded}
+            className={SECTION_TOGGLE}
+          >
+            <Webhook size={13} />
+            Webhooks
+            <span className="text-[10px] font-normal normal-case text-slate-500">
+              ({webhooks.length} {webhooks.length === 1 ? 'webhook' : 'webhooks'})
+            </span>
+            <ChevronDown size={14} className={`ml-1 transition-transform ${webhooksExpanded ? 'rotate-180' : ''}`} />
+          </button>
+        </h2>
 
         {webhooksExpanded && (
           <div className="space-y-3 animate-fade-in">
@@ -1048,45 +1029,47 @@ export default function Notifications() {
               <div className="flex items-center justify-end">
                 <button
                   onClick={() => setShowAddWebhook(!showAddWebhook)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all duration-200 press"
+                  aria-expanded={showAddWebhook}
+                  className={`${BTN_TOOLBAR} ${TONE_OK}`}
                 >
-                  <Plus size={13} />
-                  Add Webhook
+                  <Plus size={14} />
+                  Add webhook
                 </button>
               </div>
             )}
 
             {/* Inline add webhook form */}
             {showAddWebhook && (
-              <div className="bg-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-xl p-4 md:p-5 space-y-4 animate-fade-in">
+              <div className="glass border border-cyan-500/20 rounded-xl p-4 md:p-5 space-y-4 animate-fade-in">
                 <div className="flex items-center gap-2 mb-1">
                   <Webhook size={14} className="text-cyan-400" />
-                  <h4 className="text-xs font-semibold text-slate-300">New Webhook</h4>
+                  <h3 className="text-xs font-semibold text-slate-300">New webhook</h3>
                 </div>
 
                 {/* URL input */}
                 <div>
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Webhook URL</label>
+                  <label htmlFor="webhook-url" className={LABEL}>Webhook URL</label>
                   <input
+                    id="webhook-url"
                     type="url"
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
                     placeholder="https://example.com/webhook"
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500/30 focus:bg-white/[0.05] transition-colors"
+                    className={`${INPUT} font-mono`}
                   />
                 </div>
 
                 {/* Event checkboxes */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Events <span className="normal-case text-slate-600">· {webhookEvents.size} selected</span></label>
-                    <div className="flex items-center gap-2 text-[10px]">
-                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_EVENT_TYPES.map((e) => e.value)))} className="text-cyan-400 hover:underline">all</button>
-                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_DEFAULT_EVENTS))} className="text-cyan-400 hover:underline">essentials</button>
-                      <button type="button" onClick={() => setWebhookEvents(new Set())} className="text-slate-500 hover:underline">none</button>
+                    <span id="webhook-events-label" className="text-[10px] text-slate-500 uppercase tracking-wider block">Events <span className="normal-case text-slate-600">· {webhookEvents.size} selected</span></span>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_EVENT_TYPES.map((e) => e.value)))} className={`${MINI_LINK} text-cyan-400`}>All</button>
+                      <button type="button" onClick={() => setWebhookEvents(new Set(WEBHOOK_DEFAULT_EVENTS))} className={`${MINI_LINK} text-cyan-400`}>Essentials</button>
+                      <button type="button" onClick={() => setWebhookEvents(new Set())} className={`${MINI_LINK} text-slate-500`}>None</button>
                     </div>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3" role="group" aria-labelledby="webhook-events-label">
                     {WEBHOOK_EVENT_GROUPS.map((group) => (
                       <div key={group.label}>
                         <div className="text-[10px] font-semibold text-slate-400 mb-1.5">{group.label}</div>
@@ -1095,8 +1078,9 @@ export default function Notifications() {
                             <button
                               key={evt.value}
                               type="button"
+                              aria-pressed={webhookEvents.has(evt.value)}
                               onClick={() => toggleWebhookEvent(evt.value)}
-                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                                 webhookEvents.has(evt.value)
                                   ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
                                   : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
@@ -1115,32 +1099,37 @@ export default function Notifications() {
 
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    onClick={() => setShowAddWebhook(false)}
-                    className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-400 transition-colors"
-                  >
+                  <button onClick={() => setShowAddWebhook(false)} className={BTN_TOOLBAR_QUIET}>
                     Cancel
                   </button>
                   <button
                     onClick={handleCreateWebhook}
                     disabled={creatingWebhook || !webhookUrl.trim()}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-all disabled:opacity-50 press"
+                    className={`${BTN_TOOLBAR} ${TONE_OK}`}
                   >
-                    {creatingWebhook ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                    Create Webhook
+                    {creatingWebhook ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    Create webhook
                   </button>
                 </div>
               </div>
             )}
 
+            {/* Loading */}
+            {!webhooksData && (
+              <div className="space-y-2" role="status" aria-label="Loading webhooks">
+                <div className="glass rounded-xl h-[72px] skeleton" />
+              </div>
+            )}
+
             {/* Empty state */}
-            {webhooks.length === 0 && (
-              <div className="glass border border-white/5 rounded-xl p-8 flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-white/5 flex items-center justify-center">
-                  <Webhook size={18} className="text-slate-500" />
-                </div>
-                <p className="text-sm text-slate-500">No webhooks configured</p>
-                <p className="text-xs text-slate-500">Add a webhook to receive event notifications via HTTP</p>
+            {webhooksData && webhooks.length === 0 && (
+              <div className="glass border border-white/5 rounded-xl">
+                <EmptyState
+                  compact
+                  icon={<Webhook size={20} />}
+                  title="No webhooks configured"
+                  hint="Add a webhook to receive event notifications via HTTP."
+                />
               </div>
             )}
 
@@ -1186,44 +1175,29 @@ export default function Notifications() {
                       {/* Right: actions */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         {/* Test */}
-                        <button
-                          onClick={() => handleTestWebhook(wh.id)}
-                          disabled={testingWebhookId === wh.id}
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-medium text-cyan-400 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
-                          title="Send test payload"
-                        >
-                          {testingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
-                          Test
-                        </button>
+                        <Hint label="Send a test payload">
+                          <button
+                            onClick={() => handleTestWebhook(wh.id)}
+                            disabled={testingWebhookId === wh.id}
+                            className={BTN_CARD_QUIET}
+                          >
+                            {testingWebhookId === wh.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                            Test
+                          </button>
+                        </Hint>
 
                         {/* Delete — admin only */}
                         {isAdmin && (
-                          confirmDeleteWebhookId === wh.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleDeleteWebhook(wh.id)}
-                                disabled={deletingWebhookId === wh.id}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors disabled:opacity-50"
-                              >
-                                {deletingWebhookId === wh.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                                Confirm
-                              </button>
-                              <button
-                                onClick={() => setConfirmDeleteWebhookId(null)}
-                                className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-400 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
+                          <Hint label="Delete webhook">
                             <button
-                              onClick={() => setConfirmDeleteWebhookId(wh.id)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
-                              title="Delete webhook"
+                              onClick={() => handleDeleteWebhook(wh)}
+                              disabled={deletingWebhookId === wh.id}
+                              aria-label={`Delete webhook ${wh.url}`}
+                              className={`${BTN_ICON} ${TONE_GHOST_DANGER}`}
                             >
-                              <Trash2 size={13} />
+                              {deletingWebhookId === wh.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                             </button>
-                          )
+                          </Hint>
                         )}
                       </div>
                     </div>
@@ -1235,7 +1209,7 @@ export default function Notifications() {
         )}
       </div>
 
-      {/* ── Add Rule Modal (inline overlay) ─────────────────────────────── */}
+      {/* ── Add rule modal (inline overlay) ─────────────────────────────── */}
       {showAddModal && createPortal(
         <ModalOverlay onClose={() => setShowAddModal(false)} className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-0 sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}
@@ -1245,13 +1219,13 @@ export default function Notifications() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
               <div className="flex items-center gap-2">
                 <Plus size={16} className="text-emerald-400" />
-                <h3 className="text-sm font-semibold text-slate-200">New Notification Rule</h3>
+                <h3 className="text-sm font-semibold text-slate-200">New notification rule</h3>
               </div>
               <button aria-label="Close"
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                className={`${BTN_ICON} ${TONE_GHOST}`}
               >
-                <XCircle size={16} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1259,23 +1233,24 @@ export default function Notifications() {
             <div className="p-5 space-y-4">
               {/* Name */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Rule Name</label>
+                <label htmlFor="rule-name" className={LABEL}>Rule name</label>
                 <input
+                  id="rule-name"
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="e.g. Critical container alerts"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className={INPUT}
                 />
               </div>
 
               {/* Trigger type */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Trigger Type</label>
-                <select aria-label="Trigger Type"
+                <label htmlFor="rule-trigger" className={LABEL}>Trigger type</label>
+                <select id="rule-trigger"
                   value={newTrigger}
                   onChange={(e) => setNewTrigger(e.target.value as TriggerType)}
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30 transition-colors appearance-none cursor-pointer"
+                  className={`${INPUT} appearance-none cursor-pointer`}
                 >
                   {TRIGGER_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-200">
@@ -1287,28 +1262,32 @@ export default function Notifications() {
 
               {/* Target */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                <label htmlFor="rule-target" className={LABEL}>
                   Target
                   <span className="text-slate-500 ml-1 normal-case">(container, stack, or * for all)</span>
                 </label>
                 <input
+                  id="rule-target"
                   type="text"
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
                   placeholder="*"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className={`${INPUT} font-mono`}
                 />
               </div>
 
               {/* Priority */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Priority</label>
-                <div className="flex gap-2">
+                <span id="rule-priority-label" className={LABEL}>Priority</span>
+                <div className="flex gap-2" role="radiogroup" aria-labelledby="rule-priority-label">
                   {PRIORITY_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={newPriority === opt.value}
                       onClick={() => setNewPriority(opt.value)}
-                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                         newPriority === opt.value
                           ? priorityColor(opt.value).replace('/15', '/25')
                           : 'bg-white/[0.03] text-slate-500 border-white/5 hover:bg-white/5'
@@ -1322,72 +1301,76 @@ export default function Notifications() {
 
               {/* Tags */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                <label htmlFor="rule-tags" className={LABEL}>
                   Tags
                   <span className="text-slate-500 ml-1 normal-case">(comma-separated, optional)</span>
                 </label>
                 <input
+                  id="rule-tags"
                   type="text"
                   value={newTags}
                   onChange={(e) => setNewTags(e.target.value)}
                   placeholder="warning, server, docker"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className={INPUT}
                 />
               </div>
 
               {/* Cooldown */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                <label htmlFor="rule-cooldown" className={LABEL}>
                   Repeat at most every
                   <span className="text-slate-500 ml-1 normal-case">(minutes; blank = the event's default: 60 for container rules, 6 h for disk space, a day for image updates, always for deploys, backups and health changes)</span>
                 </label>
                 <input
+                  id="rule-cooldown"
                   type="number"
                   min={0}
                   max={999999}
                   value={newCooldown}
                   onChange={(e) => setNewCooldown(e.target.value)}
                   placeholder="default"
-                  className="w-40 px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/30 focus:bg-white/[0.05] transition-colors"
+                  className={`${INPUT} !w-40`}
                 />
               </div>
 
-              {/* Notification Message section */}
+              {/* Notification message section */}
               <div className="pt-2 border-t border-white/5">
                 <div className="flex items-center gap-2 mb-3">
-                  <Send size={12} className="text-amber-400" />
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">NTFY Message</span>
+                  <Send size={12} className="text-slate-400" />
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">ntfy message</span>
                 </div>
 
-                {/* Title Template */}
+                {/* Title template */}
                 <div className="mb-3">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">
+                  <label htmlFor="rule-title" className={LABEL}>
                     Title
-                    <span className="text-slate-600 ml-1 normal-case">— use {'{'}<span className="text-amber-400">variables</span>{'}'} for dynamic content</span>
+                    <span className="text-slate-600 ml-1 normal-case">— use {'{'}<span className="text-cyan-400">variables</span>{'}'} for dynamic content</span>
                   </label>
                   <input
+                    id="rule-title"
                     type="text"
                     value={newTitleTemplate}
                     onChange={(e) => setNewTitleTemplate(e.target.value)}
                     placeholder="e.g. ⚠️ {container} is {status}"
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors"
+                    className={INPUT}
                   />
                 </div>
 
-                {/* Message Template */}
+                {/* Message template */}
                 <div className="mb-3">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 block">Message Body</label>
+                  <label htmlFor="rule-message" className={LABEL}>Message body</label>
                   <textarea
+                    id="rule-message"
                     value={newMessageTemplate}
                     onChange={(e) => setNewMessageTemplate(e.target.value)}
                     rows={3}
                     placeholder="e.g. Container {container} in {stack} needs attention. Status: {status}"
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/30 focus:bg-white/[0.05] transition-colors resize-none"
+                    className={`${INPUT} resize-none`}
                   />
                 </div>
 
                 {/* Quick variable buttons */}
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Insert a variable into the message body">
                   {TEMPLATE_VARIABLES.map((v) => (
                     <button
                       key={v.var}
@@ -1396,7 +1379,7 @@ export default function Notifications() {
                         // Insert at the end of message template
                         setNewMessageTemplate((prev) => prev ? `${prev} ${v.var}` : v.var)
                       }}
-                      className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/15 hover:bg-amber-500/20 transition-colors"
+                      className="h-8 sm:h-6 px-2 rounded-md text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/15 hover:bg-cyan-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       title={v.desc}
                     >
                       {v.var}
@@ -1408,19 +1391,16 @@ export default function Notifications() {
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-300 transition-colors"
-              >
+              <button onClick={() => setShowAddModal(false)} className={BTN_SHEET_QUIET}>
                 Cancel
               </button>
               <button
                 onClick={handleCreateRule}
                 disabled={creating || !newName.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-all duration-200 disabled:opacity-50 press"
+                className={BTN_SHEET_PRIMARY}
               >
-                {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                Create Rule
+                {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                Create rule
               </button>
             </div>
           </div>
