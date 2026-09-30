@@ -1,18 +1,16 @@
 // =============================================================================
-// System — System info, Docker disk usage, and Maintenance operations
+// System — system info, Docker disk usage and maintenance
 // On a hub: the hub's own facts or one VM's (through the hub's proxy). OS
 // updates on a VM the hub built run unattended: its API has passwordless sudo.
 // =============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Monitor,
   Cpu,
   HardDrive,
   Server,
   RefreshCw,
   Trash2,
-  AlertTriangle,
   CheckCircle,
   XCircle,
   Loader2,
@@ -26,6 +24,7 @@ import {
   Package,
   Shield,
 } from 'lucide-react'
+import { Badge } from '@mantine/core'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchSystemInfoScoped, fetchSudoReadyScoped, runDockerPruneScoped, runImagePruneScoped,
@@ -33,13 +32,19 @@ import {
 } from '../api/fleetScopedOps'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
+import VmCapsule from '../components/fleet/VmCapsule'
 import { useSystemStore } from '../stores/systemStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import type { SystemInfo, DockerDiskUsage, OsUpdateCheckResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
-import { LoadingState } from '../components/common/PageState'
+import { useConfirm } from '../components/common/ConfirmDialog'
+import PageHeader from '../components/common/PageHeader'
+import Hint from '../components/common/Hint'
+import { pageLabel } from '../constants/pageTitles'
+import { Panel } from '../components/dashboard/cardShared'
+import { BTN_CARD_QUIET, BTN_TOOLBAR, BTN_TOOLBAR_QUIET, TONE_OK } from '../lib/ui'
 
 /** which server a panel talks to: null is the hub (or a server without a fleet) */
 interface ScopedProps { member: string | null; whereLabel: string }
@@ -53,26 +58,6 @@ function formatMb(mb: number): string {
     return `${(mb / 1024).toFixed(1)} GB`
   }
   return `${mb.toFixed(0)} MB`
-}
-
-// ---------------------------------------------------------------------------
-// Section Card
-// ---------------------------------------------------------------------------
-
-function SectionCard({ icon, title, children }: {
-  icon: React.ReactNode
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200">
-      <div className="px-5 py-4 border-b border-white/[0.03] flex items-center gap-2.5">
-        {icon}
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</h3>
-      </div>
-      <div className="p-5">{children}</div>
-    </div>
-  )
 }
 
 /** QEMU guest agent state for a Proxmox/KVM guest, with the fix when something is missing */
@@ -112,16 +97,19 @@ function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+/** the field every input of this page wears: the glass fill, its own emerald ring on focus */
+const FIELD = 'w-full pl-9 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30 transition-all'
+
 // ---------------------------------------------------------------------------
-// Maintenance Panel
+// Maintenance panel
 // ---------------------------------------------------------------------------
 
 function MaintenancePanel({ member, whereLabel }: ScopedProps) {
   const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
+  const confirm = useConfirm()
   const [pruning, setPruning] = useState(false)
   const [imagePruning, setImagePruning] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [confirmAction, setConfirmAction] = useState<'prune' | 'image-prune' | null>(null)
 
   // Hide entire panel for non-admin users
   if (!isAdmin) return null
@@ -129,7 +117,12 @@ function MaintenancePanel({ member, whereLabel }: ScopedProps) {
   const where = whereLabel ? ` on ${whereLabel}` : ''
 
   const handlePrune = async () => {
-    setConfirmAction(null)
+    if (!(await confirm({
+      title: `Run a Docker system prune${where}?`,
+      message: 'This removes all stopped containers, unused networks, dangling images and the build cache.',
+      confirmLabel: 'Run system prune',
+      danger: true,
+    }))) return
     setPruning(true)
     setResult(null)
     try {
@@ -146,7 +139,12 @@ function MaintenancePanel({ member, whereLabel }: ScopedProps) {
   }
 
   const handleImagePrune = async () => {
-    setConfirmAction(null)
+    if (!(await confirm({
+      title: `Prune unused images${where}?`,
+      message: 'This removes the Docker images no container uses, to free disk space.',
+      confirmLabel: 'Prune images',
+      danger: true,
+    }))) return
     setImagePruning(true)
     setResult(null)
     try {
@@ -163,12 +161,9 @@ function MaintenancePanel({ member, whereLabel }: ScopedProps) {
   }
 
   return (
-    <SectionCard
-      icon={<Wrench size={16} className="text-amber-400" />}
-      title={whereLabel ? `Maintenance · ${whereLabel}` : 'Maintenance'}
-    >
+    <Panel icon={Wrench} title={whereLabel ? `${pageLabel('maintenance')} · ${whereLabel}` : pageLabel('maintenance')}>
       <p className="text-xs text-slate-500 mb-4">
-        Clean up unused Docker resources{where} to reclaim disk space.
+        Clean up unused Docker resources{where} to reclaim disk space. The {pageLabel('maintenance')} page has the full report.
       </p>
 
       {/* Result banner */}
@@ -179,100 +174,49 @@ function MaintenancePanel({ member, whereLabel }: ScopedProps) {
             ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
             : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
           }
-        `}>
-          {result.success ? <CheckCircle size={16} /> : <XCircle size={16} />}
+        `} role="status">
+          {result.success ? <CheckCircle size={16} aria-hidden /> : <XCircle size={16} aria-hidden />}
           <span>{result.message}</span>
-        </div>
-      )}
-
-      {/* Confirmation dialog */}
-      {confirmAction && (
-        <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-4 mb-4 animate-fade-in">
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-amber-300">
-                {confirmAction === 'prune' ? 'Run Docker System Prune' : 'Run Image Prune'}{where}?
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {confirmAction === 'prune'
-                  ? 'This will remove all stopped containers, unused networks, dangling images, and build cache.'
-                  : 'This will remove unused Docker images to free disk space.'}
-              </p>
-              <div className="flex items-center gap-2 mt-3">
-                <button
-                  onClick={confirmAction === 'prune' ? handlePrune : handleImagePrune}
-                  className="
-                    rounded-lg px-3 py-1.5 text-xs font-medium
-                    bg-amber-500/20 text-amber-300 border border-amber-500/30
-                    hover:bg-amber-500/30 transition-colors
-                  "
-                >
-                  Yes, proceed
-                </button>
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  className="
-                    rounded-lg px-3 py-1.5 text-xs font-medium
-                    text-slate-400 border border-white/10
-                    hover:bg-white/5 transition-colors
-                  "
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button
-          onClick={() => setConfirmAction('prune')}
+          type="button"
+          onClick={handlePrune}
           disabled={pruning || imagePruning}
-          className="
-            flex items-center gap-3 rounded-xl p-4
-            bg-slate-800/40 border border-white/[0.03]
-            hover:bg-slate-800/60 hover:border-white/10
-            disabled:opacity-50 transition-all duration-200
-            text-left group
-          "
+          className="flex items-center gap-3 rounded-xl p-4 bg-white/[0.03] border border-white/5 hover:bg-white/5 hover:border-white/10 disabled:opacity-50 transition-all duration-200 text-left"
         >
-          <div className="rounded-lg p-2.5 bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/15 transition-colors">
+          <div className="rounded-lg p-2.5 bg-rose-500/10 text-rose-400">
             {pruning ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-200">System Prune</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Remove stopped containers, networks, cache</p>
+            <p className="text-sm font-medium text-slate-200">System prune</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Remove stopped containers, networks and the build cache</p>
           </div>
         </button>
 
         <button
-          onClick={() => setConfirmAction('image-prune')}
+          type="button"
+          onClick={handleImagePrune}
           disabled={pruning || imagePruning}
-          className="
-            flex items-center gap-3 rounded-xl p-4
-            bg-slate-800/40 border border-white/[0.03]
-            hover:bg-slate-800/60 hover:border-white/10
-            disabled:opacity-50 transition-all duration-200
-            text-left group
-          "
+          className="flex items-center gap-3 rounded-xl p-4 bg-white/[0.03] border border-white/5 hover:bg-white/5 hover:border-white/10 disabled:opacity-50 transition-all duration-200 text-left"
         >
-          <div className="rounded-lg p-2.5 bg-rose-500/10 text-rose-400 group-hover:bg-rose-500/15 transition-colors">
+          <div className="rounded-lg p-2.5 bg-rose-500/10 text-rose-400">
             {imagePruning ? <Loader2 size={18} className="animate-spin" /> : <HardDrive size={18} />}
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-200">Image Prune</p>
+            <p className="text-sm font-medium text-slate-200">Image prune</p>
             <p className="text-[11px] text-slate-500 mt-0.5">Remove unused Docker images</p>
           </div>
         </button>
       </div>
-    </SectionCard>
+    </Panel>
   )
 }
 
 // ---------------------------------------------------------------------------
-// OS Package Updates Panel
+// OS package updates panel
 // ---------------------------------------------------------------------------
 
 function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
@@ -344,10 +288,10 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
           }))
         }
         setAuthPassword('')
-        addToast({ type: 'success', message: `Authenticated as ${res.username}${where}` })
+        addToast({ type: 'success', message: `Signed in as ${res.username}${where}` })
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed'
+      const msg = err instanceof Error ? err.message : 'Sign-in failed'
       if (msg.includes('429')) setAuthError('Too many attempts. Try again in 15 minutes.')
       else if (msg.includes('401')) setAuthError('Invalid Linux username or password.')
       else setAuthError(msg)
@@ -384,7 +328,7 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
       // Start background update
       if (unattended) await applyOsUpdatesScoped(member)
       else await applyOsUpdatesScoped(member, termToken, sudoPassword || undefined)
-      addToast({ type: 'info', message: `OS update started${where} — this may take a few minutes` })
+      addToast({ type: 'info', message: `OS update started${where} — this can take a few minutes` })
 
       // Poll for completion
       const pollInterval = setInterval(async () => {
@@ -420,80 +364,84 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
   }
 
   return (
-    <SectionCard
-      icon={<Download size={16} className="text-emerald-400" />}
-      title={whereLabel ? `OS Package Updates · ${whereLabel}` : 'OS Package Updates'}
-    >
+    <Panel icon={Download} title={whereLabel ? `OS package updates · ${whereLabel}` : 'OS package updates'}>
       {member && sudoReady === null ? (
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Loader2 size={13} className="animate-spin" />
+        <div className="flex items-center gap-2 text-xs text-slate-500" role="status">
+          <Loader2 size={13} className="animate-spin" aria-hidden />
           Asking the VM whether it updates unattended…
         </div>
       ) : !termToken && !unattended ? (
-        /* Not authenticated — show auth form */
+        /* Not signed in: the Linux account form */
         <div className="space-y-3">
-          <div className="flex items-start gap-3 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
-            <Shield size={14} className="text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+          <div className="flex items-start gap-3 rounded-lg bg-cyan-500/5 border border-cyan-500/15 px-3 py-2.5">
+            <Shield size={14} className="text-cyan-400 mt-0.5 shrink-0" aria-hidden />
+            <p className="text-xs text-slate-400 leading-relaxed">
               {member
-                ? `This VM's API has no passwordless sudo, so a Linux account on the VM ${whereLabel.replace(/^VM /, '')} is needed to check and apply its OS updates. The password goes to that VM through the hub and is validated against its system account.`
-                : 'Linux system credentials are required to check and apply OS updates. Your password is sent securely to the server and validated against your system account.'}
+                ? `This VM's API has no passwordless sudo, so a Linux account on the VM ${whereLabel.replace(/^VM /, '')} is needed to check and apply its OS updates. The password goes to that VM through the hub and is checked against its system account.`
+                : 'A Linux account of this server is needed to check and apply OS updates. Your password is sent to the server and checked against its system accounts.'}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div className="relative">
-              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
               <input
                 type="text"
+                aria-label="Linux username"
                 value={authUsername}
                 onChange={(e) => { setAuthUsername(e.target.value); setAuthError('') }}
                 placeholder="Linux username"
-                className="w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                autoComplete="username"
+                className={`${FIELD} pr-3`}
               />
             </div>
             <div className="relative">
-              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
               <input
                 type={showPassword ? 'text' : 'password'}
+                aria-label="Linux password"
                 value={authPassword}
                 onChange={(e) => { setAuthPassword(e.target.value); setAuthError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
                 placeholder="Password"
-                className="w-full pl-9 pr-9 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                autoComplete="current-password"
+                className={`${FIELD} pr-10`}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                aria-pressed={showPassword}
-              >
-                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+              <Hint label={showPassword ? 'Hide the password' : 'Show the password'}>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                  aria-label={showPassword ? 'Hide the password' : 'Show the password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </Hint>
             </div>
           </div>
           {authError && (
-            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-400">
-              <XCircle size={12} />
+            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-400" role="alert">
+              <XCircle size={12} aria-hidden />
               {authError}
             </div>
           )}
           <button
+            type="button"
             onClick={handleAuth}
             disabled={authing || !authUsername.trim() || !authPassword}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-all press"
+            className={`${BTN_TOOLBAR} ${TONE_OK}`}
           >
-            {authing ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
-            Authenticate
+            {authing ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+            Sign in
           </button>
         </div>
       ) : (
-        /* Authenticated (or unattended on a VM) — show update controls */
+        /* Signed in (or unattended on a VM): the update controls */
         <div className="space-y-3">
           {unattended && (
             <div className="flex items-start gap-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5">
-              <CheckCircle size={14} className="text-emerald-400 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-slate-400 leading-relaxed">
+              <CheckCircle size={14} className="text-emerald-400 mt-0.5 shrink-0" aria-hidden />
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Unattended: the VM&apos;s API runs with passwordless sudo (the hub built it that way), so no Linux sign-in is needed here.
               </p>
             </div>
@@ -501,28 +449,30 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
           {/* Status banner */}
           {updateData ? (
             updateData.available ? (
-              <div className="flex items-center justify-between rounded-lg bg-cyan-500/5 border border-cyan-500/15 px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <Package size={14} className="text-cyan-400" />
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-cyan-500/5 border border-cyan-500/15 px-3 py-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Package size={14} className="text-cyan-400 shrink-0" aria-hidden />
                   <span className="text-sm font-medium text-cyan-400">{updateData.count} update{updateData.count !== 1 ? 's' : ''} available</span>
-                  <span className="text-[10px] text-slate-500">via {updateData.package_manager}</span>
+                  <span className="text-[11px] text-slate-500 truncate">via {updateData.package_manager}</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowPackages(!showPackages)}
-                  className="text-[10px] text-slate-400 hover:text-slate-200 transition-colors"
+                  aria-expanded={showPackages}
+                  className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors shrink-0"
                 >
                   {showPackages ? 'Hide' : 'Show'} packages
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5">
-                <CheckCircle size={14} className="text-emerald-400" />
+                <CheckCircle size={14} className="text-emerald-400" aria-hidden />
                 <span className="text-sm font-medium text-emerald-400">System is up to date</span>
-                <span className="text-[10px] text-slate-500">via {updateData.package_manager}</span>
+                <span className="text-[11px] text-slate-500">via {updateData.package_manager}</span>
               </div>
             )
           ) : (
-            <p className="text-xs text-slate-500">Click "Check for Updates" to scan for available OS package updates{where}.</p>
+            <p className="text-xs text-slate-500">Choose "Check for updates" to scan for available OS package updates{where}.</p>
           )}
 
           {/* Package list */}
@@ -532,7 +482,7 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
                 {updateData.packages.map((pkg) => (
                   <div key={pkg.package} className="flex items-center justify-between px-3 py-1.5 text-xs">
                     <span className="text-slate-300 font-mono truncate">{pkg.package}</span>
-                    <span className="text-slate-500 font-mono text-[10px] shrink-0 ml-3">{pkg.version}</span>
+                    <span className="text-slate-500 font-mono text-[11px] shrink-0 ml-3">{pkg.version}</span>
                   </div>
                 ))}
               </div>
@@ -543,44 +493,33 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
           {applyOutput && (
             <div className="rounded-lg bg-slate-950/60 border border-white/5 max-h-64 overflow-y-auto scrollbar-thin">
               <div className="px-3 py-2 border-b border-white/5 flex items-center gap-2">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Update Log</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Update log</span>
               </div>
-              <pre className="p-3 text-[10px] font-mono text-slate-400 leading-relaxed whitespace-pre-wrap">{applyOutput}</pre>
+              <pre className="p-3 text-[11px] font-mono text-slate-400 leading-relaxed whitespace-pre-wrap">{applyOutput}</pre>
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCheck}
-              disabled={checking || applying}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10 disabled:opacity-50 transition-all press"
-            >
-              {checking ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              Check for Updates
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={handleCheck} disabled={checking || applying} className={BTN_TOOLBAR_QUIET}>
+              {checking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Check for updates
             </button>
             {updateData?.available && (
-              <button
-                onClick={handleApply}
-                disabled={applying || checking}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all press"
-              >
-                {applying ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                {applying ? 'Updating...' : 'Apply Updates'}
+              <button type="button" onClick={handleApply} disabled={applying || checking} className={`${BTN_TOOLBAR} font-semibold text-white bg-emerald-600 hover:bg-emerald-500`}>
+                {applying ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                {applying ? 'Updating…' : 'Apply updates'}
               </button>
             )}
             {!unattended && (
-              <button
-                onClick={() => { forgetSession(); setUpdateData(null); setApplyOutput(null) }}
-                className="text-[10px] text-slate-500 hover:text-slate-300 ml-auto transition-colors"
-              >
+              <button type="button" onClick={() => { forgetSession(); setUpdateData(null); setApplyOutput(null) }} className={`${BTN_CARD_QUIET} ml-auto`}>
                 Sign out
               </button>
             )}
           </div>
         </div>
       )}
-    </SectionCard>
+    </Panel>
   )
 }
 
@@ -613,117 +552,99 @@ export default function System() {
   const info = data
   const diskUsage: DockerDiskUsage[] = info?.docker_disk_usage ?? []
 
+
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-4 md:space-y-5 animate-fade-in">
       <DisconnectedBanner />
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-white/5 shrink-0">
-            <Monitor className="w-6 h-6 text-cyan-400" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold"><span className="text-gradient">System Information</span>{member && <span className="ml-2 text-sm font-medium text-amber-200/90">· VM {memberName}</span>}</h1>
-            {hasFleet && <div className="mt-2"><FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Server" busy={loading && !!data} everywhere={false} /></div>}
-            <p className="text-sm text-slate-400 mt-0.5">{hasFleet ? `Resources, Docker runtime, OS updates and maintenance on ${whereLabel}` : 'Server resources, Docker runtime, and maintenance tools'}</p>
-          </div>
-        </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="
-            flex items-center gap-2 rounded-lg px-3 py-2
-            text-xs font-medium text-slate-300
-            bg-white/5 border border-white/10
-            hover:bg-white/10 hover:border-white/15
-            disabled:opacity-50 transition-all duration-200 self-start sm:self-auto shrink-0
-          "
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        page="system"
+        badge={member ? <VmCapsule member={member} name={memberName} vmid={scopeMembers.find((m) => m.id === member)?.vmid} /> : undefined}
+        subtitle={hasFleet ? `Resources, Docker runtime, OS updates and maintenance on ${whereLabel}` : undefined}
+        actions={
+          <button type="button" onClick={refresh} disabled={loading} aria-label="Refresh" className={BTN_TOOLBAR_QUIET}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        }
+      >
+        {hasFleet && <FleetScopeChips scope={pageScope} members={scopeMembers} onChange={setScope} label="Server" busy={loading && !!data} everywhere={false} />}
+      </PageHeader>
 
       {/* Error state */}
       {error && (
-        <div className="glass rounded-xl p-4 border border-rose-500/20">
-          <p className="text-sm text-rose-400">Failed to fetch system info: {error.message}</p>
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3 text-xs text-rose-300" role="alert">
+          Could not load the system information: {error.message}
         </div>
       )}
 
-      {/* Loading placeholder */}
-      {loading && !info && <LoadingState label="Loading system information…" />}
+      {/* Loading: panels shaped like the ones that follow */}
+      {loading && !info && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" role="status" aria-label="Loading the system information">
+          {[[Server, 'Server', 5], [Cpu, 'Hardware', 3]].map(([Icon, title, rows]) => (
+            <Panel key={title as string} icon={Icon as typeof Server} title={title as string}>
+              <div className="space-y-3" aria-hidden>
+                {Array.from({ length: rows as number }).map((_, i) => <div key={i} className="skeleton h-6" />)}
+              </div>
+            </Panel>
+          ))}
+        </div>
+      )}
 
       {/* Info cards grid */}
       {info && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Server Info */}
-          <SectionCard
-            icon={<Server size={16} className="text-emerald-400" />}
-            title="Server"
-          >
+        <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2">
+          <Panel icon={Server} title="Server">
             <KvRow label="Hostname" value={info.hostname} />
             <KvRow label="Kernel" value={info.kernel} />
             <KvRow label="Runs on" value={!info.virtualization || info.virtualization === 'unknown' ? 'Unknown' : info.virtualization === 'none' ? 'Bare metal' : `${info.virtualization} (virtual machine or container)`} />
             {info.guest_agent && (info.virtualization === 'kvm' || info.virtualization === 'qemu' || info.guest_agent.installed) && (
               <KvRow label="QEMU agent" value={<GuestAgentStatus ga={info.guest_agent} />} />
             )}
-            <KvRow label="Docker Version" value={info.docker_version} />
-          </SectionCard>
+            <KvRow label="Docker version" value={info.docker_version} />
+          </Panel>
 
-          {/* CPU & Memory */}
-          <SectionCard
-            icon={<Cpu size={16} className="text-cyan-400" />}
-            title="Hardware"
-          >
-            <KvRow label="CPU Cores" value={info.cpu_count} />
-            <KvRow label="Total Memory" value={formatMb(info.memory_total_mb)} />
+          <Panel icon={Cpu} title="Hardware">
+            <KvRow label="CPU cores" value={info.cpu_count} />
+            <KvRow label="Total memory" value={formatMb(info.memory_total_mb)} />
             <KvRow label="Swap" value={formatMb(info.swap_total_mb)} />
-          </SectionCard>
+          </Panel>
         </div>
       )}
 
       {/* Docker disk usage table */}
       {diskUsage.length > 0 && (
-        <SectionCard
-          icon={<Database size={16} className="text-cyan-400" />}
-          title="Docker Disk Usage"
-        >
-          <div className="overflow-x-auto -mx-5">
+        <Panel flush icon={Database} title="Docker disk usage">
+          <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Active</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Size</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Reclaimable</th>
+                  <th scope="col" className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Type</th>
+                  <th scope="col" className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Total</th>
+                  <th scope="col" className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Active</th>
+                  <th scope="col" className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Size</th>
+                  <th scope="col" className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Reclaimable</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.03]">
                 {diskUsage.map((row) => (
                   <tr key={row.type} className="hover:bg-white/[0.03] transition-colors duration-150">
-                    <td className="px-5 py-3 text-slate-200 font-medium text-xs">{row.type}</td>
-                    <td className="px-5 py-3 text-right font-mono text-slate-300 text-xs">{row.total}</td>
-                    <td className="px-5 py-3 text-right font-mono text-slate-300 text-xs">{row.active}</td>
-                    <td className="px-5 py-3 text-right font-mono text-slate-300 text-xs">{row.size}</td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="inline-flex rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
-                        {row.reclaimable}
-                      </span>
-                    </td>
+                    <td className="px-4 py-3 text-slate-200 font-medium text-xs">{row.type}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-300 text-xs">{row.total}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-300 text-xs">{row.active}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-300 text-xs">{row.size}</td>
+                    <td className="px-4 py-3 text-right"><Badge component="span" color="cyan">{row.reclaimable}</Badge></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </SectionCard>
+        </Panel>
       )}
 
-      {/* OS Package Updates (a fresh panel per server: its own sign-in, its own results) */}
+      {/* OS package updates (a fresh panel per server: its own sign-in, its own results) */}
       {isConnected && <OsUpdatesPanel key={`os-${member ?? 'hub'}`} member={member} whereLabel={whereLabel} />}
 
-      {/* Maintenance Panel */}
+      {/* Maintenance */}
       {isConnected && <MaintenancePanel key={`maint-${member ?? 'hub'}`} member={member} whereLabel={whereLabel} />}
     </div>
   )
