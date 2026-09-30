@@ -1,6 +1,10 @@
 // =============================================================================
 // SetupWizard — 5-step first-run configuration wizard
-// Full-screen page (renders outside Sidebar/Header, like Login.tsx)
+// Full-screen page (renders outside Sidebar/Header, like Login.tsx): the front
+// door of a new install, so it has no page header — the step indicator and the
+// step's own heading say where you are. Colours mean what they mean elsewhere:
+// emerald = on / fine, amber = needs attention, rose = a problem, cyan =
+// information, violet = the fleet (a Proxmox link, a hub, a stack in its own VM).
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -31,6 +35,30 @@ import { VmSizeControl } from '../components/fleet/VmSizeControl'
 import PlanCapacity from '../components/fleet/PlanCapacity'
 import { HubFirewallNote } from '../components/fleet/fleetShared'
 import JoinHubPanel from '../components/fleet/JoinHubPanel'
+import Hint from '../components/common/Hint'
+import PasswordStrengthMeter from '../components/auth/PasswordStrength'
+import ShowPasswordButton from '../components/auth/ShowPasswordButton'
+import { pageLabel } from '../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM,
+  BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_DANGER,
+} from '../lib/ui'
+import { FOCUS_RING, CHOICE, CHOICE_ON, CHOICE_OFF } from '../lib/fieldStyles'
+
+// ---------------------------------------------------------------------------
+// The pieces every step is drawn with
+// ---------------------------------------------------------------------------
+
+/** the wizard's fields: 42 px, an emerald ring on focus (an icon on the left → pl-9) */
+const W_FIELD = 'py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors'
+const W_INPUT = `w-full px-3 ${W_FIELD}`
+const W_INPUT_ICON = `w-full pl-9 pr-3 ${W_FIELD}`
+const W_INPUT_PW = `w-full pl-9 pr-12 ${W_FIELD}`
+const W_LABEL = 'block text-xs font-medium text-slate-400 mb-1.5'
+/** the header button of a folding section: its focus ring sits inside, because the section clips what sticks out */
+const SECTION_BTN = 'w-full flex items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.05] transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40'
+/** a choice among a few option cards (ntfy: off · deploy here · existing server) */
+const OPTION_CARD = 'rounded-lg border px-3 py-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,31 +98,12 @@ const COMMON_TIMEZONES = [
 ]
 
 // ---------------------------------------------------------------------------
-// Password strength calculator
-// ---------------------------------------------------------------------------
-
-function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  let score = 0
-  if (pw.length >= 8) score++
-  if (pw.length >= 12) score++
-  if (/[A-Z]/.test(pw)) score++
-  if (/[0-9]/.test(pw)) score++
-  if (/[^A-Za-z0-9]/.test(pw)) score++
-
-  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-rose-500' }
-  if (score <= 2) return { score: 2, label: 'Fair', color: 'bg-amber-500' }
-  if (score <= 3) return { score: 3, label: 'Good', color: 'bg-yellow-500' }
-  if (score <= 4) return { score: 4, label: 'Strong', color: 'bg-emerald-500' }
-  return { score: 5, label: 'Excellent', color: 'bg-emerald-400' }
-}
-
-// ---------------------------------------------------------------------------
 // Step Indicator
 // ---------------------------------------------------------------------------
 
 function StepIndicator({ current, total, needsAdmin = true }: { current: Step; total: number; needsAdmin?: boolean }) {
   const steps = Array.from({ length: total }, (_, i) => i + 1)
-  const labels = ['Connect', needsAdmin ? 'Admin' : 'Sign In', 'Server', 'Stacks', 'Review']
+  const labels = ['Connect', needsAdmin ? 'Admin' : 'Sign in', 'Server', 'Stacks', 'Review']
 
   return (
     <div className="flex items-center justify-center gap-0 mb-8">
@@ -690,10 +699,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       results.push({ label: 'Configuration saved', ok: true })
       if (configured.stacks_removed?.length) results.push({ label: `Removed stack${configured.stacks_removed.length === 1 ? '' : 's'}: ${configured.stacks_removed.join(', ')}`, ok: true })
       const kept = (configured.stacks_warned ?? []).filter((n) => removedStacks.includes(n))
-      if (kept.length) results.push({ label: `Kept ${kept.join(', ')}`, ok: false, detail: 'Containers run from it, or its App-Data folder holds data — remove it from the Stacks page when you are sure' })
-      if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${!pveSecret.trim() ? ' — the token secret saved before is kept' : pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : 'Not tested — the Proxmox page will say if the token is refused' })
-      if (linkedMembers > 0) results.push({ label: `${linkedMembers} fleet member${linkedMembers === 1 ? '' : 's'} linked — their stacks show under their VMs on the Proxmox page`, ok: true })
-      if (joined) results.push({ label: `Joined the hub ${joined.hub.name || joined.hub.url} as "${joined.member.name}"`, ok: true, detail: joined.member.vmid ? `Guest ${joined.member.vmid}${joined.member.node ? ` on ${joined.member.node}` : ''}` : 'The hub could not tell which guest this is — pick it on its Proxmox page' })
+      if (kept.length) results.push({ label: `Kept ${kept.join(', ')}`, ok: false, detail: `Containers run from it, or its App-Data folder holds data — remove it from the ${pageLabel('stacks')} page when you are sure` })
+      if (pveFilled) results.push({ label: `Proxmox linked (${pveUrl.trim()})${!pveSecret.trim() ? ' — the token secret saved before is kept' : pveSecretStored ? ' — token secret in the secret store' : ' — token secret written to .env'}`, ok: true, detail: pveTest?.ok ? pveTest.text : `Not tested — the ${pageLabel('proxmox')} page will say if the token is refused` })
+      if (linkedMembers > 0) results.push({ label: `${linkedMembers} fleet member${linkedMembers === 1 ? '' : 's'} linked — their stacks show under their VMs on the ${pageLabel('proxmox')} page`, ok: true })
+      if (joined) results.push({ label: `Joined the hub ${joined.hub.name || joined.hub.url} as "${joined.member.name}"`, ok: true, detail: joined.member.vmid ? `Guest ${joined.member.vmid}${joined.member.node ? ` on ${joined.member.node}` : ''}` : `The hub could not tell which guest this is — pick it on its ${pageLabel('proxmox')} page` })
 
       // 2. Deploy Traefik BEFORE marking setup complete (needs setup mode for permissive CORS/auth)
       if (enableTraefik && envVars.PROXY_DOMAIN) {
@@ -785,7 +794,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // 3c. The VMs: one per stack placed in a VM, built by the hub in the background
       const leftOut = stacks.filter((st) => placementOf(st.name) === 'vm' && clashOf(st.name)).map((st) => `${st.name} (VM ${clashOf(st.name)?.vmid})`)
       if (leftOut.length > 0) {
-        results.push({ label: `Left out of the build: ${leftOut.join(', ')}`, ok: false, detail: 'A guest with the stack\'s name already exists on Proxmox — delete or rename it there, or link it from the Proxmox page, then add the stack as a VM (New VM)' })
+        results.push({ label: `Left out of the build: ${leftOut.join(', ')}`, ok: false, detail: `A guest with the stack's name already exists on Proxmox — delete or rename it there, or link it from the ${pageLabel('proxmox')} page, then add the stack as a VM (New VM)` })
       }
       if (vmPlan.length > 0 && vmSettings) {
         try {
@@ -795,10 +804,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           results.push({
             label: `${built.length} VM${built.length === 1 ? '' : 's'} being built by the hub${templates.length ? `, after a DCS template of the operating system` : ''}: ${built.map((j) => `${j.stack} (${j.ip})`).join(', ')}`,
             ok: true,
-            detail: templates.length ? `The template is baked once (${templates.map((j) => j.ip).join(', ')}); every VM is then cloned from it in about 40 s and joins this hub` : 'Each VM gets Docker and DCS, joins this hub and runs its stack',
+            detail: templates.length ? `The template is baked once (${templates.map((j) => j.ip).join(', ')}); every VM is then cloned from it in about half a minute and joins this hub` : 'Each VM gets Docker and DCS, joins this hub and runs its stack',
           })
         } catch (err) {
-          results.push({ label: 'Building the VMs', ok: false, detail: `${err instanceof Error ? err.message : 'failed'} — the Proxmox page can build them one by one` })
+          results.push({ label: 'Building the VMs', ok: false, detail: `${err instanceof Error ? err.message : 'failed'} — the ${pageLabel('proxmox')} page can build them one by one` })
         }
         setSetupResults([...results])
       }
@@ -813,7 +822,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       if (done?.fleet_join) {
         results.push(done.fleet_join.joined
           ? { label: `Joined the hub ${done.fleet_join.hub?.name || done.fleet_join.hub?.url || ''} as "${done.fleet_join.member?.name ?? ''}"`, ok: true }
-          : { label: `Joining the hub ${done.fleet_join.hub_url || ''} failed`, ok: false, detail: `${done.fleet_join.error || ''} — run ./setup.sh --join <hub-url> <code> on this VM, or use the Proxmox page` })
+          : { label: `Joining the hub ${done.fleet_join.hub_url || ''} failed`, ok: false, detail: `${done.fleet_join.error || ''} — run ./setup.sh --join <hub-url> <code> on this VM, or use the ${pageLabel('proxmox')} page` })
         setSetupResults([...results])
       }
 
@@ -967,18 +976,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   ? <FleetJobsPanel jobs={jobsPoll.data.jobs} onChanged={jobsPoll.refresh} compact title="Each VM gets Docker and DCS, joins this hub and runs its stack" />
                   : <p className="text-xs text-slate-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin text-emerald-400" /> Waiting for the first VM job…</p>)}
                 {/* no automatic redirect while VMs are involved: the builds are followed here, or a refused build stays readable */}
-                <button type="button" onClick={onComplete} className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+                <button type="button" onClick={onComplete} className={`${BTN_SHEET_PRIMARY} w-full`}>
                   {vmQueued > 0 ? 'Open the dashboard — the builds carry on in the background' : 'Open the dashboard'}
                 </button>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
                 <Loader2 size={12} className="animate-spin text-emerald-400" />
-                <span>Entering Dashboard...</span>
+                <span>Entering the dashboard…</span>
               </div>
             )}
             <p className="text-[10px] text-slate-500 mt-6">
-              Tip: Export your settings from Settings to back up this configuration
+              Tip: export your settings from the {pageLabel('settings')} page to back up this setup
             </p>
           </div>
         </div>
@@ -1017,6 +1026,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             </div>
           </div>
 
+          <h1 className="sr-only">Set up DCS Orchestrator</h1>
+
           {/* Step indicator */}
           <StepIndicator current={step} total={5} needsAdmin={needsAdmin} />
 
@@ -1044,7 +1055,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="bg-slate-800/40 border border-white/5 rounded-xl p-5 mb-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Link size={16} className="text-emerald-400" />
-                  <h3 className="text-sm font-semibold text-slate-300">Server Connection</h3>
+                  <h3 className="text-sm font-semibold text-slate-300">Server connection</h3>
                 </div>
                 <p className="text-[11px] text-slate-500 mb-3">
                   Enter the IP or hostname shown by <span className="font-mono text-slate-400">./setup.sh</span> on your server
@@ -1053,28 +1064,29 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <div className="relative flex-1">
                     <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
+                      aria-label="Server address"
                       type="text"
                       value={serverUrlInput}
                       onChange={(e) => { setServerUrlInput(e.target.value); setConnected(false) }}
                       onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
                       placeholder="http://192.168.1.50:9876"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={`${W_INPUT_ICON} font-mono`}
                     />
                   </div>
                   <button
                     type="button"
                     onClick={handleConnect}
                     disabled={connecting || !serverUrlInput.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-30 press shrink-0"
+                    className={`${BTN_SHEET_PRIMARY} shrink-0`}
                   >
                     {connecting ? (
-                      <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={16} className="animate-spin" />
                     ) : connected ? (
-                      <CheckCircle2 size={14} />
+                      <CheckCircle2 size={16} />
                     ) : (
-                      <Wifi size={14} />
+                      <Wifi size={16} />
                     )}
-                    {connecting ? 'Connecting...' : connected ? 'Connected' : 'Connect'}
+                    {connecting ? 'Connecting…' : connected ? 'Connected' : 'Connect'}
                   </button>
                 </div>
               </div>
@@ -1095,9 +1107,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 mb-4 animate-fade-in">
                       <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs font-semibold text-amber-300">Server Already Configured</p>
+                        <p className="text-xs font-semibold text-amber-300">Server already configured</p>
                         <p className="text-[10px] text-amber-400/70 mt-0.5">
-                          This server is already initialized. Use the Login screen to sign in, or Factory Reset from Diagnostics to start fresh.
+                          This server is already set up. Sign in from the sign-in screen, or use Factory reset on the {pageLabel('diagnostics')} page to start fresh.
                         </p>
                       </div>
                     </div>
@@ -1107,7 +1119,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <div className="bg-slate-800/40 border border-white/5 rounded-xl p-5 animate-fade-in">
                     <div className="flex items-center gap-2 mb-4">
                       <Server size={16} className="text-emerald-400" />
-                      <h3 className="text-sm font-semibold text-slate-300">Detected System</h3>
+                      <h3 className="text-sm font-semibold text-slate-300">Detected system</h3>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                       {[
@@ -1117,7 +1129,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         { label: 'Compose', value: defaults.system.compose_version },
                         { label: 'User ID', value: String(defaults.system.puid) },
                         { label: 'Group ID', value: String(defaults.system.pgid) },
-                        { label: 'Docker Status', value: defaults.system.docker_available ? 'Available' : 'Not Available', status: defaults.system.docker_available },
+                        { label: 'Docker status', value: defaults.system.docker_available ? 'Available' : 'Not available', status: defaults.system.docker_available },
                       ].map((item) => (
                         <div key={item.label + (('status' in item) ? '-status' : '')} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.03]">
                           <span className="text-[11px] text-slate-500">{item.label}</span>
@@ -1152,12 +1164,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="flex items-center gap-2 mb-1">
                   <Shield size={16} className="text-emerald-400" />
                   <h2 className="text-lg font-semibold text-slate-100">
-                    {needsAdmin ? 'Create Admin Account' : 'Sign In to Continue'}
+                    {needsAdmin ? 'Create admin account' : 'Sign in to continue'}
                   </h2>
                 </div>
                 <p className="text-xs text-slate-500">
                   {needsAdmin
-                    ? 'This account manages your DCS server'
+                    ? 'This account manages your DCS Orchestrator server'
                     : 'An admin account already exists — sign in to resume setup'}
                 </p>
               </div>
@@ -1176,7 +1188,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setRestoreOpen((v) => !v)}
-                    className="w-full flex items-center gap-2 px-4 py-3 text-left"
+                    aria-expanded={restoreOpen}
+                    className={`w-full flex items-center gap-2 px-4 py-3 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40`}
                   >
                     <LifeBuoy size={14} className="text-rose-300 shrink-0" />
                     <span className="text-xs font-medium text-slate-300 flex-1">Moving from another server? Restore a recovery bundle</span>
@@ -1185,9 +1198,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {restoreOpen && (
                     <div className="px-4 pb-4 space-y-3 animate-fade-in">
                       <p className="text-[10px] text-slate-500 leading-relaxed">
-                        A bundle made on the Backup page brings back the accounts, settings, secrets, stacks, routes, templates and plugins. Afterwards sign in with the account you had before and start the stacks.
+                        A bundle made on the {pageLabel('backup')} page brings back the accounts, settings, secrets, stacks, routes, templates and plugins. Afterwards sign in with the account you had before and start the stacks.
                       </p>
                       <input
+                        aria-label="Recovery bundle file"
                         type="file"
                         accept=".enc,application/octet-stream"
                         onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
@@ -1196,11 +1210,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <div className="relative">
                         <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                         <input
+                          aria-label="Bundle passphrase"
                           type="password"
                           value={restorePass}
                           onChange={(e) => setRestorePass(e.target.value)}
                           placeholder="Bundle passphrase"
-                          className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                          className={W_INPUT_ICON}
                         />
                       </div>
                       {restoreError && <p className="text-[10px] text-rose-400">{restoreError}</p>}
@@ -1211,9 +1226,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           type="button"
                           onClick={handleRestoreBundle}
                           disabled={!restoreFile || restorePass.length < 8 || restoring}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-rose-500/90 text-white hover:bg-rose-400 disabled:opacity-50 transition-all"
+                          className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
                         >
-                          {restoring ? <Loader2 size={13} className="animate-spin" /> : <LifeBuoy size={13} />}
+                          {restoring ? <Loader2 size={14} className="animate-spin" /> : <LifeBuoy size={14} />}
                           {restoring ? 'Restoring…' : 'Restore this bundle'}
                         </button>
                       )}
@@ -1234,7 +1249,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       value={adminUsername}
                       onChange={(e) => setAdminUsername(e.target.value)}
                       placeholder="admin"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_ICON}
                     />
                   </div>
                   {adminUsername && adminUsername.length < 3 && (
@@ -1254,47 +1269,18 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       onChange={(e) => setAdminPassword(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && !needsAdmin && canNext()) handleNext() }}
                       placeholder={needsAdmin ? 'Min 8 chars, uppercase + number' : 'Enter your password'}
-                      className="w-full pl-9 pr-12 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_PW}
                     />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
+                    <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword(!showPassword)} />
                   </div>
                   {/* Strength indicator — only for new account creation */}
-                  {needsAdmin && adminPassword.length > 0 && (
-                    <div className="mt-2">
-                      <div className="flex gap-1 mb-1">
-                        {[1, 2, 3, 4, 5].map((level) => {
-                          const strength = getPasswordStrength(adminPassword)
-                          return (
-                            <div
-                              key={level}
-                              className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
-                                level <= strength.score ? strength.color : 'bg-slate-800'
-                              }`}
-                            />
-                          )
-                        })}
-                      </div>
-                      <p className={`text-[10px] ${
-                        getPasswordStrength(adminPassword).score <= 2 ? 'text-amber-400' : 'text-emerald-400'
-                      }`}>
-                        {getPasswordStrength(adminPassword).label}
-                      </p>
-                    </div>
-                  )}
+                  {needsAdmin && adminPassword.length > 0 && <PasswordStrengthMeter password={adminPassword} className="mt-2" />}
                 </div>
 
                 {/* Confirm Password — only for new account creation */}
                 {needsAdmin && (
                   <div>
-                    <label htmlFor="wizard-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm Password</label>
+                    <label htmlFor="wizard-confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">Confirm password</label>
                     <div className="relative">
                       <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                       <input
@@ -1304,7 +1290,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         onChange={(e) => setAdminConfirm(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter' && canNext()) handleNext() }}
                         placeholder="Repeat password"
-                        className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                        className={W_INPUT_ICON}
                       />
                     </div>
                     {adminConfirm && adminPassword !== adminConfirm && (
@@ -1322,7 +1308,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-1">
                   <Settings size={16} className="text-emerald-400" />
-                  <h2 className="text-lg font-semibold text-slate-100">Server Configuration</h2>
+                  <h2 className="text-lg font-semibold text-slate-100">Server setup</h2>
                 </div>
                 <p className="text-xs text-slate-500">Pre-populated from your system — adjust as needed</p>
               </div>
@@ -1330,25 +1316,25 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="space-y-4">
                 {/* Server Name */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Server Name</label>
+                  <label htmlFor="wiz-server-name" className="block text-xs font-medium text-slate-400 mb-1.5">Server name</label>
                   <div className="relative">
                     <Server size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
+                    <input id="wiz-server-name"
                       type="text"
                       value={envVars.SERVER_NAME || ''}
                       onChange={(e) => setEnvVars({ ...envVars, SERVER_NAME: e.target.value })}
                       placeholder="My Docker Server"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_ICON}
                     />
                   </div>
                 </div>
 
                 {/* Timezone */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Timezone</label>
+                  <label htmlFor="wiz-timezone" className="block text-xs font-medium text-slate-400 mb-1.5">Timezone</label>
                   <div className="relative">
                     <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 z-10" />
-                    <input
+                    <input id="wiz-timezone"
                       type="text"
                       value={tzDropdownOpen ? tzFilter : (envVars.TZ || '')}
                       onChange={(e) => {
@@ -1361,7 +1347,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       }}
                       onBlur={() => setTimeout(() => setTzDropdownOpen(false), 200)}
                       placeholder="Select timezone..."
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_ICON}
                     />
                     {tzDropdownOpen && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-lg shadow-xl max-h-48 overflow-y-auto z-50 scrollbar-thin">
@@ -1388,30 +1374,30 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* Domain */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Domain</label>
+                  <label htmlFor="wiz-domain" className="block text-xs font-medium text-slate-400 mb-1.5">Domain</label>
                   <div className="relative">
                     <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
+                    <input id="wiz-domain"
                       type="text"
                       value={envVars.PROXY_DOMAIN || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PROXY_DOMAIN: e.target.value })}
                       placeholder="example.com"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_ICON}
                     />
                   </div>
                 </div>
 
                 {/* Data Directory */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Data Directory</label>
+                  <label htmlFor="wiz-data-directory" className="block text-xs font-medium text-slate-400 mb-1.5">Data directory</label>
                   <div className="relative">
                     <FolderOpen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
+                    <input id="wiz-data-directory"
                       type="text"
                       value={envVars.APP_DATA_DIR || ''}
                       onChange={(e) => setEnvVars({ ...envVars, APP_DATA_DIR: e.target.value })}
                       placeholder="./App-Data"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT_ICON}
                     />
                   </div>
                 </div>
@@ -1424,7 +1410,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       type="number"
                       value={envVars.PUID || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PUID: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT}
                     />
                   </div>
                   <div>
@@ -1434,27 +1420,27 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       value={envVars.PGID || ''}
                       onChange={(e) => setEnvVars({ ...envVars, PGID: e.target.value })}
                       onKeyDown={(e) => { if (e.key === 'Enter' && canNext()) handleNext() }}
-                      className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                      className={W_INPUT}
                     />
                   </div>
                 </div>
 
                 {/* ── Proxmox (opened by itself on a Proxmox guest) ── */}
-                <div className={`border rounded-xl overflow-hidden ${pveGuest || pveHost ? 'border-amber-500/25' : 'border-white/5'}`}>
+                <div className={`border rounded-xl overflow-hidden ${pveGuest || pveHost ? 'border-violet-500/25' : 'border-white/5'}`}>
                   <button
                     type="button"
                     onClick={() => setShowProxmox(!showProxmox)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <Server size={14} className="text-amber-400 shrink-0" />
+                      <Server size={14} className="text-violet-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-300">Proxmox</span>
                       {pveTest?.ok
                         ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium truncate">{fleetRole === 'hub' ? 'Hub · linked' : 'Linked'}</span>
                         : fleetRole === 'hub'
                           ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">Hub — link Proxmox here</span>
                           : pveGuest || pveHost
-                            ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium truncate">{pveHost ? 'This is the Proxmox host' : 'Proxmox guest detected'}</span>
+                            ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 font-medium truncate">{pveHost ? 'This is the Proxmox host' : 'Proxmox guest detected'}</span>
                             : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Optional</span>}
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showProxmox ? 'rotate-90' : ''}`} />
@@ -1462,49 +1448,49 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showProxmox && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       {fleetRole === 'hub' && (
-                        <p className="text-[11px] text-amber-300 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 flex items-start gap-2">
-                          <Server size={13} className="text-amber-300 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-violet-300 rounded-lg bg-violet-500/10 border border-violet-500/20 px-3 py-2 flex items-start gap-2">
+                          <Server size={13} className="text-violet-300 shrink-0 mt-0.5" />
                           <span><b>This DCS is the hub</b> — chosen in <span className="font-mono">./setup.sh</span>. {pveSaved ? <>The Proxmox link setup made is filled in below{pveTest?.ok ? ' and works' : ''}; each stack can get its own VM in the next step.</> : <>Link Proxmox here and each stack can get its own VM in the next step.</>}</span>
                         </p>
                       )}
                       <p className="text-[11px] text-slate-500">
                         {defaults?.system?.proxmox?.reason ? <>{defaults.system.proxmox.reason}. </> : null}
-                        Link DCS to the Proxmox API and the <span className="text-slate-300">Proxmox</span> page shows every VM and container with start, shutdown, reboot and alerts.
+                        Link DCS to the Proxmox API and the <span className="text-slate-300">{pageLabel('proxmox')}</span> page shows every VM and container with start, shutdown, reboot and alerts.
                         Make a token under <span className="text-slate-300">Datacenter → Permissions → API Tokens</span> with <span className="font-mono text-slate-300">VM.Audit</span>, <span className="font-mono text-slate-300">VM.PowerMgmt</span> and <span className="font-mono text-slate-300">Sys.Audit</span> on <span className="font-mono text-slate-300">/</span> (docs/PROXMOX.md). Leave this empty to do it later.
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2">
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Proxmox URL</label>
-                          <input type="text" value={pveUrl} onChange={(e) => { setPveUrl(e.target.value); setPveTest(null) }} placeholder={defaults?.system?.proxmox?.hint_url || 'https://pve.example.com:8006'}
-                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                          <label htmlFor="wiz-proxmox-url" className="block text-xs font-medium text-slate-400 mb-1.5">Proxmox URL</label>
+                          <input id="wiz-proxmox-url" type="text" value={pveUrl} onChange={(e) => { setPveUrl(e.target.value); setPveTest(null) }} placeholder={defaults?.system?.proxmox?.hint_url || 'https://pve.example.com:8006'}
+                            className={W_INPUT} />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">API token ID</label>
-                          <input type="text" value={pveTokenId} onChange={(e) => { setPveTokenId(e.target.value); setPveTest(null) }} placeholder="dcs@pve!dcs"
-                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                          <label htmlFor="wiz-api-token-id" className="block text-xs font-medium text-slate-400 mb-1.5">API token ID</label>
+                          <input id="wiz-api-token-id" type="text" value={pveTokenId} onChange={(e) => { setPveTokenId(e.target.value); setPveTest(null) }} placeholder="dcs@pve!dcs"
+                            className={W_INPUT} />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Token secret</label>
-                          <input type="password" value={pveSecret} onChange={(e) => { setPveSecret(e.target.value); setPveTest(null) }} placeholder={usingSavedSecret ? 'saved already — leave empty to keep it' : 'shown once when the token is made'} autoComplete="off"
-                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40" />
+                          <label htmlFor="wiz-token-secret" className="block text-xs font-medium text-slate-400 mb-1.5">Token secret</label>
+                          <input id="wiz-token-secret" type="password" value={pveSecret} onChange={(e) => { setPveSecret(e.target.value); setPveTest(null) }} placeholder={usingSavedSecret ? 'saved already — leave empty to keep it' : 'shown once when the token is made'} autoComplete="off"
+                            className={W_INPUT} />
                         </div>
                       </div>
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                          <input type="checkbox" checked={pveVerify} onChange={(e) => { setPveVerify(e.target.checked); setPveTest(null) }} className="accent-amber-500" />
+                          <input type="checkbox" checked={pveVerify} onChange={(e) => { setPveVerify(e.target.checked); setPveTest(null) }} className="accent-emerald-500" />
                           Verify the certificate (off for the self-signed one Proxmox ships with)
                         </label>
                         <button type="button" onClick={() => { void runPveTest() }} disabled={!pveFilled || pveTesting}
-                          className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 disabled:opacity-40 flex items-center gap-1.5">
-                          {pveTesting ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />} Test connection
+                          className={BTN_TOOLBAR_QUIET}>
+                          {pveTesting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />} Test connection
                         </button>
                       </div>
                       {pveTest && <div className={`text-xs ${pveTest.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{pveTest.text}</div>}
                       {pveTest?.ok && (
                         <div className="pt-3 border-t border-white/[0.04] space-y-2">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <p className="text-[11px] text-slate-400">This DCS becomes the <span className="text-slate-300">hub</span>: the DCS in each other VM is a member, shown under its VM on the Proxmox page. Scan the VMs now, link what answers, and get the join code for the rest.</p>
-                            {!showLink && <button type="button" onClick={() => setShowLink(true)} className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25 text-xs font-medium hover:bg-amber-500/25 flex items-center gap-1.5 shrink-0"><Radar size={13} /> Link the VMs</button>}
+                            <p className="text-[11px] text-slate-400">This DCS becomes the <span className="text-slate-300">hub</span>: the DCS in each other VM is a member, shown under its VM on the {pageLabel('proxmox')} page. Scan the VMs now, link what answers, and get the join code for the rest.</p>
+                            {!showLink && <button type="button" onClick={() => setShowLink(true)} className={`${BTN_TOOLBAR_QUIET} shrink-0`}><Radar size={14} /> Link the VMs</button>}
                           </div>
                           {showLink && <FleetLinkPanel pve={{ url: pveUrl.trim(), token_id: pveTokenId.trim(), token_secret: pveSecret, verify_tls: pveVerify }} compact onChanged={() => setLinkedMembers((n) => n + 1)} />}
                         </div>
@@ -1515,14 +1501,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* ── Fleet: this VM runs under a hub (opened by itself when setup.sh saved a join); not on a hub ── */}
                 {(fleetRole !== 'hub' || fleetStatus?.pending_join || joined) && (
-                <div className={`border rounded-xl overflow-hidden ${fleetStatus?.pending_join || joined ? 'border-emerald-500/25' : 'border-white/5'}`}>
+                <div className={`border rounded-xl overflow-hidden ${fleetStatus?.pending_join || joined ? 'border-violet-500/25' : 'border-white/5'}`}>
                   <button
                     type="button"
                     onClick={() => setShowFleet(!showFleet)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <Satellite size={14} className="text-emerald-400 shrink-0" />
+                      <Satellite size={14} className="text-violet-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-300">Join a DCS hub</span>
                       {joined
                         ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium truncate">Joined {joined.hub.name || joined.hub.url}</span>
@@ -1535,8 +1521,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showFleet && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <p className="text-[11px] text-slate-500">
-                        A hub is the DCS linked to Proxmox. As a member, this server keeps its own stacks; the hub's Proxmox page lists them under this VM and can deploy here.
-                        {fleetStatus?.pending_join ? ' setup.sh already holds the join code — the join runs now, on the card.' : ' You need the hub\'s address and a join code from its Proxmox page (Members → Join code).'}
+                        A hub is the DCS linked to Proxmox. As a member, this server keeps its own stacks; the hub's {pageLabel('proxmox')} page lists them under this VM and can deploy here.
+                        {fleetStatus?.pending_join ? ' setup.sh already holds the join code — the join runs now, on the card.' : ` You need the hub's address and a join code from its ${pageLabel('proxmox')} page (Members → Join code).`}
                       </p>
                       <JoinHubPanel pending={fleetStatus?.pending_join ?? null} autoRun={!!fleetStatus?.pending_join} compact onJoined={(r) => { setJoined(r); setFleetStatus((f) => (f ? { ...f, pending_join: null } : f)) }} />
                     </div>
@@ -1549,10 +1535,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setShowNotifications(!showNotifications)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2">
-                      <Bell size={14} className="text-amber-400" />
+                      <Bell size={14} className="text-cyan-400" />
                       <span className="text-xs font-semibold text-slate-300">Notifications</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
                     </div>
@@ -1563,7 +1549,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <p className="text-[11px] text-slate-500">
                         DCS pushes start/stop failures, unhealthy containers, automation runs and deploy events through <span className="text-slate-300">ntfy</span>.
                       </p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Push notifications">
                         {([
                           { id: 'off', label: 'Off', hint: 'No push notifications' },
                           { id: 'self', label: 'Deploy ntfy here', hint: 'Recommended · self-hosted' },
@@ -1572,10 +1558,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <button
                             key={opt.id}
                             type="button"
+                            role="radio"
+                            aria-checked={notifyMode === opt.id}
                             onClick={() => setNotifyMode(opt.id)}
-                            className={`rounded-lg border px-3 py-2.5 text-left transition-all ${notifyMode === opt.id ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/5 bg-slate-800/30 hover:bg-slate-800/50'}`}
+                            className={`${OPTION_CARD} ${notifyMode === opt.id ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-white/5 bg-white/[0.03] hover:bg-white/[0.06]'}`}
                           >
-                            <span className={`block text-xs font-semibold ${notifyMode === opt.id ? 'text-amber-300' : 'text-slate-300'}`}>{opt.label}</span>
+                            <span className={`block text-xs font-semibold ${notifyMode === opt.id ? 'text-emerald-300' : 'text-slate-300'}`}>{opt.label}</span>
                             <span className="block text-[10px] text-slate-500 mt-0.5">{opt.hint}</span>
                           </button>
                         ))}
@@ -1583,24 +1571,24 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       {notifyMode === 'self' && (
                         <div className="grid grid-cols-2 gap-3 animate-fade-in">
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">ntfy port</label>
-                            <input
+                            <label htmlFor="wiz-ntfy-port" className="block text-xs font-medium text-slate-400 mb-1.5">ntfy port</label>
+                            <input id="wiz-ntfy-port"
                               type="text"
                               inputMode="numeric"
                               value={ntfyPort}
                               onChange={(e) => setNtfyPort(e.target.value.replace(/\D/g, ''))}
                               placeholder="8093"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                              className={W_INPUT}
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
-                            <input
+                            <label htmlFor="wiz-topic" className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
+                            <input id="wiz-topic"
                               type="text"
                               value={envVars.NTFY_TOPIC || ''}
                               onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
                               placeholder="dcs"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                              className={W_INPUT}
                             />
                           </div>
                           <p className="col-span-2 text-[10px] text-slate-500">
@@ -1611,7 +1599,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <select aria-label="Deploy into stack"
                               value={notifyStack}
                               onChange={(e) => setNotifyStack(e.target.value)}
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
+                              className={W_INPUT}
                             >
                               {stacks.map((st) => <option key={st.name} value={st.name}>{st.name}</option>)}
                             </select>
@@ -1619,48 +1607,48 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </div>
                       )}
                       <div className="pt-3 mt-1 border-t border-white/[0.03] animate-fade-in">
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Discord webhook <span className="text-slate-600">(optional)</span></label>
-                        <input
+                        <label htmlFor="wiz-discord-webhook-optional" className="block text-xs font-medium text-slate-400 mb-1.5">Discord webhook <span className="text-slate-600">(optional)</span></label>
+                        <input id="wiz-discord-webhook-optional"
                           type="text"
                           value={envVars.DISCORD_WEBHOOK_URL || ''}
                           onChange={(e) => setEnvVars({ ...envVars, DISCORD_WEBHOOK_URL: e.target.value.trim() })}
                           placeholder="https://discord.com/api/webhooks/…"
                           spellCheck={false}
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-amber-500/40 transition-colors"
+                          className={`${W_INPUT} font-mono`}
                         />
                         <p className="text-[10px] text-slate-500 mt-1">Server Settings → Integrations → Webhooks in Discord. Every notification also lands in that channel as a rich embed, whether or not ntfy is on.</p>
                       </div>
                       {notifyMode === 'external' && (
                         <div className="space-y-3 animate-fade-in">
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">ntfy server URL</label>
-                            <input
+                            <label htmlFor="wiz-ntfy-server-url" className="block text-xs font-medium text-slate-400 mb-1.5">ntfy server URL</label>
+                            <input id="wiz-ntfy-server-url"
                               type="text"
                               value={envVars.NTFY_URL || ''}
                               onChange={(e) => setEnvVars({ ...envVars, NTFY_URL: e.target.value })}
                               placeholder="https://ntfy.sh"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                              className={W_INPUT}
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
-                              <input
+                              <label htmlFor="wiz-topic-2" className="block text-xs font-medium text-slate-400 mb-1.5">Topic</label>
+                              <input id="wiz-topic-2"
                                 type="text"
                                 value={envVars.NTFY_TOPIC || ''}
                                 onChange={(e) => setEnvVars({ ...envVars, NTFY_TOPIC: e.target.value })}
                                 placeholder="dcs"
-                                className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                                className={W_INPUT}
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-slate-400 mb-1.5">Access token <span className="text-slate-600">(optional)</span></label>
-                              <input
+                              <label htmlFor="wiz-access-token-optional" className="block text-xs font-medium text-slate-400 mb-1.5">Access token <span className="text-slate-600">(optional)</span></label>
+                              <input id="wiz-access-token-optional"
                                 type="password"
                                 value={envVars.NTFY_TOKEN || ''}
                                 onChange={(e) => setEnvVars({ ...envVars, NTFY_TOKEN: e.target.value })}
                                 placeholder="tk_…"
-                                className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/40"
+                                className={W_INPUT}
                               />
                             </div>
                           </div>
@@ -1681,11 +1669,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setShowStartup(!showStartup)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2">
                       <Zap size={14} className="text-cyan-400" />
-                      <span className="text-xs font-semibold text-slate-300">Startup & Health</span>
+                      <span className="text-xs font-semibold text-slate-300">Startup and health</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showStartup ? 'rotate-90' : ''}`} />
@@ -1694,11 +1682,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       {/* Log Level */}
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Log Level</label>
-                        <select aria-label="Log Level"
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Log level</label>
+                        <select aria-label="Log level"
                           value={envVars.LOG_LEVEL || 'INFO'}
                           onChange={(e) => setEnvVars({ ...envVars, LOG_LEVEL: e.target.value })}
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         >
                           <option value="ERROR">ERROR</option>
                           <option value="WARNING">WARNING</option>
@@ -1709,7 +1697,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                       {/* Toggle: Continue on failure */}
                       <EnvToggle
-                        label="Continue on Failure"
+                        label="Continue on failure"
                         helpText="Continue starting stacks if one fails"
                         envKey="CONTINUE_ON_FAILURE"
                         envVars={envVars}
@@ -1718,7 +1706,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                       {/* Toggle: Skip health check wait */}
                       <EnvToggle
-                        label="Skip Health Check Wait"
+                        label="Skip health check wait"
                         helpText="Skip waiting for health checks during startup"
                         envKey="SKIP_HEALTHCHECK_WAIT"
                         envVars={envVars}
@@ -1727,7 +1715,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                       {/* Toggle: Post-startup health check */}
                       <EnvToggle
-                        label="Post-Startup Health Check"
+                        label="Post-startup health check"
                         helpText="Run health check after all stacks start"
                         envKey="ENABLE_POST_STARTUP_HEALTH_CHECK"
                         envVars={envVars}
@@ -1737,14 +1725,14 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       {/* Number: Service start delay */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Start Delay (seconds)</label>
-                          <input aria-label="Start Delay (seconds)"
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Start delay (seconds)</label>
+                          <input aria-label="Start delay (seconds)"
                             type="number"
                             min="0"
                             max="60"
                             value={envVars.SERVICE_START_DELAY || '5'}
                             onChange={(e) => setEnvVars({ ...envVars, SERVICE_START_DELAY: e.target.value })}
-                            className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                            className={W_INPUT}
                           />
                         </div>
                       </div>
@@ -1757,10 +1745,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setShowBackup(!showBackup)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2">
-                      <HardDrive size={14} className="text-violet-400" />
+                      <HardDrive size={14} className="text-cyan-400" />
                       <span className="text-xs font-semibold text-slate-300">Backup</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
                     </div>
@@ -1769,23 +1757,23 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   {showBackup && (
                     <div className="px-4 py-4 space-y-3 border-t border-white/[0.03] animate-fade-in">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Backup Source Directory</label>
-                        <input
+                        <label htmlFor="wiz-backup-source-directory" className="block text-xs font-medium text-slate-400 mb-1.5">Backup source directory</label>
+                        <input id="wiz-backup-source-directory"
                           type="text"
                           value={envVars.BACKUP_SOURCE_DIR || ''}
                           onChange={(e) => setEnvVars({ ...envVars, BACKUP_SOURCE_DIR: e.target.value })}
                           placeholder="/path/to/source"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Backup Destination Directory</label>
-                        <input
+                        <label htmlFor="wiz-backup-destination-directory" className="block text-xs font-medium text-slate-400 mb-1.5">Backup destination directory</label>
+                        <input id="wiz-backup-destination-directory"
                           type="text"
                           value={envVars.BACKUP_DEST_DIR || ''}
                           onChange={(e) => setEnvVars({ ...envVars, BACKUP_DEST_DIR: e.target.value })}
                           placeholder="/path/to/destination"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         />
                       </div>
                       <p className="text-[10px] text-slate-500">Configure after setup if unsure</p>
@@ -1798,11 +1786,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setShowTraefik(!showTraefik)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2">
                       <Shield size={14} className="text-emerald-400" />
-                      <span className="text-xs font-semibold text-slate-300">HTTPS & Reverse Proxy</span>
+                      <span className="text-xs font-semibold text-slate-300">HTTPS and reverse proxy</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">Recommended</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1843,7 +1831,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <select aria-label="Deploy into stack"
                               value={proxyStack}
                               onChange={(e) => setProxyStack(e.target.value)}
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40"
+                              className={W_INPUT}
                             >
                               {stacks.map((st) => <option key={st.name} value={st.name}>{st.name}</option>)}
                             </select>
@@ -1852,28 +1840,28 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                           {/* Email for Let's Encrypt */}
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                              Let's Encrypt Email <span className="text-rose-400">*</span>
+                            <label htmlFor="wiz-lets-encrypt-email" className="block text-xs font-medium text-slate-400 mb-1.5">
+                              Let's Encrypt email <span className="text-rose-400" aria-hidden>*</span>
                             </label>
-                            <input
+                            <input id="wiz-lets-encrypt-email"
                               type="email"
                               value={traefikEmail}
                               onChange={(e) => setTraefikEmail(e.target.value)}
                               placeholder="admin@example.com"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                              className={W_INPUT}
                             />
                             <p className="text-[10px] text-slate-500 mt-1">Used for certificate expiry notifications</p>
                           </div>
 
                           {/* Trusted LAN */}
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Trusted LAN Subnet</label>
-                            <input
+                            <label htmlFor="wiz-trusted-lan-subnet" className="block text-xs font-medium text-slate-400 mb-1.5">Trusted LAN subnet</label>
+                            <input id="wiz-trusted-lan-subnet"
                               type="text"
                               value={traefikTrustedLan}
                               onChange={(e) => setTraefikTrustedLan(e.target.value)}
                               placeholder="192.168.1.0/24"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                              className={`${W_INPUT} font-mono`}
                             />
                           </div>
 
@@ -1895,25 +1883,25 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                           {/* Cloudflare DNS (optional) */}
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                              Cloudflare DNS API Token <span className="text-[9px] text-slate-500">(optional)</span>
+                            <label htmlFor="wiz-cloudflare-dns-api-token-optional" className="block text-xs font-medium text-slate-400 mb-1.5">
+                              Cloudflare DNS API token <span className="text-[9px] text-slate-500">(optional)</span>
                             </label>
-                            <input
+                            <input id="wiz-cloudflare-dns-api-token-optional"
                               type="password"
                               value={cfDnsToken}
                               onChange={(e) => setCfDnsToken(e.target.value)}
                               placeholder="Leave empty for HTTP challenge"
-                              className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                              className={`${W_INPUT} font-mono`}
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">Needed for the DNS challenge (wildcard certificates), dynamic DNS and the DNS &amp; Routes page. Stored encrypted as the secret <span className="font-mono text-slate-400">CF_DNS_API_TOKEN</span>; leave empty to use the HTTP-01 challenge.</p>
+                            <p className="text-[10px] text-slate-500 mt-1">Needed for the DNS challenge (wildcard certificates), dynamic DNS and the {pageLabel('dns')} page. Stored encrypted as the secret <span className="font-mono text-slate-400">CF_DNS_API_TOKEN</span>; leave empty to use the HTTP-01 challenge.</p>
                           </div>
 
                           {/* Auto-routing info */}
                           {envVars.PROXY_DOMAIN && envVars.PROXY_DOMAIN !== 'example.com' && (
                             <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
-                              <p className="text-[11px] font-medium text-emerald-400 mb-1">Auto-Routing Enabled</p>
+                              <p className="text-[11px] font-medium text-emerald-400 mb-1">Auto-routing enabled</p>
                               <p className="text-[10px] text-slate-400 leading-relaxed">
-                                Services deployed from the Templates page will automatically get HTTPS routes at <span className="font-mono text-emerald-400/80">servicename.{envVars.PROXY_DOMAIN}</span>. You can edit routes before deploying or modify them later in the Traefik config files.
+                                Services deployed from the {pageLabel('templates')} page will automatically get HTTPS routes at <span className="font-mono text-emerald-400/80">servicename.{envVars.PROXY_DOMAIN}</span>. You can edit routes before deploying or modify them later in the Traefik config files.
                               </p>
                             </div>
                           )}
@@ -1932,20 +1920,20 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               {enableDDNS && (
                                 <div className="animate-fade-in space-y-3">
                                   <div>
-                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Subdomains to Monitor</label>
-                                    <input
+                                    <label htmlFor="wiz-subdomains-to-monitor" className="block text-xs font-medium text-slate-400 mb-1.5">Subdomains to monitor</label>
+                                    <input id="wiz-subdomains-to-monitor"
                                       type="text"
                                       value={ddnsSubdomains}
                                       onChange={(e) => setDdnsSubdomains(e.target.value)}
                                       placeholder="@,www,traefik,ui"
-                                      className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                                      className={`${W_INPUT} font-mono`}
                                     />
                                     <p className="text-[10px] text-slate-500 mt-1">Use @ for root domain. Comma-separated.</p>
                                   </div>
 
                                   <div>
-                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Check Interval</label>
-                                    <div className="flex flex-wrap gap-2">
+                                    <span className="block text-xs font-medium text-slate-400 mb-1.5">Check interval</span>
+                                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Check interval">
                                       {[
                                         { value: 60, label: '1 min' },
                                         { value: 300, label: '5 min' },
@@ -1956,12 +1944,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                                         <button
                                           key={opt.value}
                                           type="button"
+                                          role="radio"
+                                          aria-checked={ddnsInterval === opt.value}
                                           onClick={() => setDdnsInterval(opt.value)}
-                                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                            ddnsInterval === opt.value
-                                              ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                                              : 'bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/15'
-                                          }`}
+                                          className={`${CHOICE} ${ddnsInterval === opt.value ? CHOICE_ON : CHOICE_OFF}`}
                                         >
                                           {opt.label}
                                         </button>
@@ -1981,11 +1967,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* ── Authelia SSO (requires Traefik) ── */}
                 {enableTraefik && (
-                  <div className={`border rounded-xl overflow-hidden transition-all ${enableAuthelia ? 'border-violet-500/20' : 'border-white/5'}`}>
+                  <div className={`border rounded-xl overflow-hidden transition-all ${enableAuthelia ? 'border-emerald-500/20' : 'border-white/5'}`}>
                     <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02]">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center">
-                          <Shield size={18} className="text-violet-400" />
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                          <Shield size={18} className="text-emerald-400" />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-200">Authelia SSO</p>
@@ -1993,61 +1979,61 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {enableAuthelia && <span className="text-[9px] text-violet-400 font-medium">Enabled</span>}
-                        <Switch color="violet" aria-label="Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} />
+                        {enableAuthelia && <span className="text-[9px] text-emerald-400 font-medium">Enabled</span>}
+                        <Switch aria-label="Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} />
                       </div>
                     </div>
                     {enableAuthelia && (
                       <div className="px-4 py-4 space-y-3 border-t border-white/5 animate-fade-in">
                         <p className="text-[11px] text-slate-500">
-                          Authelia will protect your services with a login portal at <span className="text-violet-400 font-medium">auth.{envVars.PROXY_DOMAIN || 'yourdomain.com'}</span>
+                          Authelia will protect your services with a login portal at <span className="text-cyan-400 font-medium">auth.{envVars.PROXY_DOMAIN || 'yourdomain.com'}</span>
                         </p>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-[10px] text-slate-500 mb-1 font-medium">Admin Username</label>
-                            <input
+                            <label htmlFor="wiz-admin-username" className="block text-[10px] text-slate-500 mb-1 font-medium">Admin username</label>
+                            <input id="wiz-admin-username"
                               type="text"
                               value={autheliaUser}
                               onChange={(e) => setAutheliaUser(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
                               placeholder="admin"
-                              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                              className={W_INPUT}
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-slate-500 mb-1 font-medium">Display Name</label>
-                            <input
+                            <label htmlFor="wiz-display-name" className="block text-[10px] text-slate-500 mb-1 font-medium">Display name</label>
+                            <input id="wiz-display-name"
                               type="text"
                               value={autheliaDisplay}
                               onChange={(e) => setAutheliaDisplay(e.target.value)}
                               placeholder="John Doe"
-                              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                              className={W_INPUT}
                             />
                           </div>
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-1 font-medium">Email</label>
-                          <input
+                          <label htmlFor="wiz-email" className="block text-[10px] text-slate-500 mb-1 font-medium">Email</label>
+                          <input id="wiz-email"
                             type="email"
                             value={autheliaEmail}
                             onChange={(e) => setAutheliaEmail(e.target.value)}
                             placeholder={`admin@${envVars.PROXY_DOMAIN || 'yourdomain.com'}`}
-                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                            className={W_INPUT}
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-1 font-medium">Password</label>
-                          <input
+                          <label htmlFor="wiz-password" className="block text-[10px] text-slate-500 mb-1 font-medium">Password</label>
+                          <input id="wiz-password"
                             type="password"
                             value={autheliaPassword}
                             onChange={(e) => setAutheliaPassword(e.target.value)}
                             placeholder="Minimum 8 characters"
-                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500/40"
+                            className={W_INPUT}
                           />
                         </div>
-                        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/10">
-                          <Shield size={12} className="text-violet-400 mt-0.5 shrink-0" />
+                        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
+                          <Shield size={12} className="text-cyan-400 mt-0.5 shrink-0" />
                           <p className="text-[10px] text-slate-500 leading-relaxed">
-                            Authelia uses <span className="text-violet-400">Redis</span> for sessions and <span className="text-violet-400">SQLite</span> for storage.
+                            Authelia uses <span className="text-cyan-400">Redis</span> for sessions and <span className="text-cyan-400">SQLite</span> for storage.
                             Secrets are auto-generated. Password is hashed with Argon2id.
                             Every app you deploy afterwards sits behind the portal; apps that bring their own clients (Plex, Nextcloud, the *arr apps…) stay open unless you protect them in the deploy sheet.
                           </p>
@@ -2059,11 +2045,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* ── CrowdSec (requires Traefik) ── */}
                 {enableTraefik && (
-                  <div className={`border rounded-xl overflow-hidden transition-all ${enableCrowdsec ? 'border-rose-500/20' : 'border-white/5'}`}>
+                  <div className={`border rounded-xl overflow-hidden transition-all ${enableCrowdsec ? 'border-emerald-500/20' : 'border-white/5'}`}>
                     <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02]">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center">
-                          <Shield size={18} className="text-rose-400" />
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                          <Shield size={18} className="text-emerald-400" />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-200">CrowdSec intrusion detection</p>
@@ -2071,8 +2057,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {enableCrowdsec && <span className="text-[9px] text-rose-400 font-medium">Enabled</span>}
-                        <Switch color="rose" aria-label="CrowdSec intrusion detection" checked={enableCrowdsec} onChange={() => setEnableCrowdsec(!enableCrowdsec)} />
+                        {enableCrowdsec && <span className="text-[9px] text-emerald-400 font-medium">Enabled</span>}
+                        <Switch aria-label="CrowdSec intrusion detection" checked={enableCrowdsec} onChange={() => setEnableCrowdsec(!enableCrowdsec)} />
                       </div>
                     </div>
                     {enableCrowdsec && (
@@ -2082,7 +2068,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             <p className="text-xs font-medium text-slate-300">Block at the proxy (Traefik bouncer)</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Banned IPs are refused by Traefik before they reach any app. No root needed.</p>
                           </div>
-                          <Switch size="sm" color="rose" aria-label="Block at the proxy (Traefik bouncer)" checked={crowdsecBouncer} onChange={() => setCrowdsecBouncer(!crowdsecBouncer)} className="shrink-0" />
+                          <Switch size="sm" aria-label="Block at the proxy (Traefik bouncer)" checked={crowdsecBouncer} onChange={() => setCrowdsecBouncer(!crowdsecBouncer)} className="shrink-0" />
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
                           {(envVars.DISCORD_WEBHOOK_URL || '').trim()
@@ -2100,11 +2086,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                   <button
                     type="button"
                     onClick={() => setShowPreferences(!showPreferences)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                    className={SECTION_BTN}
                   >
                     <div className="flex items-center gap-2">
                       <Palette size={14} className="text-cyan-400" />
-                      <span className="text-xs font-semibold text-slate-300">Dashboard Preferences</span>
+                      <span className="text-xs font-semibold text-slate-300">Dashboard preferences</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 font-medium">Advanced</span>
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 ${showPreferences ? 'rotate-90' : ''}`} />
@@ -2116,7 +2102,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         <select aria-label="Mode"
                           value={prefTheme}
                           onChange={(e) => setPrefTheme(e.target.value as 'dark' | 'light' | 'system')}
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         >
                           <option value="system">System (follows this device)</option>
                           <option value="dark">Dark</option>
@@ -2124,11 +2110,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Session Duration</label>
-                        <select aria-label="Session Duration"
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Session duration</label>
+                        <select aria-label="Session duration"
                           value={prefSessionMinutes}
                           onChange={(e) => setPrefSessionMinutes(Number(e.target.value))}
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         >
                           <option value={60}>1 hour</option>
                           <option value={240}>4 hours</option>
@@ -2138,11 +2124,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-Lock</label>
-                        <select aria-label="Auto-Lock"
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-lock</label>
+                        <select aria-label="Auto-lock"
                           value={prefAutoLock}
                           onChange={(e) => setPrefAutoLock(Number(e.target.value))}
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         >
                           <option value={0}>Off</option>
                           <option value={5}>5 minutes</option>
@@ -2152,26 +2138,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">App Name</label>
-                        <input
+                        <label htmlFor="wiz-app-name" className="block text-xs font-medium text-slate-400 mb-1.5">App name</label>
+                        <input id="wiz-app-name"
                           type="text"
                           value={prefAppName}
                           onChange={(e) => setPrefAppName(e.target.value)}
                           placeholder="DCS Manager"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">App Subtitle</label>
-                        <input
+                        <label htmlFor="wiz-app-subtitle" className="block text-xs font-medium text-slate-400 mb-1.5">App subtitle</label>
+                        <input id="wiz-app-subtitle"
                           type="text"
                           value={prefAppSubtitle}
                           onChange={(e) => setPrefAppSubtitle(e.target.value)}
                           placeholder="DCS Orchestrator"
-                          className="w-full px-3 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+                          className={W_INPUT}
                         />
                       </div>
-                      <p className="text-[10px] text-slate-500">These can be changed later in Settings</p>
+                      <p className="text-[10px] text-slate-500">These can be changed later on the {pageLabel('settings')} page</p>
                     </div>
                   )}
                 </div>
@@ -2185,13 +2171,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-1">
                   <Layers size={16} className="text-emerald-400" />
-                  <h2 className="text-lg font-semibold text-slate-100">Stack Categories</h2>
+                  <h2 className="text-lg font-semibold text-slate-100">Stack categories</h2>
                 </div>
                 <p className="text-xs text-slate-500">Define your stack categories, startup order, and display labels{pveTest?.ok ? ' — and which ones get their own VM' : ''}</p>
               </div>
               {pveTest?.ok && (
-                <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3 space-y-2">
-                  <p className="text-[11px] text-slate-300 flex items-start gap-2"><Server size={13} className="text-amber-400 shrink-0 mt-0.5" /><span>Proxmox is linked, so <b>a stack can be a VM</b>: the hub builds it (Debian cloud image, Docker, DCS), the VM joins this hub and runs that one stack. The dashboard here stays the only one; <span className="font-mono">core-infrastructure</span> stays on the hub. Toggle each stack, size the VMs, and check the network below.</span></p>
+                <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-2">
+                  <p className="text-[11px] text-slate-300 flex items-start gap-2"><Server size={13} className="text-violet-400 shrink-0 mt-0.5" /><span>Proxmox is linked, so <b>a stack can be a VM</b>: the hub builds it (Debian cloud image, Docker, DCS), the VM joins this hub and runs that one stack. The dashboard here stays the only one; <span className="font-mono">core-infrastructure</span> stays on the hub. Toggle each stack, size the VMs, and check the network below.</span></p>
                   <CapabilityNote caps={caps} />
                   {vmPlan.length > 0 && <HubFirewallNote fw={provDefaults?.hub_firewall} />}
                   {(() => {
@@ -2201,7 +2187,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.06] p-3 text-[11px] text-rose-300 flex items-start gap-2">
                         <AlertTriangle size={13} className="text-rose-300 shrink-0 mt-0.5" />
                         <span>Proxmox already has a guest named like {clashes.length === 1 ? 'this stack' : 'these stacks'}: {clashes.map((st) => <span key={st.name} className="font-mono">{st.name} <span className="text-rose-300">(VM {clashOf(st.name)?.vmid})</span>{' '}</span>)}
-                          — {clashes.length === 1 ? 'it is' : 'they are'} left out of the build, the others get their VMs. Delete or rename the old guest{clashes.length === 1 ? '' : 's'} on Proxmox to build {clashes.length === 1 ? 'it' : 'them'}, or link {clashes.length === 1 ? 'it' : 'them'} from the Proxmox page.</span>
+                          — {clashes.length === 1 ? 'it is' : 'they are'} left out of the build, the others get their VMs. Delete or rename the old guest{clashes.length === 1 ? '' : 's'} on Proxmox to build {clashes.length === 1 ? 'it' : 'them'}, or link {clashes.length === 1 ? 'it' : 'them'} from the {pageLabel('proxmox')} page.</span>
                       </div>
                     )
                   })()}
@@ -2234,7 +2220,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           }}
                           onBlur={() => commitEdit(index)}
                           autoFocus
-                          className="flex-1 min-w-[8rem] px-2 py-1 bg-slate-700/50 border border-emerald-500/30 rounded text-xs font-mono text-slate-200 focus:outline-none"
+                          className={`flex-1 min-w-[8rem] px-2 ${W_FIELD} !py-1 !text-xs font-mono`}
                         />
                       ) : (
                         <span className="flex-1 min-w-[8rem] text-xs font-mono text-slate-300 truncate" title={stack.name}>
@@ -2244,7 +2230,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                       {/* Badges */}
                       {stack.label && labelEditIndex !== index && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-violet-500/15 text-violet-400 shrink-0">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white/10 text-slate-300 shrink-0">
                           {stack.label}
                         </span>
                       )}
@@ -2262,79 +2248,91 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       {/* Where the stack runs: on the hub, or in its own VM */}
                       {vmReady && (
                         <div className="flex items-center gap-1 shrink-0">
-                          <div className="flex rounded-md bg-white/5 border border-white/10 overflow-hidden">
+                          <div className="flex rounded-md bg-white/5 border border-white/10 overflow-hidden" role="radiogroup" aria-label={`Where ${stack.name} runs`}>
                             {(['hub', 'vm'] as const).map((p) => (
-                              <button key={p} type="button" onClick={() => setPlacements((m) => ({ ...m, [stack.name]: p }))}
+                              <button key={p} type="button" role="radio" aria-checked={placementOf(stack.name) === p} onClick={() => setPlacements((m) => ({ ...m, [stack.name]: p }))}
                                 disabled={p === 'vm' && !!hubOnly[stack.name]} title={p === 'vm' && hubOnly[stack.name] ? `Stays on the hub — ${hubOnly[stack.name]}` : undefined}
-                                className={`h-6 px-2 text-[10px] font-semibold disabled:opacity-30 disabled:cursor-not-allowed ${placementOf(stack.name) === p ? (p === 'vm' ? 'bg-amber-500/25 text-amber-200' : 'bg-emerald-500/20 text-emerald-300') : 'text-slate-500 hover:text-slate-300'}`}>
+                                className={`h-8 sm:h-6 px-3 sm:px-2 text-[11px] sm:text-[10px] font-semibold disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40 ${placementOf(stack.name) === p ? (p === 'vm' ? 'bg-violet-500/25 text-violet-200' : 'bg-emerald-500/20 text-emerald-300') : 'text-slate-500 hover:text-slate-300'}`}>
                                 {p === 'vm' ? 'VM' : 'Hub'}
                               </button>
                             ))}
                           </div>
+                          <div className="flex items-center gap-1 sm:min-w-[8.5rem]">
                           {hubOnly[stack.name] && <span className="text-slate-500" title={`Stays on the hub — ${hubOnly[stack.name]}`}><Lock size={10} /></span>}
                           {placementOf(stack.name) === 'vm' && clashOf(stack.name) && (
                             <span className="h-6 px-2 rounded-md border border-rose-500/30 bg-rose-500/10 text-[10px] font-medium text-rose-300 flex items-center gap-1"
-                              title={`A guest named ${stack.name} already exists on Proxmox (VM ${clashOf(stack.name)?.vmid}, ${clashOf(stack.name)?.status || 'stopped'}). This stack is left out of the build: delete or rename that guest on Proxmox, or link it from the Proxmox page.`}>
+                              title={`A guest named ${stack.name} already exists on Proxmox (VM ${clashOf(stack.name)?.vmid}, ${clashOf(stack.name)?.status || 'stopped'}). This stack is left out of the build: delete or rename that guest on Proxmox, or link it from the ${pageLabel('proxmox')} page.`}>
                               <AlertTriangle size={10} /> VM {clashOf(stack.name)?.vmid} exists
                             </span>
                           )}
                           {placementOf(stack.name) === 'vm' && !clashOf(stack.name) && (
                             <button type="button" onClick={() => setSizeOpen((o) => (o === stack.name ? null : stack.name))} aria-expanded={sizeOpen === stack.name}
                               title="The VM's size"
-                              className={`h-6 px-2 rounded-md border text-[10px] font-medium flex items-center gap-1.5 tabular-nums transition-colors ${sizeOpen === stack.name ? 'bg-amber-500/15 border-amber-500/35 text-amber-100' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}>
-                              <Cpu size={10} className="text-amber-300" />
+                              className={`h-8 sm:h-6 px-2 rounded-md border text-[10px] font-medium flex items-center gap-1.5 tabular-nums transition-colors ${FOCUS_RING} ${sizeOpen === stack.name ? 'bg-violet-500/15 border-violet-500/35 text-violet-100' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}>
+                              <Cpu size={10} className="text-violet-300" />
                               {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB
                               <ChevronDown size={10} className={`transition-transform ${sizeOpen === stack.name ? 'rotate-180' : ''}`} />
                             </button>
                           )}
+                          </div>
                         </div>
                       )}
 
                       {/* Actions */}
-                      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => labelEditIndex === index ? commitLabelEdit(index) : startLabelEdit(index)}
-                          className={`p-1 rounded hover:bg-white/5 transition-colors ${labelEditIndex === index ? 'text-violet-400' : 'text-slate-500 hover:text-slate-300'}`}
-                          title={stack.label ? 'Edit label' : 'Add label'}
-                        >
-                          <Palette size={11} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => startEdit(index)}
-                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300"
-                          title="Rename"
-                        >
-                          <Pencil size={11} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveStack(index, 'up')}
-                          disabled={index === 0}
-                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 disabled:opacity-20"
-                          title="Move up"
-                        >
-                          <ChevronUp size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveStack(index, 'down')}
-                          disabled={index === stacks.length - 1}
-                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 disabled:opacity-20"
-                          title="Move down"
-                        >
-                          <ChevronDown size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteStack(index)}
-                          disabled={stacks.length <= 1}
-                          className="p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 disabled:opacity-20"
-                          title="Remove"
-                        >
-                          <Trash2 size={11} />
-                        </button>
+                      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity shrink-0">
+                        <Hint label={stack.label ? 'Edit label' : 'Add label'}>
+                          <button
+                            type="button"
+                            onClick={() => labelEditIndex === index ? commitLabelEdit(index) : startLabelEdit(index)}
+                            aria-label={`${stack.label ? 'Edit' : 'Add'} the label of ${stack.name}`}
+                            className={`${BTN_ICON_SM} ${labelEditIndex === index ? 'text-emerald-400 hover:bg-white/10' : TONE_GHOST}`}
+                          >
+                            <Palette size={12} />
+                          </button>
+                        </Hint>
+                        <Hint label="Rename">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(index)}
+                            aria-label={`Rename ${stack.name}`}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        </Hint>
+                        <Hint label="Move up">
+                          <button
+                            type="button"
+                            onClick={() => moveStack(index, 'up')}
+                            disabled={index === 0}
+                            aria-label={`Move ${stack.name} up`}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST} disabled:opacity-20`}
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                        </Hint>
+                        <Hint label="Move down">
+                          <button
+                            type="button"
+                            onClick={() => moveStack(index, 'down')}
+                            disabled={index === stacks.length - 1}
+                            aria-label={`Move ${stack.name} down`}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST} disabled:opacity-20`}
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                        </Hint>
+                        <Hint label="Remove">
+                          <button
+                            type="button"
+                            onClick={() => deleteStack(index)}
+                            disabled={stacks.length <= 1}
+                            aria-label={`Remove ${stack.name}`}
+                            className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER} disabled:opacity-20`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </Hint>
                       </div>
                     </div>
 
@@ -2360,12 +2358,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           }}
                           autoFocus
                           placeholder={formatStackName(stack.name)}
-                          className="flex-1 px-2 py-1 bg-slate-700/50 border border-violet-500/30 rounded text-xs text-slate-200 placeholder-slate-600 focus:outline-none"
+                          className={`flex-1 min-w-0 px-2 ${W_FIELD} !py-1 !text-xs`}
                         />
                         <button
                           type="button"
                           onClick={() => commitLabelEdit(index)}
-                          className="px-2 py-1 rounded text-[10px] font-medium bg-violet-600/20 border border-violet-500/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
+                          className={`${BTN_CARD} ${TONE_OK}`}
                         >
                           Save
                         </button>
@@ -2379,7 +2377,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               setLabelEditIndex(null)
                               setLabelEditValue('')
                             }}
-                            className="px-2 py-1 rounded text-[10px] font-medium text-slate-500 hover:text-rose-400 transition-colors"
+                            className={`${BTN_CARD} text-slate-400 hover:text-rose-300 hover:bg-rose-500/10`}
                           >
                             Clear
                           </button>
@@ -2393,20 +2391,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               {/* Add stack */}
               <div className="flex items-center gap-2">
                 <input
+                  aria-label="New stack name"
                   type="text"
                   value={newStackName}
                   onChange={(e) => setNewStackName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                   onKeyDown={(e) => e.key === 'Enter' && addStack()}
                   placeholder="new-stack-name"
-                  className="flex-1 px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50"
+                  className={`flex-1 min-w-0 px-3 ${W_FIELD} !py-2 font-mono`}
                 />
                 <button
                   type="button"
                   onClick={addStack}
                   disabled={!newStackName.trim()}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/20 text-xs font-medium text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-30 transition-colors"
+                  className={`${BTN_TOOLBAR} ${TONE_OK} shrink-0`}
                 >
-                  <Plus size={12} />
+                  <Plus size={14} />
                   Add
                 </button>
               </div>
@@ -2416,12 +2415,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               )}
 
               {vmReady && vmSettings && vmPlan.length > 0 && (
-                <div className="mt-4 border border-amber-500/20 rounded-xl overflow-hidden">
-                  <button type="button" onClick={() => setShowVmSettings(!showVmSettings)} className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors">
+                <div className="mt-4 border border-violet-500/20 rounded-xl overflow-hidden">
+                  <button type="button" onClick={() => setShowVmSettings(!showVmSettings)} className={SECTION_BTN}>
                     <div className="flex items-center gap-2 min-w-0">
-                      <Server size={14} className="text-amber-400 shrink-0" />
+                      <Server size={14} className="text-violet-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-300">VM settings</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-mono truncate">{osLabel(vmSettings, provDefaults)} · {vmSettings.node} · {vmSettings.storage} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 font-mono truncate">{osLabel(vmSettings, provDefaults)} · {vmSettings.node} · {vmSettings.storage} · {vmSettings.bridge} · from {vmSettings.ip_start}/{vmSettings.cidr} via {vmSettings.gateway}</span>
                     </div>
                     <ChevronRight size={14} className={`text-slate-500 transition-transform duration-200 shrink-0 ${showVmSettings ? 'rotate-90' : ''}`} />
                   </button>
@@ -2441,7 +2440,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             <div className="animate-fade-in">
               <div className="text-center mb-6">
                 <Sparkles size={20} className="text-emerald-400 mx-auto mb-2" />
-                <h2 className="text-lg font-semibold text-slate-100">Review Configuration</h2>
+                <h2 className="text-lg font-semibold text-slate-100">Review configuration</h2>
                 <p className="text-xs text-slate-500 mt-1">Confirm your settings before completing setup</p>
               </div>
 
@@ -2450,7 +2449,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Shield size={14} className="text-emerald-400" />
-                    <h3 className="text-xs font-semibold text-slate-300">Admin Account</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">Admin account</h3>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">
@@ -2467,7 +2466,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Settings size={14} className="text-emerald-400" />
-                    <h3 className="text-xs font-semibold text-slate-300">Server Identity</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">Server identity</h3>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['SERVER_NAME', 'TZ', 'PROXY_DOMAIN'].map((key) => (
@@ -2482,7 +2481,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <FolderOpen size={14} className="text-emerald-400" />
-                    <h3 className="text-xs font-semibold text-slate-300">Storage & Permissions</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">Storage and permissions</h3>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {['APP_DATA_DIR', 'PUID', 'PGID'].map((key) => (
@@ -2498,7 +2497,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 {envVars.NTFY_URL && (
                   <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Bell size={14} className="text-amber-400" />
+                      <Bell size={14} className="text-cyan-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Notifications</h3>
                     </div>
                     <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
@@ -2521,7 +2520,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                     <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <Zap size={14} className="text-cyan-400" />
-                        <h3 className="text-xs font-semibold text-slate-300">Startup & Health</h3>
+                        <h3 className="text-xs font-semibold text-slate-300">Startup and health</h3>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {changed.map(([key]) => (
@@ -2538,7 +2537,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 {(envVars.BACKUP_SOURCE_DIR || envVars.BACKUP_DEST_DIR) && (
                   <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <HardDrive size={14} className="text-violet-400" />
+                      <HardDrive size={14} className="text-cyan-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Backup</h3>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -2574,13 +2573,13 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       )}
                       {prefAutoLock !== 0 && (
                         <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
-                          <span className="text-[10px] text-slate-500 shrink-0">Auto-Lock</span>
+                          <span className="text-[10px] text-slate-500 shrink-0">Auto-lock</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAutoLock}min</span>
                         </div>
                       )}
                       {prefAppName !== 'DCS Manager' && (
                         <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
-                          <span className="text-[10px] text-slate-500 shrink-0">App Name</span>
+                          <span className="text-[10px] text-slate-500 shrink-0">App name</span>
                           <span className="text-[10px] font-mono text-slate-300 truncate ml-2">{prefAppName}</span>
                         </div>
                       )}
@@ -2595,16 +2594,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 )}
 
                 {/* Proxmox */}
-                <div className={`bg-slate-800/40 border rounded-xl p-4 ${pveFilled ? 'border-amber-500/20' : 'border-white/5'}`}>
+                <div className={`bg-slate-800/40 border rounded-xl p-4 ${pveFilled ? 'border-violet-500/20' : 'border-white/5'}`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <Server size={14} className={pveFilled ? 'text-amber-400' : 'text-slate-500'} />
+                    <Server size={14} className={pveFilled ? 'text-violet-400' : 'text-slate-500'} />
                     <h3 className="text-xs font-semibold text-slate-300">Proxmox</h3>
                   </div>
                   {pveFilled ? (
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5">
-                        <span className="text-[10px] text-amber-300 font-medium">Linked{pveTest?.ok ? ' · connection tested' : ''}</span>
-                        <span className="text-[10px] text-amber-300">✓</span>
+                      <div className="flex items-center justify-between py-1 px-2 rounded bg-emerald-500/5">
+                        <span className="text-[10px] text-emerald-300 font-medium">Linked{pveTest?.ok ? ' · connection tested' : ''}</span>
+                        <span className="text-[10px] text-emerald-300" aria-hidden>✓</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">URL</span>
@@ -2616,21 +2615,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-500">Not linked — the Proxmox page and Server Config can do it any time</p>
+                    <p className="text-[10px] text-slate-500">Not linked — the {pageLabel('proxmox')} page and the {pageLabel('config')} page can do it any time</p>
                   )}
                 </div>
 
                 {/* VMs the hub builds */}
                 {vmPlan.length > 0 && vmSettings && (
-                  <div className="bg-slate-800/40 border border-amber-500/20 rounded-xl p-4">
+                  <div className="bg-slate-800/40 border border-violet-500/20 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Server size={14} className="text-amber-400" />
+                      <Server size={14} className="text-violet-400" />
                       <h3 className="text-xs font-semibold text-slate-300">VMs the hub builds ({vmPlan.length})</h3>
                     </div>
                     <div className="space-y-1">
                       {vmPlan.map((v) => (
-                        <div key={v.stack} className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5">
-                          <span className="text-[10px] font-mono text-amber-200">{v.stack}</span>
+                        <div key={v.stack} className="flex items-center justify-between py-1 px-2 rounded bg-violet-500/5">
+                          <span className="text-[10px] font-mono text-violet-200">{v.stack}</span>
                           <span className="text-[10px] text-slate-400">{v.cores} cores · {v.memGb} GB RAM · {v.diskGb} GB</span>
                         </div>
                       ))}
@@ -2648,9 +2647,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
 
                 {/* Fleet */}
                 {(linkedMembers > 0 || joined || fleetStatus?.pending_join) && (
-                  <div className="bg-slate-800/40 border border-emerald-500/20 rounded-xl p-4">
+                  <div className="bg-slate-800/40 border border-violet-500/20 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Satellite size={14} className="text-emerald-400" />
+                      <Satellite size={14} className="text-violet-400" />
                       <h3 className="text-xs font-semibold text-slate-300">Fleet</h3>
                     </div>
                     <div className="space-y-1">
@@ -2665,35 +2664,35 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className={`bg-slate-800/40 border rounded-xl p-4 ${enableTraefik ? 'border-emerald-500/20' : 'border-white/5'}`}>
                   <div className="flex items-center gap-2 mb-3">
                     <Shield size={14} className={enableTraefik ? 'text-emerald-400' : 'text-slate-500'} />
-                    <h3 className="text-xs font-semibold text-slate-300">HTTPS & Reverse Proxy</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">HTTPS and reverse proxy</h3>
                   </div>
                   {enableTraefik ? (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-emerald-500/5">
-                        <span className="text-[10px] text-emerald-400 font-medium">Traefik Enabled</span>
-                        <span className="text-[10px] text-emerald-400">✓</span>
+                        <span className="text-[10px] text-emerald-400 font-medium">Traefik enabled</span>
+                        <span className="text-[10px] text-emerald-400" aria-hidden>✓</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Domain</span>
                         <span className="text-[10px] font-mono text-slate-300">{envVars.PROXY_DOMAIN}</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
-                        <span className="text-[10px] text-slate-500">ACME Email</span>
+                        <span className="text-[10px] text-slate-500">ACME email</span>
                         <span className="text-[10px] font-mono text-slate-300">{traefikEmail}</span>
                       </div>
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Docker Socket Proxy</span>
                         <span className="text-[10px] text-slate-300">{includeDockerSocket ? 'Included' : 'Excluded'}</span>
                       </div>
-                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableAuthelia && autheliaUser && autheliaPassword ? 'bg-violet-500/5' : 'bg-white/[0.03]'}`}>
+                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableAuthelia && autheliaUser && autheliaPassword ? 'bg-emerald-500/5' : 'bg-white/[0.03]'}`}>
                         <span className="text-[10px] text-slate-500">Authelia SSO</span>
-                        <span className={`text-[10px] ${enableAuthelia && autheliaUser && autheliaPassword ? 'text-violet-300' : 'text-slate-400'}`}>
+                        <span className={`text-[10px] ${enableAuthelia && autheliaUser && autheliaPassword ? 'text-emerald-300' : 'text-slate-400'}`}>
                           {enableAuthelia && autheliaUser && autheliaPassword ? `${autheliaUser} · auth.${envVars.PROXY_DOMAIN}` : enableAuthelia ? 'Enabled but incomplete — skipped' : 'Off'}
                         </span>
                       </div>
-                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableCrowdsec ? 'bg-amber-500/5' : 'bg-white/[0.03]'}`}>
+                      <div className={`flex items-center justify-between py-1 px-2 rounded ${enableCrowdsec ? 'bg-emerald-500/5' : 'bg-white/[0.03]'}`}>
                         <span className="text-[10px] text-slate-500">CrowdSec</span>
-                        <span className={`text-[10px] ${enableCrowdsec ? 'text-amber-300' : 'text-slate-400'}`}>{enableCrowdsec ? `Enabled${crowdsecBouncer ? ' · Traefik bouncer' : ''}` : 'Off'}</span>
+                        <span className={`text-[10px] ${enableCrowdsec ? 'text-emerald-300' : 'text-slate-400'}`}>{enableCrowdsec ? `Enabled${crowdsecBouncer ? ' · Traefik bouncer' : ''}` : 'Off'}</span>
                       </div>
                       {cfDnsToken && (
                         <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
@@ -2703,7 +2702,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       )}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-500 px-2">Not configured — can be enabled later from Templates</p>
+                    <p className="text-[10px] text-slate-500 px-2">Not configured — you can turn it on later from the {pageLabel('templates')} page</p>
                   )}
                 </div>
 
@@ -2711,7 +2710,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Layers size={14} className="text-emerald-400" />
-                    <h3 className="text-xs font-semibold text-slate-300">Startup Order ({stacks.length} stacks)</h3>
+                    <h3 className="text-xs font-semibold text-slate-300">Startup order ({stacks.length} {stacks.length === 1 ? 'stack' : 'stacks'})</h3>
                   </div>
                   <div className="space-y-1">
                     {stacks.map((stack, i) => (
@@ -2723,10 +2722,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         {vmReady && (placementOf(stack.name) === 'vm'
                           ? (clashOf(stack.name)
                             ? <span className="text-[8px] px-1 rounded bg-rose-500/15 text-rose-300" title="A guest with this name already exists on Proxmox">left out — VM {clashOf(stack.name)?.vmid} exists</span>
-                            : <span className="text-[8px] px-1 rounded bg-amber-500/15 text-amber-300">VM · {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB</span>)
+                            : <span className="text-[8px] px-1 rounded bg-violet-500/15 text-violet-300">VM · {specOf(stack.name).cores}c · {specOf(stack.name).memGb} GB · {specOf(stack.name).diskGb} GB</span>)
                           : <span className="text-[8px] px-1 rounded bg-emerald-500/10 text-emerald-300">hub</span>)}
                         {stack.label && (
-                          <span className="text-[8px] px-1 rounded bg-violet-500/15 text-violet-400">{stack.label}</span>
+                          <span className="text-[8px] px-1 rounded bg-white/10 text-slate-300">{stack.label}</span>
                         )}
                         {stack.isNew && (
                           <span className="text-[8px] px-1 rounded bg-cyan-500/15 text-cyan-400">new</span>
@@ -2746,9 +2745,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 type="button"
                 onClick={handleBack}
                 disabled={loading || completing}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors disabled:opacity-30"
+                className={BTN_SHEET_QUIET}
               >
-                <ArrowLeft size={14} />
+                <ArrowLeft size={16} />
                 Back
               </button>
             ) : (
@@ -2760,17 +2759,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 type="button"
                 onClick={handleNext}
                 disabled={!canNext() || loading}
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-30 disabled:hover:bg-emerald-600 press"
+                className={BTN_SHEET_PRIMARY}
               >
                 {loading ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Processing...
+                    <Loader2 size={16} className="animate-spin" />
+                    Processing…
                   </>
                 ) : (
                   <>
                     Next
-                    <ArrowRight size={14} />
+                    <ArrowRight size={16} />
                   </>
                 )}
               </button>
@@ -2779,17 +2778,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 type="button"
                 onClick={handleComplete}
                 disabled={completing}
-                className="flex items-center gap-1.5 px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-30 press"
+                className={BTN_SHEET_PRIMARY}
               >
                 {completing ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Applying configuration...
+                    <Loader2 size={16} className="animate-spin" />
+                    Applying configuration…
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 size={14} />
-                    Complete Setup
+                    <CheckCircle2 size={16} />
+                    Complete setup
                   </>
                 )}
               </button>
