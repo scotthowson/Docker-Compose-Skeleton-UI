@@ -1,6 +1,6 @@
 // =============================================================================
-// Export — Server Data Export Center
-// =============================================================================
+// Export — download what the server knows as JSON files: one full system report,
+// or any of nine reports on their own (one at a time, or several selected).
 // Exports real data from working API endpoints — bypasses the broken
 // /export/:type endpoint which references non-existent internal functions.
 // =============================================================================
@@ -30,6 +30,8 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
+import PageHeader from '../components/common/PageHeader'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, TONE_OK, TONE_QUIET, TONE_GHOST, TONE_GHOST_DANGER } from '../lib/ui'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,7 +42,6 @@ interface ExportCardDef {
   title: string
   description: string
   icon: React.ElementType
-  color: 'emerald' | 'cyan' | 'amber' | 'violet' | 'rose' | 'blue'
   fetcher: () => Promise<unknown>
 }
 
@@ -49,51 +50,9 @@ interface ExportHistoryEntry {
   title: string
   timestamp: number
   sizeBytes: number
-  color: string
+  /** (older entries carry the colour their card once had; nothing reads it now) */
+  color?: string
 }
-
-// ---------------------------------------------------------------------------
-// Color config
-// ---------------------------------------------------------------------------
-
-const colors = {
-  emerald: {
-    iconBg: 'bg-emerald-500/15', iconText: 'text-emerald-400',
-    btnBg: 'bg-emerald-500/15 hover:bg-emerald-500/25', btnText: 'text-emerald-400',
-    border: 'border-emerald-500/20', ring: 'ring-emerald-500/20',
-    glow: 'shadow-emerald-500/10', dot: 'bg-emerald-400',
-  },
-  cyan: {
-    iconBg: 'bg-cyan-500/15', iconText: 'text-cyan-400',
-    btnBg: 'bg-cyan-500/15 hover:bg-cyan-500/25', btnText: 'text-cyan-400',
-    border: 'border-cyan-500/20', ring: 'ring-cyan-500/20',
-    glow: 'shadow-cyan-500/10', dot: 'bg-cyan-400',
-  },
-  amber: {
-    iconBg: 'bg-amber-500/15', iconText: 'text-amber-400',
-    btnBg: 'bg-amber-500/15 hover:bg-amber-500/25', btnText: 'text-amber-400',
-    border: 'border-amber-500/20', ring: 'ring-amber-500/20',
-    glow: 'shadow-amber-500/10', dot: 'bg-amber-400',
-  },
-  violet: {
-    iconBg: 'bg-violet-500/15', iconText: 'text-violet-400',
-    btnBg: 'bg-violet-500/15 hover:bg-violet-500/25', btnText: 'text-violet-400',
-    border: 'border-violet-500/20', ring: 'ring-violet-500/20',
-    glow: 'shadow-violet-500/10', dot: 'bg-violet-400',
-  },
-  rose: {
-    iconBg: 'bg-rose-500/15', iconText: 'text-rose-400',
-    btnBg: 'bg-rose-500/15 hover:bg-rose-500/25', btnText: 'text-rose-400',
-    border: 'border-rose-500/20', ring: 'ring-rose-500/20',
-    glow: 'shadow-rose-500/10', dot: 'bg-rose-400',
-  },
-  blue: {
-    iconBg: 'bg-blue-500/15', iconText: 'text-blue-400',
-    btnBg: 'bg-blue-500/15 hover:bg-blue-500/25', btnText: 'text-blue-400',
-    border: 'border-blue-500/20', ring: 'ring-blue-500/20',
-    glow: 'shadow-blue-500/10', dot: 'bg-blue-400',
-  },
-} as const
 
 // ---------------------------------------------------------------------------
 // Data fetchers — call real working endpoints
@@ -158,18 +117,16 @@ async function fetchFullReport(): Promise<unknown> {
 const exportCards: ExportCardDef[] = [
   {
     id: 'stacks',
-    title: 'Stack Configurations',
-    description: 'All compose files, stack status, and running container counts per stack',
+    title: 'Stack configurations',
+    description: 'All compose files, stack status and running container counts per stack',
     icon: Layers,
-    color: 'emerald',
     fetcher: fetchStackConfigs,
   },
   {
     id: 'health',
-    title: 'Health Report',
-    description: 'Container health checks, uptime, restart counts, and health summary',
+    title: 'Health report',
+    description: 'Container health checks, uptime, restart counts and a health summary',
     icon: HeartPulse,
-    color: 'cyan',
     fetcher: async () => {
       const data = await fetchHealthReport()
       return { exported_at: new Date().toISOString(), ...data }
@@ -177,10 +134,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'containers',
-    title: 'Container Inventory',
-    description: 'Full container list with status, image, ports, networks, and labels',
+    title: 'Container inventory',
+    description: 'Full container list with status, image, ports, networks and labels',
     icon: Box,
-    color: 'blue',
     fetcher: async () => {
       const data = await fetchContainers()
       return { exported_at: new Date().toISOString(), ...data }
@@ -188,10 +144,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'system',
-    title: 'System & Resources',
-    description: 'CPU, memory, disk usage, Docker version, kernel, and hostname',
+    title: 'System & resources',
+    description: 'CPU, memory, disk usage, Docker version, kernel and hostname',
     icon: Monitor,
-    color: 'amber',
     fetcher: async () => {
       const data = await fetchSystemInfo()
       return { exported_at: new Date().toISOString(), ...data }
@@ -199,10 +154,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'images',
-    title: 'Image Inventory',
-    description: 'All Docker images with size, age, tags, and staleness info',
+    title: 'Image inventory',
+    description: 'All Docker images with size, age, tags and staleness',
     icon: Image,
-    color: 'violet',
     fetcher: async () => {
       const data = await fetchImages()
       return { exported_at: new Date().toISOString(), ...data }
@@ -210,10 +164,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'networks',
-    title: 'Network Map',
-    description: 'Docker networks, subnets, gateways, and connected containers',
+    title: 'Network map',
+    description: 'Docker networks, subnets, gateways and connected containers',
     icon: Network,
-    color: 'rose',
     fetcher: async () => {
       const data = await fetchNetworks()
       return { exported_at: new Date().toISOString(), ...data }
@@ -221,10 +174,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'config',
-    title: 'Server Configuration',
-    description: 'Sanitized server configuration values and feature flags',
+    title: 'Server settings',
+    description: 'Sanitized server settings and feature flags',
     icon: Settings2,
-    color: 'emerald',
     fetcher: async () => {
       const data = await fetchConfig()
       return { exported_at: new Date().toISOString(), ...data }
@@ -232,10 +184,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'events',
-    title: 'Event Log',
-    description: 'Recent Docker events — container starts, stops, image pulls, and more',
+    title: 'Event log',
+    description: 'Recent Docker events — container starts, stops, image pulls and more',
     icon: Clock,
-    color: 'cyan',
     fetcher: async () => {
       const data = await fetchEvents()
       return { exported_at: new Date().toISOString(), ...data }
@@ -243,10 +194,9 @@ const exportCards: ExportCardDef[] = [
   },
   {
     id: 'audit',
-    title: 'Audit Trail',
-    description: 'API audit log with user actions, timestamps, and request details',
+    title: 'Audit trail',
+    description: 'API audit log with user actions, timestamps and request details',
     icon: FileText,
-    color: 'amber',
     fetcher: async () => {
       const data = await fetchAuditLog({ limit: 500 })
       return { exported_at: new Date().toISOString(), ...data }
@@ -298,43 +248,59 @@ function saveHistory(entries: ExportHistoryEntry[]) {
 // Export Card Component
 // ---------------------------------------------------------------------------
 
-function ExportCard({ card, onExport, isLoading, isConnected, isAdmin }: {
+function ExportCard({ card, selected, onToggle, onExport, isLoading, isConnected, isAdmin }: {
   card: ExportCardDef
+  selected: boolean
+  onToggle: () => void
   onExport: () => void
   isLoading: boolean
   isConnected: boolean
   isAdmin: boolean
 }) {
-  const c = colors[card.color]
   const Icon = card.icon
 
   return (
-    <div className={`glass rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 group`}>
+    <div className={`relative glass rounded-xl border transition-colors ${selected ? 'border-cyan-500/30 bg-cyan-500/[0.05]' : 'border-white/5 hover:border-white/10'}`}>
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={`Select ${card.title} for the batch export`}
+          aria-pressed={selected}
+          className="absolute top-1.5 right-1.5 z-10 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        >
+          <span className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${selected ? 'bg-cyan-500/30 border-cyan-500/40 text-cyan-400' : 'border-white/15 text-transparent'}`}>
+            {selected && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden />}
+          </span>
+        </button>
+      )}
       <div className="p-5">
-        <div className="flex items-start gap-3.5">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${c.iconBg} shrink-0`}>
-            <Icon className={`w-5 h-5 ${c.iconText}`} />
+        <div className="flex items-start gap-3.5 pr-7">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-white/5 border border-white/10 shrink-0" aria-hidden>
+            <Icon className="w-5 h-5 text-slate-300" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-white leading-tight">{card.title}</h3>
+            <h3 className="text-sm font-semibold text-slate-100 leading-tight">{card.title}</h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">{card.description}</p>
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <FileJson className="w-3 h-3 text-slate-500" />
+            <FileJson className="w-3 h-3 text-slate-500" aria-hidden />
             <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">JSON</span>
           </div>
           {isAdmin && (
             <button
+              type="button"
               onClick={onExport}
               disabled={isLoading || !isConnected}
-              className={`px-3.5 py-1.5 rounded-lg ${c.btnBg} ${c.btnText} text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 press`}
+              aria-label={`Export ${card.title}`}
+              className={`${BTN_CARD} ${TONE_QUIET}`}
             >
               {isLoading ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Exporting</>
+                <><Loader2 size={12} className="animate-spin" /> Exporting</>
               ) : (
-                <><Download className="w-3.5 h-3.5" /> Export</>
+                <><Download size={12} /> Export</>
               )}
             </button>
           )}
@@ -365,13 +331,12 @@ export default function Export() {
   // Persist history
   useEffect(() => { saveHistory(history) }, [history])
 
-  const addHistoryEntry = useCallback((title: string, sizeBytes: number, color: string) => {
+  const addHistoryEntry = useCallback((title: string, sizeBytes: number) => {
     setHistory((prev) => [{
       id: `${Date.now()}-${++exportCountRef.current}`,
       title,
       timestamp: Date.now(),
       sizeBytes,
-      color,
     }, ...prev].slice(0, 20))
   }, [])
 
@@ -382,11 +347,11 @@ export default function Export() {
       const json = JSON.stringify(data, null, 2)
       const date = new Date().toISOString().slice(0, 10)
       triggerDownload(json, `dcs-${card.id}-${date}.json`)
-      addHistoryEntry(card.title, new Blob([json]).size, card.color)
-      addToast({ type: 'success', message: `${card.title} exported successfully` })
+      addHistoryEntry(card.title, new Blob([json]).size)
+      addToast({ type: 'success', message: `${card.title} exported` })
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed'
-      addToast({ type: 'error', message: `Failed to export ${card.title}: ${message}` })
+      const message = err instanceof Error ? err.message : 'The export failed'
+      addToast({ type: 'error', message: `Could not export ${card.title}: ${message}` })
     } finally {
       setLoadingMap((prev) => ({ ...prev, [card.id]: false }))
     }
@@ -400,11 +365,11 @@ export default function Export() {
       const date = new Date().toISOString().slice(0, 10)
       const time = new Date().toISOString().slice(11, 16).replace(':', '')
       triggerDownload(json, `dcs-full-report-${date}-${time}.json`)
-      addHistoryEntry('Full System Report', new Blob([json]).size, 'cyan')
-      addToast({ type: 'success', message: 'Full system report exported successfully' })
+      addHistoryEntry('Full system report', new Blob([json]).size)
+      addToast({ type: 'success', message: 'Full system report exported' })
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed'
-      addToast({ type: 'error', message: `Full report failed: ${message}` })
+      const message = err instanceof Error ? err.message : 'The export failed'
+      addToast({ type: 'error', message: `The full report failed: ${message}` })
     } finally {
       setFullReportLoading(false)
     }
@@ -431,10 +396,10 @@ export default function Export() {
         const json = JSON.stringify(data, null, 2)
         const date = new Date().toISOString().slice(0, 10)
         triggerDownload(json, `dcs-${card.id}-${date}.json`)
-        addHistoryEntry(card.title, new Blob([json]).size, card.color)
+        addHistoryEntry(card.title, new Blob([json]).size)
         successCount++
       } catch {
-        addToast({ type: 'error', message: `Failed to export ${card.title}` })
+        addToast({ type: 'error', message: `Could not export ${card.title}` })
       } finally {
         setLoadingMap((prev) => ({ ...prev, [card.id]: false }))
       }
@@ -451,208 +416,171 @@ export default function Export() {
     addToast({ type: 'success', message: 'Export history cleared' })
   }, [addToast])
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <DisconnectedBanner />
+  const allSelected = selectedCards.size === exportCards.length
 
-      {/* ── Page Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-white/5">
-            <Download className="w-6 h-6 text-cyan-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold"><span className="text-gradient">Export Center</span></h1>
-            <p className="text-sm text-slate-400 mt-0.5">Download server data, reports, and configurations</p>
-          </div>
-        </div>
-        {history.length > 0 && (
-          <button
-            onClick={() => setShowHistory((p) => !p)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 border border-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
-          >
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <DisconnectedBanner />
+      <PageHeader
+        page="export"
+        actions={history.length > 0 ? (
+          <button type="button" onClick={() => setShowHistory((p) => !p)} aria-expanded={showHistory} className={BTN_TOOLBAR_QUIET}>
             <Clock size={14} />
             History ({history.length})
-            {showHistory ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {showHistory ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* ── Non-admin notice ── */}
       {!isAdmin && (
-        <div className="glass rounded-xl p-4 border border-amber-500/20 flex items-center gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-300/90">
+        <div className="glass rounded-xl p-4 border border-cyan-500/20 flex items-center gap-3" role="status">
+          <ShieldAlert className="w-5 h-5 text-cyan-400 shrink-0" aria-hidden />
+          <p className="text-sm text-cyan-200/90">
             Admin privileges are required to export server data.
           </p>
         </div>
       )}
 
-      {/* ── Full System Report Hero ── */}
+      {/* ── Full system report ── */}
       {isAdmin && (
-        <div className="glass rounded-xl border border-cyan-500/10 hover:border-cyan-500/20 transition-all overflow-hidden">
-          <div className="p-6 flex items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 border border-white/5">
-                <Archive className="w-7 h-7 text-cyan-400" />
+        <section aria-labelledby="export-full-title" className="glass rounded-xl border border-white/5 overflow-hidden">
+          <div className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Archive size={16} className="text-slate-400" aria-hidden />
+                <h2 id="export-full-title" className="text-sm font-semibold text-slate-200">Full system report</h2>
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">Full System Report</h2>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  Comprehensive export — status, health, stacks, containers, system info, images, networks, and volumes in one file
-                </p>
-              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Everything in one file: status, health, stacks, containers, system info, images, networks and volumes
+              </p>
             </div>
             <button
+              type="button"
               onClick={handleFullReport}
               disabled={fullReportLoading || !isConnected}
-              className="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-400 text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 border border-cyan-500/20 press"
+              className={`${BTN_TOOLBAR} ${TONE_OK} shrink-0`}
             >
               {fullReportLoading ? (
                 <><Loader2 size={14} className="animate-spin" /> Generating</>
               ) : (
-                <><Download size={14} /> Generate Report</>
+                <><Download size={14} /> Generate report</>
               )}
             </button>
           </div>
-          <div className="px-6 pb-4 flex items-center gap-6">
+          <ul className="px-5 pb-4 flex flex-wrap items-center gap-x-5 gap-y-1.5">
             {[
-              { icon: HardDrive, label: 'Status', c: 'text-emerald-400' },
-              { icon: HeartPulse, label: 'Health', c: 'text-cyan-400' },
-              { icon: Layers, label: 'Stacks', c: 'text-violet-400' },
-              { icon: Box, label: 'Containers', c: 'text-blue-400' },
-              { icon: Monitor, label: 'System', c: 'text-amber-400' },
-              { icon: Image, label: 'Images', c: 'text-rose-400' },
-              { icon: Network, label: 'Networks', c: 'text-emerald-400' },
-              { icon: HardDrive, label: 'Volumes', c: 'text-cyan-400' },
-            ].map(({ icon: I, label, c }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <I className={`w-3 h-3 ${c}`} />
+              { icon: HardDrive, label: 'Status' },
+              { icon: HeartPulse, label: 'Health' },
+              { icon: Layers, label: 'Stacks' },
+              { icon: Box, label: 'Containers' },
+              { icon: Monitor, label: 'System' },
+              { icon: Image, label: 'Images' },
+              { icon: Network, label: 'Networks' },
+              { icon: HardDrive, label: 'Volumes' },
+            ].map(({ icon: I, label }) => (
+              <li key={label} className="flex items-center gap-1.5">
+                <I className="w-3 h-3 text-slate-500" aria-hidden />
                 <span className="text-[10px] text-slate-500 font-medium">{label}</span>
-              </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
       {/* ── Batch selection toolbar ── */}
       {isAdmin && selectedCards.size > 0 && (
-        <div className="glass rounded-xl p-3 border border-violet-500/20 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-violet-400" />
+        <div className="glass rounded-xl p-3 border border-cyan-500/20 flex flex-wrap items-center justify-between gap-2 animate-fade-in">
+          <div className="flex items-center gap-2" role="status">
+            <Zap className="w-4 h-4 text-cyan-400" aria-hidden />
             <span className="text-sm text-slate-300">
-              <span className="font-semibold text-violet-400">{selectedCards.size}</span> export{selectedCards.size > 1 ? 's' : ''} selected
+              <span className="font-semibold text-cyan-400 tabular-nums">{selectedCards.size}</span> export{selectedCards.size > 1 ? 's' : ''} selected
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedCards(new Set())}
-              className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
-            >
-              Clear
+            <button type="button" onClick={() => setSelectedCards(new Set())} className={`${BTN_TOOLBAR} ${TONE_GHOST}`}>
+              Clear the selection
             </button>
-            <button
-              onClick={handleBatchExport}
-              disabled={batchLoading || !isConnected}
-              className="px-4 py-1.5 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 text-violet-400 text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-1.5 press"
-            >
+            <button type="button" onClick={handleBatchExport} disabled={batchLoading || !isConnected} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
               {batchLoading ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Exporting</>
+                <><Loader2 size={14} className="animate-spin" /> Exporting</>
               ) : (
-                <><Download className="w-3.5 h-3.5" /> Export Selected</>
+                <><Download size={14} /> Export selected</>
               )}
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Export Cards Grid ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Individual Exports</h2>
+      {/* ── Individual exports ── */}
+      <section aria-labelledby="export-individual-title">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 id="export-individual-title" className="text-sm font-semibold text-slate-200">Individual exports</h2>
           {isAdmin && (
             <button
+              type="button"
               onClick={() => {
-                if (selectedCards.size === exportCards.length) setSelectedCards(new Set())
+                if (allSelected) setSelectedCards(new Set())
                 else setSelectedCards(new Set(exportCards.map((c) => c.id)))
               }}
-              className="text-[10px] text-slate-500 hover:text-slate-300 uppercase tracking-wider transition-colors"
+              className={`${BTN_CARD} ${TONE_GHOST}`}
             >
-              {selectedCards.size === exportCards.length ? 'Deselect All' : 'Select All'}
+              {allSelected ? 'Clear the selection' : 'Select all'}
             </button>
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {exportCards.map((card) => (
-            <div key={card.id} className="relative">
-              {isAdmin && (
-                <button
-                  onClick={() => toggleCard(card.id)}
-                  aria-label={`Select ${card.title} for the batch export`}
-                  aria-pressed={selectedCards.has(card.id)}
-                  className={`absolute top-3 right-3 z-10 w-5 h-5 rounded-md border transition-all flex items-center justify-center ${
-                    selectedCards.has(card.id)
-                      ? 'bg-violet-500/30 border-violet-500/40 text-violet-400'
-                      : 'border-white/10 text-transparent hover:border-white/20'
-                  }`}
-                >
-                  {selectedCards.has(card.id) && <CheckCircle2 className="w-3.5 h-3.5" />}
-                </button>
-              )}
-              <ExportCard
-                card={card}
-                onExport={() => handleExport(card)}
-                isLoading={loadingMap[card.id] ?? false}
-                isConnected={isConnected}
-                isAdmin={isAdmin}
-              />
-            </div>
+            <ExportCard
+              key={card.id}
+              card={card}
+              selected={selectedCards.has(card.id)}
+              onToggle={() => toggleCard(card.id)}
+              onExport={() => handleExport(card)}
+              isLoading={loadingMap[card.id] ?? false}
+              isConnected={isConnected}
+              isAdmin={isAdmin}
+            />
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* ── Export History ── */}
+      {/* ── Export history ── */}
       {showHistory && history.length > 0 && (
-        <div className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
-          <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+        <section aria-labelledby="export-history-title" className="glass rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+          <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Export History</h2>
+              <Clock className="w-4 h-4 text-slate-400" aria-hidden />
+              <h2 id="export-history-title" className="text-sm font-semibold text-slate-200">Export history</h2>
             </div>
-            <button
-              onClick={clearHistory}
-              className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 uppercase tracking-wider transition-colors"
-            >
-              <Trash2 className="w-3 h-3" />
-              Clear
+            <button type="button" onClick={clearHistory} className={`${BTN_CARD} ${TONE_GHOST_DANGER}`}>
+              <Trash2 size={12} />
+              Clear history
             </button>
           </div>
-          <div className="divide-y divide-white/[0.03]">
-            {history.map((entry) => {
-              const c = colors[entry.color as keyof typeof colors] ?? colors.cyan
-              return (
-                <div key={entry.id} className="px-5 py-3 flex items-center justify-between hover:bg-white/[0.03] transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-                    <span className="text-sm text-slate-300">{entry.title}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-slate-500 tabular-nums font-medium">{formatBytes(entry.sizeBytes)}</span>
-                    <span className="text-xs text-slate-500 tabular-nums">{formatTime(entry.timestamp)}</span>
-                  </div>
+          <ul className="divide-y divide-white/[0.03]">
+            {history.map((entry) => (
+              <li key={entry.id} className="px-5 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 hover:bg-white/[0.03] transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-500" aria-hidden />
+                  <span className="text-sm text-slate-300">{entry.title}</span>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-slate-500 tabular-nums font-medium">{formatBytes(entry.sizeBytes)}</span>
+                  <span className="text-xs text-slate-500 tabular-nums">{formatTime(entry.timestamp)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* ── Info footer ── */}
       {isAdmin && (
         <div className="flex items-start gap-3 px-1">
-          <AlertTriangle className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
+          <AlertTriangle className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" aria-hidden />
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Exports contain server configuration data. The Configuration export uses the sanitized API endpoint and excludes passwords and secrets. Store exported files securely.
+            Exports contain server data. The Server settings export uses the sanitized API endpoint and leaves out passwords and secrets. Store exported files securely.
           </p>
         </div>
       )}
