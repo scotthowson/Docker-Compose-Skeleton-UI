@@ -11,7 +11,9 @@ import {
   Star, Cpu, MemoryStick, Clock, ChevronRight,
   Play, RotateCw, Square as SquareStop, Moon } from 'lucide-react'
 import { CopyButton } from '../common/CopyButton'
+import Hint from '../common/Hint'
 import VmCapsule from '../fleet/VmCapsule'
+import { BTN_ICON_SM, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER } from '../../lib/ui'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,33 +157,45 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
       {/* Batch checkbox */}
       {batchMode && (
         <td className="px-3 py-3 w-10">
-          {batchSelected
-            ? <CheckSquare size={15} className="text-cyan-400" />
-            : <Square size={15} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
-          }
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={!!batchSelected}
+            aria-label={`Select ${container.name}`}
+            onClick={(e) => { e.stopPropagation(); onClick(container) }}
+            className="rounded"
+          >
+            {batchSelected
+              ? <CheckSquare size={15} className="text-cyan-400" />
+              : <Square size={15} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
+            }
+          </button>
         </td>
       )}
 
       {/* Favorite star */}
-      <td className="px-1 py-3 w-8">
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
-          className="p-0.5 rounded transition-colors hover:bg-white/5"
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          aria-pressed={isFavorite}
-        >
-          <Star
-            size={13}
-            className={isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-700 hover:text-slate-500'}
-          />
-        </button>
+      <td className="px-1 py-1 w-10">
+        <Hint label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
+            className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+            aria-label={`Favorite ${container.name}`}
+            aria-pressed={isFavorite}
+          >
+            <Star
+              size={13}
+              className={isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-500'}
+            />
+          </button>
+        </Hint>
       </td>
 
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2.5">
           <Box className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
-          <ContainerNameWithPopover container={container} formatUptime={formatUptime} />
+          <ContainerNameWithPopover container={container} formatUptime={formatUptime} onOpen={() => onClick(container)} />
           {showCapsule && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
         </div>
       </td>
@@ -248,35 +262,41 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
         </span>
       </td>
 
-      {/* Quick actions */}
+      {/* Quick actions: they show under the pointer and while the keyboard is inside the group */}
       <td className="px-3 py-2">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {container.state !== 'running' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'start') }}
-              className="p-1 rounded hover:bg-emerald-500/10 text-slate-600 hover:text-emerald-400 transition-colors"
-              title="Start"
-            >
-              {quickActionLoading === `${busyKey}start` ? <RefreshCw size={13} className="animate-spin text-emerald-400" /> : <Play size={13} />}
-            </button>
+            <Hint label="Start">
+              <button
+                onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'start') }}
+                className={`${BTN_ICON_SM} ${TONE_GHOST_OK}`}
+                aria-label={`Start ${container.name}`}
+              >
+                {quickActionLoading === `${busyKey}start` ? <RefreshCw size={13} className="animate-spin text-emerald-400" /> : <Play size={13} />}
+              </button>
+            </Hint>
           )}
           {container.state === 'running' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'restart') }}
-              className="p-1 rounded hover:bg-amber-500/10 text-slate-600 hover:text-amber-400 transition-colors"
-              title="Restart"
-            >
-              {quickActionLoading === `${busyKey}restart` ? <RefreshCw size={13} className="animate-spin text-amber-400" /> : <RotateCw size={13} />}
-            </button>
+            <Hint label="Restart">
+              <button
+                onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'restart') }}
+                className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                aria-label={`Restart ${container.name}`}
+              >
+                {quickActionLoading === `${busyKey}restart` ? <RefreshCw size={13} className="animate-spin" /> : <RotateCw size={13} />}
+              </button>
+            </Hint>
           )}
           {container.state === 'running' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'stop') }}
-              className="p-1 rounded hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-colors"
-              title="Stop"
-            >
-              {quickActionLoading === `${busyKey}stop` ? <RefreshCw size={13} className="animate-spin text-rose-400" /> : <SquareStop size={13} />}
-            </button>
+            <Hint label="Stop">
+              <button
+                onClick={(e) => { e.stopPropagation(); onQuickAction?.(container, 'stop') }}
+                className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}
+                aria-label={`Stop ${container.name}`}
+              >
+                {quickActionLoading === `${busyKey}stop` ? <RefreshCw size={13} className="animate-spin text-rose-400" /> : <SquareStop size={13} />}
+              </button>
+            </Hint>
           )}
         </div>
       </td>
@@ -319,31 +339,44 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
       `}
     >
       {/* Top: name + state + favorite */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         {batchMode && (
-          <div className="flex-shrink-0">
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={!!batchSelected}
+            aria-label={`Select ${container.name}`}
+            onClick={(e) => { e.stopPropagation(); onClick(container) }}
+            className="flex-shrink-0 rounded"
+          >
             {batchSelected
               ? <CheckSquare size={16} className="text-cyan-400" />
-              : <Square size={16} className="text-slate-600" />
+              : <Square size={16} className="text-slate-500" />
             }
-          </div>
+          </button>
         )}
         <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(container.name) }}
-          className="p-0.5 flex-shrink-0"
-          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          className={`${BTN_ICON_SM} ${TONE_GHOST} -ml-1`}
+          aria-label={`Favorite ${container.name}`}
           aria-pressed={isFavorite}
         >
           <Star
             size={14}
-            className={isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}
+            className={isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-500'}
           />
         </button>
         <Box className="h-4 w-4 text-slate-500 flex-shrink-0" />
-        <span className="text-[15px] font-semibold text-slate-200 truncate flex-1">
+        {/* the whole card opens the container for a finger; this button is the way in for a keyboard */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClick(container) }}
+          className="min-w-0 flex-1 truncate rounded text-left text-[15px] font-semibold text-slate-200"
+        >
           {container.name}
-        </span>
-        <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0" />
+        </button>
+        <ChevronRight className="h-4 w-4 text-slate-500 flex-shrink-0" aria-hidden="true" />
       </div>
 
       {/* Middle: badges */}
@@ -383,7 +416,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
             </div>
           </div>
         ) : (
-          <span className="text-[10px] text-slate-600">No live stats</span>
+          <span className="text-[10px] text-slate-500">No live stats</span>
         )}
         <div className="flex items-center gap-1 text-[10px] text-slate-500">
           <Clock size={9} />
@@ -397,7 +430,7 @@ export const ContainerCard: React.FC<ContainerRowProps> = ({
 // ---------------------------------------------------------------------------
 // Portal-based container name popover (escapes overflow:hidden on parent glass)
 // ---------------------------------------------------------------------------
-function ContainerNameWithPopover({ container, formatUptime }: { container: ContainerInfo; formatUptime: (s: number) => string }) {
+function ContainerNameWithPopover({ container, formatUptime, onOpen }: { container: ContainerInfo; formatUptime: (s: number) => string; onOpen: () => void }) {
   const [show, setShow] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const ref = useRef<HTMLDivElement>(null)
@@ -421,11 +454,17 @@ function ContainerNameWithPopover({ container, formatUptime }: { container: Cont
 
   return (
     <div className="relative">
-      <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
-        <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors flex items-center gap-1">
+      <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={handleLeave} className="text-sm font-medium flex items-center gap-1">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen() }}
+          onFocus={handleEnter}
+          onBlur={handleLeave}
+          className="rounded text-left text-slate-200 group-hover:text-white transition-colors"
+        >
           {container.name}
-          <CopyButton text={container.name} className="opacity-0 group-hover:opacity-100" size={10} />
-        </span>
+        </button>
+        <CopyButton text={container.name} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" size={10} />
       </div>
       {show && createPortal(
         <div

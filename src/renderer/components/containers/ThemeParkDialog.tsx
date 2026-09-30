@@ -13,6 +13,8 @@ import { setContainerTheme } from '../../api/fleetScoped'
 import type { RowMember } from '../../../shared/fleetScoped'
 import type { ContainerThemeState, ContainerThemeResponse } from '../../../shared/types'
 import ModalOverlay from '../common/ModalOverlay'
+import Hint from '../common/Hint'
+import { BTN_ICON_SM, BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_DANGER, TONE_GHOST } from '../../lib/ui'
 
 interface Props {
   containerName: string
@@ -42,12 +44,6 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
   const [addons, setAddons] = useState<string[]>(state.enabled ? state.addons : [])
   const [busy, setBusy] = useState<'apply' | 'remove' | null>(null)
   const darker = addons.some((a) => a.endsWith('-darker'))
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose, busy])
 
   // a "darker" add-on replaces the theme: theme.park wants the base theme under it
   useEffect(() => { if (darker && theme !== 'base') setTheme('base') }, [darker, theme])
@@ -86,9 +82,11 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
             <h3 className="text-sm font-semibold text-slate-100">{state.enabled ? `Theme: ${label(state.theme)}${state.managed === false ? ' (from your route)' : ''}` : 'Theme'}</h3>
             <p className="text-[11px] text-slate-500 truncate"><span className="font-mono">{containerName}</span> · theme.park for {appName}</p>
           </div>
-          <button type="button" onClick={onClose} disabled={!!busy} className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-40" title="Close">
-            <X size={15} />
-          </button>
+          <Hint label="Close">
+            <button type="button" onClick={onClose} disabled={!!busy} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label="Close">
+              <X size={15} />
+            </button>
+          </Hint>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -124,7 +122,7 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1.5">
                   {official.map((t) => (
-                    <button key={t} type="button" disabled={!!busy} onClick={() => setTheme(t)}
+                    <button key={t} type="button" disabled={!!busy} aria-pressed={theme === t} onClick={() => setTheme(t)}
                       className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${theme === t ? 'bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-100' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}>
                       {label(t)}
                     </button>
@@ -135,7 +133,7 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
                     <div className="text-[10px] text-slate-500">Community themes</div>
                     <div className="flex flex-wrap gap-1.5">
                       {community.map((t) => (
-                        <button key={t} type="button" disabled={!!busy} onClick={() => setTheme(t)}
+                        <button key={t} type="button" disabled={!!busy} aria-pressed={theme === t} onClick={() => setTheme(t)}
                           className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${theme === t ? 'bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-100' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'}`}>
                           {label(t)}
                         </button>
@@ -171,20 +169,19 @@ export default function ThemeParkDialog({ containerName, member, state, onClose,
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 mt-5">
-          <button type="button" onClick={onClose} disabled={!!busy} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors disabled:opacity-40">
+          <button type="button" onClick={onClose} disabled={!!busy} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
             Close
           </button>
           {state.enabled && (
-            <button type="button" onClick={() => void apply(false)} disabled={!!busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-rose-500/25 text-rose-300 bg-rose-500/[0.08] hover:bg-rose-500/15 transition-colors disabled:opacity-40"
-              title="Remove the theme middleware: the app shows its own look again">
-              {busy === 'remove' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-              Remove theme
-            </button>
+            <Hint label="Remove the theme middleware: the app shows its own look again">
+              <button type="button" onClick={() => void apply(false)} disabled={!!busy} className={`${BTN_SHEET} ${TONE_DANGER} flex-1 sm:flex-none`}>
+                {busy === 'remove' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Remove theme
+              </button>
+            </Hint>
           )}
-          <button type="button" onClick={() => void apply(true)} disabled={!!busy || !!cannot}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-fuchsia-500/20 border border-fuchsia-500/40 text-fuchsia-100 hover:bg-fuchsia-500/30 transition-colors disabled:opacity-40">
-            {busy === 'apply' ? <Loader2 size={13} className="animate-spin" /> : <Palette size={13} />}
+          <button type="button" onClick={() => void apply(true)} disabled={!!busy || !!cannot} className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}>
+            {busy === 'apply' ? <Loader2 size={14} className="animate-spin" /> : <Palette size={14} />}
             {state.enabled ? 'Save' : 'Apply theme'}
           </button>
         </div>

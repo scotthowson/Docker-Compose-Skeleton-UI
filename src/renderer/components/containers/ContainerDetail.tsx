@@ -27,7 +27,14 @@ import { FloatingSaveBar } from '../common/FloatingSaveBar'
 import { useSettingsStore } from '../../stores/settingsStore'
 import LiveLogViewer from '../logs/LiveLogViewer'
 import { NukeDialog } from './NukeDialog'
-import { Tooltip as Hint } from '@mantine/core'   // (recharts' Tooltip is the other one here)
+import Hint from '../common/Hint'
+import { SegmentedControl } from '@mantine/core'
+import { LoadingState, EmptyState } from '../common/PageState'
+import { pageLabel } from '../../constants/pageTitles'
+import {
+  BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM,
+  TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
+} from '../../lib/ui'
 import OnDemandDialog from './OnDemandDialog'
 import HomarrChip from './HomarrChip'
 import ThemeButton from './ThemeButton'
@@ -373,11 +380,11 @@ function serverHostname(): string {
 const NETWORK_COLORS = [
   { bg: 'bg-purple-500/10', text: 'text-purple-300', ring: 'ring-purple-500/20' },
   { bg: 'bg-cyan-500/10', text: 'text-cyan-300', ring: 'ring-cyan-500/20' },
-  { bg: 'bg-emerald-500/10', text: 'text-emerald-300', ring: 'ring-emerald-500/20' },
-  { bg: 'bg-amber-500/10', text: 'text-amber-300', ring: 'ring-amber-500/20' },
-  { bg: 'bg-rose-500/10', text: 'text-rose-300', ring: 'ring-rose-500/20' },
-  { bg: 'bg-blue-500/10', text: 'text-blue-300', ring: 'ring-blue-500/20' },
+  { bg: 'bg-teal-500/10', text: 'text-teal-300', ring: 'ring-teal-500/20' },
+  { bg: 'bg-sky-500/10', text: 'text-sky-300', ring: 'ring-sky-500/20' },
   { bg: 'bg-pink-500/10', text: 'text-pink-300', ring: 'ring-pink-500/20' },
+  { bg: 'bg-blue-500/10', text: 'text-blue-300', ring: 'ring-blue-500/20' },
+  { bg: 'bg-fuchsia-500/10', text: 'text-fuchsia-300', ring: 'ring-fuchsia-500/20' },
   { bg: 'bg-indigo-500/10', text: 'text-indigo-300', ring: 'ring-indigo-500/20' },
 ]
 
@@ -887,20 +894,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       <div className="flex flex-col gap-3">
         {/* Top row: back + name + badges (badges drop to their own line on phones) */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
-          <button
-            onClick={onBack}
-            title="Back to containers (Esc)"
-            className="
-              flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm flex-shrink-0
-              text-slate-400 hover:text-white
-              bg-white/5 hover:bg-white/10 border border-white/5
-              transition-all duration-200 press
-            "
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Back</span>
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
-          </button>
+          <Hint label={`Back to ${pageLabel('containers')} (Esc)`}>
+            <button onClick={onBack} className={`${BTN_TOOLBAR_QUIET} flex-shrink-0`}>
+              <ArrowLeft size={14} />
+              <span className="hidden sm:inline">Back</span>
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/5 border border-white/5 ml-1">Esc</kbd>
+            </button>
+          </Hint>
 
           <Box className="h-5 w-5 text-emerald-400 flex-shrink-0" />
           {renaming ? (
@@ -911,27 +911,33 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleRename()
-                  if (e.key === 'Escape') { setRenaming(false); setRenameValue(containerName) }
+                  if (e.key === 'Escape') { e.stopPropagation(); setRenaming(false); setRenameValue(containerName) }
                 }}
-                className="px-2 py-1 text-base md:text-lg font-bold text-white bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0 flex-1"
+                className="px-2 py-1 text-base md:text-lg font-bold text-slate-100 bg-white/10 border border-emerald-500/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0 flex-1"
               />
-              <button aria-label="Save" onClick={handleRename} disabled={renameLoading} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-all flex-shrink-0">
-                {renameLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-              </button>
-              <button aria-label="Cancel" onClick={() => { setRenaming(false); setRenameValue(containerName) }} className="p-1 text-slate-400 hover:bg-white/10 rounded transition-all flex-shrink-0">
-                <X size={16} />
-              </button>
+              <Hint label="Save the new name">
+                <button aria-label="Save" onClick={handleRename} disabled={renameLoading} className={`${BTN_ICON_SM} ${TONE_GHOST_OK} flex-shrink-0`}>
+                  {renameLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                </button>
+              </Hint>
+              <Hint label="Cancel">
+                <button aria-label="Cancel" onClick={() => { setRenaming(false); setRenameValue(containerName) }} className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}>
+                  <X size={16} />
+                </button>
+              </Hint>
             </div>
           ) : (
             <>
-              <h1 className="text-lg md:text-xl font-bold text-white truncate min-w-0 flex-1">{containerName}</h1>
-              <button
-                onClick={() => setRenaming(true)}
-                title="Rename container"
-                className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/10 rounded transition-all flex-shrink-0"
-              >
-                <Pencil size={14} />
-              </button>
+              <h1 className="text-lg md:text-xl font-bold text-slate-100 truncate min-w-0 flex-1">{containerName}</h1>
+              <Hint label="Rename the container">
+                <button
+                  onClick={() => setRenaming(true)}
+                  aria-label="Rename the container"
+                  className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}
+                >
+                  <Pencil size={14} />
+                </button>
+              </Hint>
             </>
           )}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
@@ -941,31 +947,32 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           </div>
         </div>
 
-        {/* Action buttons row — wraps on mobile */}
+        {/* Action buttons row — wraps on mobile: emerald starts, rose removes, the rest is neutral */}
         <div className="flex flex-wrap items-center gap-2">
           {/* on demand is Sablier beside the Traefik that serves the route: a VM's containers are
               served by the hub's Traefik and Sablier cannot wake them from there (not yet); the button
               stays visible for them, switched off, and says why */}
           {isAdmin && member && (
-            <Hint label="Not for a container in a VM yet. Sablier has to run beside the Traefik that serves the route, and that is the hub's. Sablier has no login of its own, so it is not opened to the network the VM is on. Containers that run on the hub can start on demand." multiline w={320} withArrow>
+            <Hint label="Not for a container in a VM yet. Sablier has to run beside the Traefik that serves the route, and that is the hub's. Sablier has no login of its own, so it is not opened to the network the VM is on. Containers that run on the hub can start on demand.">
               <span className="inline-flex cursor-not-allowed">
-                <button type="button" disabled aria-disabled="true" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white/5 text-slate-500 border-white/10 opacity-60 pointer-events-none">
-                  <Moon className="h-3.5 w-3.5" />
+                <button type="button" disabled aria-disabled="true" className={`${BTN_TOOLBAR} ${TONE_QUIET} !text-slate-500 opacity-60 pointer-events-none`}>
+                  <Moon size={14} />
                   Start on demand
                 </button>
               </span>
             </Hint>
           )}
           {isAdmin && !member && (
-            <button
-              onClick={() => setOnDemandOpen(true)}
-              disabled={!!actionLoading}
-              title={containerInfo.on_demand ? 'Sablier stops this container when idle and starts it on the first request — change the idle time and the waiting page, or serve it normally again' : 'Let Traefik start this container on the first request and stop it when idle (needs the Sablier template and an HTTPS route)'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 ${containerInfo.on_demand ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/25 hover:bg-indigo-500/25' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-slate-200'}`}
-            >
-              <Moon className="h-3.5 w-3.5" />
-              {containerInfo.on_demand ? 'On demand: on' : 'Start on demand'}
-            </button>
+            <Hint label={containerInfo.on_demand ? 'Sablier stops this container when idle and starts it on the first request — change the idle time and the waiting page, or serve it normally again' : 'Let Traefik start this container on the first request and stop it when idle (needs the Sablier template and an HTTPS route)'}>
+              <button
+                onClick={() => setOnDemandOpen(true)}
+                disabled={!!actionLoading}
+                className={`${BTN_TOOLBAR} ${containerInfo.on_demand ? TONE_OK : TONE_QUIET}`}
+              >
+                <Moon size={14} />
+                {containerInfo.on_demand ? 'On demand: on' : 'Start on demand'}
+              </button>
+            </Hint>
           )}
           {isAdmin && <ThemeButton containerName={containerName} member={member} disabled={!!actionLoading} />}
           {onDemandOpen && (
@@ -987,9 +994,9 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             <button
               onClick={() => handleAction('start')}
               disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
+              className={`${BTN_TOOLBAR} ${TONE_OK}`}
             >
-              {actionLoading === 'start' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {actionLoading === 'start' ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
               Start
             </button>
           )}
@@ -998,25 +1005,27 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               <button
                 onClick={() => handleAction('restart')}
                 disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
               >
-                {actionLoading === 'restart' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                {actionLoading === 'restart' ? <RefreshCw size={14} className="animate-spin" /> : <RotateCw size={14} />}
                 Restart
               </button>
-              <button
-                onClick={() => handleAction('recreate')}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-all disabled:opacity-50"
-              >
-                {actionLoading === 'recreate' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                Recreate
-              </button>
+              <Hint label="Remove the container and create it again from its image">
+                <button
+                  onClick={() => handleAction('recreate')}
+                  disabled={!!actionLoading}
+                  className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
+                >
+                  {actionLoading === 'recreate' ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                  Recreate
+                </button>
+              </Hint>
               <button
                 onClick={() => handleAction('stop')}
                 disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+                className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
               >
-                {actionLoading === 'stop' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+                {actionLoading === 'stop' ? <RefreshCw size={14} className="animate-spin" /> : <Square size={14} />}
                 Stop
               </button>
             </>
@@ -1024,42 +1033,44 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <button
             onClick={handleFetchLogs}
             disabled={logsLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all disabled:opacity-50"
+            className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
           >
-            {logsLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ScrollText className="h-3.5 w-3.5" />}
+            {logsLoading ? <RefreshCw size={14} className="animate-spin" /> : <ScrollText size={14} />}
             Logs
           </button>
           {isAdmin && composeProject && (
-            <button
-              onClick={openComposeEditor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-all"
-              title={`Open ${composeProject}/docker-compose.yml in the stack editor at the ${composeService} service`}
-            >
-              <FileCode className="h-3.5 w-3.5" />
-              Edit compose
-            </button>
+            <Hint label={`Open ${composeProject}/docker-compose.yml in the stack editor at the ${composeService} service`}>
+              <button
+                onClick={openComposeEditor}
+                className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
+              >
+                <FileCode size={14} />
+                Edit compose
+              </button>
+            </Hint>
           )}
           {isAdmin && (
             <button
               onClick={() => handleAction('remove')}
               disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all disabled:opacity-50"
+              className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
             >
-              {actionLoading === 'remove' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {actionLoading === 'remove' ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
               Remove
             </button>
           )}
           {isAdmin && composeProject && (
             <>
-              <button
-                onClick={() => setNukeOpen(true)}
-                disabled={!!actionLoading}
-                title="Fresh install: remove the container and the App-Data folders it owns (kept in the trash a week), then create it again from the compose file"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/25 hover:bg-rose-500/20 transition-all disabled:opacity-50"
-              >
-                <Bomb className="h-3.5 w-3.5" />
-                Nuke &amp; reinstall
-              </button>
+              <Hint label="Fresh install: remove the container and the App-Data folders it owns (kept in the trash a week), then create it again from the compose file">
+                <button
+                  onClick={() => setNukeOpen(true)}
+                  disabled={!!actionLoading}
+                  className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
+                >
+                  <Bomb size={14} />
+                  Nuke &amp; reinstall
+                </button>
+              </Hint>
               <NukeDialog
                 containerName={containerName}
                 member={member}
@@ -1073,13 +1084,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           {isRunning && (
             <button
               onClick={handleToggleProcesses}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                showProcesses
-                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
-                  : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
-              }`}
+              aria-pressed={showProcesses}
+              className={`${BTN_TOOLBAR} ${showProcesses ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/25' : TONE_QUIET}`}
             >
-              <Terminal className="h-3.5 w-3.5" />
+              <Terminal size={14} />
               Processes
             </button>
           )}
@@ -1092,7 +1100,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
       {/* ---- Detail loading skeleton ---- */}
       {detailLoading && detail === null && (
-        <div className="space-y-3 animate-pulse">
+        <div role="status" aria-label="Reading the container details" className="space-y-3 animate-pulse">
           <div className="h-4 w-3/4 bg-white/[0.06] rounded" />
           <div className="h-4 w-1/2 bg-white/[0.06] rounded" />
           <div className="h-4 w-2/3 bg-white/[0.06] rounded" />
@@ -1101,17 +1109,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
       {/* ---- Detail error banner ---- */}
       {detailError && (
-        <div className="flex items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
           <AlertCircle className="h-5 w-5 text-rose-400 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-rose-300">Failed to load container details</p>
-            <p className="text-xs text-rose-400/70 mt-0.5">{detailError}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-rose-300">Could not load the container details</p>
+            <p className="text-xs text-rose-400/70 mt-0.5 break-words">{detailError}</p>
           </div>
-          <button
-            onClick={retryDetail}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20 hover:bg-rose-500/20 transition-all"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
+          <button onClick={retryDetail} className={`${BTN_CARD} ${TONE_DANGER}`}>
+            <RefreshCw size={12} />
             Retry
           </button>
         </div>
@@ -1119,7 +1124,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
       {/* ---- Stats section ---- */}
       <section>
-        <SectionHeader icon={<Activity className="h-4 w-4 text-cyan-400" />} title="Resource Stats" />
+        <SectionHeader icon={<Activity className="h-4 w-4 text-cyan-400" />} title="Resource stats" />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
           <StatCard
             icon={<Cpu className="h-4 w-4 text-cyan-400" />}
@@ -1141,13 +1146,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             loading={statsLoading}
           />
           <StatCard
-            icon={<HardDrive className="h-4 w-4 text-amber-400" />}
+            icon={<HardDrive className="h-4 w-4 text-slate-400" />}
             label="Block I/O"
             value={stats?.block_io ?? '--'}
             loading={statsLoading}
           />
           <StatCard
-            icon={<Users className="h-4 w-4 text-rose-400" />}
+            icon={<Users className="h-4 w-4 text-slate-400" />}
             label="PIDs"
             value={stats?.pids ?? '--'}
             loading={statsLoading}
@@ -1164,25 +1169,25 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       {/* ---- 4A: Metrics History Graphs ---- */}
       {chartData.length >= 2 && (
         <section className="animate-fade-in">
-          <SectionHeader icon={<Activity className="h-4 w-4 text-amber-400" />} title="Metrics History" />
+          <SectionHeader icon={<Activity className="h-4 w-4 text-cyan-400" />} title="Metrics history" />
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5 mt-3">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* CPU % over time */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Cpu className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">CPU Usage (%)</span>
+                  <Cpu className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">CPU usage (%)</span>
                 </div>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                       <defs>
                         <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
                       <XAxis
                         dataKey="time"
                         tick={{ fontSize: 10, fill: '#64748b' }}
@@ -1212,11 +1217,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       <Area
                         type="monotone"
                         dataKey="cpu"
-                        stroke="#f59e0b"
+                        stroke="#06b6d4"
                         strokeWidth={2}
                         fill="url(#cpuGradient)"
                         dot={false}
-                        activeDot={{ r: 3, fill: '#f59e0b', stroke: '#1e293b', strokeWidth: 2 }}
+                        activeDot={{ r: 3, fill: '#06b6d4', stroke: '#1e293b', strokeWidth: 2 }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1227,7 +1232,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MemoryStick className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Memory Usage (MB)</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Memory usage (MB)</span>
                 </div>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1238,7 +1243,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
                       <XAxis
                         dataKey="time"
                         tick={{ fontSize: 10, fill: '#64748b' }}
@@ -1286,49 +1291,38 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       {/* ---- Container Logs (right below Metrics History) ---- */}
       {showLogs && (
         <section>
-          <div className="flex items-center justify-between">
-            <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container Logs" />
-            <div className="flex items-center gap-2">
-              {/* Live / Snapshot toggle */}
-              <div className="flex rounded-md bg-white/[0.03] border border-white/5 p-0.5">
-                <button
-                  onClick={() => setLiveLogsMode(false)}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${!liveLogsMode ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
-                >
-                  Snapshot
-                </button>
-                <button
-                  onClick={() => setLiveLogsMode(true)}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${liveLogsMode ? 'bg-emerald-500/15 text-emerald-400' : 'text-slate-500 hover:text-slate-400'}`}
-                >
-                  Live
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container logs" />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Live / Snapshot: one choice */}
+              <SegmentedControl
+                aria-label="Log mode"
+                value={liveLogsMode ? 'live' : 'snapshot'}
+                onChange={(v) => setLiveLogsMode(v === 'live')}
+                data={[{ value: 'snapshot', label: 'Snapshot' }, { value: 'live', label: 'Live' }]}
+              />
               {!liveLogsMode && (
                 <>
                   <button
                     onClick={handleDownloadLogs}
                     disabled={!containerLogs}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Download logs as text file"
+                    className={BTN_CARD_QUIET}
                   >
-                    <Download className="h-3 w-3" />
+                    <Download size={12} />
                     Download
                   </button>
                   <button
                     onClick={handleFetchLogs}
                     disabled={logsLoading}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                    className={BTN_CARD_QUIET}
                   >
-                    <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw size={12} className={logsLoading ? 'animate-spin' : ''} />
                     Refresh
                   </button>
                 </>
               )}
-              <button
-                onClick={() => setShowLogs(false)}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-              >
+              <button onClick={() => setShowLogs(false)} className={BTN_CARD_QUIET}>
+                <X size={12} />
                 Close
               </button>
             </div>
@@ -1339,10 +1333,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             </div>
           ) : (
             <pre
+              tabIndex={0}
+              aria-label="Container logs"
               className="
                 glass-subtle mt-3 p-4 max-h-80 overflow-auto
                 text-xs leading-relaxed font-mono text-slate-300
                 whitespace-pre-wrap break-words scrollbar-thin
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40
               "
             >
               {containerLogs || 'No logs available.'}
@@ -1353,7 +1350,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
       {/* ---- Info section ---- */}
       <section>
-        <SectionHeader icon={<Info className="h-4 w-4 text-emerald-400" />} title="Container Info" />
+        <SectionHeader icon={<Info className="h-4 w-4 text-cyan-400" />} title="Container info" />
         <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl mt-3 overflow-hidden">
           {/* Image header */}
           <div className="px-5 py-4 border-b border-white/[0.03]">
@@ -1372,7 +1369,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/15">{img.tag}</span>
                       <span className="inline-flex items-center gap-1">
-                        <span className="text-[10px] text-slate-600 font-mono truncate" title={containerInfo.image_id}>{containerInfo.image_id ? containerInfo.image_id.slice(0, 16) : '--'}</span>
+                        <span className="text-[10px] text-slate-500 font-mono truncate" title={containerInfo.image_id}>{containerInfo.image_id ? containerInfo.image_id.slice(0, 16) : '--'}</span>
                         {containerInfo.image_id && <CopyButton text={containerInfo.image_id} size={10} />}
                       </span>
                     </div>
@@ -1396,12 +1393,12 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             </div>
             {/* Restart Policy */}
             <div className="bg-slate-900/80 px-4 py-3">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart Policy</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart policy</span>
               <span className="text-xs text-slate-300 font-mono">{detail?.restart_policy || '--'}</span>
             </div>
             {/* Restart Count */}
             <div className="bg-slate-900/80 px-4 py-3">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart Count</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Restart count</span>
               <span className={`text-xs font-mono ${containerInfo.restart_count > 0 ? 'text-amber-400' : 'text-slate-300'}`}>{containerInfo.restart_count}</span>
             </div>
             {/* Hostname */}
@@ -1417,7 +1414,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {/* Working Dir */}
             {detail?.working_dir && (
               <div className="bg-slate-900/80 px-4 py-3 col-span-2 lg:col-span-3">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Working Directory</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Working directory</span>
                 <span className="text-xs text-slate-300 font-mono">{detail.working_dir}</span>
               </div>
             )}
@@ -1429,7 +1426,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             if (ips.length === 0) return null
             return (
               <div className="px-5 py-3 border-t border-white/[0.03]">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-2">IP Addresses</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-2">IP addresses</span>
                 <div className="flex flex-wrap gap-2">
                   {ips.map((entry) => (
                     <div key={`${entry.network}-${entry.ip}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/5">
@@ -1450,54 +1447,46 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
       {showProcesses && isRunning && (
         <section className="animate-fade-in">
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-violet-400" />
+                <Terminal className="h-4 w-4 text-cyan-400" />
                 <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                  Running Processes
+                  Running processes
                 </h2>
                 {processes.length > 0 && (
-                  <span className="text-xs text-slate-600 ml-1">({processes.length})</span>
+                  <span className="text-xs text-slate-500 ml-1">({processes.length})</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFetchProcesses}
-                  disabled={processesLoading}
-                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
-                >
-                  <RefreshCw className={`h-3 w-3 ${processesLoading ? 'animate-spin' : ''}`} />
+                <button onClick={handleFetchProcesses} disabled={processesLoading} className={BTN_CARD_QUIET}>
+                  <RefreshCw size={12} className={processesLoading ? 'animate-spin' : ''} />
                   Refresh
                 </button>
-                <button
-                  onClick={handleToggleProcesses}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                >
+                <button onClick={handleToggleProcesses} className={BTN_CARD_QUIET}>
+                  <X size={12} />
                   Close
                 </button>
               </div>
             </div>
 
             {processesLoading && processes.length === 0 ? (
-              <div className="space-y-2">
+              <div role="status" aria-label="Reading the processes" className="space-y-2">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="h-8 bg-white/[0.03] rounded animate-pulse" />
                 ))}
               </div>
             ) : processes.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-600">
-                No process information available.
-              </div>
+              <EmptyState compact icon={<Terminal size={28} />} title="No process information available." />
             ) : (
               <div className="overflow-x-auto scrollbar-thin rounded-lg border border-white/[0.03]">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-white/5">
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">PID</th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">User</th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">CPU%</th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">Time</th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">Command</th>
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">PID</th>
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">User</th>
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">CPU%</th>
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">Time</th>
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">Command</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1510,7 +1499,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       >
                         <td className="px-4 py-2 font-mono text-cyan-400">{proc.pid}</td>
                         <td className="px-4 py-2 text-slate-300">{proc.uid}</td>
-                        <td className="px-4 py-2 text-amber-400 font-mono">{proc.cpu}</td>
+                        <td className="px-4 py-2 text-slate-300 font-mono">{proc.cpu}</td>
                         <td className="px-4 py-2 text-slate-400 font-mono">{proc.time}</td>
                         <td className="px-4 py-2 text-slate-300 font-mono truncate max-w-xs" title={proc.cmd}>
                           {proc.cmd}
@@ -1531,11 +1520,12 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
             <button
               onClick={() => setShowExec(!showExec)}
+              aria-expanded={showExec}
               className="flex items-center gap-2 w-full p-5 hover:bg-white/[0.03] transition-colors"
             >
               <Terminal className="h-4 w-4 text-emerald-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                Run Command
+                Run command
               </h2>
               <ChevronDown
                 className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${showExec ? 'rotate-0' : '-rotate-90'}`}
@@ -1547,7 +1537,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 {/* Safety warning */}
                 <div className="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
                   <Lock className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-[10px] text-amber-400/80 leading-relaxed">
+                  <p className="text-[11px] text-amber-400/80 leading-relaxed">
                     Commands run as the container's default user. Use caution — some commands may affect container state.
                   </p>
                 </div>
@@ -1555,9 +1545,10 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 {/* Command input */}
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-mono select-none">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-mono select-none" aria-hidden="true">$</span>
                     <input
                       type="text"
+                      aria-label="Command to run"
                       value={execCommand}
                       onChange={(e) => setExecCommand(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleExecCommand()}
@@ -1574,18 +1565,12 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   <button
                     onClick={handleExecCommand}
                     disabled={!execCommand.trim() || execLoading}
-                    className="
-                      flex items-center gap-1.5 px-4 py-2.5 rounded-lg
-                      text-xs font-medium text-white
-                      bg-emerald-500 hover:bg-emerald-400
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      transition-all duration-200 shadow-lg shadow-emerald-500/20
-                    "
+                    className={`${BTN_TOOLBAR} ${TONE_OK} self-stretch`}
                   >
                     {execLoading ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <RefreshCw size={14} className="animate-spin" />
                     ) : (
-                      <Play className="h-3.5 w-3.5" />
+                      <Play size={14} />
                     )}
                     Execute
                   </button>
@@ -1594,13 +1579,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 {/* Command history chips */}
                 {execHistory.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[10px] text-slate-600 self-center mr-1">History:</span>
+                    <span className="text-[10px] text-slate-500 self-center mr-1">History:</span>
                     {execHistory.map((cmd) => (
                       <button
                         key={cmd}
                         onClick={() => setExecCommand(cmd)}
                         className="
-                          px-2 py-0.5 rounded text-[10px] font-mono
+                          px-2 py-1 rounded text-[10px] font-mono
                           bg-white/[0.03] border border-white/5 text-slate-400
                           hover:bg-white/5 hover:text-slate-200
                           transition-all duration-150 truncate max-w-[200px]
@@ -1628,11 +1613,15 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                         exit {execOutput.exitCode}
                       </span>
                     </div>
-                    <pre className="
+                    <pre
+                      tabIndex={0}
+                      aria-label="Command output"
+                      className="
                       bg-slate-950 border border-white/5 rounded-lg p-4
                       text-[11px] text-slate-300 font-mono
                       max-h-[300px] overflow-auto scrollbar-thin
                       whitespace-pre-wrap break-all leading-relaxed
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40
                     ">
                       {execOutput.output || '(no output)'}
                     </pre>
@@ -1651,17 +1640,18 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             {/* Header with collapse toggle */}
             <button
               onClick={() => setEnvCollapsed(!envCollapsed)}
+              aria-expanded={!envCollapsed}
               className="flex items-center gap-2 w-full group"
             >
-              <Variable className="h-4 w-4 text-amber-400" />
+              <Variable className="h-4 w-4 text-cyan-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                Environment Variables
+                Environment variables
               </h2>
-              <span className="text-xs text-slate-600 ml-1">({envEntries.length})</span>
+              <span className="text-xs text-slate-500 ml-1">({envEntries.length})</span>
               {canEditEnv ? (
                 <span className="ml-2 text-[10px] text-slate-500 hidden sm:inline">click a value to change it · saved to {composeProject}/docker-compose.yml</span>
               ) : isAdmin && detail && !composeService ? (
-                <span className="ml-2 text-[10px] text-slate-600 hidden sm:inline">read-only: not managed by a stack</span>
+                <span className="ml-2 text-[10px] text-slate-500 hidden sm:inline">read-only: not managed by a stack</span>
               ) : null}
               <ChevronDown
                 className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${
@@ -1677,7 +1667,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="Filter variables..."
+                    aria-label="Filter the variables"
+                    placeholder="Filter variables…"
                     value={envSearch}
                     onChange={(e) => setEnvSearch(e.target.value)}
                     className="
@@ -1698,25 +1689,29 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                         <Plus className="h-3 w-3 text-emerald-400 shrink-0" />
                         <input
                           type="text"
+                          aria-label={`Name of new variable ${i + 1}`}
                           value={a.key}
                           onChange={(e) => setEnvAdditions((prev) => prev.map((x, j) => (j === i ? { ...x, key: e.target.value.replace(/[^A-Za-z0-9_]/g, '').toUpperCase() } : x)))}
                           placeholder="VARIABLE"
                           spellCheck={false}
                           autoFocus={!a.key}
-                          className="w-32 md:w-56 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40"
+                          className="w-32 md:w-56 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                         />
-                        <span className="text-xs text-slate-600">=</span>
+                        <span className="text-xs text-slate-500" aria-hidden="true">=</span>
                         <input
                           type="text"
+                          aria-label={`Value of new variable ${i + 1}`}
                           value={a.value}
                           onChange={(e) => setEnvAdditions((prev) => prev.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
                           placeholder="value"
                           spellCheck={false}
-                          className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40"
+                          className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20"
                         />
-                        <button onClick={() => setEnvAdditions((prev) => prev.filter((_, j) => j !== i))} className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Remove this row">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        <Hint label="Remove this row">
+                          <button onClick={() => setEnvAdditions((prev) => prev.filter((_, j) => j !== i))} className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`} aria-label={`Remove new variable ${i + 1}`}>
+                            <X size={14} />
+                          </button>
+                        </Hint>
                       </div>
                     ))}
                   </div>
@@ -1725,9 +1720,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 {/* Variable table */}
                 <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-lg border border-white/[0.03]">
                   {filteredEnvEntries.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-600">
-                      No matching variables found.
-                    </div>
+                    <EmptyState compact title="No matching variables found." hint={envSearch ? 'Try another name or value.' : undefined} />
                   ) : (
                     filteredEnvEntries.map((entry, idx) => {
                       const sensitive = isSensitiveKey(entry.key)
@@ -1735,13 +1728,13 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                       return (
                         <div
                           key={entry.key}
-                          className={`flex items-center gap-3 px-4 py-2.5 animate-fade-in ${
+                          className={`flex items-center gap-3 px-4 py-2 animate-fade-in ${
                             idx % 2 === 0 ? 'bg-white/[0.03]' : 'bg-transparent'
                           }`}
                           style={{ animationDelay: `${idx * 0.02}s` }}
                         >
                           {sensitive && (
-                            <Lock className="h-3 w-3 text-amber-500/60 flex-shrink-0" />
+                            <Lock className="h-3 w-3 text-amber-500/60 flex-shrink-0" aria-label="Sensitive value" />
                           )}
                           <span
                             className="text-xs font-mono text-cyan-400 w-32 md:w-56 flex-shrink-0 truncate"
@@ -1749,7 +1742,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           >
                             {entry.key}
                           </span>
-                          <span className="text-xs text-slate-600 flex-shrink-0">=</span>
+                          <span className="text-xs text-slate-500 flex-shrink-0" aria-hidden="true">=</span>
                           {canEditEnv && envEditingKey === entry.key ? (
                             <input aria-label={`Value of ${entry.key}`}
                               type="text"
@@ -1762,12 +1755,12 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                               }}
                               onBlur={() => setEnvEditingKey(null)}
                               spellCheck={false}
-                              className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-amber-500/40 text-xs font-mono text-slate-100 focus:outline-none focus:border-amber-500/60"
+                              className="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-emerald-500/40 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30"
                             />
                           ) : (
                             <span
                               onClick={canEditEnv && !envRemovals.has(entry.key) ? () => setEnvEditingKey(entry.key) : undefined}
-                              className={`text-xs font-mono truncate flex-1 min-w-0 ${envRemovals.has(entry.key) ? 'line-through text-slate-600' : envDrafts[entry.key] !== undefined && envDrafts[entry.key] !== entry.value ? 'text-amber-300' : 'text-slate-300'} ${canEditEnv && !envRemovals.has(entry.key) ? 'cursor-text hover:text-white' : ''}`}
+                              className={`text-xs font-mono truncate flex-1 min-w-0 ${envRemovals.has(entry.key) ? 'line-through text-slate-500' : envDrafts[entry.key] !== undefined && envDrafts[entry.key] !== entry.value ? 'text-amber-300' : 'text-slate-300'} ${canEditEnv && !envRemovals.has(entry.key) ? 'cursor-text hover:text-white' : ''}`}
                               title={envRemovals.has(entry.key) ? 'Removed when you save' : sensitive && !revealed ? '(hidden)' : (envDrafts[entry.key] ?? entry.value)}
                             >
                               {sensitive && !revealed ? maskValue(envDrafts[entry.key] ?? entry.value) : (envDrafts[entry.key] ?? entry.value)}
@@ -1778,32 +1771,41 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                           )}
                           {canEditEnv && envEditingKey !== entry.key && (
                             envRemovals.has(entry.key) ? (
-                              <button onClick={() => setEnvRemovals((prev) => { const next = new Set(prev); next.delete(entry.key); return next })} className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-emerald-400 transition-colors" title="Keep this variable">
-                                <Undo2 className="h-3.5 w-3.5" />
-                              </button>
+                              <Hint label="Keep this variable">
+                                <button onClick={() => setEnvRemovals((prev) => { const next = new Set(prev); next.delete(entry.key); return next })} className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST_OK}`} aria-label={`Keep ${entry.key}`}>
+                                  <Undo2 size={14} />
+                                </button>
+                              </Hint>
                             ) : (
                               <>
-                                <button onClick={() => setEnvEditingKey(entry.key)} className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-amber-300 transition-colors" title="Change value">
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                                <button onClick={() => { setEnvRemovals((prev) => new Set(prev).add(entry.key)); setEnvDrafts((prev) => { const next = { ...prev }; delete next[entry.key]; return next }) }} className="flex-shrink-0 p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors" title="Remove from the compose file">
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
+                                <Hint label="Change the value">
+                                  <button onClick={() => setEnvEditingKey(entry.key)} className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST}`} aria-label={`Change the value of ${entry.key}`}>
+                                    <Pencil size={12} />
+                                  </button>
+                                </Hint>
+                                <Hint label="Remove from the compose file">
+                                  <button onClick={() => { setEnvRemovals((prev) => new Set(prev).add(entry.key)); setEnvDrafts((prev) => { const next = { ...prev }; delete next[entry.key]; return next }) }} className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST_DANGER}`} aria-label={`Remove ${entry.key}`}>
+                                    <X size={14} />
+                                  </button>
+                                </Hint>
                               </>
                             )
                           )}
                           {sensitive && (
-                            <button
-                              onClick={() => toggleSecret(entry.key)}
-                              className="flex-shrink-0 p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-colors"
-                              title={revealed ? 'Hide value' : 'Reveal value'}
-                            >
-                              {revealed ? (
-                                <EyeOff className="h-3.5 w-3.5" />
-                              ) : (
-                                <Eye className="h-3.5 w-3.5" />
-                              )}
-                            </button>
+                            <Hint label={revealed ? 'Hide the value' : 'Reveal the value'}>
+                              <button
+                                onClick={() => toggleSecret(entry.key)}
+                                className={`flex-shrink-0 ${BTN_ICON_SM} ${TONE_GHOST}`}
+                                aria-label={`${revealed ? 'Hide' : 'Reveal'} the value of ${entry.key}`}
+                                aria-pressed={revealed}
+                              >
+                                {revealed ? (
+                                  <EyeOff size={14} />
+                                ) : (
+                                  <Eye size={14} />
+                                )}
+                              </button>
+                            </Hint>
                           )}
                         </div>
                       )
@@ -1813,9 +1815,9 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                 {canEditEnv && (
                   <button
                     onClick={() => setEnvAdditions((prev) => [...prev, { key: '', value: '' }])}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-white/5 border border-white/5 text-slate-300 hover:bg-white/10 hover:border-white/10 transition-all"
+                    className={BTN_CARD_QUIET}
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus size={12} />
                     Add variable
                   </button>
                 )}
@@ -1845,11 +1847,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
-              <HardDrive className="h-4 w-4 text-amber-400" />
+              <HardDrive className="h-4 w-4 text-cyan-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                Volume Mounts
+                Volume mounts
               </h2>
-              <span className="text-xs text-slate-600 ml-1">({mountEntries.length})</span>
+              <span className="text-xs text-slate-500 ml-1">({mountEntries.length})</span>
             </div>
 
             <div className="grid gap-2.5">
@@ -1867,7 +1869,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   {/* Source path */}
                   <div className="flex-1 min-w-0">
                     <span
-                      className="text-xs font-mono text-amber-400 truncate block"
+                      className="text-xs font-mono text-cyan-400 truncate block"
                       title={mount.source}
                     >
                       {mount.source}
@@ -1915,11 +1917,11 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
             <div className="flex items-center gap-2 mb-4">
               <Globe className="h-4 w-4 text-cyan-400" />
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                Port Mappings
+                Port mappings
               </h2>
-              <span className="text-xs text-slate-600 ml-1">({portMappings.length})</span>
+              <span className="text-xs text-slate-500 ml-1">({portMappings.length})</span>
               {member && (
-                <span className="ml-auto text-[11px] text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5 truncate" title="A container in a VM publishes its ports on the VM's address">
+                <span className="ml-auto text-[11px] text-violet-200 bg-violet-500/10 border border-violet-500/20 rounded-full px-2 py-0.5 truncate" title="A container in a VM publishes its ports on the VM's address">
                   on {memberName || containerInfo.member_name || 'its VM'}{containerInfo.member_host ? ` · ${containerInfo.member_host}` : ''}
                 </span>
               )}
@@ -1962,14 +1964,14 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                   {port.hostPort ? (
                     <div className="flex flex-col items-center min-w-0">
                       {shownBind && (
-                        <span className="text-[10px] text-slate-600 font-mono truncate max-w-[110px]" title={shownBind}>
+                        <span className="text-[10px] text-slate-500 font-mono truncate max-w-[110px]" title={shownBind}>
                           {shownBind}
                         </span>
                       )}
                       <span className="text-lg font-bold text-white leading-tight">
                         {port.hostPort}
                       </span>
-                      <span className="text-[10px] text-slate-600 uppercase">host</span>
+                      <span className="text-[10px] text-slate-500 uppercase">host</span>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center min-w-0">
@@ -1985,7 +1987,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
                     <span className="text-lg font-bold text-cyan-400 leading-tight">
                       {port.containerPort}
                     </span>
-                    <span className="text-[10px] text-slate-600 uppercase">container</span>
+                    <span className="text-[10px] text-slate-500 uppercase">container</span>
                   </div>
 
                   {/* Protocol badge + open link */}
@@ -2022,7 +2024,7 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
               <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
                 Networks
               </h2>
-              <span className="text-xs text-slate-600 ml-1">({networks.length})</span>
+              <span className="text-xs text-slate-500 ml-1">({networks.length})</span>
             </div>
 
             <div className="flex flex-wrap gap-2.5">
@@ -2094,29 +2096,6 @@ const StatCard: React.FC<StatCardProps> = ({ icon, label, value, subValue, loadi
         )}
       </div>
     )}
-  </div>
-)
-
-interface InfoRowProps {
-  label: string
-  value: string
-  mono?: boolean
-  highlight?: boolean
-}
-
-const InfoRow: React.FC<InfoRowProps> = ({ label, value, mono, highlight }) => (
-  <div className="flex items-center gap-4 px-4 py-2.5">
-    <span className="text-xs text-slate-500 uppercase tracking-wide w-24 md:w-32 flex-shrink-0">
-      {label}
-    </span>
-    <span
-      className={`text-sm truncate ${mono ? 'font-mono' : ''} ${
-        highlight ? 'text-amber-400' : 'text-slate-300'
-      }`}
-      title={value}
-    >
-      {value}
-    </span>
   </div>
 )
 

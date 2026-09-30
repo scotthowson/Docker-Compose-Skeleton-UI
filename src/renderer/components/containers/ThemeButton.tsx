@@ -9,6 +9,8 @@ import { Palette } from 'lucide-react'
 import { fetchContainerTheme } from '../../api/fleetScoped'
 import { useToast } from '../common/Toast'
 import ThemeParkDialog from './ThemeParkDialog'
+import Hint from '../common/Hint'
+import { BTN_TOOLBAR, TONE_QUIET, TONE_OK } from '../../lib/ui'
 import type { RowMember } from '../../../shared/fleetScoped'
 import type { ContainerThemeState } from '../../../shared/types'
 
@@ -34,16 +36,17 @@ export default function ThemeButton({ containerName, member, disabled }: Props) 
   const label = state.enabled ? `Theme: ${state.theme.replace(/-/g, ' ')}` : 'Theme'
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        disabled={disabled}
-        title={state.enabled ? `theme.park's ${state.theme} theme is on — change it or remove it` : `Give ${containerName} a theme.park theme (Nord, Dracula, Catppuccin…) through its Traefik route`}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 capitalize ${state.enabled ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/25 hover:bg-fuchsia-500/25' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-slate-200'}`}
-      >
-        <Palette className="h-3.5 w-3.5" />
-        {label}
-      </button>
+      <Hint label={state.enabled ? `theme.park's ${state.theme} theme is on — change it or remove it` : `Give ${containerName} a theme.park theme (Nord, Dracula, Catppuccin…) through its Traefik route`}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={disabled}
+          className={`${BTN_TOOLBAR} capitalize ${state.enabled ? TONE_OK : TONE_QUIET}`}
+        >
+          <Palette size={14} />
+          {label}
+        </button>
+      </Hint>
       {open && (
         <ThemeParkDialog
           containerName={containerName}

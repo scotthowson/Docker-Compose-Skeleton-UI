@@ -13,6 +13,8 @@ import type { RowMember } from '../../../shared/fleetScoped'
 import type { SablierSettingsResponse, SablierToggleResponse } from '../../../shared/types'
 import { SABLIER_DEFAULTS, SABLIER_SESSIONS, SABLIER_THEMES, SABLIER_THEME_NOTES, describeSession } from '../../lib/sablier'
 import ModalOverlay from '../common/ModalOverlay'
+import Hint from '../common/Hint'
+import { BTN_ICON_SM, BTN_SHEET, BTN_SHEET_QUIET, BTN_SHEET_PRIMARY, TONE_GHOST, TONE_QUIET } from '../../lib/ui'
 
 interface Props {
   containerName: string
@@ -24,7 +26,7 @@ interface Props {
   onError: (message: string) => void
 }
 
-const field = 'w-full px-2.5 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/40 disabled:opacity-50'
+const field = 'w-full px-2.5 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 disabled:opacity-50'
 
 export default function OnDemandDialog({ containerName, member, onDemand, onClose, onChanged, onError }: Props) {
   const [settings, setSettings] = useState<SablierSettingsResponse | null>(null)
@@ -52,12 +54,6 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [containerName, member])
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose, busy])
 
   const apply = async (on: boolean) => {
     setBusy(on ? 'save' : 'off')
@@ -95,9 +91,11 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
             <h3 className="text-sm font-semibold text-slate-100">{enabled ? 'On demand' : 'Start on demand'}</h3>
             <p className="text-[11px] text-slate-500 truncate font-mono">{containerName}</p>
           </div>
-          <button type="button" onClick={onClose} disabled={!!busy} className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-40" title="Close">
-            <X size={15} />
-          </button>
+          <Hint label="Close">
+            <button type="button" onClick={onClose} disabled={!!busy} className={`${BTN_ICON_SM} ${TONE_GHOST}`} aria-label="Close">
+              <X size={15} />
+            </button>
+          </Hint>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -119,7 +117,7 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
         )}
 
         {loading ? (
-          <div className="flex items-center gap-2 text-xs text-slate-500 py-6 justify-center"><Loader2 size={14} className="animate-spin" /> Reading the current settings…</div>
+          <div role="status" className="flex items-center gap-2 text-xs text-slate-500 py-6 justify-center"><Loader2 size={14} className="animate-spin" /> Reading the current settings…</div>
         ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -154,28 +152,29 @@ export default function OnDemandDialog({ containerName, member, onDemand, onClos
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-2 mt-5">
-          <button type="button" onClick={onClose} disabled={!!busy} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors disabled:opacity-40">
+          <button type="button" onClick={onClose} disabled={!!busy} className={`${BTN_SHEET_QUIET} flex-1 sm:flex-none`}>
             Close
           </button>
           {enabled && (
-            <button
-              type="button"
-              onClick={() => void apply(false)}
-              disabled={!!busy || loading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-rose-500/25 text-rose-300 bg-rose-500/[0.08] hover:bg-rose-500/15 transition-colors disabled:opacity-40"
-              title="Remove the Sablier middleware from its route; the container keeps running until you stop it"
-            >
-              {busy === 'off' ? <Loader2 size={13} className="animate-spin" /> : <Sun size={13} />}
-              Serve normally
-            </button>
+            <Hint label="Remove the Sablier middleware from its route; the container keeps running until you stop it">
+              <button
+                type="button"
+                onClick={() => void apply(false)}
+                disabled={!!busy || loading}
+                className={`${BTN_SHEET} ${TONE_QUIET} flex-1 sm:flex-none`}
+              >
+                {busy === 'off' ? <Loader2 size={14} className="animate-spin" /> : <Sun size={14} />}
+                Serve normally
+              </button>
+            </Hint>
           )}
           <button
             type="button"
             onClick={() => void apply(true)}
             disabled={!!busy || loading || !!cannot}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/30 transition-colors disabled:opacity-40"
+            className={`${BTN_SHEET_PRIMARY} flex-1 sm:flex-none`}
           >
-            {busy === 'save' ? <Loader2 size={13} className="animate-spin" /> : <Moon size={13} />}
+            {busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : <Moon size={14} />}
             {enabled ? 'Save changes' : 'Start on demand'}
           </button>
         </div>

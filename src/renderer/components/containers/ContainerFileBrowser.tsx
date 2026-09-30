@@ -8,6 +8,9 @@ import { fetchContainerFilesOn, fetchContainerFileContentOn } from '../../api/fl
 import type { ContainerFileEntry } from '../../../shared/types'
 import type { RowMember } from '../../../shared/fleetScoped'
 import { useModalA11y } from '../../hooks/useModalA11y'
+import Hint from '../common/Hint'
+import { EmptyState } from '../common/PageState'
+import { BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON, BTN_ICON_SM, TONE_QUIET, TONE_DANGER } from '../../lib/ui'
 import {
   Folder,
   File,
@@ -64,10 +67,10 @@ function FileIcon({ entry }: { entry: ContainerFileEntry }) {
   }
   const ext = getExtension(entry.name)
   if (ext === 'json') {
-    return <FileJson className="h-4 w-4 text-amber-400 flex-shrink-0" />
+    return <FileJson className="h-4 w-4 text-teal-400 flex-shrink-0" />
   }
   if (['sh', 'bash', 'zsh', 'py', 'js', 'ts', 'rb', 'go', 'rs', 'lua', 'pl'].includes(ext)) {
-    return <FileCode className="h-4 w-4 text-violet-400 flex-shrink-0" />
+    return <FileCode className="h-4 w-4 text-purple-400 flex-shrink-0" />
   }
   return <FileText className="h-4 w-4 text-slate-400 flex-shrink-0" />
 }
@@ -292,7 +295,7 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
               >
                 {fileName}
               </h2>
-              <p className="text-[11px] text-slate-500 font-mono truncate" title={filePath}>
+              <p className="text-[11px] text-slate-400 font-mono truncate" title={filePath}>
                 {filePath}
               </p>
             </div>
@@ -309,49 +312,31 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
               </span>
             )}
             {/* Download button */}
-            <button
-              onClick={handleDownload}
-              disabled={content === null}
-              className="
-                flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                text-xs font-medium
-                bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
-                hover:bg-emerald-500/20 transition-all
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
-              title="Download file"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download
+            <button onClick={handleDownload} disabled={content === null} className={BTN_TOOLBAR_QUIET}>
+              <Download size={14} />
+              <span className="hidden sm:inline">Download</span>
+              <span className="sm:hidden sr-only">Download</span>
             </button>
             {/* Close button */}
-            <button
-              onClick={onClose}
-              className="
-                flex items-center justify-center
-                w-8 h-8 rounded-lg
-                text-slate-500 hover:text-slate-300
-                hover:bg-white/5
-                transition-colors duration-150
-              "
-              aria-label="Close file viewer"
-            >
-              <X size={18} strokeWidth={2} />
-            </button>
+            <Hint label="Close">
+              <button onClick={onClose} className={`${BTN_ICON} ${TONE_QUIET}`} aria-label="Close file viewer">
+                <X size={16} strokeWidth={2} />
+              </button>
+            </Hint>
           </div>
         </div>
 
         {/* Content area */}
         <div className="flex-1 overflow-hidden">
           {loading && (
-            <div className="flex items-center justify-center h-64 gap-3">
+            <div role="status" className="flex items-center justify-center h-64 gap-3">
               <RefreshCw className="h-5 w-5 text-emerald-400 animate-spin" />
-              <span className="text-sm text-slate-400">Reading file...</span>
+              <span className="text-sm text-slate-400">Reading the file…</span>
             </div>
           )}
 
           {error && (
-            <div className="flex flex-col items-center justify-center h-64 gap-3 px-6">
+            <div role="alert" className="flex flex-col items-center justify-center h-64 gap-3 px-6">
               <AlertCircle className="h-8 w-8 text-rose-400" />
               <p className="text-sm text-rose-300 text-center">{error}</p>
             </div>
@@ -359,6 +344,8 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
 
           {!loading && !error && content !== null && (
             <pre
+              tabIndex={0}
+              aria-label={`Contents of ${fileName}`}
               className="
                 px-6 py-5
                 text-[12px] leading-relaxed font-mono text-slate-300
@@ -366,6 +353,7 @@ function FileViewer({ containerName, member = null, filePath, fileName, onClose 
                 overflow-auto max-h-[calc(85vh-130px)]
                 scrollbar-thin
                 selection:bg-emerald-500/30
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40
               "
             >
               {content || '(empty file)'}
@@ -475,11 +463,12 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
           {/* Header with collapse toggle */}
           <button
             onClick={() => setCollapsed(!collapsed)}
+            aria-expanded={!collapsed}
             className="flex items-center gap-2 w-full px-5 py-4 hover:bg-white/[0.03] transition-colors"
           >
             <FolderOpen className="h-4 w-4 text-emerald-400" />
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-              File Browser
+              File browser
             </h2>
             <ChevronRight
               className={`h-4 w-4 text-slate-500 ml-auto transition-transform duration-200 ${
@@ -493,41 +482,32 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
               {/* Toolbar: breadcrumbs + actions */}
               <div className="flex items-center gap-3 flex-wrap">
                 {/* Back / parent directory button */}
-                <button
-                  onClick={navigateUp}
-                  disabled={isRoot || loading}
-                  className="
-                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
-                    text-xs font-medium
-                    bg-white/5 border border-white/5
-                    text-slate-400 hover:text-white hover:bg-white/10
-                    transition-all duration-200
-                    disabled:opacity-30 disabled:cursor-not-allowed
-                  "
-                  title="Go to parent directory"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Up
-                </button>
+                <Hint label="Go to the parent directory">
+                  <button onClick={navigateUp} disabled={isRoot || loading} className={BTN_CARD_QUIET}>
+                    <ArrowLeft size={12} />
+                    Up
+                  </button>
+                </Hint>
 
                 {/* Breadcrumb navigation */}
-                <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+                <nav aria-label="Path" className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
                   {breadcrumbs.map((crumb, idx) => {
                     const isLast = idx === breadcrumbs.length - 1
                     return (
                       <React.Fragment key={crumb.path}>
                         {idx > 0 && (
-                          <ChevronRight className="h-3 w-3 text-slate-500 flex-shrink-0" />
+                          <ChevronRight className="h-3 w-3 text-slate-500 flex-shrink-0" aria-hidden="true" />
                         )}
                         <button
                           onClick={() => !isLast && navigateTo(crumb.path)}
                           disabled={isLast || loading}
+                          aria-current={isLast ? 'location' : undefined}
                           className={`
-                            px-1.5 py-0.5 rounded text-xs font-mono flex-shrink-0
+                            px-1.5 py-1 rounded text-xs font-mono flex-shrink-0
                             transition-colors duration-150
                             ${isLast
                               ? 'text-slate-200 font-semibold cursor-default'
-                              : 'text-slate-500 hover:text-emerald-400 hover:bg-white/5'
+                              : 'text-slate-400 hover:text-emerald-400 hover:bg-white/5'
                             }
                           `}
                           title={crumb.path}
@@ -540,40 +520,22 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
                 </nav>
 
                 {/* Refresh button */}
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="
-                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
-                    text-xs font-medium
-                    bg-white/5 border border-white/5
-                    text-slate-400 hover:text-white hover:bg-white/10
-                    transition-all duration-200
-                    disabled:opacity-30
-                  "
-                  title="Refresh directory"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                <Hint label="Refresh the directory">
+                  <button onClick={handleRefresh} disabled={loading} className={`${BTN_ICON_SM} ${TONE_QUIET}`} aria-label="Refresh the directory">
+                    <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                  </button>
+                </Hint>
               </div>
 
               {/* Error banner */}
               {error && (
-                <div className="flex items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
+                <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3">
                   <AlertCircle className="h-5 w-5 text-rose-400 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-rose-300">{error}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-rose-300 break-words">{error}</p>
                   </div>
-                  <button
-                    onClick={handleRefresh}
-                    className="
-                      flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                      text-xs font-medium
-                      bg-rose-500/10 text-rose-300 border border-rose-500/20
-                      hover:bg-rose-500/20 transition-all
-                    "
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                  <button onClick={handleRefresh} className={`${BTN_CARD} ${TONE_DANGER}`}>
+                    <RefreshCw size={12} />
                     Retry
                   </button>
                 </div>
@@ -584,19 +546,19 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-white/5">
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5">
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5">
                         Name
                       </th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-20">
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5 w-20">
                         Type
                       </th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-24">
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5 w-24">
                         Size
                       </th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-28 hidden md:table-cell">
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5 w-28 hidden md:table-cell">
                         Permissions
                       </th>
-                      <th className="text-left text-slate-500 uppercase tracking-wider font-semibold px-4 py-2.5 w-40 hidden lg:table-cell">
+                      <th scope="col" className="text-left text-slate-400 uppercase tracking-wider font-semibold px-4 py-2.5 w-40 hidden lg:table-cell">
                         Modified
                       </th>
                     </tr>
@@ -634,13 +596,15 @@ const ContainerFileBrowser: React.FC<Props> = ({ containerName, member = null })
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-3 min-w-0">
                               <FileIcon entry={entry} />
-                              <span
-                                className={`font-mono truncate ${entryNameColor(entry)}`}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleEntryClick(entry) }}
+                                className={`font-mono truncate rounded text-left ${entryNameColor(entry)}`}
                                 title={entry.name}
                               >
                                 {entry.name}
                                 {entry.type === 'directory' && '/'}
-                              </span>
+                              </button>
                             </div>
                           </td>
 
