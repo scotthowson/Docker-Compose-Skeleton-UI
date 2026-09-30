@@ -1,3 +1,4 @@
+import './userData' // first: it decides where the settings and the sign-in live (see the file)
 import { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme } from 'electron'
 import path from 'path'
 import http from 'http'

@@ -26,7 +26,7 @@ There is no unit-test suite and no linter. The checks are `npm run typecheck`, `
 ### Process Model (Electron)
 
 ```
-Main Process (src/main/index.ts)
+Main Process (src/main/index.ts; its first import, userData.ts, names the data folder "DCS Manager" and carries an older "Docker Compose Skeleton UI" folder over once)
   ├── BrowserWindow with contextIsolation: true
   ├── electron-store for persistent settings (IPC bridge)
   ├── CORS proxy via session.webRequest (allows localhost API calls)

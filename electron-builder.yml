@@ -1,5 +1,5 @@
 appId: com.dcs.skeleton-ui
-productName: Docker Compose Skeleton UI
+productName: DCS Manager
 directories:
   output: release
   buildResources: build
