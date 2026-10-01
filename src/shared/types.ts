@@ -3767,7 +3767,21 @@ export interface FleetTemplatesResponse { total: number; templates: FleetTemplat
 /** GET /fleet/versions — the hub's DCS version next to every member's (asked live) */
 export interface FleetMemberVersion { id: string; name: string; vmid: number | null; url: string; /** the version recorded at join/last update */ recorded: string; version: string; reachable: boolean; /** answering, on another version than the hub */ behind: boolean }
 export interface FleetUpdateResult { id: string; success: boolean; message: string; from?: string; to?: string; restart?: string }
-export interface FleetUpdateRound { at: number; hub_version: string; results: FleetUpdateResult[]; updated: number; failed: number }
+/** one update round as GET /fleet/versions `last_round` keeps it: `running` while the members fetch the hub's code and
+ *  re-execute (results empty, the counts 0), `done` afterwards, `aborted` when the hub went down in the middle of it;
+ *  a hub before 4.0.4 sends no status (its rounds were always finished) */
+export interface FleetUpdateRound {
+  status?: 'running' | 'done' | 'aborted'
+  at: number
+  started_at?: number
+  finished_at?: number
+  /** the member ids a running round addresses */
+  members?: string[]
+  hub_version: string
+  results: FleetUpdateResult[]
+  updated: number
+  failed: number
+}
 /** GET /system/docker-engine — the Docker Engine here and what its package source offers */
 export interface DockerEngineStatus { status: 'idle' | 'running' | 'done' | 'failed'; started_at?: string; finished_at?: string; version?: string; exit_code?: number; output?: string; by?: string }
 export interface DockerEngineInfo {
@@ -3797,7 +3811,9 @@ export interface DockerEngineUpdateResponse { success: boolean; status: string; 
 export interface FleetDockerEngineUpdateResponse { success: boolean; results: { id: string; success: boolean; message: string }[]; started: number; failed: number }
 
 export interface FleetVersions { hub: { version: string }; members: FleetMemberVersion[]; behind: number; unreachable: number; /** a round is queued for after the hub's own restart */ pending: boolean; last_round: FleetUpdateRound | null; /** when the members were asked (epoch seconds) */ checked_at: number }
-export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean }
+/** POST /fleet/update: the finished round — or 202 with `running: true` when it did not finish within the API's wait (a
+ *  member's self-update takes minutes); the result then comes from GET /fleet/versions `last_round` once that is no longer running */
+export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean; running?: boolean; message?: string }
 /** firewalld on the hub and the API port the VMs fetch DCS from and join on (certain: firewalld itself said; else read from the zone as shipped) */
 export interface HubFirewall { active: boolean; port: number; zone: string; open: boolean | null; certain: boolean }
 
