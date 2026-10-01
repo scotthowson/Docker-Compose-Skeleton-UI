@@ -32,12 +32,13 @@ import Hint from '../components/common/Hint'
 import { pageLabel } from '../constants/pageTitles'
 import {
   BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_ICON_SM,
-  TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
+  TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER,
 } from '../lib/ui'
 import { FIELD, INPUT, LABEL, FOCUS_RING as FOCUS, CHOICE, CHOICE_ON, CHOICE_OFF, SUBHEAD } from '../lib/fieldStyles'
 import { usePolling } from '../hooks/usePolling'
 import { FloatingSaveBar } from '../components/common/FloatingSaveBar'
-import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, updateConfig, fetchConfig } from '../api/endpoints'
+import { fetchVersion, fetchDisks, fetchAlertConfig, updateAlertConfig, updateConfig, fetchConfig, authVerify, authChangePassword } from '../api/endpoints'
+import { ApiError } from '../api/client'
 import { patchServerProfile, syncProfileFromServer, readLocalProfile, mergeServerProfile, cleanPrefs, PROFILE_KEYS, SYNCED_PREFS } from '../lib/userSync'
 import type { APIVersion, DiskInfo, CustomDiskEntry, AppSettings, AlertThresholds, PageId } from '../../shared/types'
 
@@ -853,9 +854,10 @@ function AppearanceSettings() {
     const prof = getProfileData()
     saveProfileData({ ...prof, backgroundImage: val })
     setBackgroundImage(val)
-    // Persist branding to server so it survives browser data clears
+    // Persist branding to server so it survives browser data clears — POST /config is the admin's (a user's call
+    // was a 403 swallowed here), so only an admin writes it; everyone else keeps the name on this device
     const isConn = useConnectionStore.getState().status === 'connected'
-    if (isConn) {
+    if (isConn && useAuthStore.getState().userRole === 'admin') {
       updateConfig({ SERVER_NAME: name, SERVER_SUBTITLE: subtitle }).catch(() => {})
     }
   }, [nameInput, subtitleInput, bgInput, updateSetting])
@@ -1102,11 +1104,17 @@ function TwoFactorSetup() {
   const [loading, setLoading] = useState(false)
   const [disablePassword, setDisablePassword] = useState('')
 
-  // Check if TOTP is already enabled (look for totp_enabled in user data from server)
+  // Whether 2FA is already on: GET /auth/verify carries totp_enabled (an older server leaves it out, so the panel
+  // starts as idle there; the panel used to start idle on every server and never knew)
+  const isConnected = useConnectionStore((s) => s.status === 'connected')
   useEffect(() => {
-    // We'll check via the auth verify endpoint or just try setup
-    // For now, start as idle and let user click to set up
-  }, [])
+    if (!isConnected) return
+    let cancelled = false
+    authVerify().then((res) => {
+      if (!cancelled && res.totp_enabled) setStatus((s) => (s === 'idle' ? 'enabled' : s))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [isConnected])
 
   const handleSetup = async () => {
     setLoading(true)
@@ -1254,35 +1262,38 @@ function TwoFactorSetup() {
 // ---------------------------------------------------------------------------
 
 function SecuritySettings() {
-  const { changePassword, deleteAccount, error, clearError, currentUser, userRole } = useAuthStore()
-  const [section, setSection] = useState<'info' | 'password' | 'delete' | null>('info')
+  const { syncLocalPassword, logout } = useAuthStore()
+  const [section, setSection] = useState<'info' | 'password' | null>('info')
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
-  const [deletePw, setDeletePw] = useState('')
-  const [pwSuccess, setPwSuccess] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
   const [pwLoading, setPwLoading] = useState(false)
 
+  // The password is changed on the server (POST /auth/password): a form that only rewrote this browser's copy left
+  // the server on the old password. The server re-hashes it and ends every session of the account, this one too,
+  // so the person lands on the sign-in screen with a note to use the new password (the note travels the way the
+  // "session expired" one does: the sign-in screen sits outside the toast provider). The rules for a password
+  // someone CHOOSES match the sign-up (8 characters, an uppercase letter and a digit); the server holds it to 8.
   const handleChangePassword = async () => {
-    clearError()
-    if (newPw !== confirmPw) {
-      return // Handled by UI below
-    }
+    setPwError(null)
+    if (newPw !== confirmPw) return // Handled by UI below
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
+    if (!/[A-Z]/.test(newPw) || !/[0-9]/.test(newPw)) { setPwError('Password must contain at least one uppercase letter and one number'); return }
     setPwLoading(true)
-    const ok = await changePassword(currentPw, newPw)
-    setPwLoading(false)
-    if (ok) {
-      setPwSuccess(true)
-      setCurrentPw('')
-      setNewPw('')
-      setConfirmPw('')
-      setTimeout(() => { setPwSuccess(false); setSection('info') }, 2500)
+    try {
+      await authChangePassword(currentPw, newPw)
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : 'The server could not change the password')
+      setPwLoading(false)
+      return
     }
-  }
-
-  const handleDeleteAccount = async () => {
-    clearError()
-    await deleteAccount(deletePw)
+    // the local copy used for the app lock follows the password the server now holds
+    await syncLocalPassword(newPw)
+    setCurrentPw(''); setNewPw(''); setConfirmPw('')
+    sessionStorage.setItem('logout-reason', 'password-changed')
+    // the sessions saved for other servers are not this server's business
+    await logout({ keepOtherServers: true })
   }
 
   return (
@@ -1329,36 +1340,17 @@ function SecuritySettings() {
           {/* Two-Factor Authentication */}
           <TwoFactorSetup />
 
-          {/* Action buttons */}
+          {/* Action buttons — no "Delete account" here: the server has no endpoint for it, and a button that only
+              dropped this browser's copy of the account left the account on the server (an admin revokes it on the Users page) */}
           <div className="flex items-center gap-2 pt-2">
             <button
-              onClick={() => { clearError(); setSection('password') }}
+              onClick={() => { setPwError(null); setSection('password') }}
               className={BTN_TOOLBAR_QUIET}
             >
               <Key size={14} />
               Change password
             </button>
-            {userRole === 'admin' ? (
-              <button
-                type="button"
-                disabled
-                aria-describedby="delete-account-note"
-                className={`${BTN_TOOLBAR} ${TONE_QUIET} cursor-not-allowed`}
-              >
-                <Trash2 size={14} />
-                Delete account
-              </button>
-            ) : (
-              <button
-                onClick={() => { clearError(); setSection('delete') }}
-                className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
-              >
-                <Trash2 size={14} />
-                Delete account
-              </button>
-            )}
           </div>
-          {userRole === 'admin' && <p id="delete-account-note" className="text-[10px] text-slate-500">Admin accounts cannot be deleted from here.</p>}
         </>
       )}
 
@@ -1369,17 +1361,12 @@ function SecuritySettings() {
             <Key size={14} className="text-slate-400" />
             <h3 className="text-xs font-semibold text-slate-200">Change password</h3>
           </div>
+          <p className="text-[11px] text-slate-500">Every session of your account ends, this one too — you sign in again with the new password.</p>
 
-          {error && (
+          {pwError && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-400">
               <XCircle size={12} />
-              {error}
-            </div>
-          )}
-          {pwSuccess && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-400">
-              <Check size={12} />
-              Password changed successfully
+              {pwError}
             </div>
           )}
 
@@ -1397,7 +1384,7 @@ function SecuritySettings() {
             type="password"
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
-            placeholder="New password (min 6, uppercase + number)"
+            placeholder="New password (min 8, uppercase + number)"
             autoComplete="new-password"
             className={INPUT}
           />
@@ -1424,7 +1411,7 @@ function SecuritySettings() {
               Update password
             </button>
             <button
-              onClick={() => { setSection('info'); clearError(); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}
+              onClick={() => { setSection('info'); setPwError(null); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}
               className={BTN_TOOLBAR_QUIET}
             >
               Cancel
@@ -1433,56 +1420,6 @@ function SecuritySettings() {
         </div>
       )}
 
-      {/* Delete account form */}
-      {section === 'delete' && (
-        <div className="space-y-3 animate-fade-in">
-          <div className="rounded-lg bg-rose-500/5 border border-rose-500/20 p-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={14} className="text-rose-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-rose-300">Danger zone</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  This will permanently delete your account, profile data, and all settings. This action cannot be undone.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-400">
-              <XCircle size={12} />
-              {error}
-            </div>
-          )}
-
-          <input
-            aria-label="Your password"
-            type="password"
-            value={deletePw}
-            onChange={(e) => setDeletePw(e.target.value)}
-            placeholder="Enter your password to confirm"
-            autoComplete="current-password"
-            className={`${INPUT} !border-rose-500/20 focus:!border-rose-500/50 focus:!ring-rose-500/25`}
-          />
-
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={handleDeleteAccount}
-              disabled={!deletePw}
-              className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
-            >
-              <Trash2 size={14} />
-              Delete my account
-            </button>
-            <button
-              onClick={() => { setSection('info'); clearError(); setDeletePw('') }}
-              className={BTN_TOOLBAR_QUIET}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -1993,8 +1930,8 @@ function NotificationPreferencesSection() {
 // ---------------------------------------------------------------------------
 
 function SessionInfo() {
-  const { currentUser } = useAuthStore()
-  const [sessionData, setSessionData] = useState<{ expiresAt?: number; token?: string } | null>(null)
+  const { currentUser, apiToken } = useAuthStore()
+  const [sessionData, setSessionData] = useState<{ expiresAt?: number } | null>(null)
   const [timeLeft, setTimeLeft] = useState('')
   const [lastLogin, setLastLogin] = useState<string | null>(null)
   const [showToken, setShowToken] = useState(false)
@@ -2048,7 +1985,8 @@ function SessionInfo() {
     load()
   }, [currentUser])
 
-  const token = sessionData?.token ?? null
+  // the Bearer token the server issued (the row used to show a random client-only token nothing accepts)
+  const token = apiToken
   const tokenMasked = token ? `${token.slice(0, 8)}${'*'.repeat(Math.min(token.length - 12, 24))}${token.slice(-4)}` : null
 
   const handleCopyToken = useCallback(() => {

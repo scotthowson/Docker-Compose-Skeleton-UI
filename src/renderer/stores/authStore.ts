@@ -359,10 +359,9 @@ interface AuthState {
   /** Set the user role (from server auth response). Pass username explicitly
    *  when calling before login/register has set currentUser in the store. */
   setUserRole: (role: 'admin' | 'user' | 'bot' | null, forUsername?: string) => void
-  /** Change password for the current user */
-  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
-  /** Delete account */
-  deleteAccount: (password: string) => Promise<boolean>
+  /** The server accepted a new password for the signed-in account (POST /auth/password): the local copy used for
+   *  the app lock follows it, so the next unlock and the next offline sign-in take the new one */
+  syncLocalPassword: (newPassword: string) => Promise<void>
 }
 
 // Restore API token on startup
@@ -637,103 +636,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     apiClient.setAuthToken(null)
   },
 
-  changePassword: async (currentPassword: string, newPassword: string) => {
-    set({ error: null })
+  // The password itself is changed on the server (POST /auth/password, from the Settings page): a copy that only
+  // rewrote this browser's PBKDF2 hash used to leave the server on the old password. What stays here is the local
+  // app-lock copy following a change the server accepted; an account this device never signed in to has no copy,
+  // and the sign-in after the change creates one (Login: register with overwrite).
+  syncLocalPassword: async (newPassword: string) => {
     const { currentUser } = get()
-    if (!currentUser) {
-      set({ error: 'Not logged in' })
-      return false
-    }
-
-    if (newPassword.length < 8) {
-      set({ error: 'New password must be at least 8 characters' })
-      return false
-    }
-
-    if (!/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      set({ error: 'Password must contain at least one uppercase letter and one number' })
-      return false
-    }
-
+    if (!currentUser) return
     const accounts = await getAccounts()
     const account = accounts.find((a) => a.username.toLowerCase() === currentUser.toLowerCase())
-    if (!account) {
-      set({ error: 'Account not found' })
-      return false
-    }
-
-    const valid = await verifyPassword(currentPassword, account)
-    if (!valid) {
-      set({ error: 'Current password is incorrect' })
-      return false
-    }
-
-    // Re-hash with new PBKDF2 salt
+    if (!account) return
     const salt = generateSalt()
     account.passwordHash = await hashPassword(newPassword, salt)
     account.salt = salt
     account.hashVersion = 2
     await saveAccounts(accounts)
-
-    set({ error: null })
-    return true
-  },
-
-  deleteAccount: async (password: string) => {
-    set({ error: null })
-    const { currentUser } = get()
-    if (!currentUser) {
-      set({ error: 'Not logged in' })
-      return false
-    }
-
-    const accounts = await getAccounts()
-    const accountIdx = accounts.findIndex((a) => a.username.toLowerCase() === currentUser.toLowerCase())
-    if (accountIdx === -1) {
-      set({ error: 'Account not found' })
-      return false
-    }
-
-    const valid = await verifyPassword(password, accounts[accountIdx])
-    if (!valid) {
-      set({ error: 'Password is incorrect' })
-      return false
-    }
-
-    // Prevent deleting the last admin account
-    // Role is stored per-user in localStorage, not on the account object
-    const deletingUsername = accounts[accountIdx].username
-    const deletingRole = getPersistedUserRole(deletingUsername) || determineDefaultRole(deletingUsername, accounts)
-    if (deletingRole === 'admin') {
-      const otherAdmins = accounts.filter((a, i) => {
-        if (i === accountIdx) return false
-        const role = getPersistedUserRole(a.username) || determineDefaultRole(a.username, accounts)
-        return role === 'admin'
-      })
-      if (otherAdmins.length === 0) {
-        set({ error: 'Cannot delete the only admin account. Create another admin first.' })
-        return false
-      }
-    }
-
-    accounts.splice(accountIdx, 1)
-    await saveAccounts(accounts)
-
-    // Clean up per-user profile, role, and session
-    const deletedUser = get().currentUser
-    if (deletedUser) {
-      localStorage.removeItem(`user-profile-${deletedUser}`)
-      localStorage.removeItem(`${USER_ROLE_KEY_PREFIX}${deletedUser}`)
-    }
-    localStorage.removeItem('user-profile') // legacy key
-    clearPersistedSession()
-
-    set({
-      isAuthenticated: false,
-      currentUser: null,
-      hasAccount: accounts.length > 0,
-    })
-    return true
   },
 
   clearError: () => set({ error: null }),

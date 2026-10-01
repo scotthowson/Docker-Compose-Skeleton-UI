@@ -41,6 +41,8 @@ const CREDENTIAL_CHECK_PATHS = [
   '/auth/totp/validate',
   '/auth/totp/verify',
   '/auth/totp/disable',
+  // a wrong current password is a 401 about the body, not the session
+  '/auth/password',
   '/terminal/auth',
   '/terminal/exec',
   '/system/os-update',

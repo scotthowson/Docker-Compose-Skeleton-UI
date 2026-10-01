@@ -66,6 +66,9 @@ export default function Login() {
   // this screen mounts twice (and twice in development, StrictMode), and the first mount used to take the reason
   // away from the one that stays. It is forgotten when the screen goes away after having been on show.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => sessionStorage.getItem('logout-reason') === 'session-expired')
+  // a password change (Settings → Security) ends every session of the account on the server, this one too: the
+  // note to sign in with the new password lands here (this screen sits outside the dashboard's toast provider)
+  const [passwordChangedNotice, setPasswordChangedNotice] = useState(() => sessionStorage.getItem('logout-reason') === 'password-changed')
   useEffect(() => {
     const shownAt = Date.now()
     return () => { if (Date.now() - shownAt > 400) sessionStorage.removeItem('logout-reason') }
@@ -882,6 +885,22 @@ export default function Login() {
                   </div>
                   <Hint label="Dismiss">
                     <button type="button" aria-label="Dismiss" onClick={() => setSessionExpiredNotice(false)} className={`${BTN_ICON_SM} text-amber-400 hover:bg-amber-500/10 shrink-0 ml-auto ${FOCUS_RING}`}>
+                      <X size={14} />
+                    </button>
+                  </Hint>
+                </div>
+              )}
+
+              {/* Password changed notice */}
+              {passwordChangedNotice && (
+                <div className="flex items-center gap-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-3 mb-4 animate-fade-in" role="status">
+                  <KeyRound size={15} className="text-emerald-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-300">Password changed</p>
+                    <p className="text-[10px] text-emerald-400/70 mt-0.5">Every session of your account was signed out. Sign in again with the new password.</p>
+                  </div>
+                  <Hint label="Dismiss">
+                    <button type="button" aria-label="Dismiss" onClick={() => setPasswordChangedNotice(false)} className={`${BTN_ICON_SM} text-emerald-400 hover:bg-emerald-500/10 shrink-0 ml-auto ${FOCUS_RING}`}>
                       <X size={14} />
                     </button>
                   </Hint>

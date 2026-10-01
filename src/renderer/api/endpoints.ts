@@ -62,6 +62,7 @@ import type {
   AuthResponse,
   AuthVerifyResponse,
   AuthLogoutResponse,
+  AuthPasswordChangeResponse,
   InviteResponse,
   InviteListResponse,
   UserListResponse,
@@ -636,6 +637,11 @@ export function authListInvites(): Promise<InviteListResponse> {
   return apiClient.get<InviteListResponse>('/auth/invites')
 }
 
+/** DELETE /auth/invite/:code — Revoke an invite code (admin); 404 when the code is unknown */
+export function authDeleteInvite(code: string): Promise<{ success: boolean; code: string; message: string }> {
+  return apiClient.delete<{ success: boolean; code: string; message: string }>(`/auth/invite/${encodeURIComponent(code)}`)
+}
+
 /** POST /auth/revoke — Revoke a user's access */
 export function authRevokeUser(username: string): Promise<{ success: boolean; message: string }> {
   return apiClient.post<{ success: boolean; message: string }>('/auth/revoke', { username })
@@ -649,6 +655,12 @@ export function authLogout(): Promise<AuthLogoutResponse> {
 /** POST /auth/logout-all — Invalidate all sessions for a user (admin) */
 export function authLogoutAll(username: string): Promise<AuthLogoutResponse> {
   return apiClient.post<AuthLogoutResponse>('/auth/logout-all', { username })
+}
+
+/** POST /auth/password — Change the signed-in account's password on the server; every session of the account ends,
+ *  this one too (401: the current password is wrong, 400: the new one is shorter than 8 characters) */
+export function authChangePassword(currentPassword: string, newPassword: string): Promise<AuthPasswordChangeResponse> {
+  return apiClient.post<AuthPasswordChangeResponse>('/auth/password', { current_password: currentPassword, new_password: newPassword })
 }
 
 /** POST /auth/refresh — Refresh current session token */

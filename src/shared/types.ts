@@ -307,6 +307,8 @@ export interface ImageInfo {
 export interface ServerConfig {
   environment: string
   update_channel?: string
+  /** UPDATE_ON_BOOT: pull image updates during an unattended boot (an older API leaves it out) */
+  update_on_boot?: boolean
   update_auto_rollback?: boolean
   update_health_grace?: number
   update_rollback_drop?: number
@@ -757,10 +759,19 @@ export interface AuthVerifyResponse {
   role: string
   /** Set when valid is false (older servers answer 200 instead of 401) */
   message?: string
+  /** 4.0.5: whether the account asks for a TOTP code at sign-in (an older server leaves it out) */
+  totp_enabled?: boolean
 }
 
 export interface AuthLogoutResponse {
   success: boolean
+  message: string
+}
+
+/** POST /auth/password — the server re-hashed the password and ended every session of the account, this one too */
+export interface AuthPasswordChangeResponse {
+  success: boolean
+  signed_out: boolean
   message: string
 }
 
@@ -2718,10 +2729,13 @@ export interface WebhookDeleteResponse {
 }
 
 export interface WebhookTestResponse {
+  /** false when the hook did not answer 2xx (status_code 0: unreachable) */
   success: boolean
   status_code: number
   url: string
   timestamp: string
+  /** 4.0.5: one sentence about the answer, for the toast (an older API leaves it out) */
+  message?: string
 }
 
 // POST /images/pull
