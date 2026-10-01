@@ -29,6 +29,9 @@ import '@mantine/core/styles/Popover.css'
 import '@mantine/core/styles/Progress.css'
 import '@mantine/core/styles/RingProgress.css'
 import '@mantine/core/styles/ScrollArea.css'
+// the sliding pill of a SegmentedControl is a FloatingIndicator: without its own sheet it has no top/left and sits the
+// control's padding too far right and down (every Mantine pill row in the app looked off by two pixels)
+import '@mantine/core/styles/FloatingIndicator.css'
 import '@mantine/core/styles/SegmentedControl.css'
 import '@mantine/core/styles/Switch.css'
 import '@mantine/core/styles/Timeline.css'
