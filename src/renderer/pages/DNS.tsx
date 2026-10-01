@@ -131,6 +131,10 @@ function DeleteRouteModal({ route, onConfirm, onCancel, busy }: {
 }) {
   // a destructive question: Cancel has the focus, so Enter does not delete
   const cancelRef = useRef<HTMLButtonElement>(null)
+  // a VM's route is deleted on the VM (its route file); the hub drops it from its proxy on the next route sync and
+  // never removes a Cloudflare record for it — only the hub's own routes lose their record with the file
+  const fr = route as FleetRoute
+  const vm = fr.member ? (fr.member_name || fr.member) : ''
   return createPortal(
     <ModalOverlay onClose={onCancel} initialFocus={cancelRef} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
       <div className="relative w-full max-w-md mx-4 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
@@ -140,12 +144,15 @@ function DeleteRouteModal({ route, onConfirm, onCancel, busy }: {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-slate-100">Delete route</h3>
-            <p className="text-[10px] text-slate-500">Removes the Traefik route file and its Cloudflare record</p>
+            <p className="text-[10px] text-slate-500">{vm ? `Removes the route file on the VM ${vm}` : 'Removes the Traefik route file and its Cloudflare record'}</p>
           </div>
         </div>
         <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 mb-4">
           <p className="text-xs text-rose-300">
-            <span className="font-semibold text-rose-400">{route.subdomain}</span> will stop answering. The route file and the DNS record are removed; the service keeps running.
+            <span className="font-semibold text-rose-400">{route.subdomain}</span>{' '}
+            {vm
+              ? 'will stop answering once the hub syncs the VM\'s routes (within half a minute). The route file is removed on the VM; its Cloudflare record stays — delete it on the Records tab if it is no longer wanted. The service keeps running.'
+              : 'will stop answering. The route file and the DNS record are removed; the service keeps running.'}
           </p>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.03] p-3 mb-5 space-y-1.5">
@@ -165,8 +172,10 @@ function DeleteRouteModal({ route, onConfirm, onCancel, busy }: {
   )
 }
 
-function RecordModal({ zone, initial, onClose, onSaved }: {
+function RecordModal({ zone, zoneId, initial, onClose, onSaved }: {
   zone: string
+  /** the zone chosen on the Records tab ('' = the server's own zone): the record is written there, not in the default zone */
+  zoneId: string
   initial: DnsRecord | null
   onClose: () => void
   onSaved: (rec: DnsRecord, created: boolean) => void
@@ -194,6 +203,8 @@ function RecordModal({ zone, initial, onClose, onSaved }: {
     if (problem) { setError(problem); return }
     setSaving(true); setError(null)
     const input: DnsRecordInput = {
+      // the zone picked above the list: without it the API wrote to (or looked the id up in) its default zone
+      zone: zoneId || undefined,
       type, name: name.trim() || '@', content: content.trim(), ttl: proxiable && proxied ? 1 : ttl,
       proxied: proxiable ? proxied : false, comment: comment.trim(),
       ...(type === 'MX' ? { priority: priority ? Number(priority) : 10 } : {}),
@@ -206,7 +217,7 @@ function RecordModal({ zone, initial, onClose, onSaved }: {
     } finally {
       setSaving(false)
     }
-  }, [type, name, content, priority, comment, ttl, proxied, proxiable, editing, initial, onSaved])
+  }, [zoneId, type, name, content, priority, comment, ttl, proxied, proxiable, editing, initial, onSaved])
 
   // Ctrl+Enter saves (Escape is the overlay's: it closes the dialog and gives the focus back)
   useEffect(() => {
@@ -512,7 +523,11 @@ export default function DNS() {
       const fr = route as FleetRoute
       if (fr.member) await apiClient.put(memberPath(fr.member, `/routes/${encodeURIComponent(route.stack)}/${encodeURIComponent(route.service)}`), { subdomain: newSub })
       else await updateRoute(route.stack, route.service, newSub)
-      addToast({ type: 'success', message: `Route renamed to ${newSub}.${domain} — the DNS record follows` })
+      // the hub moves the Cloudflare record of its own route with the file; a VM's route is rewritten on the VM, the
+      // hub's proxy picks the new name up on its next route sync and its DNS record is not moved for it
+      addToast(fr.member
+        ? { type: 'success', duration: 8000, message: `Route renamed to ${newSub}.${domain} on the VM ${fr.member_name || fr.member} — the hub follows on its next route sync. Its DNS record is not moved: Sync on the Records tab creates the new one, the old one stays there` }
+        : { type: 'success', message: `Route renamed to ${newSub}.${domain} — the DNS record follows` })
       setEditingRoute(null)
       refreshAll()
     } catch (err) {
@@ -528,7 +543,10 @@ export default function DNS() {
       const fr = route as FleetRoute
       if (fr.member) await apiClient.delete(memberPath(fr.member, `/routes/${encodeURIComponent(route.stack)}/${encodeURIComponent(route.service)}`))
       else await deleteRoute(route.stack, route.service)
-      addToast({ type: 'success', message: `Route deleted: ${route.subdomain}` })
+      // a VM's route: the file is gone on the VM, the hub's proxy drops it on its next route sync, its record stays
+      addToast(fr.member
+        ? { type: 'success', duration: 8000, message: `Route deleted on the VM ${fr.member_name || fr.member}: ${route.subdomain} — the hub drops it on its next route sync; its DNS record stays on the Records tab` }
+        : { type: 'success', message: `Route deleted: ${route.subdomain}` })
       setDeletingRoute(null)
       refreshAll()
     } catch (err) {
@@ -562,7 +580,8 @@ export default function DNS() {
   const handleToggleProxy = useCallback(async (rec: DnsRecord) => {
     setBusyRecord(rec.id)
     try {
-      await updateDnsRecord(rec.id, { proxied: !rec.proxied })
+      // the record lives in the zone picked above the list: without it the API looked its id up in the default zone
+      await updateDnsRecord(rec.id, { proxied: !rec.proxied, zone: zoneId || undefined })
       addToast({ type: 'success', message: `${rec.name} is now ${rec.proxied ? 'DNS only' : 'proxied through Cloudflare'}` })
       refreshDns()
     } catch (err) {
@@ -570,7 +589,7 @@ export default function DNS() {
     } finally {
       setBusyRecord(null)
     }
-  }, [addToast, refreshDns])
+  }, [zoneId, addToast, refreshDns])
 
   const handleDeleteRecord = useCallback(async (rec: DnsRecord, force: boolean) => {
     setBusyRecord(rec.id)
@@ -620,7 +639,7 @@ export default function DNS() {
       <DisconnectedBanner />
 
       {deletingRoute && <DeleteRouteModal route={deletingRoute} busy={deleting} onConfirm={() => handleDeleteRoute(deletingRoute)} onCancel={() => setDeletingRoute(null)} />}
-      {recordModal.open && <RecordModal zone={zoneName} initial={recordModal.record} onClose={() => setRecordModal({ open: false, record: null })} onSaved={handleRecordSaved} />}
+      {recordModal.open && <RecordModal zone={zoneName} zoneId={zoneId} initial={recordModal.record} onClose={() => setRecordModal({ open: false, record: null })} onSaved={handleRecordSaved} />}
       {deletingRecord && <DeleteRecordModal record={deletingRecord} zone={zoneName} busy={busyRecord === deletingRecord.id} onConfirm={(force) => handleDeleteRecord(deletingRecord, force)} onCancel={() => setDeletingRecord(null)} />}
 
       {/* ---- Page Header ---- */}
