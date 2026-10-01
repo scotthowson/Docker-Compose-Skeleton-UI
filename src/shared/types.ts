@@ -2047,6 +2047,18 @@ export interface TemplateDryRunResponse {
   env_existing?: { key: string; current_value: string; new_value: string }[]
   lines_added: number
   compose_preview: string
+  /** the template runs once per server */
+  is_singleton?: boolean
+  /** a singleton that is already deployed: the service names, comma-separated */
+  singleton_conflict?: string
+  has_singleton_conflict?: boolean
+  /** required variables with no value, comma-separated */
+  missing_required_vars?: string
+  has_missing_vars?: boolean
+  /** what the security scan of the compose found */
+  security_warnings?: string[]
+  /** what the pre-deploy plugin hooks said (dry run) */
+  plugin_results?: { plugin: string; output: string }[]
 }
 
 // Automations

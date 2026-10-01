@@ -1355,8 +1355,13 @@ export function deployTemplate(name: string, opts: {
   authelia_services?: string[]
   /** services Sablier starts on demand (route carries the middleware) */
   on_demand_services?: string[]
+  /** false: no route, no DNS record and no proxy network for this deploy (the API otherwise gives every service a default route) */
+  routes?: boolean
+  /** only these services get a route; an empty list sent on purpose means none */
+  route_services?: string[]
 }, member?: string | null): Promise<TemplateDeployResponse> {
-  return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 180000)
+  // a first deploy pulls every image and Authelia hashes its secrets: well past the usual 30 s
+  return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 600000)
 }
 
 /** POST /templates/import — Import a custom template */
@@ -1403,6 +1408,8 @@ export function undeployTemplate(name: string, opts: {
 /** POST /templates/:name/dry-run — Preview deployment without writing */
 export function dryRunTemplate(name: string, opts: {
   target_stack: string; variables?: Record<string, string>; exclude_services?: string[]
+  /** the same routing choice the deploy sends (see deployTemplate) */
+  routes?: boolean; route_services?: string[]
 }, member?: string | null): Promise<TemplateDryRunResponse> {
   return apiClient.post<TemplateDryRunResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/dry-run`), opts, member ? 60000 : undefined)
 }
