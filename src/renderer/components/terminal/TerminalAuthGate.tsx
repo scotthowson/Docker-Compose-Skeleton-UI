@@ -46,6 +46,8 @@ export default function TerminalAuthGate({ onAuthenticated }: Props) {
           sessionStorage.setItem('terminal-session', JSON.stringify({
             token: res.token,
             username: res.username,
+            // the System page's OS updates restore the session only while it is valid: the API says how long (4 h as shipped)
+            expiresAt: Date.now() + (res.expires_in || 14400) * 1000,
           }))
         }
         onAuthenticated(res.token, res.username)
