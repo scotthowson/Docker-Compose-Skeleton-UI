@@ -356,6 +356,15 @@ function parseComposeServices(compose: string): { name: string; containerName: s
   return out
 }
 
+/** the subdomain an app was last deployed under, per template and service: a re-deploy offers it again instead of the service's name */
+const routeSubKey = (tpl: string, svc: string): string => `dcs.route-subdomain.${tpl}.${svc}`
+function rememberedSubdomain(tpl: string, svc: string): string | null {
+  try { const v = localStorage.getItem(routeSubKey(tpl, svc)); return v && /^[a-z0-9-]{1,63}$/.test(v) ? v : null } catch { return null }
+}
+function rememberSubdomains(tpl: string, rows: { name: string; subdomain: string; enabled: boolean }[]): void {
+  try { for (const r of rows) if (r.enabled && r.subdomain) localStorage.setItem(routeSubKey(tpl, r.name), r.subdomain) } catch { /* a private window keeps nothing */ }
+}
+
 function parseServicesWithPorts(compose: string): { name: string; containerName: string; port: string }[] {
   const results: { name: string; containerName: string; port: string }[] = []
   const lines = compose.split('\n')
@@ -692,12 +701,13 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const services = parseServicesWithPorts(detail.compose)
     setRouteServices(services.map((svc) => ({
       ...svc,
-      subdomain: svc.name,
+      // the name this app was last deployed under, when there was one: a re-deploy keeps its address
+      subdomain: rememberedSubdomain(template.name, svc.name) ?? svc.name,
       enabled: true,
       authelia: false,
       onDemand: false,
     })))
-  }, [traefikActive, traefikDomain, detail])
+  }, [traefikActive, traefikDomain, detail, template.name])
 
   // Generate route YAML from subdomain state (reactive)
   useEffect(() => {
@@ -936,6 +946,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     }
     const exclude = excludedServices.size > 0 ? Array.from(excludedServices) : undefined
     const routes = traefikActive && enableRouting && Object.keys(customRoutes).length > 0 ? customRoutes : undefined
+    if (routes) rememberSubdomains(template.name, routeServices)
     const proxyFlag = traefikActive && connectProxy ? true : undefined
     const resLimits = enableResourceLimits && (memLimit || cpuLimit)
       ? { mem_limit: memLimit || undefined, cpus: cpuLimit ? Number(cpuLimit) : undefined }
