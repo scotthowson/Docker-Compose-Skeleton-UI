@@ -1,6 +1,6 @@
 // =============================================================================
-// Integrations that talk to other apps on the same server — Homarr:
-//   GET /homarr/status, POST|DELETE /homarr/key, POST /homarr/sync
+// Integrations that talk to other apps on the same server or in a VM of the
+// fleet — Homarr: GET /homarr/status, POST|DELETE /homarr/key, POST /homarr/sync
 // =============================================================================
 
 /** How DCS can put a deployed app on Homarr */
@@ -9,6 +9,8 @@ export type HomarrMode =
   | 'board'
   /** sqlite only (no key): the app lands in the library and the owner drags it onto a board */
   | 'library'
+  /** Homarr is deployed here but its container is stopped: apps land on it again once it runs */
+  | 'stopped'
   /** Homarr is not deployed here */
   | 'none'
 
@@ -25,6 +27,10 @@ export interface HomarrStatus {
   boards?: number
   /** one sentence the server wants the owner to read */
   hint?: string
+  /** 4.0.5: where Homarr runs — "hub" for this server, a member id for a VM of the fleet, null when nowhere */
+  where?: string | null
+  /** the VM's name when `where` is a member (null on the hub) */
+  where_name?: string | null
 }
 
 /** POST /homarr/key — Homarr accepted the key and it is stored as the secret HOMARR_API_KEY */

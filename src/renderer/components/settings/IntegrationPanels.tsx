@@ -137,6 +137,7 @@ function missingOnServer(e: unknown): boolean {
 const HOMARR_WORDS = {
   board: 'Tiles on the home board',
   library: 'Library only — tiles need an API key',
+  stopped: 'Homarr is stopped',
   none: 'Homarr is not deployed here',
 } as const
 
@@ -213,9 +214,12 @@ export function HomarrPanel({ onOpenSecrets }: { onOpenSecrets?: () => void }) {
   }
 
   const mode = homarrMode(s)
-  const tone = mode === 'board' ? 'emerald' : mode === 'library' ? 'amber' : 'slate'
+  // stopped is amber like library: Homarr is there, something needs doing before tiles land
+  const tone = mode === 'board' ? 'emerald' : mode === 'library' || mode === 'stopped' ? 'amber' : 'slate'
+  // Homarr in a VM of the fleet (where = the member id): say so, the address alone looks like the hub's
+  const inVm = s.where && s.where !== 'hub' ? `in the VM ${s.where_name || s.where}` : ''
   const where = s.active
-    ? [s.url, s.port && !s.url.endsWith(`:${s.port}`) ? `port ${s.port}` : '', s.has_api_key && s.boards !== undefined ? `${s.boards} board${s.boards === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')
+    ? [inVm, s.url, s.port && !s.url.endsWith(`:${s.port}`) ? `port ${s.port}` : '', s.has_api_key && s.boards !== undefined ? `${s.boards} board${s.boards === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')
     : ''
   return (
     <div className="mt-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 space-y-3">
@@ -227,9 +231,10 @@ export function HomarrPanel({ onOpenSecrets }: { onOpenSecrets?: () => void }) {
         </div>
         {where && <div className="text-[11px] text-slate-500 break-all">{where}</div>}
       </div>
-      {mode === 'none' ? (
-        // the server's own sentence when it has one (the panel below says the rest itself once Homarr runs)
-        <div className="text-[11px] text-slate-500">{s.hint || 'Deploy the Homarr template and DCS registers every routed app on it — as a tile on the home board with an API key, in the app library without one.'}</div>
+      {mode === 'none' || mode === 'stopped' ? (
+        // the server's own sentence when it has one (the panel below says the rest itself once Homarr runs);
+        // a stopped Homarr gets the server's hint too (start it on the Containers page), not a key form it cannot test
+        <div className="text-[11px] text-slate-500">{s.hint || (mode === 'stopped' ? `Homarr is stopped: start it on the ${pageLabel('containers')} page and apps land on it again.` : 'Deploy the Homarr template and DCS registers every routed app on it — as a tile on the home board with an API key, in the app library without one.')}</div>
       ) : (
         <>
           <form onSubmit={(e) => { e.preventDefault(); void save() }} className="flex items-center gap-2 flex-wrap">

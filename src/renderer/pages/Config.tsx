@@ -371,6 +371,8 @@ export default function Config() {
     ENVIRONMENT: d.environment,
     LOG_LEVEL: d.log_level,
     TZ: d.timezone,
+    // the row showed "off" whatever .env held, and a save always sent the key (no original to diff against)
+    UPDATE_ON_BOOT: d.update_on_boot ?? false,
     SERVER_NAME: d.server_name,
     SERVER_SUBTITLE: d.server_subtitle ?? '',
     PROXY_DOMAIN: d.proxy_domain ?? '',
@@ -1100,6 +1102,7 @@ function getOriginalValue(data: ServerConfig, key: string): string | boolean | n
     ENVIRONMENT: data.environment,
     LOG_LEVEL: data.log_level,
     TZ: data.timezone,
+    UPDATE_ON_BOOT: data.update_on_boot ?? false,
     SERVER_NAME: data.server_name,
     SERVER_SUBTITLE: data.server_subtitle ?? '',
     PROXY_DOMAIN: data.proxy_domain ?? '',

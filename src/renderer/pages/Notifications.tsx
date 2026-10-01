@@ -537,10 +537,11 @@ export default function Notifications() {
     setTestingWebhookId(id)
     try {
       const res = await testWebhook(id)
+      // the server's own sentence about the answer (status 0 = unreachable); an older API only sends the code
       if (res.success) {
-        addToast({ type: 'success', message: `Webhook test sent (${res.status_code})` })
+        addToast({ type: 'success', message: res.message || `Webhook test sent (${res.status_code})` })
       } else {
-        addToast({ type: 'error', message: `Webhook test failed (${res.status_code})` })
+        addToast({ type: 'error', message: res.message || `Webhook test failed (${res.status_code})` })
       }
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to test webhook' })
