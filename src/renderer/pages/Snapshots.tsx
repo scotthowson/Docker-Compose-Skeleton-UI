@@ -47,7 +47,7 @@ import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import { apiClient } from '../api/client'
-import type { SnapshotEntry, SnapshotListResponse } from '../../shared/types'
+import type { SnapshotEntry, SnapshotListResponse, SnapshotCreateResponse } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,19 +82,21 @@ function relativeTime(ts: string, epoch?: number): string {
   return `${Math.floor(diffDays / 30)}mo ago`
 }
 
-/** Extract hostname and DCS version from filename if encoded, else return null */
-function parseFilenameMetadata(filename: string): {
-  hostname: string | null
-  version: string | null
-} {
-  // Common patterns: dcs-snapshot-<hostname>-<version>-<timestamp>.tar.gz
-  const match = filename.match(
-    /^dcs-snapshot-([^-]+(?:-[^-]+)*?)-v?([\d]+\.[\d]+\.[\d]+)/i,
-  )
-  if (match) {
-    return { hostname: match[1], version: `v${match[2]}` }
-  }
-  return { hostname: null, version: null }
+/** the DCS version a snapshot was taken on, as the manifest has it ("4.0.4" → "v4.0.4"; '' on an archive without one) */
+function snapshotVersion(s: SnapshotEntry): string {
+  const v = (s.dcs_version ?? '').trim()
+  return v ? (v.startsWith('v') ? v : `v${v}`) : ''
+}
+
+/** what the fleet's "New snapshot" did on each DCS, in one line: taken everywhere, taken on some (which failed, why), or nowhere */
+function fleetSnapshotToast(results: NonNullable<SnapshotCreateResponse['results']>): { type: 'success' | 'warning' | 'error'; message: string } {
+  const failed = results.filter((r) => !r.success)
+  const taken = results.length - failed.length
+  const vms = results.length - 1
+  if (failed.length === 0) return { type: 'success', message: `Snapshot taken on the hub and ${vms} VM${vms === 1 ? '' : 's'}` }
+  const why = failed.map((r) => `${r.name}: ${r.message || 'no answer'}`).join(' · ')
+  if (taken === 0) return { type: 'error', message: `No snapshot was taken — ${why}` }
+  return { type: 'warning', message: `Snapshot taken on ${taken} of ${results.length} — ${why}` }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +113,8 @@ function SnapshotCard({ snapshot, onDownload, onRestore, onDelete, downloading, 
   /** a restore or a delete is being asked about or running: the card's other buttons wait */
   locked: boolean
 }) {
-  const meta = parseFilenameMetadata(snapshot.filename)
+  // the manifest inside the archive says where and on which DCS it was taken (the file name never did)
+  const version = snapshotVersion(snapshot)
   const label = (text: string) => <span className="hidden md:inline">{text}</span>
 
   return (
@@ -134,11 +137,11 @@ function SnapshotCard({ snapshot, onDownload, onRestore, onDelete, downloading, 
         </div>
         {/* Badges */}
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {meta.hostname && (
-            <Badge component="span" color="slate" leftSection={<Server size={10} />}>{meta.hostname}</Badge>
+          {snapshot.hostname && (
+            <Badge component="span" color="slate" leftSection={<Server size={10} />}>{snapshot.hostname}</Badge>
           )}
-          {meta.version && (
-            <Badge component="span" color="slate">{meta.version}</Badge>
+          {version && (
+            <Badge component="span" color="slate">{version}</Badge>
           )}
         </div>
       </div>
@@ -318,7 +321,17 @@ export default function Snapshots() {
     setCreating(true)
     try {
       const result = await createSnapshot(createLabel.trim() || undefined, scope)
-      if (result.success) {
+      if (result.results) {
+        // Everywhere: the fleet answer says what each DCS did — its success is false as soon as one VM failed, so the
+        // toast reads the results themselves
+        const t = fleetSnapshotToast(result.results)
+        addToast({ ...t, duration: t.type === 'success' ? undefined : 8000 })
+        if (t.type !== 'error') {
+          setCreateLabel('')
+          setShowCreateInput(false)
+        }
+        refresh()
+      } else if (result.success) {
         addToast({
           type: 'success',
           message: `Snapshot "${result.filename}" created`,
@@ -329,7 +342,7 @@ export default function Snapshots() {
       } else {
         addToast({
           type: 'error',
-          message: 'Could not create the snapshot',
+          message: result.message || 'Could not create the snapshot',
           duration: 6000,
         })
       }

@@ -1814,6 +1814,9 @@ export interface SnapshotEntry {
   vmid?: number | null
   filename: string
   label: string
+  /** from the archive's manifest: the DCS that took it and its version ('' on an archive without one) */
+  hostname?: string
+  dcs_version?: string
   size: string
   timestamp: string
   epoch: number
@@ -1833,6 +1836,13 @@ export interface SnapshotCreateResponse {
   label: string
   size: string
   timestamp: string
+  message?: string
+  /** POST …?fleet=1 on a hub: one snapshot here and one on every VM — what each DCS did (id null = the hub);
+   *  `success` is false as soon as one of them failed, so read taken / failed / results */
+  fleet?: boolean
+  results?: { id: string | null; name: string; success: boolean; filename: string; message: string }[]
+  taken?: number
+  failed?: number
 }
 
 export interface SnapshotRestoreResponse {
@@ -2429,7 +2439,8 @@ export interface HealthScoreResponse {
     images: { score: number; weight: number; total: number; stale: number }
     uptime: { score: number; weight: number; seconds: number }
   }
-  stacks: StackHealthScore[]
+  /** per-stack scores: the API does not emit them today (the fleet view sends an empty list) — shown only when they come */
+  stacks?: StackHealthScore[]
   /** GET /health/score?fleet=1 on a hub: the members were folded in */
   fleet?: boolean
   members?: { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; score: number | null; grade: string | null }[]

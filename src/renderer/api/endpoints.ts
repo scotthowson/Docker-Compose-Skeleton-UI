@@ -1003,9 +1003,9 @@ export function fetchAppLogsLive(lines = 100, since?: string): Promise<LiveLogsR
 //       Compose History, Templates, Automations, Network Topology
 // ---------------------------------------------------------------------------
 
-/** POST /metrics/snapshot — Capture and persist current metrics */
-export function captureMetricsSnapshot(): Promise<MetricsSnapshotResponse> {
-  return apiClient.post<MetricsSnapshotResponse>('/metrics/snapshot')
+/** POST /metrics/snapshot — Capture and persist current metrics (on a fleet member when one is given: its own trends) */
+export function captureMetricsSnapshot(member?: string | null): Promise<MetricsSnapshotResponse> {
+  return apiClient.post<MetricsSnapshotResponse>(memberPath(member, '/metrics/snapshot'))
 }
 
 /** GET /metrics/trends — Query historical metrics */
