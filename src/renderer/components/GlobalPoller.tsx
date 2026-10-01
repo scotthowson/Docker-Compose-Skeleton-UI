@@ -7,6 +7,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useHealthStore } from '../stores/healthStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import { useContainerStore } from '../stores/containerStore'
 import { fetchServerStatus, fetchHealthReport, fetchContainers, checkSystemUpdate, fetchVersion } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
@@ -32,6 +33,8 @@ export function GlobalPoller() {
   const setContainerStats = useContainerStore((s) => s.setStats)
   const setContainersLoading = useContainerStore((s) => s.setLoading)
   const autoCheckUpdates = useSettingsStore((s) => s.autoCheckUpdates)
+  // GET /system/update/check is admin-only: a user's session never asks (it was a 403 every interval)
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
 
   const statusTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -157,8 +160,8 @@ export function GlobalPoller() {
     healthTimer.current = setInterval(pollHealth, HEALTH_INTERVAL)
     containersTimer.current = setInterval(pollContainers, CONTAINERS_INTERVAL)
 
-    // Delayed initial update check + periodic interval (if enabled)
-    if (autoCheckUpdates > 0) {
+    // Delayed initial update check + periodic interval (if enabled, and for an admin)
+    if (autoCheckUpdates > 0 && isAdmin) {
       updateTimer.current = setTimeout(() => {
         pollUpdates()
         // After initial check, set up the recurring interval
@@ -187,7 +190,7 @@ export function GlobalPoller() {
       clearTimers()
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [isConnected, autoCheckUpdates, pollStatus, pollHealth, pollContainers, pollUpdates])
+  }, [isConnected, isAdmin, autoCheckUpdates, pollStatus, pollHealth, pollContainers, pollUpdates])
 
   // Listen for Ctrl+R app-refresh events
   useEffect(() => {

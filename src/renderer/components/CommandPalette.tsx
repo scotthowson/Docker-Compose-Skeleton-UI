@@ -610,7 +610,42 @@ export function CommandPalette() {
         })
       }
 
-      // Dynamic stack commands
+      // The log viewer of every stack (its controls are admin-only: the block below)
+      for (const stack of stacks) {
+        items.push({
+          id: `stack-logs-${stack.name}`,
+          label: `View Logs: ${stack.name}`,
+          description: `Open log viewer for ${stack.name}`,
+          icon: <ScrollText size={16} className="text-cyan-400" />,
+          type: 'stack',
+          keywords: ['logs', 'log', 'view', 'stack', stack.name.toLowerCase(), 'output', 'tail'],
+          onSelect: () => {
+            setCurrentPage('logs')
+            setOpen(false)
+          },
+        })
+      }
+
+      // The log viewer of every container (its controls are admin-only: the block below)
+      for (const container of containers) {
+        items.push({
+          id: `container-logs-${container.member ?? 'local'}-${container.name}`,
+          label: `View Logs: ${container.name}`,
+          description: `Open log viewer for ${container.name}`,
+          icon: <ScrollText size={16} className="text-cyan-400" />,
+          type: 'container',
+          keywords: ['logs', 'log', 'view', 'container', container.name.toLowerCase(), 'output', 'tail'],
+          onSelect: () => {
+            setCurrentPage('logs')
+            setOpen(false)
+          },
+        })
+      }
+    }
+
+    // --- Stack and container controls (admin: the API answers 403 to a user). After the list above so
+    //     the palette keeps its order on an empty query ---
+    if (isConnected && isAdmin) {
       for (const stack of stacks) {
         if (stack.status === 'running') {
           items.push({
@@ -660,23 +695,7 @@ export function CommandPalette() {
             },
           })
         }
-
-        // View logs for every stack
-        items.push({
-          id: `stack-logs-${stack.name}`,
-          label: `View Logs: ${stack.name}`,
-          description: `Open log viewer for ${stack.name}`,
-          icon: <ScrollText size={16} className="text-cyan-400" />,
-          type: 'stack',
-          keywords: ['logs', 'log', 'view', 'stack', stack.name.toLowerCase(), 'output', 'tail'],
-          onSelect: () => {
-            setCurrentPage('logs')
-            setOpen(false)
-          },
-        })
       }
-
-      // Dynamic container commands
       for (const container of containers) {
         const isRunning = container.state === 'running'
 
@@ -728,20 +747,6 @@ export function CommandPalette() {
             },
           })
         }
-
-        // View logs for every container
-        items.push({
-          id: `container-logs-${container.member ?? 'local'}-${container.name}`,
-          label: `View Logs: ${container.name}`,
-          description: `Open log viewer for ${container.name}`,
-          icon: <ScrollText size={16} className="text-cyan-400" />,
-          type: 'container',
-          keywords: ['logs', 'log', 'view', 'container', container.name.toLowerCase(), 'output', 'tail'],
-          onSelect: () => {
-            setCurrentPage('logs')
-            setOpen(false)
-          },
-        })
       }
     }
 
