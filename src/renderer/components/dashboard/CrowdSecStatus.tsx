@@ -70,6 +70,9 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
   }
 
   const decisions = data.decisions ?? []
+  // the list holds the first 50 bans; the count is every active one
+  const activeBans = data.counts?.decisions_active ?? decisions.length
+  const shown = Math.min(decisions.length, 60)
   // what the CrowdSec page raises as needing attention (a bouncer that stopped asking, a chain without the bouncer ...) counts here too
   const attention = (data.issues ?? []).filter((i) => i.severity === 'warning' || i.severity === 'error')
   const banned = data.client_banned
@@ -81,7 +84,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
       card="crowdsec"
       icon={banned || attention.length > 0 ? ShieldAlert : undefined}
       tone={banned ? 'problem' : attention.length > 0 ? 'attention' : undefined}
-      badge={<Badge component="span" color={attention.length > 0 || decisions.length > 0 ? 'amber' : 'emerald'}>{attention.length > 0 ? 'needs attention' : `${decisions.length} active ban${decisions.length === 1 ? '' : 's'}`}</Badge>}
+      badge={<Badge component="span" color={attention.length > 0 || activeBans > 0 ? 'amber' : 'emerald'}>{attention.length > 0 ? 'needs attention' : `${activeBans} active ban${activeBans === 1 ? '' : 's'}`}</Badge>}
       open="crowdsec"
       clickable={false}
     >
@@ -121,7 +124,7 @@ export default function CrowdSecStatus({ data, error, onRetry }: Props) {
             )}
           </div>
         ))}
-        {decisions.length > 60 && <p className="text-slate-600">+{decisions.length - 60} more</p>}
+        {activeBans > shown && <p className="text-slate-600">+{activeBans - shown} more</p>}
       </CardBody>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

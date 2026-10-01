@@ -53,7 +53,8 @@ export default function BanSheet({ initialValue = '', initialReason = '', onClos
   const perm = duration === PERMANENT
   const sec = perm ? null : parseDuration(duration)
   const durOk = perm || (sec !== null && sec >= 60 && sec <= 315360000)
-  const own = !!status?.client_ip && target === status.client_ip
+  // (on a VM the client address is the hub's, not yours: no guard there)
+  const own = !member && !!status?.client_ip && target === status.client_ip
   const label = perm ? 'permanently' : `for ${humanDuration(sec !== null ? canonicalDuration(sec) : duration)}`
   const hint = useMemo(() => {
     if (!target) return 'An address such as 203.0.113.7, an IPv6 address, or a network such as 203.0.113.0/24.'
