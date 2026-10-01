@@ -172,9 +172,10 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
           {result && (
             <div className={`rounded-lg border px-3 py-3 text-xs ${result.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-200' : 'bg-rose-500/10 border-rose-500/20 text-rose-200'}`}>
               <div className="flex items-center gap-2 font-semibold mb-1">{result.success ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{result.message}</div>
-              {result.trashed.length > 0 && <p className="text-[11px] opacity-80">Old files: <span className="font-mono">{result.trash_dir}</span></p>}
-              {result.volumes_removed.length > 0 && <p className="text-[11px] opacity-80">Volumes removed: {result.volumes_removed.join(', ')}</p>}
-              {result.failed.length > 0 && <p className="text-[11px] opacity-90 mt-1">Could not handle: {result.failed.join(', ')}</p>}
+              {/* (a list the API left out of an answer is an empty one, not a crash) */}
+              {(result.trashed ?? []).length > 0 && <p className="text-[11px] opacity-80">Old files: <span className="font-mono">{result.trash_dir}</span></p>}
+              {(result.volumes_removed ?? []).length > 0 && <p className="text-[11px] opacity-80">Volumes removed: {(result.volumes_removed ?? []).join(', ')}</p>}
+              {(result.failed ?? []).length > 0 && <p className="text-[11px] opacity-90 mt-1">Could not handle: {(result.failed ?? []).join(', ')}</p>}
               {!result.success && result.output && <pre className="mt-2 max-h-40 overflow-auto rounded bg-black/30 p-2 text-[10px] text-slate-300 whitespace-pre-wrap">{result.output.trim().split('\n').slice(-12).join('\n')}</pre>}
             </div>
           )}

@@ -877,9 +877,14 @@ export function fetchTerminalHistory(): Promise<TerminalHistoryResponse> {
   return apiClient.get<TerminalHistoryResponse>('/terminal/history')
 }
 
-/** POST /images/:id/delete — Remove a Docker image */
+/** POST /images/:id/delete — Remove a Docker image by id (an untagged one: "<none>") */
 export function deleteImage(id: string, member?: string | null): Promise<ImageDeleteResponse> {
   return apiClient.post<ImageDeleteResponse>(memberPath(member, `/images/${encodeURIComponent(id)}/delete`), undefined, 120000)
+}
+
+/** POST /images/delete — Remove a tagged image by its reference ("repository:tag"): Docker takes the name even when the id carries several tags */
+export function deleteImageRef(image: string, member?: string | null): Promise<ImageDeleteResponse> {
+  return apiClient.post<ImageDeleteResponse>(memberPath(member, '/images/delete'), { image }, 120000)
 }
 
 /** POST /containers/:name/rename — Rename a container */

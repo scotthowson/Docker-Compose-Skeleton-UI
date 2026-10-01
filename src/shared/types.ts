@@ -2664,7 +2664,6 @@ export interface ImageSearchResult {
   description: string
   stars: number
   official: string
-  automated: string
 }
 
 export interface ImageSearchResponse {

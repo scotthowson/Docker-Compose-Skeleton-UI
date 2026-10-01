@@ -932,16 +932,19 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           ) : (
             <>
               <h1 className="text-lg md:text-xl font-bold text-slate-100 truncate min-w-0 flex-1">{containerName}</h1>
-              <Hint label="Rename the container">
-                <button
-                  onClick={() => setRenaming(true)}
-                  data-rename-open
-                  aria-label="Rename the container"
-                  className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}
-                >
-                  <Pencil size={14} />
-                </button>
-              </Hint>
+              {/* renaming is an admin call on the API */}
+              {isAdmin && (
+                <Hint label="Rename the container">
+                  <button
+                    onClick={() => setRenaming(true)}
+                    data-rename-open
+                    aria-label="Rename the container"
+                    className={`${BTN_ICON_SM} ${TONE_GHOST} flex-shrink-0`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </Hint>
+              )}
             </>
           )}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 ml-auto w-full sm:w-auto">
@@ -1298,13 +1301,15 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <SectionHeader icon={<ScrollText className="h-4 w-4 text-cyan-400" />} title="Container logs" />
             <div className="flex flex-wrap items-center gap-2">
-              {/* Live / Snapshot: one choice */}
-              <SegmentedControl
-                aria-label="Log mode"
-                value={liveLogsMode ? 'live' : 'snapshot'}
-                onChange={(v) => setLiveLogsMode(v === 'live')}
-                data={[{ value: 'snapshot', label: 'Snapshot' }, { value: 'live', label: 'Live' }]}
-              />
+              {/* Live / Snapshot: one choice (the live stream is an admin call on the API) */}
+              {isAdmin && (
+                <SegmentedControl
+                  aria-label="Log mode"
+                  value={liveLogsMode ? 'live' : 'snapshot'}
+                  onChange={(v) => setLiveLogsMode(v === 'live')}
+                  data={[{ value: 'snapshot', label: 'Snapshot' }, { value: 'live', label: 'Live' }]}
+                />
+              )}
               {!liveLogsMode && (
                 <>
                   <button
@@ -1518,8 +1523,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         </section>
       )}
 
-      {/* ---- Command Runner (Phase 7C) ---- */}
-      {isRunning && (
+      {/* ---- Command Runner (Phase 7C) — running a command is an admin call on the API ---- */}
+      {isAdmin && isRunning && (
         <section className="animate-fade-in">
           <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-xl overflow-hidden">
             <button
@@ -2060,8 +2065,8 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
         </section>
       )}
 
-      {/* ---- File Browser ---- */}
-      {detail?.state === 'running' && (
+      {/* ---- File Browser (the container's files are read by an admin call on the API) ---- */}
+      {isAdmin && detail?.state === 'running' && (
         <ContainerFileBrowser containerName={containerName} member={member} />
       )}
     </div>
