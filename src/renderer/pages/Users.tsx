@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   KeyRound,
   Bot,
+  LogOut,
+  Trash2,
 } from 'lucide-react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
@@ -26,10 +28,10 @@ import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import PageHeader from '../components/common/PageHeader'
 import Hint from '../components/common/Hint'
-import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, TONE_OK, TONE_DANGER, TONE_GHOST } from '../lib/ui'
+import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_ICON_SM, TONE_OK, TONE_DANGER, TONE_GHOST, TONE_GHOST_DANGER } from '../lib/ui'
 import {
   authListUsers, authListInvites, authCreateInvite, authCreateUser, authRevokeUser, authSetUserRole,
-  authListSessions, authRevokeSession,
+  authListSessions, authRevokeSession, authDeleteInvite, authLogoutAll,
 } from '../api/endpoints'
 import type { ApiUser, InviteCode, SessionInfo as SessionEntry } from '../../shared/types'
 import { LoadingState, EmptyState } from '../components/common/PageState'
@@ -135,6 +137,8 @@ export default function Users() {
   const [createLoading, setCreateLoading] = useState(false)
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [revokingSession, setRevokingSession] = useState<string | null>(null)
+  const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState<string | null>(null)
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -253,6 +257,56 @@ export default function Users() {
       setRevokingSession(null)
     }
   }, [addToast, fetchData])
+
+  // Every session of an account at once (POST /auth/logout-all): a lost phone, a shared password. Your own account
+  // too — that ends this session as well, so the dashboard signs out itself instead of hitting a 401 on the next poll.
+  const askLogoutAll = useCallback(async (username: string) => {
+    const self = username === currentUser
+    const ok = await confirm({
+      title: 'Sign out everywhere?',
+      message: self
+        ? 'Sign out every session of your account, this one too? You sign in again afterwards.'
+        : `Sign out every session of ${username}? They stay registered and can sign in again.`,
+      confirmLabel: 'Sign out everywhere',
+      danger: true,
+    })
+    if (!ok) return
+    setSigningOut(username)
+    try {
+      const result = await authLogoutAll(username)
+      if (!result.success) { addToast({ type: 'error', message: result.message || 'Could not sign the account out' }); return }
+      if (self) { await useAuthStore.getState().logout({ keepOtherServers: true }); return }
+      addToast({ type: 'success', message: `${username} is signed out everywhere` })
+      fetchData()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not sign the account out', duration: 6000 })
+    } finally {
+      setSigningOut(null)
+    }
+  }, [confirm, currentUser, addToast, fetchData])
+
+  // An invite that should not be used (sent to the wrong person, no longer wanted): DELETE /auth/invite/{code}
+  const askDeleteInvite = useCallback(async (invite: InviteCode) => {
+    const ok = await confirm({
+      title: invite.used ? 'Remove this invite?' : 'Revoke this invite?',
+      message: invite.used
+        ? `Remove the used invite ${invite.code.slice(0, 8)}… from the list? ${invite.used_by ? `${invite.used_by}'s account stays.` : 'The account made with it stays.'}`
+        : `Revoke the invite ${invite.code}? Nobody can register with it any more.`,
+      confirmLabel: invite.used ? 'Remove' : 'Revoke invite',
+      danger: !invite.used,
+    })
+    if (!ok) return
+    setDeletingInvite(invite.code)
+    try {
+      await authDeleteInvite(invite.code)
+      addToast({ type: 'success', message: invite.used ? 'Invite removed' : 'Invite revoked' })
+      fetchData()
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not delete the invite', duration: 6000 })
+    } finally {
+      setDeletingInvite(null)
+    }
+  }, [confirm, addToast, fetchData])
 
   // Copy invite code to clipboard
   const handleCopyCode = useCallback((code: string) => {
@@ -375,6 +429,18 @@ export default function Users() {
                         </select>
                       </Hint>
                     )}
+                    {/* Every session of the account at once (your own too: that ends this one) */}
+                    <Hint label={user.username === currentUser ? 'Sign out every session of your account, this one too' : `Sign out every session of ${user.username}`}>
+                      <button
+                        type="button"
+                        onClick={() => askLogoutAll(user.username)}
+                        disabled={signingOut === user.username}
+                        aria-label={`Sign out ${user.username} everywhere`}
+                        className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                      >
+                        {signingOut === user.username ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />}
+                      </button>
+                    </Hint>
                     {/* Revoke — not for yourself (you cannot revoke your own access) */}
                     {user.username === currentUser ? (
                       <Hint label="You cannot revoke your own account">
@@ -504,6 +570,8 @@ export default function Users() {
                     invite={invite}
                     copiedCode={copiedCode}
                     onCopy={handleCopyCode}
+                    onDelete={askDeleteInvite}
+                    deleting={deletingInvite === invite.code}
                   />
                 ))}
               </div>
@@ -534,6 +602,18 @@ export default function Users() {
                           {invite.used_by}
                         </span>
                       )}
+                      {/* a used invite is only history: removing it keeps the list short, the account it made stays */}
+                      <Hint label="Remove from the list">
+                        <button
+                          type="button"
+                          onClick={() => askDeleteInvite(invite)}
+                          disabled={deletingInvite === invite.code}
+                          aria-label={`Remove the used invite ${invite.code}`}
+                          className={`${BTN_ICON_SM} ${TONE_GHOST}`}
+                        >
+                          {deletingInvite === invite.code ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        </button>
+                      </Hint>
                     </div>
                   </div>
                 ))}
@@ -626,10 +706,13 @@ function SummaryCard({ icon, label, value }: {
   )
 }
 
-function InviteCard({ invite, copiedCode, onCopy }: {
+function InviteCard({ invite, copiedCode, onCopy, onDelete, deleting }: {
   invite: InviteCode
   copiedCode: string | null
   onCopy: (code: string) => void
+  /** DELETE /auth/invite/{code}: the code stops working */
+  onDelete: (invite: InviteCode) => void
+  deleting: boolean
 }) {
   const expired = isExpired(invite.expires_at)
 
@@ -669,6 +752,17 @@ function InviteCard({ invite, copiedCode, onCopy }: {
               ? <Check size={12} className="text-emerald-400" />
               : <Copy size={12} />
             }
+          </button>
+        </Hint>
+        <Hint label={expired ? 'Remove the expired invite' : 'Revoke the invite — nobody can register with it'}>
+          <button
+            type="button"
+            onClick={() => onDelete(invite)}
+            disabled={deleting}
+            aria-label={`${expired ? 'Remove' : 'Revoke'} the invite code ${invite.code}`}
+            className={`${BTN_ICON_SM} ${TONE_GHOST_DANGER}`}
+          >
+            {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
           </button>
         </Hint>
       </div>
