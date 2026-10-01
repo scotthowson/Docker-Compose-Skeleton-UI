@@ -3809,6 +3809,35 @@ export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: s
 export interface StackPushResponse { success: boolean; stack: string; member: string; member_name: string; pushed: number; message: string }
 /** POST /stacks/:name/pull — the VM's files into the hub's Stacks/<name>/, file for file (the copy replaced is kept in the compose history) */
 export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
+/** GET /stacks/:name/appdata — where a stack's App-Data is. A VM's stack on a hub: Stacks/<name>/VM-App-Data on the hub is a live view of the VM's App-Data (a mount over the hub's ssh key), with whether it is mounted and why not */
+export interface StackAppDataStatus {
+  stack: string
+  /** local: this server runs the stack; vm: a VM of the fleet does */
+  placement: 'local' | 'vm'
+  /** local: the App-Data folder here; vm: the link on the hub, absolute */
+  path?: string
+  exists?: boolean
+  member?: string
+  member_name?: string
+  /** false: FLEET_APPDATA_MOUNT=false in the hub's .env */
+  enabled?: boolean
+  state?: 'mounted' | 'waiting' | 'unavailable' | 'held' | 'off'
+  mounted?: boolean
+  /** unmounted on purpose: it stays down until Mount */
+  held?: boolean
+  /** sshfs is installed on the hub */
+  sshfs?: boolean
+  /** Stacks/<name>/VM-App-Data */
+  link?: string
+  mountpoint?: string
+  /** user@address:/folder — the folder in the VM */
+  remote?: string
+  /** root (the VM's account has passwordless sudo) or account */
+  access?: string
+  reason?: string
+  success?: boolean
+  message?: string
+}
 /** POST /fleet/members/:id/sync — the files of every stack a member runs, pulled into the hub (or pushed into the VM) */
 export interface FleetMemberSyncResponse {
   success: boolean

@@ -16,6 +16,13 @@ import ModalOverlay from '../common/ModalOverlay'
 import Hint from '../common/Hint'
 import { BTN_ICON_SM, BTN_SHEET_DANGER, BTN_SHEET_QUIET, TONE_GHOST } from '../../lib/ui'
 
+// a folder is named from its stack on (Stacks/<stack>/App-Data/…): the row cuts a long path at its end, which is
+// the part that tells the folders apart; the whole path is the row's title
+function shortPath(p: string): string {
+  const i = p.indexOf('/Stacks/')
+  return i >= 0 ? p.slice(i + 1) : p
+}
+
 interface NukeDialogProps {
   containerName: string
   /** The server the container runs on: a fleet member id rides the hub's proxy; null or undefined = this server */
@@ -112,7 +119,7 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
                   <ul className="space-y-1">
                     {preview.app_data.map((f) => (
                       <li key={f.path} className="flex items-center justify-between gap-3 rounded-md bg-rose-500/5 border border-rose-500/10 px-2.5 py-1.5">
-                        <span className="font-mono text-[11px] text-slate-300 truncate" title={f.path}>{f.path}</span>
+                        <span className="font-mono text-[11px] text-slate-300 truncate" title={f.path}>{shortPath(f.path)}</span>
                         <span className="text-[10px] text-slate-500 shrink-0">{f.exists ? f.size : 'missing'}</span>
                       </li>
                     ))}
@@ -127,7 +134,7 @@ export function NukeDialog({ containerName, member = null, memberName = '', open
                   <ul className="space-y-1">
                     {preview.kept_shared.map((f) => (
                       <li key={f.path} className="flex items-center justify-between gap-3 rounded-md bg-emerald-500/5 border border-emerald-500/10 px-2.5 py-1.5">
-                        <span className="font-mono text-[11px] text-slate-300 truncate" title={f.path}>{f.path}</span>
+                        <span className="font-mono text-[11px] text-slate-300 truncate" title={f.path}>{shortPath(f.path)}</span>
                         <span className="text-[10px] text-slate-500 shrink-0">also {f.shared_with}</span>
                       </li>
                     ))}

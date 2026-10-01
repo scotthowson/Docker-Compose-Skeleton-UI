@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -921,6 +921,21 @@ export function pushStackFiles(name: string): Promise<StackPushResponse> {
 /** POST /stacks/:name/pull — Pull a VM stack's files from the VM into the hub's Stacks/<name>/ (admin; the hub's own endpoint) */
 export function pullStackFiles(name: string): Promise<StackPullResponse> {
   return apiClient.post<StackPullResponse>(`/stacks/${encodeURIComponent(name)}/pull`, {}, 120000)
+}
+
+/** GET /stacks/:name/appdata — Where a stack's App-Data is; for a VM's stack on a hub, whether the VM's folder is mounted at Stacks/<name>/VM-App-Data (admin; the hub's own endpoint) */
+export function fetchStackAppData(name: string): Promise<StackAppDataStatus> {
+  return apiClient.get<StackAppDataStatus>(`/stacks/${encodeURIComponent(name)}/appdata`)
+}
+
+/** POST /stacks/:name/appdata/mount — Mount a VM stack's App-Data on the hub now; the hub may install sshfs first, hence the long wait (409 with the reason when it cannot be mounted) */
+export function mountStackAppData(name: string): Promise<StackAppDataStatus> {
+  return apiClient.post<StackAppDataStatus>(`/stacks/${encodeURIComponent(name)}/appdata/mount`, {}, 300000)
+}
+
+/** POST /stacks/:name/appdata/unmount — Take the mount down on the hub until Mount (nothing changes in the VM) */
+export function unmountStackAppData(name: string): Promise<StackAppDataStatus> {
+  return apiClient.post<StackAppDataStatus>(`/stacks/${encodeURIComponent(name)}/appdata/unmount`, {}, 60000)
 }
 
 export function fetchStackServices(name: string): Promise<StackServicesResponse> {

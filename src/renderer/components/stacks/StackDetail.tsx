@@ -29,8 +29,8 @@ import {
   CloudUpload,
   CloudDownload,
 } from 'lucide-react'
-import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxVmAction } from '../../../shared/types'
-import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction, pushStackFiles, pullStackFiles } from '../../api/endpoints'
+import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxVmAction, StackAppDataStatus } from '../../../shared/types'
+import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction, pushStackFiles, pullStackFiles, fetchStackAppData, mountStackAppData, unmountStackAppData } from '../../api/endpoints'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
@@ -140,6 +140,10 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [composeLoading, setComposeLoading] = useState(false)
   // a VM stack's files: the hub's copy into the VM, or the VM's copy onto the hub
   const [filesBusy, setFilesBusy] = useState<'push' | 'pull' | ''>('')
+  // a VM stack's App-Data, shown on the hub through Stacks/<name>/VM-App-Data: whether it is mounted, and why not
+  // (null: a hub that does not know the call yet, or a viewer — the plain sentence is shown)
+  const [appData, setAppData] = useState<StackAppDataStatus | null>(null)
+  const [appDataBusy, setAppDataBusy] = useState<'mount' | 'unmount' | ''>('')
   const logEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { addToast } = useToast()
@@ -264,6 +268,36 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       setFilesBusy('')
     }
   }, [stackName, stack?.member_name, confirm, addToast, loadDetail])
+
+  // the hub's view of the VM's App-Data: read when the page opens and every half minute (a mount comes by itself a
+  // moment after a deploy or a start, and goes with a VM that is switched off)
+  const loadAppData = useCallback(async () => {
+    if (!isVm || !isAdmin) { setAppData(null); return }
+    try {
+      const res = await fetchStackAppData(stackName)
+      setAppData(res.placement === 'vm' ? res : null)
+    } catch {
+      setAppData(null)
+    }
+  }, [isVm, isAdmin, stackName])
+  useEffect(() => {
+    void loadAppData()
+    const t = setInterval(() => { void loadAppData() }, 30000)
+    return () => clearInterval(t)
+  }, [loadAppData])
+  const moveAppData = useCallback(async (what: 'mount' | 'unmount') => {
+    setAppDataBusy(what)
+    try {
+      const res = what === 'mount' ? await mountStackAppData(stackName) : await unmountStackAppData(stackName)
+      setAppData(res.placement === 'vm' ? res : null)
+      addToast({ type: 'success', message: res.message || (what === 'mount' ? `The App-Data of ${stackName} is mounted on the hub` : `The App-Data of ${stackName} is unmounted on the hub`) })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : String(err), duration: 9000 })
+      void loadAppData()
+    } finally {
+      setAppDataBusy('')
+    }
+  }, [stackName, addToast, loadAppData])
 
   // Initial load + polling
   useEffect(() => {
@@ -435,8 +469,37 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
           {/* where things are: the hub's Stacks folder looks like any stack folder, and an App-Data made in it is never filled */}
           <p className="basis-full text-slate-500">
             The compose, <span className="font-mono text-slate-400">.env</span> and configuration are kept on the hub in <span className="font-mono text-slate-400">Stacks/{stackName}</span> and pushed into the VM on every save.
-            The containers and their data (<span className="font-mono text-slate-400">App-Data</span>) are in the VM{stack?.member_url ? <> at <span className="font-mono text-slate-400">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span></> : null}, under the same folder there: open the File Browser or the Terminal with this VM chosen to look at them.
+            The containers and their data (<span className="font-mono text-slate-400">App-Data</span>) are in the VM{stack?.member_url ? <> at <span className="font-mono text-slate-400">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span></> : null}, under the same folder there{appData ? '.' : ': open the File Browser or the Terminal with this VM chosen to look at them.'}
           </p>
+          {/* the VM's App-Data on the hub: a link in the hub's stack folder to a live mount of the VM's folder */}
+          {appData && (
+            <p className="basis-full text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-1.5" data-appdata-state={appData.state}>
+              {appData.state === 'mounted' ? (
+                <span>
+                  <span className="text-emerald-300">That App-Data is on the hub too, live:</span>{' '}
+                  <span className="font-mono text-slate-400">{appData.link}</span> — a file edited there is edited in the VM at once{appData.access === 'root' ? ' (as root there: a file made from the hub belongs to root)' : ''}.
+                </span>
+              ) : appData.state === 'off' ? (
+                <span>Showing that App-Data on the hub is switched off (<span className="font-mono text-slate-400">FLEET_APPDATA_MOUNT=false</span> in the hub&apos;s <span className="font-mono text-slate-400">.env</span>).</span>
+              ) : (
+                <span>
+                  <span className="text-amber-300">That App-Data is not shown on the hub{appData.state === 'held' ? '' : ' yet'}:</span>{' '}
+                  {appData.reason || 'no reason was recorded'}.{' '}
+                  {appData.state !== 'held' && <>The hub tries again by itself; <span className="font-mono text-slate-400">{appData.link}/NOT-MOUNTED.txt</span> says the same.</>}
+                </span>
+              )}
+              {appData.state === 'mounted' && (
+                <button type="button" onClick={() => void moveAppData('unmount')} disabled={!!appDataBusy} className={BTN_CARD_QUIET} data-appdata-unmount>
+                  {appDataBusy === 'unmount' ? 'Unmounting…' : 'Unmount'}
+                </button>
+              )}
+              {appData.state !== 'mounted' && appData.state !== 'off' && (
+                <button type="button" onClick={() => void moveAppData('mount')} disabled={!!appDataBusy} className={BTN_CARD_QUIET} data-appdata-mount>
+                  {appDataBusy === 'mount' ? 'Mounting…' : 'Mount'}
+                </button>
+              )}
+            </p>
+          )}
         </div>
       )}
 
