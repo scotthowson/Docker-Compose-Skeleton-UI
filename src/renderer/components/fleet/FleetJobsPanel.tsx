@@ -58,8 +58,9 @@ function sizeText(j: FleetJob): string {
   const ram = j.memory_mb >= 1024 ? `${Math.round((j.memory_mb / 1024) * 10) / 10} GB` : `${j.memory_mb} MB`
   return `${j.cores} ${j.cores === 1 ? 'core' : 'cores'} · ${ram} RAM · ${j.disk_gb} GB disk`
 }
+/** The one line that makes the VM a node of this hub carrying the build's stack: GET /fleet/bootstrap serves the installer with this code's values */
 function joinLine(j: FleetJob): string {
-  return `git clone https://github.com/scotthowson/dcs-orchestrator.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO && DCS_HUB_URL=${j.hub_url ?? ''} DCS_JOIN_TOKEN=${j.join_token ?? ''} DCS_STACKS=${j.stack} ./setup.sh`
+  return `curl -fsSL '${j.hub_url ?? ''}/fleet/bootstrap?token=${j.join_token ?? ''}&stack=${j.stack}' | bash`
 }
 
 function StepIcon({ state, size = 13 }: { state: FleetJobStep['state'] | 'skipped'; size?: number }) {
@@ -193,7 +194,7 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
 
       {job.manual && !job.member_id && job.status === 'done' && (
         <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3 space-y-2">
-          <p className="text-xs text-amber-300 font-medium">Finish by hand: open VM #{job.vmid} in the Proxmox console and install the system — give it {job.ip}/{job.cidr} via {job.gateway}. Then run on the VM:</p>
+          <p className="text-xs text-amber-300 font-medium">Finish by hand: open VM #{job.vmid} in the Proxmox console and install the system — give it {job.ip}/{job.cidr} via {job.gateway}. Then run on the VM, as a user with sudo (it installs Docker and DCS as a node of this hub and joins):</p>
           <div className="flex items-start gap-2">
             <code className="text-[11px] font-mono text-slate-200 bg-black/30 rounded-lg px-2 py-1.5 break-all flex-1 select-all">{joinLine(job)}</code>
             <CopyChip text={joinLine(job)} label="Copy" />

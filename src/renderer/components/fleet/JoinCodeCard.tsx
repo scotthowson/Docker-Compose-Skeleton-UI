@@ -1,6 +1,8 @@
 // =============================================================================
-// JoinCodeCard — mints and shows a join code with the two commands a Docker VM
-// runs to become a member of this hub. Used by the wizard and the Proxmox page.
+// JoinCodeCard — mints and shows a join code with the one line that makes any VM
+// a node of this hub (the API alone: the hub's dashboard manages it) and, for a
+// VM that already runs a full DCS, the join command. Used by the wizard and the
+// Proxmox page.
 // =============================================================================
 
 import { useEffect, useState } from 'react'
@@ -10,8 +12,6 @@ import type { FleetJoinToken } from '../../../shared/types'
 import { CopyChip } from './fleetShared'
 import Hint from '../common/Hint'
 import { BTN_CARD_QUIET } from '../../lib/ui'
-
-const CLONE = 'git clone https://github.com/scotthowson/dcs-orchestrator.git ~/.Docker-Compose-Skeleton-AIO && cd ~/.Docker-Compose-Skeleton-AIO'
 
 export default function JoinCodeCard({ compact = false, autoMint = true }: { compact?: boolean; autoMint?: boolean }) {
   const [hubUrl, setHubUrl] = useState('')
@@ -34,7 +34,8 @@ export default function JoinCodeCard({ compact = false, autoMint = true }: { com
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const latest = tokens[tokens.length - 1]
-  const cmd = latest ? `DCS_HUB_URL=${hubUrl} DCS_JOIN_TOKEN=${latest.token} ./setup.sh` : ''
+  // the API composes the node line (GET /fleet/bootstrap with this code); an older hub without it gets the same shape built here
+  const nodeCmd = latest ? (latest.node_command || `curl -fsSL '${hubUrl}/fleet/bootstrap?token=${latest.token}' | bash`) : ''
   const joinCmd = latest ? `./setup.sh --join ${hubUrl} ${latest.token}` : ''
   return (
     <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-3 space-y-2.5">
@@ -55,21 +56,21 @@ export default function JoinCodeCard({ compact = false, autoMint = true }: { com
             <span className="text-[11px] text-slate-500">valid until {new Date(latest.expires_at * 1000).toLocaleString()}{latest.uses ? ` · used ${latest.uses}×` : ''}</span>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] text-slate-400">On a fresh Docker VM (installs DCS and joins this hub):</p>
+            <p className="text-[11px] text-slate-400">On any Debian, Ubuntu, Fedora or Arch VM, as a user with sudo — installs Docker and DCS as a node of this hub and joins it:</p>
             <div className="flex items-start gap-2">
-              <pre className="flex-1 min-w-0 text-[11px] font-mono text-slate-300 bg-black/30 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all">{CLONE}{'\n'}{cmd}</pre>
-              <CopyChip text={`${CLONE} && ${cmd}`} label="Copy" />
+              <pre className="flex-1 min-w-0 text-[11px] font-mono text-slate-300 bg-black/30 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all">{nodeCmd}</pre>
+              <CopyChip text={nodeCmd} label="Copy" />
             </div>
             {!compact && (
               <>
-                <p className="text-[11px] text-slate-400">On a VM that already runs DCS:</p>
+                <p className="text-[11px] text-slate-400">On a VM that already runs a full DCS (it keeps its own dashboard and accounts):</p>
                 <div className="flex items-start gap-2">
                   <pre className="flex-1 min-w-0 text-[11px] font-mono text-slate-300 bg-black/30 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all">{joinCmd}</pre>
                   <CopyChip text={joinCmd} label="Copy" />
                 </div>
               </>
             )}
-            <p className="text-[10px] text-slate-500">The VM creates an account for this hub and hands it over once; the hub reaches it at http://&lt;its address&gt;:9876. The join finishes in that VM's setup wizard when the VM is brand new.</p>
+            <p className="text-[10px] text-slate-500">A node is the API alone: no dashboard, no accounts of its own, no wizard. The join creates the account this hub uses on it and hands it over once; the hub reaches it at http://&lt;its address&gt;:9876 and this dashboard manages it from then on.</p>
           </div>
           {tokens.length > 1 && !compact && (
             <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">

@@ -91,7 +91,7 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
       const r = await addFleetMember({ url: u, username: username.trim(), password, name: name.trim() || undefined, vmid: m.vmid, node: m.node, type: m.type, insecure })
       const mm = r.member
       setCurrent(2); push(`Signed in as ${mm.username} (${mm.role || 'admin'})${mm.version ? ` — DCS ${mm.version}` : ''}`, 'ok')
-      push(`Identity: ${mm.identity?.hostname || 'unknown host'}${mm.identity?.ips?.length ? ` · ${mm.identity.ips.join(', ')}` : ''}`)
+      push(`Identity: ${mm.identity?.hostname || 'unknown host'}${mm.identity?.ips?.length ? ` · ${mm.identity.ips.join(', ')}` : ''}${mm.identity?.role === 'node' ? ' · a node (the API alone: this dashboard manages it)' : ''}`)
       setCurrent(3)
       if (mm.vmid) push(`Guest ${mm.vmid}${mm.node ? ` on ${mm.node}` : ''} — ${MATCH_LABEL[mm.matched_by ?? ''] ?? mm.matched_by}`, 'ok')
       else push('No guest matched: map it by hand from the member\'s menu (the hub needs the VM\'s guest agent, a shared address or the same name)', 'warn')
