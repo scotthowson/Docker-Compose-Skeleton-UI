@@ -21,7 +21,7 @@ import {
   ExternalLink, Download, Copy, Expand, Shrink, Link2,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { useFleetScope } from '../hooks/useFleetScope'
+import { useFleetScope, type ScopeMember } from '../hooks/useFleetScope'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSystemStore } from '../stores/systemStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -329,17 +329,30 @@ function parsePortLink(portStr: string, hostname: string | undefined): { label: 
   return { label: `Open :${hostPort}`, href: `http://${host}:${hostPort}` }
 }
 
+/** The address a VM's published ports answer on: the host of the URL the hub reaches that member at
+ *  ('' when the member or its URL is not known — then there is nothing honest to link to) */
+function memberHost(member: string, members: ScopeMember[]): string {
+  const url = members.find((m) => m.id === member)?.url
+  if (!url) return ''
+  try { return new URL(url).hostname } catch { return '' }
+}
+
 function DetailPanel({
   node,
   netNames,
   onClose,
+  vmHost,
 }: {
   node: TopologyNode
   netNames: string[]
   onClose: () => void
+  /** null: the node runs on the hub; a string: the address of the VM that runs it ('' = not known, so no link) */
+  vmHost: string | null
 }) {
   const stroke = healthColor(node.state, node.health)
-  const hostname = useSystemStore((s) => s.status?.hostname)
+  // a VM's published port answers on the VM: the hub's hostname in that link opened the wrong machine
+  const hubHostname = useSystemStore((s) => s.status?.hostname)
+  const hostname = vmHost === null ? hubHostname : vmHost
 
   return createPortal(
     <ModalOverlay onClose={onClose}
@@ -407,7 +420,8 @@ function DetailPanel({
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ports</p>
               <div className="space-y-1.5">
                 {node.ports.split(' ').filter(Boolean).map((p) => {
-                  const link = parsePortLink(p, hostname)
+                  // a VM whose address is not known gets no link (never the hub's, never localhost)
+                  const link = vmHost === '' ? null : parsePortLink(p, hostname)
                   return (
                     <div key={p} className="flex items-center justify-between gap-2">
                       <span className="text-xs text-slate-300 font-mono break-all">{p}</span>
@@ -828,7 +842,9 @@ export default function Topology() {
       <DisconnectedBanner />
       {/* Detail panel */}
       {selectedNode && (
-        <DetailPanel node={selectedNode} netNames={netNames} onClose={() => setSelectedNode(null)} />
+        // the VM that runs the node: its own on the fleet map, the chosen VM on a single VM's map, none on the hub's
+        <DetailPanel node={selectedNode} netNames={netNames} onClose={() => setSelectedNode(null)}
+          vmHost={(selectedNode.member ?? scopeMember) ? memberHost((selectedNode.member ?? scopeMember) as string, scopeMembers) : null} />
       )}
 
       <PageHeader

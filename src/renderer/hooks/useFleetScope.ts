@@ -17,7 +17,8 @@ const fleetMembersShared = sharedFetch(fetchFleetMembers, 10000)
 
 /** 'all' | 'hub' | a member id */
 export type FleetScope = string
-export interface ScopeMember { id: string; name: string; vmid: number | null; reachable: boolean; version: string }
+/** url: where the hub reaches the member's API — its host is the address the VM's published ports answer on */
+export interface ScopeMember { id: string; name: string; vmid: number | null; reachable: boolean; version: string; url: string }
 
 const KEY = 'dcs-fleet-scope'
 let cached: FleetScope | null = null
@@ -34,7 +35,7 @@ export function useFleetScope() {
   const listRefresh = list.refresh
   const refreshMembers = useCallback(() => { fleetMembersShared.invalidate(); listRefresh() }, [listRefresh])
   const members: ScopeMember[] = useMemo(
-    () => (list.data?.members ?? []).map((m: FleetMember) => ({ id: m.id, name: m.name, vmid: m.vmid, reachable: m.reachable, version: m.version })),
+    () => (list.data?.members ?? []).map((m: FleetMember) => ({ id: m.id, name: m.name, vmid: m.vmid, reachable: m.reachable, version: m.version, url: m.url ?? '' })),
     [list.data],
   )
   const [choice, setChoice] = useState<FleetScope | null>(() => cached ?? load())
