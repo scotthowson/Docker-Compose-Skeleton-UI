@@ -432,6 +432,11 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
               <button type="button" onClick={() => useSettingsStore.getState().setCurrentPage('proxmox')} className={BTN_CARD_QUIET}>{pageLabel('proxmox')} page</button>
             </span>
           )}
+          {/* where things are: the hub's Stacks folder looks like any stack folder, and an App-Data made in it is never filled */}
+          <p className="basis-full text-slate-500">
+            The compose, <span className="font-mono text-slate-400">.env</span> and configuration are kept on the hub in <span className="font-mono text-slate-400">Stacks/{stackName}</span> and pushed into the VM on every save.
+            The containers and their data (<span className="font-mono text-slate-400">App-Data</span>) are in the VM{stack?.member_url ? <> at <span className="font-mono text-slate-400">{stack.member_url.replace(/^https?:\/\//, '').replace(/:\d+$/, '')}</span></> : null}, under the same folder there: open the File Browser or the Terminal with this VM chosen to look at them.
+          </p>
         </div>
       )}
 
