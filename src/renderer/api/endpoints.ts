@@ -41,6 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -893,6 +894,16 @@ export function renameContainer(name: string, newName: string): Promise<Containe
 /** GET /stacks/:stack/activity — Progress of the background action on a stack (deploy, start, stop) */
 export function fetchStackActivity(name: string, member?: string | null): Promise<StackActivityResponse> {
   return apiClient.get<StackActivityResponse>(memberPath(member, `/stacks/${encodeURIComponent(name)}/activity`))
+}
+
+/** POST /stacks/:name/push — Push the hub's files of a VM stack into the VM that runs it (admin; the hub's own endpoint) */
+export function pushStackFiles(name: string): Promise<StackPushResponse> {
+  return apiClient.post<StackPushResponse>(`/stacks/${encodeURIComponent(name)}/push`, {}, 120000)
+}
+
+/** POST /stacks/:name/pull — Pull a VM stack's files from the VM into the hub's Stacks/<name>/ (admin; the hub's own endpoint) */
+export function pullStackFiles(name: string): Promise<StackPullResponse> {
+  return apiClient.post<StackPullResponse>(`/stacks/${encodeURIComponent(name)}/pull`, {}, 120000)
 }
 
 export function fetchStackServices(name: string): Promise<StackServicesResponse> {
@@ -2175,6 +2186,12 @@ export function deleteFleetJob(id: string, destroy = false): Promise<{ success: 
 /** POST /fleet/members/:id/test — log in afresh, read the identity, match the guest */
 export function testFleetMember(id: string): Promise<FleetMemberTestResponse> {
   return apiClient.post<FleetMemberTestResponse>(`/fleet/members/${encodeURIComponent(id)}/test`, {}, 90000)
+}
+
+/** POST /fleet/members/:id/sync — pull the files of every stack the member runs into the hub's Stacks/ (direction "push" sends the hub's copies into the VM); stacks limits it */
+export function syncFleetMember(id: string, body: { direction?: 'pull' | 'push'; stacks?: string[] } = {}): Promise<FleetMemberSyncResponse> {
+  // one call per stack inside, 90 s each on the member's side
+  return apiClient.post<FleetMemberSyncResponse>(`/fleet/members/${encodeURIComponent(id)}/sync`, body, 300000)
 }
 
 /** GET /fleet/overview — every member with its stacks and container counts */

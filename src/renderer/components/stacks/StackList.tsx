@@ -382,10 +382,11 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
             <MenuButton ariaLabel={batchMode ? 'More actions, batch mode is on' : 'More actions'} label={batchMode ? 'Batch mode on' : 'More'} icon={<ListChecks size={14} />} width={224} className={`${BTN_TOOLBAR} ${batchClass}`}>
               {(close) => (
                 <>
-                  {stoppedCount > 0 && (
+                  {/* starting and stopping are admin calls on the API */}
+                  {isAdmin && stoppedCount > 0 && (
                     <button role="menuitem" onClick={() => { close(); handleStartAll() }} className={`${MENU_ITEM} text-xs text-emerald-300 flex items-center gap-2`}><Play size={12} /> Start all ({stoppedCount} stopped)</button>
                   )}
-                  {runningCount > 0 && (
+                  {isAdmin && runningCount > 0 && (
                     <button role="menuitem" onClick={() => { close(); void handleStopAll() }} className={`${MENU_ITEM} text-xs text-rose-300 flex items-center gap-2`}><Square size={12} /> Stop all ({runningCount} running)</button>
                   )}
                   {isAdmin && onToggleBatchMode && (
@@ -400,8 +401,8 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
           </>
         ) : (
           <>
-            {/* Quick actions: Start all / Stop all */}
-            {!batchMode && stacks.length > 0 && (
+            {/* Quick actions: Start all / Stop all (admin calls on the API) */}
+            {isAdmin && !batchMode && stacks.length > 0 && (
               <>
                 {stoppedCount > 0 && (
                   <button aria-label="Start all stacks" onClick={handleStartAll} className={`${BTN_TOOLBAR} ${TONE_OK}`}>

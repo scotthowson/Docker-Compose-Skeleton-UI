@@ -26,9 +26,11 @@ import {
   Copy,
   Pencil,
   X,
+  CloudUpload,
+  CloudDownload,
 } from 'lucide-react'
 import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxVmAction } from '../../../shared/types'
-import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction } from '../../api/endpoints'
+import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction, pushStackFiles, pullStackFiles } from '../../api/endpoints'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
@@ -120,7 +122,8 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
     }
     setVmBusy(action)
     try {
-      await proxmoxVmAction(stack.node, 'qemu', stack.vmid, action)
+      // the list row says which guest kind the hub matched (an LXC is driven by other Proxmox routes than a VM)
+      await proxmoxVmAction(stack.node, stack.type === 'lxc' ? 'lxc' : 'qemu', stack.vmid, action)
       addToast({ type: 'success', message: action === 'start' ? `Starting ${vm}` : action === 'reboot' ? `Rebooting ${vm}` : `Shutting down ${vm}` })
     } catch (err) {
       addToast({ type: 'error', message: `Could not ${action === 'shutdown' ? 'shut down' : action} ${vm}: ${err instanceof Error ? err.message : String(err)}`, duration: 6000 })
@@ -133,8 +136,10 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
   const [logsLoading, setLogsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('containers')
   const [showCompose, setShowCompose] = useState(false)
-  const [composeContent, setComposeContent] = useState<string | undefined>(undefined)
+  const [composeContent, setComposeContent] = useState('')
   const [composeLoading, setComposeLoading] = useState(false)
+  // a VM stack's files: the hub's copy into the VM, or the VM's copy onto the hub
+  const [filesBusy, setFilesBusy] = useState<'push' | 'pull' | ''>('')
   const logEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { addToast } = useToast()
@@ -165,14 +170,13 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       const data = await fetchStackCompose(stackName)
       setComposeContent(data.content)
       setShowCompose(true)
-    } catch {
-      // Still open the viewer — it will show the placeholder
-      setComposeContent(undefined)
-      setShowCompose(true)
+    } catch (err) {
+      // the viewer has nothing to show without the file: say why instead of opening it
+      addToast({ type: 'error', message: `Could not read the compose file of ${stackName}: ${err instanceof Error ? err.message : String(err)}`, duration: 6000 })
     } finally {
       setComposeLoading(false)
     }
-  }, [stackName])
+  }, [stackName, addToast])
 
   // Clone stack handler
   const handleClone = useCallback(async () => {
@@ -240,6 +244,26 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
       setLogsLoading(false)
     }
   }, [stackName])
+
+  // a VM stack: push the hub's files into the VM (a rebuilt VM, a change made on the hub by hand) or pull the
+  // VM's copies onto the hub; both replace files, so ask first
+  const moveFiles = useCallback(async (dir: 'push' | 'pull') => {
+    const vm = stack?.member_name ? `the VM ${stack.member_name}` : 'the VM'
+    const ok = await confirm(dir === 'push'
+      ? { title: 'Push the files to the VM', message: `Copy the hub's files of ${stackName} into ${vm}? The VM's copies of those files are overwritten (nothing is removed there).`, confirmLabel: 'Push' }
+      : { title: 'Pull the files from the VM', message: `Replace the hub's files of ${stackName} with ${vm}'s, file for file? The compose file it replaces is kept in the history.`, confirmLabel: 'Pull' })
+    if (!ok) return
+    setFilesBusy(dir)
+    try {
+      const res = dir === 'push' ? await pushStackFiles(stackName) : await pullStackFiles(stackName)
+      addToast({ type: res.success ? 'success' : 'error', message: res.message, duration: res.success ? 4000 : 8000 })
+      if (dir === 'pull') void loadDetail()
+    } catch (err) {
+      addToast({ type: 'error', message: `Could not ${dir} the files of ${stackName}: ${err instanceof Error ? err.message : String(err)}`, duration: 8000 })
+    } finally {
+      setFilesBusy('')
+    }
+  }, [stackName, stack?.member_name, confirm, addToast, loadDetail])
 
   // Initial load + polling
   useEffect(() => {
@@ -373,7 +397,8 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 </h1>
                 <p className="text-xs text-slate-400 font-mono truncate">{stackName}</p>
               </div>
-              {isAdmin && (
+              {/* a VM stack's name is the VM's: the API refuses the rename (409) */}
+              {isAdmin && !isVm && (
                 <Hint label="Rename the stack">
                   <button
                     aria-label="Rename the stack"
@@ -459,32 +484,37 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
 
           {/* Action buttons: emerald starts, rose stops, the rest is neutral */}
           <div className="flex items-center flex-wrap gap-2">
-            <button
-              onClick={() => onAction(stackName, 'start')}
-              disabled={isRunning || isActionLoading}
-              className={`${BTN_TOOLBAR} ${TONE_OK}`}
-            >
-              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-              Start
-            </button>
+            {/* start, stop and restart are admin calls on the API: a viewer sees the state, not the controls */}
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => onAction(stackName, 'start')}
+                  disabled={isRunning || isActionLoading}
+                  className={`${BTN_TOOLBAR} ${TONE_OK}`}
+                >
+                  {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  Start
+                </button>
 
-            <button
-              onClick={() => void askThen('stop')}
-              disabled={!isRunning || isActionLoading}
-              className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
-            >
-              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-              Stop
-            </button>
+                <button
+                  onClick={() => void askThen('stop')}
+                  disabled={!isRunning || isActionLoading}
+                  className={`${BTN_TOOLBAR} ${TONE_DANGER}`}
+                >
+                  {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+                  Stop
+                </button>
 
-            <button
-              onClick={() => void askThen('restart')}
-              disabled={!isRunning || isActionLoading}
-              className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
-            >
-              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-              Restart
-            </button>
+                <button
+                  onClick={() => void askThen('restart')}
+                  disabled={!isRunning || isActionLoading}
+                  className={`${BTN_TOOLBAR} ${TONE_QUIET}`}
+                >
+                  {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                  Restart
+                </button>
+              </>
+            )}
 
             {/* Update — admin only (pulls images + redeploys) */}
             {isAdmin && (
@@ -516,6 +546,24 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 Clone
               </button>
             )}
+
+            {/* a VM stack: the hub keeps the files and the VM runs them — move them either way by hand */}
+            {isVm && isAdmin && (
+              <>
+                <Hint label="Copy the hub's files of this stack into the VM (a rebuilt VM, a change made on the hub by hand)">
+                  <button onClick={() => void moveFiles('push')} disabled={!!filesBusy} className={`${BTN_TOOLBAR} ${TONE_QUIET}`}>
+                    {filesBusy === 'push' ? <Loader2 size={14} className="animate-spin" /> : <CloudUpload size={14} />}
+                    Push files to the VM
+                  </button>
+                </Hint>
+                <Hint label="Copy the VM's files of this stack onto the hub, file for file (the compose file replaced is kept in the history)">
+                  <button onClick={() => void moveFiles('pull')} disabled={!!filesBusy} className={`${BTN_TOOLBAR} ${TONE_QUIET}`}>
+                    {filesBusy === 'pull' ? <Loader2 size={14} className="animate-spin" /> : <CloudDownload size={14} />}
+                    Pull files from the VM
+                  </button>
+                </Hint>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -525,6 +573,7 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
         <ComposeViewer
           stackName={stackName}
           content={composeContent}
+          isAdmin={isAdmin}
           onClose={() => setShowCompose(false)}
         />
       )}

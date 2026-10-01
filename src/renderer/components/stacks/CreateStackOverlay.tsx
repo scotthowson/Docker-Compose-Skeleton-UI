@@ -114,13 +114,15 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
       // Step 2: Save compose content if user modified it
       if (composeContent.trim() && composeContent !== DEFAULT_COMPOSE) {
         try {
-          await saveStackCompose(sanitizedName, composeContent)
-        } catch {
+          const res = await saveStackCompose(sanitizedName, composeContent)
+          // HTTP 200 with success:false is a compose file Docker refused: the stack exists, the file was not written
+          if (!res.success) throw new Error(res.validation_errors || res.message || 'Validation failed')
+        } catch (err) {
           // Non-fatal: stack was created, compose save failed
           addToast({
             type: 'warning',
-            message: 'Stack created but compose file could not be saved',
-            duration: 4000,
+            message: `Stack created but the compose file could not be saved: ${err instanceof Error ? err.message : String(err)}`,
+            duration: 6000,
           })
         }
       }
@@ -128,13 +130,14 @@ export default function CreateStackOverlay({ onClose, onCreated }: Props) {
       // Step 3: Save env content if user modified it
       if (envContent.trim() && envContent !== DEFAULT_ENV) {
         try {
-          await saveStackEnv(sanitizedName, envContent)
-        } catch {
+          const res = await saveStackEnv(sanitizedName, envContent)
+          if (!res.success) throw new Error(res.message || 'Save failed')
+        } catch (err) {
           // Non-fatal
           addToast({
             type: 'warning',
-            message: 'Stack created but .env file could not be saved',
-            duration: 4000,
+            message: `Stack created but the .env file could not be saved: ${err instanceof Error ? err.message : String(err)}`,
+            duration: 6000,
           })
         }
       }
