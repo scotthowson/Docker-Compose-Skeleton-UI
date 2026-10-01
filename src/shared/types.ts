@@ -2141,6 +2141,9 @@ export interface SetupStatusResponse {
   initialized: boolean
   needs_admin?: boolean
   needs_config?: boolean
+  /** A node (DCS_ROLE=node) is never "to be set up": it says so, and which hub manages it (null until it joined one) */
+  role?: 'node'
+  hub?: { url: string; name: string } | null
 }
 
 // GET /setup/defaults
@@ -3625,6 +3628,8 @@ export interface FleetStatus {
   server_name: string
   version: string
   hub_account: string
+  /** What this installation is: the full DCS (hub, the default; a standalone server is a hub without members) or the API alone (node) */
+  dcs_role?: 'hub' | 'node'
 }
 
 export interface FleetIdentity {
@@ -3638,6 +3643,8 @@ export interface FleetIdentity {
   virt: string
   /** false for an API-only DCS (a member the hub built): it serves no dashboard of its own */
   dashboard?: boolean
+  /** node: the API alone, no dashboard, no accounts of its own (the hub's is the only one); hub: the full DCS */
+  role?: 'hub' | 'node'
 }
 
 export type FleetMatchedBy = 'uuid' | 'ip' | 'name' | 'manual' | 'provision'
@@ -3710,7 +3717,15 @@ export interface FleetGuestScan {
 
 export interface FleetDiscoverResponse { scanned: number; found: number; guests: FleetGuestScan[]; error?: string }
 
-export interface FleetJoinToken { token: string; created_at: number; expires_at: number; created_by: string; uses: number }
+export interface FleetJoinToken {
+  token: string
+  created_at: number
+  expires_at: number
+  created_by: string
+  uses: number
+  /** curl -fsSL '<hub>/fleet/bootstrap?token=<code>' | bash — installs DCS as a node of this hub on any VM and joins it */
+  node_command?: string
+}
 export interface FleetJoinTokensResponse { hub_url: string; tokens: FleetJoinToken[] }
 export interface FleetJoinTokenResponse {
   success: boolean
@@ -3718,6 +3733,8 @@ export interface FleetJoinTokenResponse {
   expires_at: number
   ttl_hours: number
   hub_url: string
+  /** curl -fsSL '<hub>/fleet/bootstrap?token=<code>' | bash — the one line for a node */
+  node_command: string
   /** DCS_HUB_URL=… DCS_JOIN_TOKEN=… ./setup.sh */
   command: string
   /** ./setup.sh --join <hub> <code> */
