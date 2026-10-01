@@ -8,13 +8,15 @@ interface ScheduleState {
   loading: boolean
   saving: boolean
   error: string | null
+  /** the fleet scope of the list on screen ('hub', 'all' or a member id): a re-fetch after a change keeps it */
+  scope: string | null | undefined
   fetchSchedules: (scope?: string | null) => Promise<void>
   createSchedule: (data: { name: string; schedule: string; action: string; target?: string }, member?: string | null) => Promise<boolean>
   updateSchedule: (id: string, updates: Partial<Schedule>, member?: string | null) => Promise<boolean>
   deleteSchedule: (id: string, member?: string | null) => Promise<boolean>
   toggleSchedule: (id: string, member?: string | null) => Promise<boolean>
   runSchedule: (id: string, member?: string | null) => Promise<{ success: boolean; output: string } | null>
-  fetchHistory: (id: string) => Promise<void>
+  fetchHistory: (id: string, member?: string | null) => Promise<void>
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -23,9 +25,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loading: false,
   saving: false,
   error: null,
+  scope: undefined,
 
   fetchSchedules: async (scope) => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, scope })
     try {
       const res = await api.fetchSchedules(scope)
       set({ schedules: res.schedules, loading: false })
@@ -39,7 +42,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     try {
       await api.createSchedule(data, member)
       set({ saving: false })
-      get().fetchSchedules()
+      // the scope of the list on screen: a scope-less fetch would replace a VM's list with the hub's
+      get().fetchSchedules(get().scope)
       return true
     } catch (err) {
       set({ saving: false, error: err instanceof Error ? err.message : 'Failed to create schedule' })
@@ -52,7 +56,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     try {
       await api.updateSchedule(id, updates, member)
       set({ saving: false })
-      get().fetchSchedules()
+      get().fetchSchedules(get().scope)
       return true
     } catch (err) {
       set({ saving: false, error: err instanceof Error ? err.message : 'Failed to update schedule' })
@@ -88,15 +92,16 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   runSchedule: async (id, member) => {
     try {
       const result = await api.runSchedule(id, member)
-      get().fetchSchedules() // Refresh to update run_count and last_run
-      get().fetchHistory(id) // Refresh history
+      get().fetchSchedules(get().scope) // Refresh to update run_count and last_run
+      get().fetchHistory(id, member) // Refresh history (on the member that ran it)
       return result
     } catch { return null }
   },
 
-  fetchHistory: async (id) => {
+  // the runs live where the schedule does: a VM's are asked on that VM, not the hub
+  fetchHistory: async (id, member) => {
     try {
-      const res = await api.fetchScheduleHistory(id)
+      const res = await api.fetchScheduleHistory(id, member)
       set(prev => ({ history: { ...prev.history, [id]: res.history } }))
     } catch { /* ignore */ }
   },

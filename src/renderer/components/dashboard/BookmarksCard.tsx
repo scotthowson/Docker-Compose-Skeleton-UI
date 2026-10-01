@@ -29,8 +29,9 @@ function load(): BookmarkItem[] {
   } catch { return [] }
 }
 
-/** The Bookmarks page stores colours as class names ("text-emerald-400"); map them back to an accent */
+/** The Bookmarks page stores the colour's name ("emerald"); a bookmark saved by an older build holds a class name ("text-emerald-400") */
 function accentOf(color: string): typeof ACCENTS[string] {
+  if (ACCENTS[color]) return ACCENTS[color]
   const m = /-(emerald|cyan|violet|amber|rose|blue|teal|orange|pink|slate)-/.exec(color || '')
   return ACCENTS[m?.[1] ?? 'cyan']
 }

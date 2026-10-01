@@ -68,6 +68,9 @@ type TriggerType =
   | 'fleet_member_joined'
   | 'fleet_member_down'
   | 'fleet_member_up'
+  | 'fleet_vm_ready'
+  | 'fleet_vm_failed'
+  | 'docker_engine_update'
 
 type Priority = 'urgent' | 'high' | 'default' | 'low'
 
@@ -91,6 +94,9 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string }[] = [
   { value: 'fleet_member_joined', label: 'Fleet member joined' },
   { value: 'fleet_member_down', label: 'Fleet member stopped answering' },
   { value: 'fleet_member_up', label: 'Fleet member back' },
+  { value: 'fleet_vm_ready', label: 'VM built and joined' },
+  { value: 'fleet_vm_failed', label: 'VM build failed' },
+  { value: 'docker_engine_update', label: 'Docker Engine updated' },
 ]
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -394,8 +400,9 @@ export default function Notifications() {
         addToast({ type: 'error', message: res.message || 'Failed to send test notification' })
       }
       refreshHistory()
-    } catch {
-      addToast({ type: 'error', message: 'Failed to send test notification' })
+    } catch (err) {
+      // the server says why (no channel, a webhook that answered 4xx, a 403): show its words
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to send test notification' })
     } finally {
       setSendingTest(false)
     }
@@ -535,8 +542,8 @@ export default function Notifications() {
       } else {
         addToast({ type: 'error', message: `Webhook test failed (${res.status_code})` })
       }
-    } catch {
-      addToast({ type: 'error', message: 'Failed to test webhook' })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to test webhook' })
     } finally {
       setTestingWebhookId(null)
     }
@@ -589,16 +596,19 @@ export default function Notifications() {
             <BookOpen size={14} />
             <span className="hidden sm:inline">Guide</span>
           </button>
-          <button
-            onClick={handleSendTest}
-            disabled={sendingTest || (!ntfyConfigured && !discordConfigured)}
-            aria-label="Send test"
-            className={BTN_TOOLBAR_QUIET}
-            title={ntfyConfigured || discordConfigured ? 'Send a test notification on every configured channel' : 'No channel is configured yet'}
-          >
-            {sendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            <span className="hidden sm:inline">Send test</span>
-          </button>
+          {/* (admin: a test is a send, the API answers 403 to a user) */}
+          {isAdmin && (
+            <button
+              onClick={handleSendTest}
+              disabled={sendingTest || (!ntfyConfigured && !discordConfigured)}
+              aria-label="Send test"
+              className={BTN_TOOLBAR_QUIET}
+              title={ntfyConfigured || discordConfigured ? 'Send a test notification on every configured channel' : 'No channel is configured yet'}
+            >
+              {sendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              <span className="hidden sm:inline">Send test</span>
+            </button>
+          )}
           {isAdmin && (
             <button onClick={() => setShowAddModal(true)} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
               <Plus size={14} />
@@ -1174,17 +1184,19 @@ export default function Notifications() {
 
                       {/* Right: actions */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Test */}
-                        <Hint label="Send a test payload">
-                          <button
-                            onClick={() => handleTestWebhook(wh.id)}
-                            disabled={testingWebhookId === wh.id}
-                            className={BTN_CARD_QUIET}
-                          >
-                            {testingWebhookId === wh.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                            Test
-                          </button>
-                        </Hint>
+                        {/* Test — admin only (a send: the API answers 403 to a user) */}
+                        {isAdmin && (
+                          <Hint label="Send a test payload">
+                            <button
+                              onClick={() => handleTestWebhook(wh.id)}
+                              disabled={testingWebhookId === wh.id}
+                              className={BTN_CARD_QUIET}
+                            >
+                              {testingWebhookId === wh.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                              Test
+                            </button>
+                          </Hint>
+                        )}
 
                         {/* Delete — admin only */}
                         {isAdmin && (

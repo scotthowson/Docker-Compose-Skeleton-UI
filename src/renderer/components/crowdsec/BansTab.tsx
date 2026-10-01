@@ -143,7 +143,8 @@ export default function BansTab({ seedSearch }: { seedSearch?: string }) {
   const doExport = async (fmt: 'csv' | 'json') => {
     setMenu(false); setBusy('export')
     try {
-      const r = await crowdsecExportBans(fmt, { ...queryRef.current, limit: undefined, offset: undefined }, member)
+      // the whole filtered list in cscli's order: the export ignores sort and dir (and pages)
+      const r = await crowdsecExportBans(fmt, { ...queryRef.current, limit: undefined, offset: undefined, sort: undefined, dir: undefined }, member)
       downloadText(r.filename, r.content, fmt === 'csv' ? 'text/csv' : 'application/json')
       addToast({ type: 'success', message: `Exported ${r.count} ban${r.count === 1 ? '' : 's'} as ${fmt.toUpperCase()}` })
     } catch (e) { addToast({ type: 'error', message: errMsg(e, 'Could not export'), duration: 7000 }) } finally { setBusy('') }

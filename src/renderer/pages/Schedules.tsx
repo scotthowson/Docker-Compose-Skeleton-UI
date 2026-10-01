@@ -11,6 +11,7 @@ import {
   CalendarClock, Plus, Trash2, Play, Pause, Clock, History, RefreshCw,
   Archive, Wrench, HeartPulse, RotateCcw, X, Loader2, ChevronDown,
   ChevronRight, CheckCircle, XCircle, Pencil, Activity, Zap, ArrowUpCircle, LifeBuoy,
+  CirclePlay, CircleStop, ArrowDownToLine,
 } from 'lucide-react'
 import { useScheduleStore } from '../stores/scheduleStore'
 import { useFleetScope } from '../hooks/useFleetScope'
@@ -33,18 +34,19 @@ import {
 
 const actionIcons: Record<string, React.ElementType> = {
   backup: Archive, update: RefreshCw, prune: Wrench, 'health-check': HeartPulse,
-  restart: RotateCcw, 'metrics-snapshot': Activity, custom: Play,
-  'dcs-update': ArrowUpCircle, recovery: LifeBuoy,
+  restart: RotateCcw, start: CirclePlay, stop: CircleStop, 'metrics-snapshot': Activity, custom: Play,
+  'dcs-update': ArrowUpCircle, 'image-update': ArrowDownToLine, recovery: LifeBuoy,
 }
 const actionLabels: Record<string, string> = {
   backup: 'Backup', update: 'Update stack', prune: 'Docker prune',
-  'health-check': 'Health check', restart: 'Restart stack',
+  'health-check': 'Health check', restart: 'Restart stack', start: 'Start stack', stop: 'Stop stack',
   'metrics-snapshot': 'Metrics snapshot', custom: 'Custom script',
-  'dcs-update': 'DCS self-update', recovery: 'Recovery bundle',
+  'dcs-update': 'DCS self-update', 'image-update': 'Image updates', recovery: 'Recovery bundle',
 }
 /** What the target field means per action (empty: no target) */
 const actionTargetHints: Record<string, string> = {
   'dcs-update': 'Leave empty, or "images" to pull image updates for every stack as well. Rolls back by itself when the health score drops.',
+  'image-update': 'Leave empty to pull newer images and recreate their containers, or "pull" to only pull them (the containers keep the old image until they are recreated).',
   recovery: `No target. Needs the RECOVERY_PASSPHRASE secret (${pageLabel('backup')} page); copies to RECOVERY_REMOTE when set.`,
 }
 
@@ -59,7 +61,10 @@ const scheduleOptions = [
   { value: '@monthly', label: 'Every month' },
 ]
 
-const actionOptions = ['backup', 'update', 'prune', 'health-check', 'restart', 'metrics-snapshot', 'dcs-update', 'recovery', 'custom']
+// every action the API's schedule runner knows (start, stop and image-update included)
+const actionOptions = ['backup', 'update', 'image-update', 'prune', 'health-check', 'start', 'stop', 'restart', 'metrics-snapshot', 'dcs-update', 'recovery', 'custom']
+/** the actions that run on one stack: the target is its name, and a run without one fails */
+const STACK_ACTIONS = new Set(['update', 'restart', 'start', 'stop'])
 
 /** the fields of the schedule dialog: one look, one focus ring */
 const FIELD = 'w-full h-11 px-3 rounded-xl bg-white/5 text-sm text-slate-200 placeholder-slate-500 border border-white/10 transition-colors focus:outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/40'
@@ -76,7 +81,7 @@ function ScheduleDialog({ mode, form, setForm, saving, onSubmit, onClose }: {
   onClose: () => void
 }) {
   const uid = useId()
-  const needsTarget = form.action === 'update' || form.action === 'restart'
+  const needsTarget = STACK_ACTIONS.has(form.action)
   return createPortal(
     <ModalOverlay onClose={onClose} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 max-h-[92vh] overflow-y-auto border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
@@ -191,10 +196,11 @@ export default function Schedules() {
     if (done) addToast({ type: 'success', message: 'Schedule deleted' })
   }, [schedules, confirm, deleteSchedule, scopeMember, addToast])
 
-  const handleExpand = (id: string) => {
-    if (expandedId === id) { setExpandedId(null); return }
-    setExpandedId(id)
-    if (!history[id]) fetchHistory(id)
+  /** the runs live where the schedule does: a VM's are asked on that VM, not the hub */
+  const handleExpand = (s: { id: string; member?: string | null }) => {
+    if (expandedId === s.id) { setExpandedId(null); return }
+    setExpandedId(s.id)
+    if (!history[s.id]) fetchHistory(s.id, s.member ?? scopeMember)
   }
 
   const startEdit = (s: { id: string; name: string; schedule?: string; cron?: string; action: string; target?: string }) => {
@@ -290,16 +296,19 @@ export default function Schedules() {
                         </button>
                       </Hint>
                     )}
-                    <Hint label={s.enabled ? 'Pause' : 'Resume'}>
-                      <button
-                        type="button"
-                        onClick={() => toggleSchedule(s.id, s.member ?? scopeMember)}
-                        aria-label={`${s.enabled ? 'Pause' : 'Resume'} ${s.name}`}
-                        className={`${BTN_ICON_SM} ${s.enabled ? TONE_GHOST : TONE_GHOST_OK}`}
-                      >
-                        {s.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      </button>
-                    </Hint>
+                    {/* (admin: the toggle is a write, the API answers 403 to a user) */}
+                    {isAdmin && (
+                      <Hint label={s.enabled ? 'Pause' : 'Resume'}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSchedule(s.id, s.member ?? scopeMember)}
+                          aria-label={`${s.enabled ? 'Pause' : 'Resume'} ${s.name}`}
+                          className={`${BTN_ICON_SM} ${s.enabled ? TONE_GHOST : TONE_GHOST_OK}`}
+                        >
+                          {s.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                        </button>
+                      </Hint>
+                    )}
                     {isAdmin && (
                       <Hint label="Edit">
                         <button type="button" onClick={() => startEdit(s)} aria-label={`Edit ${s.name}`} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
@@ -308,7 +317,7 @@ export default function Schedules() {
                       </Hint>
                     )}
                     <Hint label={isExpanded ? 'Hide the runs' : 'Show the runs'}>
-                      <button type="button" aria-label={isExpanded ? 'Hide the runs' : 'Show the runs'} aria-expanded={isExpanded} onClick={() => handleExpand(s.id)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
+                      <button type="button" aria-label={isExpanded ? 'Hide the runs' : 'Show the runs'} aria-expanded={isExpanded} onClick={() => handleExpand(s)} className={`${BTN_ICON_SM} ${TONE_GHOST}`}>
                         {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </button>
                     </Hint>

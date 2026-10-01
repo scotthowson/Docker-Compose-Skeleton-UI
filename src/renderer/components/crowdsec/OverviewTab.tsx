@@ -303,7 +303,8 @@ export default function OverviewTab() {
                   </StatusRow>
                 : <StatusRow tone="good" title={`All ${checked} route${checked === 1 ? '' : 's'} go through the bouncer`}>Routes of your VMs pass through this Traefik&rsquo;s chain too.</StatusRow>
             )}
-            {clientIp && (
+            {/* the address you connect from (on a VM it would be the hub's, so it is left out, as the allowlist does) */}
+            {!member && clientIp && (
               s?.client_banned
                 ? <StatusRow tone="bad" title={`You are banned right now (${clientIp})`} action={<button type="button" className={BTN_QUIET} onClick={() => goTab('bans', clientIp)}>Open your ban</button>}>Requests from this address are refused by Traefik.</StatusRow>
                 : covered

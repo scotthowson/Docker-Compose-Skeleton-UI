@@ -100,6 +100,15 @@ function formatTimestamp(ts: string): string {
   }
 }
 
+/** what a log line is told apart by from one poll to the next */
+function entryKey(e: LogStreamEntry): string { return `${e.timestamp}\n${e.line}` }
+/** how many times each line appears in a batch (a line that repeats within one second is logged that often) */
+function batchCounts(entries: LogStreamEntry[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const e of entries) { const k = entryKey(e); m.set(k, (m.get(k) ?? 0) + 1) }
+  return m
+}
+
 // ---------------------------------------------------------------------------
 // LiveLogViewer
 // ---------------------------------------------------------------------------
@@ -123,6 +132,9 @@ export default function LiveLogViewer({
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastTimestampRef = useRef<string>('')
+  // the last batch's lines by key and count: the next poll asks `since` that timestamp inclusive, so
+  // every line of that second comes back once more and is dropped once per copy already shown
+  const lastBatchRef = useRef<Map<string, number>>(new Map())
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const userScrolledRef = useRef(false)
 
@@ -148,6 +160,7 @@ export default function LiveLogViewer({
     fetchLogs().then((data) => {
       if (data?.entries) {
         setLines(data.entries)
+        lastBatchRef.current = batchCounts(data.entries)
         const last = data.entries[data.entries.length - 1]
         if (last?.timestamp) lastTimestampRef.current = last.timestamp
       }
@@ -168,24 +181,27 @@ export default function LiveLogViewer({
     intervalRef.current = setInterval(async () => {
       const data = await fetchLogs(lastTimestampRef.current || undefined)
       if (data?.entries && data.entries.length > 0) {
+        // Deduplicate against the whole last batch, not only its last line: `since` is inclusive to the
+        // second, so every line of that second comes back (the server filters most of it now that it
+        // takes its own stamp; what remains is dropped here, once per copy already shown)
+        const seen = new Map(lastBatchRef.current)
+        const newEntries = data.entries.filter((e) => {
+          const k = entryKey(e)
+          const n = seen.get(k) ?? 0
+          if (n > 0) { seen.set(k, n - 1); return false }
+          return true
+        })
+        lastBatchRef.current = batchCounts(data.entries)
+        const last = data.entries[data.entries.length - 1]
+        if (last?.timestamp) lastTimestampRef.current = last.timestamp
+        if (newEntries.length === 0) return
         setLines((prev) => {
-          // Deduplicate: skip entries that match the last known timestamp + line content
-          const lastTs = lastTimestampRef.current
-          const lastLine = prev.length > 0 ? prev[prev.length - 1].line : ''
-          const newEntries = data.entries.filter((e) => {
-            // Skip if same timestamp AND same line content (duplicate from inclusive since)
-            if (e.timestamp === lastTs && e.line === lastLine) return false
-            return true
-          })
-          if (newEntries.length === 0) return prev
           const combined = [...prev, ...newEntries]
           if (combined.length > maxLines) {
             return combined.slice(combined.length - maxLines)
           }
           return combined
         })
-        const last = data.entries[data.entries.length - 1]
-        if (last?.timestamp) lastTimestampRef.current = last.timestamp
       }
     }, pollInterval)
 
@@ -255,6 +271,7 @@ export default function LiveLogViewer({
   const handleClear = useCallback(() => {
     setLines([])
     lastTimestampRef.current = ''
+    lastBatchRef.current = new Map()
   }, [])
 
   // Level counts
