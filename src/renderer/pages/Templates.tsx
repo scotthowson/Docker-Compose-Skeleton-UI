@@ -3118,13 +3118,20 @@ export default function Templates() {
   useEffect(() => {
     const p = useSettingsStore.getState().navigationPayload
     if (p && typeof p.search === 'string') { setSearch(p.search); useSettingsStore.getState().consumeNavigationPayload() }
-    // "Deploy here" on the Proxmox page: the next deployment targets that VM's stack
-    if (p && typeof p.targetStack === 'string') { setPreferredStack(p.targetStack); useSettingsStore.getState().consumeNavigationPayload() }
+    // "Deploy here" on the Proxmox page: the next deployment targets that VM's stack, on that VM when it names the member
+    // (a stack the hub never placed there is unknown to it: by the name alone the deploy would land on the hub)
+    if (p && typeof p.targetStack === 'string') {
+      setPreferredStack(p.targetStack)
+      const m = p.member as { id?: unknown; name?: unknown } | undefined
+      setDeployMember(m && typeof m.id === 'string' ? { id: m.id, name: typeof m.name === 'string' ? m.name : m.id } : null)
+      useSettingsStore.getState().consumeNavigationPayload()
+    }
   }, [navigationPayload])
   const [deployTarget, setDeployTarget] = useState<TemplateInfo | null>(null)
-  // Fleet (3.9): "Deploy here" on the Proxmox page preselects that VM's stack; the hub forwards the deploy
+  // Fleet (3.9): "Deploy here" on the Proxmox page preselects that VM's stack; the hub forwards the deploy, the dry run and
+  // the undo to the member when one is given (deployTemplate & co. take its id)
   const [preferredStack, setPreferredStack] = useState<string>('')
-  const [deployMember] = useState<{ id: string; name: string } | null>(null)
+  const [deployMember, setDeployMember] = useState<{ id: string; name: string } | null>(null)
   const [detail, setDetail] = useState<TemplateDetailResponse | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [deploying, setDeploying] = useState(false)
@@ -3162,12 +3169,15 @@ export default function Templates() {
     { enabled: isConnected },
   )
 
-  // Fetch available stacks for the deploy/edit dropdowns
+  // Fetch available stacks for the deploy/edit dropdowns (the member's own when a deploy goes to a VM: the hub's list has
+  // only the stacks it placed there; the earlier fetch is dropped so it cannot overwrite the later one)
   const [availableStacks, setAvailableStacks] = useState<StackInfo[]>([])
   useEffect(() => {
     if (!isConnected) return
-    fetchStacks().then((res) => setAvailableStacks(res.stacks)).catch(() => {})
-  }, [isConnected])
+    let alive = true
+    fetchStacks(deployMember?.id).then((res) => { if (alive) setAvailableStacks(res.stacks) }).catch(() => {})
+    return () => { alive = false }
+  }, [isConnected, deployMember])
 
   // F3: Fetch deploy history + F6: containers
   const refreshHistory = useCallback(async () => {
@@ -3290,7 +3300,7 @@ export default function Templates() {
     try {
       const [res, stacksRes] = await Promise.all([
         fetchTemplateDetail(template.name),
-        fetchStacks().catch(() => null),
+        fetchStacks(deployMember?.id).catch(() => null),
       ])
       setDetail(res)
       if (stacksRes) setAvailableStacks(stacksRes.stacks)
@@ -3299,7 +3309,7 @@ export default function Templates() {
     } finally {
       setDetailLoading(false)
     }
-  }, [])
+  }, [deployMember])
 
   // Close deploy modal
   const handleCloseDeploy = useCallback(() => {

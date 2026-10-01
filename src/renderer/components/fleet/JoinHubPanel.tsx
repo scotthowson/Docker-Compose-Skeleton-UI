@@ -30,11 +30,13 @@ interface Props {
   pending?: { hub_url: string; name: string } | null
   autoRun?: boolean
   compact?: boolean
+  /** a non-admin: sees the hub, cannot leave it or join one (the API answers 403 to anyone but an admin) */
+  readOnly?: boolean
   onJoined?: (r: FleetJoinHubResponse) => void
   onLeft?: () => void
 }
 
-export default function JoinHubPanel({ hub, initial, pending = null, autoRun = false, compact = false, onJoined, onLeft }: Props) {
+export default function JoinHubPanel({ hub, initial, pending = null, autoRun = false, compact = false, readOnly = false, onJoined, onLeft }: Props) {
   const confirm = useConfirm()
   const uid = useId()
   const [hubUrl, setHubUrl] = useState(pending?.hub_url ?? initial?.hub_url ?? 'http://')
@@ -101,9 +103,11 @@ export default function JoinHubPanel({ hub, initial, pending = null, autoRun = f
           <p className="text-xs font-semibold text-slate-200">Member of {hub.name || hub.url}{hub.version ? ` (DCS ${hub.version})` : ''}</p>
           <p className="text-[11px] text-slate-500 truncate">as "{hub.member_name}"{hub.vmid ? ` · guest ${hub.vmid}${hub.node ? ` on ${hub.node}` : ''}` : ' · no guest matched yet'} · joined {new Date(hub.joined_at * 1000).toLocaleDateString()} · account {hub.username}</p>
         </div>
-        <button type="button" onClick={leave} disabled={leaving} className={`${BTN_CARD_QUIET} hover:!bg-rose-500/15 hover:!text-rose-200`}>
-          {leaving ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />} Leave
-        </button>
+        {!readOnly && (
+          <button type="button" onClick={leave} disabled={leaving} className={`${BTN_CARD_QUIET} hover:!bg-rose-500/15 hover:!text-rose-200`}>
+            {leaving ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />} Leave
+          </button>
+        )}
         {err && <p role="alert" className="w-full text-[11px] text-rose-300">{err}</p>}
       </div>
     )
@@ -134,10 +138,12 @@ export default function JoinHubPanel({ hub, initial, pending = null, autoRun = f
       {state !== 'idle' && <ProgressCard steps={STEPS} current={current} state={state} status={status} lines={lines} compact={compact} />}
       {state !== 'done' && (
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-[11px] text-slate-500">The code comes from the Join code button on the hub's {pageLabel('proxmox')} page. This server creates the account dcs-hub for the hub and hands it over once.</p>
-          <button type="button" onClick={() => void run()} disabled={busy} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />} Join the hub
-          </button>
+          <p className="text-[11px] text-slate-500">The code comes from the Join code button on the hub's {pageLabel('proxmox')} page. This server creates the account dcs-hub for the hub and hands it over once.{readOnly ? ' An admin does the join.' : ''}</p>
+          {!readOnly && (
+            <button type="button" onClick={() => void run()} disabled={busy} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />} Join the hub
+            </button>
+          )}
         </div>
       )}
     </div>

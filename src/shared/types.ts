@@ -3508,7 +3508,8 @@ export interface ProxmoxVmDetail {
   maxmem: number
   disk: number
   maxdisk: number
-  /** the memory balloon as Proxmox reports it while the VM runs, in bytes; 0 = no balloon device, so `mem` is the host's view of the whole allocation (page cache included) */
+  /** the balloon floor in MiB — the API emits the VM's config value as is (and divides the live figure down to it);
+   *  0 = no balloon device, so `mem` is the host's view of the whole allocation (page cache included) */
   balloon: number
   /** what the guest itself reports through its balloon driver, in bytes (0 when there is no device or the guest has not answered yet) */
   guest_mem_free: number
