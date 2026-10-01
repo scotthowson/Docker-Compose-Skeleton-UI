@@ -55,6 +55,9 @@ const W_INPUT = `w-full px-3 ${W_FIELD}`
 const W_INPUT_ICON = `w-full pl-9 pr-3 ${W_FIELD}`
 const W_INPUT_PW = `w-full pl-9 pr-12 ${W_FIELD}`
 const W_LABEL = 'block text-xs font-medium text-slate-400 mb-1.5'
+/** Geoblock's country list as typed: two letters per country, comma separated (the API checks each one against ISO 3166-1; "UK" is GB) */
+const GEOBLOCK_COUNTRIES_RE = /^\s*[A-Za-z]{2}(\s*,\s*[A-Za-z]{2})*\s*$/
+const geoblockCountriesOk = (s: string) => GEOBLOCK_COUNTRIES_RE.test(s) && !/\bUK\b/i.test(s)
 /** the header button of a folding section: its focus ring sits inside, because the section clips what sticks out */
 const SECTION_BTN = 'w-full flex items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.05] transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40'
 /** a choice among a few option cards (ntfy: off · deploy here · existing server) */
@@ -304,6 +307,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
   const [traefikTrustedLan, setTraefikTrustedLan] = useState('192.168.1.0/24')
   const [cfDnsToken, setCfDnsToken] = useState('')
   const [includeDockerSocket, setIncludeDockerSocket] = useState(true)
+  // Traefik's add-ons (switches of the template): each declares a Traefik plugin only while it is on, since Traefik
+  // does not start when a declared plugin cannot be fetched
+  const [traefikSablier, setTraefikSablier] = useState(false)
+  const [traefikCloudflareIp, setTraefikCloudflareIp] = useState(false)
+  const [traefikGeoblock, setTraefikGeoblock] = useState(false)
+  const [traefikGeoblockCountries, setTraefikGeoblockCountries] = useState('')
+  const [traefikThemePark, setTraefikThemePark] = useState(false)
+  const [traefikMaintenance, setTraefikMaintenance] = useState(false)
+  const traefikAddonsOn = [
+    traefikSablier && 'Start on demand',
+    traefikCloudflareIp && 'Cloudflare real IP',
+    traefikGeoblock && `Geoblock${traefikGeoblockCountries.trim() ? ` (${traefikGeoblockCountries.toUpperCase().replace(/\s+/g, '')})` : ''}`,
+    traefikThemePark && 'theme.park',
+    traefikMaintenance && 'Maintenance mode',
+  ].filter((x): x is string => typeof x === 'string')
   const [enableDDNS, setEnableDDNS] = useState(false)
   const [ddnsSubdomains, setDdnsSubdomains] = useState('@')
   const [ddnsInterval, setDdnsInterval] = useState(300)
@@ -524,8 +542,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     (notifyMode === 'external' && /^https?:\/\/\S+$/.test((envVars.NTFY_URL || '').trim()) && notifyTopicValid)
 
   const isStep3Valid = useCallback(() => {
+    // Geoblock without a usable country list would be refused by the deploy: it stops the step here instead
+    if (enableTraefik && traefikGeoblock && !geoblockCountriesOk(traefikGeoblockCountries)) return false
     return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim()) && notifyValid
-  }, [envVars, notifyValid])
+  }, [envVars, notifyValid, enableTraefik, traefikGeoblock, traefikGeoblockCountries])
 
   const isStep4Valid = useCallback(() => {
     if (!(stacks.length >= 1 && stacks.every((s) => /^[a-z0-9][a-z0-9_-]*$/.test(s.name)))) return false
@@ -714,12 +734,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               TRAEFIK_ACME_EMAIL: traefikEmail || `admin@${envVars.PROXY_DOMAIN}`,
               TRAEFIK_TRUSTED_LAN: traefikTrustedLan,
               ...(cfTokenValue ? { CF_DNS_API_TOKEN: cfTokenValue } : {}),
+              // the add-ons: a plugin is declared only while its switch is on
+              TRAEFIK_SABLIER: traefikSablier ? 'true' : 'false',
+              TRAEFIK_CLOUDFLARE_REAL_IP: traefikCloudflareIp ? 'true' : 'false',
+              TRAEFIK_GEOBLOCK: traefikGeoblock ? 'true' : 'false',
+              ...(traefikGeoblock ? { TRAEFIK_GEOBLOCK_COUNTRIES: traefikGeoblockCountries.trim() } : {}),
+              TRAEFIK_THEMEPARK: traefikThemePark ? 'true' : 'false',
+              TRAEFIK_MAINTENANCE: traefikMaintenance ? 'true' : 'false',
             },
             auto_start: true,
             replace_services: true,
             exclude_services: includeDockerSocket ? [] : ['docker-socket-proxy'],
           })
           results.push({ label: 'Traefik deployed', ok: res.started !== false, detail: res.started === false ? (res as { warning?: string }).warning || 'Deployed but not started' : undefined })
+          if (traefikSablier) {
+            if (res.sablier?.deployed) results.push({ label: 'Sablier deployed with Traefik (start on demand)', ok: true })
+            else if (res.sablier?.present) results.push({ label: 'Sablier runs already: its plugin is declared', ok: true })
+            else results.push({ label: 'Sablier deployment', ok: false, detail: res.sablier?.error || 'not deployed' })
+          }
+          const addonsOn = traefikAddonsOn.filter((a) => !a.startsWith('Start on demand'))
+          if (addonsOn.length) results.push({ label: `Traefik add-ons: ${addonsOn.join(', ')}`, ok: true })
         } catch (err) {
           console.error('[SetupWizard] Traefik deploy failed:', err)
           results.push({ label: 'Traefik deployment', ok: false, detail: err instanceof Error ? err.message : 'failed' })
@@ -1881,6 +1915,65 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             </Tooltip>
                           </div>
 
+                          {/* Add-ons: each declares a Traefik plugin only while it is on */}
+                          <div className="pt-1">
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Add-ons</p>
+                            <p className="text-[10px] text-slate-500 mt-1">Each one declares a Traefik plugin only while it is on (Traefik does not start when a declared plugin cannot be fetched). Deploying the Traefik template again changes them later.</p>
+                            <div className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-300">Start containers on demand (Sablier)</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Deploys Sablier with Traefik: an app can sleep while nobody uses it and wake on the first visit, chosen per route when you deploy it</p>
+                              </div>
+                              <Switch aria-label="Start containers on demand (Sablier)" checked={traefikSablier} onChange={() => setTraefikSablier(!traefikSablier)} className="shrink-0 ml-3" />
+                            </div>
+                            <div className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-300">Cloudflare real IP</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">For a site behind Cloudflare's proxy: the visitor's address replaces Cloudflare's before CrowdSec and Geoblock judge it. Leave off when Cloudflare only serves your DNS.</p>
+                              </div>
+                              <Switch aria-label="Cloudflare real IP" checked={traefikCloudflareIp} onChange={() => setTraefikCloudflareIp(!traefikCloudflareIp)} className="shrink-0 ml-3" />
+                            </div>
+                            <div className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-300">Geoblock</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Only visitors from the countries you list reach your routes; your LAN is always let in</p>
+                              </div>
+                              <Switch aria-label="Geoblock" checked={traefikGeoblock} onChange={() => setTraefikGeoblock(!traefikGeoblock)} className="shrink-0 ml-3" />
+                            </div>
+                            {traefikGeoblock && (
+                              <div className="pb-2 animate-fade-in">
+                                <label htmlFor="wiz-geoblock-countries" className={W_LABEL}>
+                                  Allowed countries <span className="text-rose-400" aria-hidden>*</span>
+                                </label>
+                                <input id="wiz-geoblock-countries"
+                                  type="text"
+                                  value={traefikGeoblockCountries}
+                                  onChange={(e) => setTraefikGeoblockCountries(e.target.value)}
+                                  placeholder="GB,US,DE"
+                                  aria-invalid={traefikGeoblockCountries.trim() !== '' && !geoblockCountriesOk(traefikGeoblockCountries) ? true : undefined}
+                                  className={`${W_INPUT} font-mono`}
+                                />
+                                <p className={`text-[10px] mt-1 ${traefikGeoblockCountries.trim() !== '' && !geoblockCountriesOk(traefikGeoblockCountries) ? 'text-rose-400' : 'text-slate-500'}`}>
+                                  {/\bUK\b/i.test(traefikGeoblockCountries) ? 'The United Kingdom is GB.' : 'ISO 3166-1 alpha-2 codes, comma separated. Needed before you can continue.'}
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-300">theme.park themes</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Declares the theme.park plugin now, so a theme put on an app's pages later needs no Traefik restart</p>
+                              </div>
+                              <Switch aria-label="theme.park themes" checked={traefikThemePark} onChange={() => setTraefikThemePark(!traefikThemePark)} className="shrink-0 ml-3" />
+                            </div>
+                            <div className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-300">Maintenance mode</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">A "maintenance" middleware with a holding page: add it to a route, and the page shows while App-Data/Traefik/maintenance.trigger exists</p>
+                              </div>
+                              <Switch aria-label="Maintenance mode" checked={traefikMaintenance} onChange={() => setTraefikMaintenance(!traefikMaintenance)} className="shrink-0 ml-3" />
+                            </div>
+                          </div>
+
                           {/* Cloudflare DNS (optional) */}
                           <div>
                             <label htmlFor="wiz-cloudflare-dns-api-token-optional" className={W_LABEL}>
@@ -2683,6 +2776,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                       <div className="flex items-center justify-between py-1 px-2 rounded bg-white/[0.03]">
                         <span className="text-[10px] text-slate-500">Docker Socket Proxy</span>
                         <span className="text-[10px] text-slate-300">{includeDockerSocket ? 'Included' : 'Excluded'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between gap-3 py-1 px-2 rounded ${traefikAddonsOn.length ? 'bg-emerald-500/5' : 'bg-white/[0.03]'}`}>
+                        <span className="text-[10px] text-slate-500 shrink-0">Add-ons</span>
+                        <span className={`text-[10px] text-right ${traefikAddonsOn.length ? 'text-emerald-300' : 'text-slate-400'}`}>{traefikAddonsOn.length ? traefikAddonsOn.join(' · ') : 'None'}</span>
                       </div>
                       <div className={`flex items-center justify-between py-1 px-2 rounded ${enableAuthelia && autheliaUser && autheliaPassword ? 'bg-emerald-500/5' : 'bg-white/[0.03]'}`}>
                         <span className="text-[10px] text-slate-500">Authelia SSO</span>

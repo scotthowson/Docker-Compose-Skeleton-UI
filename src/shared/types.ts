@@ -1947,6 +1947,10 @@ export interface TemplateDeployResponse {
   on_demand?: string[]
   /** true when the Sablier plugin had to be declared and Traefik was restarted once */
   traefik_restarted?: boolean
+  /** the Traefik template's "Start containers on demand" switch: Sablier deployed into the stack, or present already, or why not */
+  sablier?: { deployed: boolean; present: boolean; error?: string } | null
+  /** the Traefik template's add-ons as this deploy left them (geoblock carries its countries) */
+  addons?: Record<string, { on: boolean; countries?: string[] }> | null
 }
 
 // GET /stacks/:stack/activity — progress of a background action on a stack
