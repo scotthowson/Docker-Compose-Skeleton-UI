@@ -20,6 +20,7 @@ import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useAuthStore } from '../stores/authStore'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { LoadingState, EmptyState } from '../components/common/PageState'
 import PageHeader from '../components/common/PageHeader'
@@ -408,6 +409,8 @@ function EmptyEvents({ filtered, onClear }: { filtered: boolean; onClear: () => 
 export default function Activity() {
   const connectionStatus = useConnectionStore((s) => s.status)
   const isConnected = connectionStatus === 'connected'
+  // GET /audit is admin-only: a user's page never asks for it (it answered 403, a toast every poll)
+  const isAdmin = useAuthStore((s) => s.userRole) === 'admin'
   const reportPollSuccess = useConnectionStore((s) => s.reportPollSuccess)
   const reportPollFailure = useConnectionStore((s) => s.reportPollFailure)
 
@@ -510,7 +513,7 @@ export default function Activity() {
 
   // Fetch audit log when expanded
   useEffect(() => {
-    if (!auditExpanded || !isConnected) return
+    if (!auditExpanded || !isConnected || !isAdmin) return
     let cancelled = false
     const load = async () => {
       setAuditLoading(true)
@@ -526,7 +529,7 @@ export default function Activity() {
     load()
     const interval = setInterval(load, 15000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [auditExpanded, isConnected, addToast, scope])
+  }, [auditExpanded, isConnected, isAdmin, addToast, scope])
 
   // Audit action types for filter
   const auditActions = useMemo(() => {
@@ -686,8 +689,8 @@ export default function Activity() {
             </div>
           )}
 
-          {/* ── Audit log section (collapsible) ──────────────────────────── */}
-          <div className="animate-fade-in">
+          {/* ── Audit log section (collapsible; admins only, GET /audit answers 403 to a user) ── */}
+          {isAdmin && <div className="animate-fade-in">
             <button
               type="button"
               onClick={() => setAuditExpanded(!auditExpanded)}
@@ -840,7 +843,7 @@ export default function Activity() {
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </>
       )}
     </div>

@@ -1,7 +1,7 @@
 // =============================================================================
 // Live Events — the server's live event stream (Server-Sent Events): Docker
-// events, metrics, log lines and health scores as they happen, with filtering
-// and auto-scroll. On a hub the fleet chips choose what the stream carries:
+// events and metrics as they happen, with filtering and auto-scroll. On a hub
+// the fleet chips choose what the stream carries:
 // the hub's own docker events, every VM's too, or one VM's.
 // =============================================================================
 
@@ -26,12 +26,12 @@ const MAX_EVENTS = 500
 
 type FilterKey = SSEEventType | 'all'
 
+// (the stream only ever sends docker-event and metrics; log-line and health-score are in the protocol
+// but nothing emits them, so a tab for them would stay empty for ever)
 const FILTER_TABS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'docker-event', label: 'Docker events' },
   { key: 'metrics', label: 'Metrics' },
-  { key: 'log-line', label: 'Logs' },
-  { key: 'health-score', label: 'Health' },
 ]
 
 /** Docker events are the ones to watch (cyan); the rest is a steady stream, told apart by its label (slate) */
