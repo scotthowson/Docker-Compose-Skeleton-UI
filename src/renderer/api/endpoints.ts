@@ -41,6 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -888,9 +889,14 @@ export function fetchTerminalHistory(): Promise<TerminalHistoryResponse> {
   return apiClient.get<TerminalHistoryResponse>('/terminal/history')
 }
 
-/** POST /images/:id/delete — Remove a Docker image */
+/** POST /images/:id/delete — Remove a Docker image by id (an untagged one: "<none>") */
 export function deleteImage(id: string, member?: string | null): Promise<ImageDeleteResponse> {
   return apiClient.post<ImageDeleteResponse>(memberPath(member, `/images/${encodeURIComponent(id)}/delete`), undefined, 120000)
+}
+
+/** POST /images/delete — Remove a tagged image by its reference ("repository:tag"): Docker takes the name even when the id carries several tags */
+export function deleteImageRef(image: string, member?: string | null): Promise<ImageDeleteResponse> {
+  return apiClient.post<ImageDeleteResponse>(memberPath(member, '/images/delete'), { image }, 120000)
 }
 
 /** POST /containers/:name/rename — Rename a container */
@@ -905,6 +911,16 @@ export function renameContainer(name: string, newName: string): Promise<Containe
 /** GET /stacks/:stack/activity — Progress of the background action on a stack (deploy, start, stop) */
 export function fetchStackActivity(name: string, member?: string | null): Promise<StackActivityResponse> {
   return apiClient.get<StackActivityResponse>(memberPath(member, `/stacks/${encodeURIComponent(name)}/activity`))
+}
+
+/** POST /stacks/:name/push — Push the hub's files of a VM stack into the VM that runs it (admin; the hub's own endpoint) */
+export function pushStackFiles(name: string): Promise<StackPushResponse> {
+  return apiClient.post<StackPushResponse>(`/stacks/${encodeURIComponent(name)}/push`, {}, 120000)
+}
+
+/** POST /stacks/:name/pull — Pull a VM stack's files from the VM into the hub's Stacks/<name>/ (admin; the hub's own endpoint) */
+export function pullStackFiles(name: string): Promise<StackPullResponse> {
+  return apiClient.post<StackPullResponse>(`/stacks/${encodeURIComponent(name)}/pull`, {}, 120000)
 }
 
 export function fetchStackServices(name: string): Promise<StackServicesResponse> {
@@ -1356,8 +1372,13 @@ export function deployTemplate(name: string, opts: {
   authelia_services?: string[]
   /** services Sablier starts on demand (route carries the middleware) */
   on_demand_services?: string[]
+  /** false: no route, no DNS record and no proxy network for this deploy (the API otherwise gives every service a default route) */
+  routes?: boolean
+  /** only these services get a route; an empty list sent on purpose means none */
+  route_services?: string[]
 }, member?: string | null): Promise<TemplateDeployResponse> {
-  return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 180000)
+  // a first deploy pulls every image and Authelia hashes its secrets: well past the usual 30 s
+  return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 600000)
 }
 
 /** POST /templates/import — Import a custom template */
@@ -1404,6 +1425,8 @@ export function undeployTemplate(name: string, opts: {
 /** POST /templates/:name/dry-run — Preview deployment without writing */
 export function dryRunTemplate(name: string, opts: {
   target_stack: string; variables?: Record<string, string>; exclude_services?: string[]
+  /** the same routing choice the deploy sends (see deployTemplate) */
+  routes?: boolean; route_services?: string[]
 }, member?: string | null): Promise<TemplateDryRunResponse> {
   return apiClient.post<TemplateDryRunResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/dry-run`), opts, member ? 60000 : undefined)
 }
@@ -2190,6 +2213,12 @@ export function deleteFleetJob(id: string, destroy = false): Promise<{ success: 
 /** POST /fleet/members/:id/test — log in afresh, read the identity, match the guest */
 export function testFleetMember(id: string): Promise<FleetMemberTestResponse> {
   return apiClient.post<FleetMemberTestResponse>(`/fleet/members/${encodeURIComponent(id)}/test`, {}, 90000)
+}
+
+/** POST /fleet/members/:id/sync — pull the files of every stack the member runs into the hub's Stacks/ (direction "push" sends the hub's copies into the VM); stacks limits it */
+export function syncFleetMember(id: string, body: { direction?: 'pull' | 'push'; stacks?: string[] } = {}): Promise<FleetMemberSyncResponse> {
+  // one call per stack inside, 90 s each on the member's side
+  return apiClient.post<FleetMemberSyncResponse>(`/fleet/members/${encodeURIComponent(id)}/sync`, body, 300000)
 }
 
 /** GET /fleet/overview — every member with its stacks and container counts */

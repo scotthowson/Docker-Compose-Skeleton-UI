@@ -404,8 +404,11 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
   const handleRollback = useCallback(async (versionId: string) => {
     setRollingBack(versionId)
     try {
-      await rollbackCompose(stack.name, versionId)
-      addToast({ type: 'success', message: `Rolled back to ${versionId}` })
+      const rb = await rollbackCompose(stack.name, versionId)
+      if (!rb.success) throw new Error(rb.message || 'Rollback failed')
+      // a VM stack: the hub's copy is rolled back either way; pushed:false means the VM did not take it yet
+      if (rb.pushed === false) addToast({ type: 'warning', message: rb.message, duration: 8000 })
+      else addToast({ type: 'success', message: `Rolled back to ${versionId}` })
       // Reload compose content
       const res = await fetchStackCompose(stack.name)
       setOriginalCompose(res.content)
@@ -634,9 +637,13 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
 
     setSavingCompose(true)
     try {
-      await saveStackCompose(stack.name, composeContent)
+      const res = await saveStackCompose(stack.name, composeContent)
+      // HTTP 200 with success:false is a compose file Docker refused: nothing was written, the editor stays dirty
+      if (!res.success) throw new Error(res.validation_errors || res.message || 'Validation failed')
       setOriginalCompose(composeContent)
-      addToast({ type: 'success', message: `Compose file saved for ${stack.name}` })
+      // a VM stack: the hub's copy is saved either way; pushed:false means the VM did not take it yet
+      if (res.pushed === false) addToast({ type: 'warning', message: res.message, duration: 8000 })
+      else addToast({ type: 'success', message: `Compose file saved for ${stack.name}` })
       setComposeEditMode(false)
       setShowDiff(false)
       setValidationResult(null)
@@ -660,9 +667,11 @@ export default function EditStackOverlay({ stack, onClose, onSaved, initialServi
   const handleSaveEnv = useCallback(async () => {
     setSavingEnv(true)
     try {
-      await saveStackEnv(stack.name, envContent)
+      const res = await saveStackEnv(stack.name, envContent)
+      if (!res.success) throw new Error(res.message || 'Save failed')
       setOriginalEnv(envContent)
-      addToast({ type: 'success', message: `.env saved for ${stack.name}` })
+      if (res.pushed === false) addToast({ type: 'warning', message: res.message, duration: 8000 })
+      else addToast({ type: 'success', message: `.env saved for ${stack.name}` })
       setEnvEditMode(false)
       onSaved()
     } catch (err) {

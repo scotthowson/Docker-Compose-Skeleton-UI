@@ -6,7 +6,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { SegmentedControl } from '@mantine/core'
 import { useImageStore } from '../stores/imageStore'
 import { useApi } from '../hooks/useApi'
-import { fetchImages, runImagePrune, deleteImage, searchImages, pullImage, checkImageRegistry, checkFleetImageRegistry } from '../api/endpoints'
+import { fetchImages, runImagePrune, deleteImage, deleteImageRef, searchImages, pullImage, checkImageRegistry, checkFleetImageRegistry } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import { useToast } from '../components/common/Toast'
@@ -254,7 +254,10 @@ const Images: React.FC = () => {
     for (const key of selectedImages) {
       const sep = key.indexOf('|'); const member = key.slice(0, sep) || null; const id = key.slice(sep + 1)
       try {
-        const res = await deleteImage(id, member)
+        // a tagged image goes by its name: Docker refuses an id that carries several tags; an untagged one ("<none>") by its id
+        const row = images.find((i) => imageKey(i) === key)
+        const tagged = !!row && row.repository !== '<none>' && row.tag !== '<none>'
+        const res = tagged ? await deleteImageRef(`${row.repository}:${row.tag}`, member) : await deleteImage(id, member)
         results.push({ id, success: res.success, message: res.message })
       } catch (err) {
         results.push({ id, success: false, message: err instanceof Error ? err.message : 'Failed' })
@@ -272,7 +275,7 @@ const Images: React.FC = () => {
       addToast({ type: 'error', message: `${results.length - successCount} deletion${results.length - successCount !== 1 ? 's' : ''} failed`, duration: 5000 })
     }
     setSelectedImages(new Set())
-  }, [selectedImages, batchLoading, addToast, confirm, handleFetch])
+  }, [selectedImages, batchLoading, addToast, confirm, handleFetch, images])
 
   // Summary counts
   const counts = useMemo(() => {
@@ -595,11 +598,6 @@ const Images: React.FC = () => {
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                               <BadgeCheck size={10} />
                               Official
-                            </span>
-                          )}
-                          {result.automated === '[OK]' && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/20">
-                              Auto
                             </span>
                           )}
                         </div>

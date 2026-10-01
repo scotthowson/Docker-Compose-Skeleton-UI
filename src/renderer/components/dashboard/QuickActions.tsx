@@ -30,6 +30,7 @@ import {
 import type { PageId } from '../../../shared/types'
 import { ADMIN_ONLY_PAGES } from '../../../shared/types'
 import { pageLabel, pageTitles } from '../../constants/pageTitles'
+import { activityOutcome, opGerund, startedInBackground, waitForStackActivity, type StackOp } from '../../lib/stackActivity'
 import { Card, CardBody, CardEmpty, ACCENTS, ACCENT_NAMES, type CardCommonProps } from './cardShared'
 import ModalOverlay from '../common/ModalOverlay'
 import Hint from '../common/Hint'
@@ -127,9 +128,17 @@ export default function QuickActions({ cardConfig, onSaveConfig, dashboardEditMo
         else if (a.target === 'check-health') { const rep = await fetchHealthReport(); setHealthReport(rep); const n = rep.summary?.unhealthy ?? 0; addToast({ type: n > 0 ? 'warning' : 'success', message: n > 0 ? `${n} container${n === 1 ? '' : 's'} need attention` : 'Everything is healthy' }) }
         else if (a.target === 'run-backup') { const r = await triggerBackup(); addToast({ type: r.success ? 'success' : 'error', message: r.success ? 'Backup started' : (r.message || 'Backup failed') }) }
       } else if (a.kind === 'stack') {
-        const fn = { start: startStack, stop: stopStack, restart: restartStack, update: updateStack }[a.op || 'start'] ?? startStack
+        const op: StackOp = STACK_OPS.includes(a.op || '') ? (a.op as StackOp) : 'start'
+        const fn = { start: startStack, stop: stopStack, restart: restartStack, update: updateStack }[op]
         const r = await fn(a.target)
-        addToast({ type: r.success ? 'success' : 'error', message: r.success ? `${a.target}: ${a.op || 'start'} done` : `${a.target}: ${a.op || 'start'} failed` })
+        if (r.success && startedInBackground((r as { output?: string }).output)) {
+          // the API answered before anything ran: follow the stack's activity, then say how it ended
+          addToast({ type: 'info', message: `${a.target}: ${opGerund(op).toLowerCase()}…`, duration: 4000 })
+          void refreshContainers()
+          addToast(activityOutcome(await waitForStackActivity(a.target), a.target, op))
+        } else {
+          addToast({ type: r.success ? 'success' : 'error', message: r.success ? `${a.target}: ${op} done` : `${a.target}: ${op} failed` })
+        }
         void refreshContainers()
       } else if (a.kind === 'container') {
         const fn = { start: startContainer, stop: stopContainer, restart: restartContainer, recreate: recreateContainer }[a.op || 'start'] ?? startContainer

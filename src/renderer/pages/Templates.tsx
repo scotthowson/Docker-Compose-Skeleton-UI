@@ -425,13 +425,16 @@ function parseServicesWithPorts(compose: string): { name: string; containerName:
   return results
 }
 
+/** the per-route choices of the deploy sheet: who is behind Authelia, who starts on demand, and whether a route is made at all */
+type DeploySwitches = { authelia_services?: string[]; on_demand_services?: string[]; routes?: boolean; route_services?: string[] }
+
 interface DeployModalProps {
   template: TemplateInfo
   detail: TemplateDetailResponse | null
   detailLoading: boolean
   stacks: StackInfo[]
   onClose: () => void
-  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: { authelia_services?: string[]; on_demand_services?: string[] }) => Promise<TemplateDeployResponse | null>
+  onDeploy: (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: DeploySwitches) => Promise<TemplateDeployResponse | null>
   deploying: boolean
   onUndeploy?: (templateName: string, targetStack: string, services: string[]) => Promise<boolean>
   isAdmin?: boolean
@@ -617,7 +620,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       .then((res) => {
         setTraefikActive(res.active)
         setTraefikDomain(res.domain || '')
-        const mw = res.authelia_middleware || (res.authelia ? 'authelia' : '')
+        // the middleware name is the install's own (the older `authelia: true` flag never named one)
+        const mw = res.authelia_middleware || ''
         setAutheliaMw(mw)
         // Authelia here: routes sit behind the portal by default, except templates whose apps bring their own clients
         setEnableAuthelia(!!mw && template.auth !== 'bypass')
@@ -939,10 +943,19 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const homarrFlag = homarrActive && addToHomarr ? true : undefined
     const names = Object.keys(customContainerNames).length > 0 ? customContainerNames : undefined
     const routing = traefikActive && enableRouting
-    const switches = routing
+    // Traefik with a real domain: the routing switch and the per-service boxes travel too — without them the API
+    // gives every service a default route (an empty route_services sent on purpose means none)
+    const routable = traefikActive && !!traefikDomain && traefikDomain !== 'example.com'
+    const switches: DeploySwitches | undefined = routing || routable
       ? {
-          authelia_services: routeServices.filter((s) => s.enabled && (s.authelia || enableAuthelia) && !!autheliaMw).map((s) => s.name),
-          on_demand_services: routeServices.filter((s) => s.enabled && s.onDemand && sablierPresent).map((s) => s.name),
+          ...(routing ? {
+            authelia_services: routeServices.filter((s) => s.enabled && (s.authelia || enableAuthelia) && !!autheliaMw).map((s) => s.name),
+            on_demand_services: routeServices.filter((s) => s.enabled && s.onDemand && sablierPresent).map((s) => s.name),
+          } : {}),
+          ...(routable ? {
+            routes: enableRouting,
+            route_services: enableRouting && routeServices.length > 0 ? routeServices.filter((s) => s.enabled).map((s) => s.name) : undefined,
+          } : {}),
         }
       : undefined
     const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names, switches)
@@ -952,7 +965,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       setShowOutput(true)
     }
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, traefikDomain, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -963,7 +976,8 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // F4: Handle "Undo Deploy" (undeploy)
   const handleUndoDeploy = useCallback(async () => {
     if (!deployResult || !onUndeploy) return
-    if (!(await confirm({ title: 'Undo deploy', message: `Undo deploy? This will remove the deployed services from "${deployResult.target_stack}".`, confirmLabel: 'Undo deploy', danger: true }))) return
+    // the undeploy removes the data too (remove_data): say so before asking
+    if (!(await confirm({ title: 'Undo deploy', message: `Undo deploy? This removes the deployed services from "${deployResult.target_stack}" together with their data — the App-Data folders they own are deleted.`, confirmLabel: 'Undo deploy', danger: true }))) return
     setUndeploying(true)
     const ok = await onUndeploy(template.name, deployResult.target_stack, deployResult.services_added || [])
     setUndeploying(false)
@@ -987,7 +1001,12 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         const secretName = (secretNames[name] ?? name).trim() || name
         previewVars[name] = `\${SECRETS_${secretName}}`
       }
-      const res = await dryRunTemplate(template.name, { target_stack: targetStack, variables: previewVars, exclude_services: exclude }, member?.id)
+      // the same routing choice the deploy sends, so the preview shows the routes it would make
+      const routable = traefikActive && !!traefikDomain && traefikDomain !== 'example.com'
+      const res = await dryRunTemplate(template.name, {
+        target_stack: targetStack, variables: previewVars, exclude_services: exclude,
+        ...(routable ? { routes: enableRouting, route_services: enableRouting && routeServices.length > 0 ? routeServices.filter((s) => s.enabled).map((s) => s.name) : undefined } : {}),
+      }, member?.id)
       setDryRunResult(res)
     } catch (err) {
       setDryRunResult(null)
@@ -995,7 +1014,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     } finally {
       setDryRunLoading(false)
     }
-  }, [template.name, targetStack, variables, excludedServices, storeAsSecret, secretNames])
+  }, [template.name, targetStack, variables, excludedServices, storeAsSecret, secretNames, member, traefikActive, traefikDomain, enableRouting, routeServices])
 
   const headerTone = deployResult
     ? (outcome === 'running' ? 'ok' : outcome === 'failed' ? 'bad' : outcome === 'not-started' ? 'held' : 'busy')
@@ -1719,8 +1738,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                 </div>
               )}
 
-              {/* Homarr Dashboard Toggle — visible when Homarr is deployed; without an API key the app only lands in its library */}
-              {homarrActive && (
+              {/* Homarr Dashboard Toggle — visible when Homarr is deployed and the app gets a route here (the route loop
+                  registers apps with Traefik + domain only; a deploy into a VM is registered by the hub itself);
+                  without an API key the app only lands in its library */}
+              {homarrActive && traefikActive && !targetInVm && (
                 <div className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5">
                     <div className="flex items-center gap-2">
@@ -1964,8 +1985,54 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       </div>
                     )}
 
+                    {/* A singleton that is already deployed */}
+                    {dryRunResult.has_singleton_conflict && (
+                      <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2">
+                        <p className="text-rose-400 font-semibold text-[11px]">
+                          <AlertTriangle size={11} className="inline mr-1" />
+                          Already deployed — this template runs once per server
+                        </p>
+                        <p className="text-[10px] mt-0.5 font-mono text-rose-300/80">{dryRunResult.singleton_conflict}</p>
+                      </div>
+                    )}
+
+                    {/* Required variables without a value */}
+                    {dryRunResult.has_missing_vars && (
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2">
+                        <p className="text-amber-400 font-semibold text-[11px]">
+                          <AlertTriangle size={11} className="inline mr-1" />
+                          Required variables still empty
+                        </p>
+                        <p className="text-[10px] mt-0.5 font-mono text-amber-300/80">{dryRunResult.missing_required_vars}</p>
+                      </div>
+                    )}
+
+                    {/* What the security scan of the compose found */}
+                    {(dryRunResult.security_warnings ?? []).length > 0 && (
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
+                        <p className="text-amber-400 font-semibold text-[11px]">
+                          <Shield size={11} className="inline mr-1" />
+                          Security warnings
+                        </p>
+                        {(dryRunResult.security_warnings ?? []).map((w, i) => (
+                          <p key={i} className="text-[10px] font-mono text-amber-300/80 whitespace-pre-wrap">{w}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* What the pre-deploy plugin hooks said (they do not block) */}
+                    {(dryRunResult.plugin_results ?? []).length > 0 && (
+                      <div className="rounded-md bg-white/[0.03] border border-white/5 p-2 space-y-1">
+                        <p className="text-slate-300 font-semibold text-[11px]">Plugins</p>
+                        {(dryRunResult.plugin_results ?? []).map((r) => (
+                          <p key={r.plugin} className="text-[10px] text-slate-400 whitespace-pre-wrap"><span className="font-mono text-cyan-400">{r.plugin}</span>: {r.output}</p>
+                        ))}
+                      </div>
+                    )}
+
                     {/* No conflicts (or all resolved via replace) */}
-                    {(!dryRunResult.has_service_conflicts || replaceServices) && !dryRunResult.has_port_conflicts && (
+                    {(!dryRunResult.has_service_conflicts || replaceServices) && !dryRunResult.has_port_conflicts
+                      && !dryRunResult.has_singleton_conflict && !dryRunResult.has_missing_vars && (dryRunResult.security_warnings ?? []).length === 0 && (
                       <p className="text-emerald-400/80">
                         <CheckCircle size={11} className="inline mr-1" />
                         {replaceServices && dryRunResult.has_service_conflicts
@@ -2958,6 +3025,8 @@ interface TemplateCardProps {
   onDelete: (template: TemplateInfo) => void
   onExport: (template: TemplateInfo) => void
   deployStatus?: DeployStatus
+  /** editing and deleting are admin calls on the API */
+  isAdmin?: boolean
 }
 
 /** a card's shape while the templates load: its category, its name, two lines, its tags, its button */
@@ -3006,7 +3075,7 @@ function CreateTemplateCard({ onClick }: { onClick: () => void }) {
   )
 }
 
-function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deployStatus }: TemplateCardProps) {
+function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deployStatus, isAdmin = false }: TemplateCardProps) {
   const name = template.title || template.name
   const running = deployStatus?.state === 'running'
 
@@ -3029,16 +3098,20 @@ function TemplateCard({ template, onDeploy, onEdit, onDelete, onExport, deploySt
               <Download size={12} />
             </button>
           </Hint>
-          <Hint label="Edit this template">
-            <button type="button" aria-label={`Edit ${name}`} onClick={(e) => { e.stopPropagation(); onEdit(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10`}>
-              <Pencil size={12} />
-            </button>
-          </Hint>
-          <Hint label="Delete this template">
-            <button type="button" aria-label={`Delete ${name}`} onClick={(e) => { e.stopPropagation(); onDelete(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-rose-300 hover:bg-rose-500/10`}>
-              <Trash2 size={12} />
-            </button>
-          </Hint>
+          {isAdmin && (
+            <>
+              <Hint label="Edit this template">
+                <button type="button" aria-label={`Edit ${name}`} onClick={(e) => { e.stopPropagation(); onEdit(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10`}>
+                  <Pencil size={12} />
+                </button>
+              </Hint>
+              <Hint label="Delete this template">
+                <button type="button" aria-label={`Delete ${name}`} onClick={(e) => { e.stopPropagation(); onDelete(template) }} className={`${BTN_ICON_SM} text-slate-500 hover:text-rose-300 hover:bg-rose-500/10`}>
+                  <Trash2 size={12} />
+                </button>
+              </Hint>
+            </>
+          )}
         </div>
       </div>
 
@@ -3320,7 +3393,7 @@ export default function Templates() {
 
   // Execute deployment — returns result on success for the modal's success state (F4)
   const handleDeploy = useCallback(
-    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: { authelia_services?: string[]; on_demand_services?: string[] }): Promise<TemplateDeployResponse | null> => {
+    async (targetStack: string, variables: Record<string, string>, autoStart: boolean, replaceServices?: boolean, excludeServices?: string[], customRoutes?: Record<string, string>, connectProxy?: boolean, resourceLimits?: { mem_limit?: string; cpus?: number }, addToHomarr?: boolean, containerNames?: Record<string, string>, switches?: DeploySwitches): Promise<TemplateDeployResponse | null> => {
       if (!deployTarget) return null
       setDeploying(true)
       try {
@@ -3330,7 +3403,8 @@ export default function Templates() {
           target_stack: targetStack,
           variables,
           auto_start: autoStart,
-          replace_services: true,
+          // the preview's "Replace existing services" box decides; unticked, a name clash is refused (409)
+          replace_services: replaceServices === true,
           exclude_services: excludeServices,
           custom_routes: customRoutes,
           connect_proxy: connectProxy,
@@ -3341,6 +3415,9 @@ export default function Templates() {
           // the sheet's choice travels even when it is "none": the server would otherwise protect by default
           authelia_services: switches?.authelia_services,
           on_demand_services: switches?.on_demand_services?.length ? switches.on_demand_services : undefined,
+          // the routing switch and the per-service boxes (an empty list on purpose = no route)
+          routes: switches?.routes,
+          route_services: switches?.route_services,
         }, deployMember?.id)
         if (res.success) {
           refresh()
@@ -3414,6 +3491,13 @@ export default function Templates() {
     }
   }, [addToast, refresh, refreshHistory, deployMember])
 
+  // the History table's Undeploy (the deploy sheet asks on its own): the data goes with the services, so ask first
+  const askUndeploy = useCallback(async (templateName: string, targetStack: string, services: string[]) => {
+    const what = services.length > 0 ? services.join(', ') : templateName
+    if (!(await confirm({ title: 'Undeploy', message: `Remove ${what} from "${targetStack}"? The containers go, and so does the app's data — the App-Data folders these services own are deleted.`, confirmLabel: 'Undeploy', danger: true }))) return
+    await handleUndeploy(templateName, targetStack, services)
+  }, [confirm, handleUndeploy])
+
   // Open create modal
   const handleOpenCreate = useCallback(() => {
     setEditInitial(undefined)
@@ -3428,7 +3512,9 @@ export default function Templates() {
         name: template.name,
         compose: res.compose || '',
         env: res.env || '',
-        metadata: { title: template.title || template.name, description: template.description, category: template.category, target_stack: template.target_stack || '', tags: template.tags, variables: template.variables || [] },
+        // the whole record: icon, auth, singleton, config_path, route_skip and the rest survive a save (the editor
+        // only changes its own fields on top of it; the API merges too)
+        metadata: { ...template, title: template.title || template.name, target_stack: template.target_stack || '', tags: template.tags, variables: template.variables || [] },
       })
       setCreateEditMode('edit')
     } catch {
@@ -3583,10 +3669,13 @@ export default function Templates() {
           {filtered.length !== templates.length && ` (${filtered.length} shown)`}
         </>}
         actions={<>
-          <button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
-            <Plus size={14} />
-            Create
-          </button>
+          {/* creating, importing, editing and deleting templates are admin calls on the API */}
+          {isAdmin && (
+            <button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}>
+              <Plus size={14} />
+              Create
+            </button>
+          )}
           {isAdmin && (
             <Hint label="Import a template from a URL">
               <button type="button" aria-label="URL import" onClick={() => setShowUrlImport(true)} className={BTN_TOOLBAR_QUIET}>
@@ -3684,7 +3773,7 @@ export default function Templates() {
                         {isAdmin && entry.action === 'deploy' && latestActionMap.get(`${entry.template}__${entry.target_stack}`) !== 'undeploy' && (
                           <button
                             type="button"
-                            onClick={() => handleUndeploy(entry.template, entry.target_stack, entry.services)}
+                            onClick={() => void askUndeploy(entry.template, entry.target_stack, entry.services)}
                             aria-label={`Undeploy ${entry.template} from ${entry.target_stack}`}
                             className={`${BTN_CARD} ${TONE_GHOST_DANGER}`}
                           >
@@ -3773,7 +3862,7 @@ export default function Templates() {
               icon={<Package size={28} />}
               title="No templates available"
               hint="Import a template, create your own, or put one in the .templates/ folder of the server."
-              action={<button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Plus size={14} /> Create template</button>}
+              action={isAdmin ? <button type="button" onClick={handleOpenCreate} className={`${BTN_TOOLBAR} ${TONE_OK}`}><Plus size={14} /> Create template</button> : undefined}
             />
           )}
 
@@ -3813,6 +3902,7 @@ export default function Templates() {
                           onDelete={handleDeleteTemplate}
                           onExport={handleExportTemplate}
                           deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+                          isAdmin={isAdmin}
                         />
                       ))}
                     </div>
@@ -3820,10 +3910,12 @@ export default function Templates() {
                 )
               })}
 
-              {/* Create template card — at the end */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <CreateTemplateCard onClick={handleOpenCreate} />
-              </div>
+              {/* Create template card — at the end (admins: creating is an admin call on the API) */}
+              {isAdmin && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <CreateTemplateCard onClick={handleOpenCreate} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -3836,11 +3928,12 @@ export default function Templates() {
                   onDelete={handleDeleteTemplate}
                   onExport={handleExportTemplate}
                   deployStatus={deployStatusMap[template.name] || { state: 'none' }}
+                  isAdmin={isAdmin}
                 />
               ))}
 
-              {/* Create template card */}
-              <CreateTemplateCard onClick={handleOpenCreate} />
+              {/* Create template card (admins) */}
+              {isAdmin && <CreateTemplateCard onClick={handleOpenCreate} />}
             </div>
           )}
         </>

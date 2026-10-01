@@ -29,6 +29,7 @@ import {
   CheckCircle2, XCircle, X, ListChecks,
 } from 'lucide-react'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
+import { activityOutcome, startedInBackground, waitForStackActivity } from '../lib/stackActivity'
 import { useFleetRole } from '../hooks/useFleetRole'
 import { usePolling } from '../hooks/usePolling'
 import { fetchFleetJobs, fetchFleetProvisionDefaults, fetchProxmoxCapabilities } from '../api/endpoints'
@@ -163,7 +164,14 @@ export default function Stacks() {
 
         const result = await actionFn(stackName)
 
-        if (result.success) {
+        if (result.success && startedInBackground(result.output)) {
+          // "Starting X (background)": the API answered before anything ran — follow the
+          // stack's activity and only then say how it ended
+          useStackStore.getState().recordAction(stackName)
+          addToast({ type: 'info', message: `${gerund[action]} "${stackName}"…`, duration: 4000 })
+          refresh()
+          addToast(activityOutcome(await waitForStackActivity(stackName), stackName, action))
+        } else if (result.success) {
           useStackStore.getState().recordAction(stackName)
           const pastTense: Record<typeof action, string> = {
             start: 'started',
@@ -269,8 +277,22 @@ export default function Stacks() {
 
         setBatchResults(response.results)
 
-        const successCount = response.results.filter((r) => r.success).length
-        const failCount = response.results.length - successCount
+        // "start queued": the API answered before anything ran — follow each stack's
+        // activity and settle its row with the real outcome
+        let results = response.results
+        const queued = results.filter((r) => r.success && startedInBackground(r.message))
+        if (queued.length > 0) {
+          addToast({ type: 'info', message: `${gerund[action]} ${queued.length} stack${queued.length !== 1 ? 's' : ''}…`, duration: 4000 })
+          const ended = new Map(await Promise.all(queued.map(async (r) => [r.stack, activityOutcome(await waitForStackActivity(r.stack), r.stack, action)] as const)))
+          results = results.map((r) => {
+            const o = ended.get(r.stack)
+            return o ? { ...r, success: o.type !== 'error', message: o.message } : r
+          })
+          setBatchResults(results)
+        }
+
+        const successCount = results.filter((r) => r.success).length
+        const failCount = results.length - successCount
 
         if (failCount === 0) {
           addToast({

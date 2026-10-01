@@ -17,7 +17,7 @@ import {
   RotateCcw, Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
   Satellite, Link2, KeyRound, Radar, Rocket, MoreHorizontal, PlugZap, Pencil, Trash2, Layers, ExternalLink, Home,
-  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp,
+  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp, FolderSync,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -31,7 +31,7 @@ import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxVm, fetchProxmoxTasks, proxmoxVmAction, proxmoxVmBalloon,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
-  testFleetMember, removeFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
+  testFleetMember, removeFleetMember, syncFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
 } from '../api/endpoints'
 import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, FleetStatus, FleetTemplate, FleetJob, FleetProvisionDefaults, StackInfo, ContainerInfo, ProxmoxSelf } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
@@ -959,7 +959,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
 function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: FleetMemberBase; vms: ProxmoxVm[]; onClose: () => void; onEdit: () => void; onChanged: () => void }) {
   const { addToast } = useToast()
   const confirm = useConfirm()
-  const [busy, setBusy] = useState<'test' | 'remove' | ''>('')
+  const [busy, setBusy] = useState<'test' | 'sync' | 'remove' | ''>('')
   const [note, setNote] = useState('')
   // destroying the VM asks for its name first, here in the sheet (a native prompt is not drawn by every window)
   const [destroying, setDestroying] = useState(false)
@@ -974,6 +974,17 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
       setNote(`Answers as ${r.identity?.hostname || member.url}${r.version ? ` (DCS ${r.version})` : ''}${r.match ? ` · guest ${r.match.vmid} ${r.match.name} — ${MATCH_LABEL[r.match.matched_by]}` : ' · no guest matched'}`)
       onChanged()
     } catch (e) { setNote(e instanceof Error ? e.message : 'The test failed') } finally { setBusy('') }
+  }
+  // the hub keeps a copy of every stack a VM runs: pull what the VM has now (a change made inside the VM, a stack
+  // the hub never saw); the answer names what moved and what did not
+  const sync = async () => {
+    setBusy('sync'); setNote('')
+    try {
+      const r = await syncFleetMember(member.id, { direction: 'pull' })
+      addToast({ type: r.success ? 'success' : 'warning', message: `${member.name}: ${r.message}`, duration: r.success ? 4000 : 8000 })
+      if (r.failed.length > 0) setNote(r.failed.map((f) => `${f.name}: ${f.error}`).join(' · '))
+      onChanged()
+    } catch (e) { setNote(e instanceof Error ? e.message : 'The sync failed') } finally { setBusy('') }
   }
   const remove = async () => {
     if (!(await confirm({ title: 'Forget this member', message: `Forget ${member.name}? Its stacks keep running; only the hub stops managing it.`, confirmLabel: 'Forget', danger: true }))) return
@@ -995,6 +1006,7 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
         <p className="text-[11px] text-slate-500">Added {new Date(member.added_at * 1000).toLocaleString()} by {member.added_by} ({member.source === 'join' ? 'joined with a code' : 'added by address'}) · last answered {member.last_seen ? ago(member.last_seen) : 'never'}{member.last_error ? ` · ${member.last_error}` : ''}</p>
         {note && <p className="text-xs text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">{note}</p>}
         <button type="button" onClick={test} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
+        <button type="button" onClick={sync} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'sync' ? <Loader2 size={15} className="animate-spin" /> : <FolderSync size={15} />} Sync stack files from the VM</button>
         <button type="button" onClick={onEdit} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}><Pencil size={15} /> Edit name, address, account or guest</button>
         <button type="button" onClick={remove} disabled={!!busy} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}>{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
         {canDestroy && <button ref={destroyRef} type="button" onClick={() => setDestroying(true)} disabled={!!busy || destroying} aria-expanded={destroying} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}><Trash2 size={15} /> Stop and destroy the VM on Proxmox</button>}

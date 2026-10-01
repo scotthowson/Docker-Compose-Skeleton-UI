@@ -51,18 +51,11 @@ function CountBadge({ errors, warnings }: { errors: number; warnings: number }) 
 
 interface ComposeViewerProps {
   stackName: string
-  content?: string
+  /** the docker-compose.yml as read from the API (the caller does not open the viewer when the read failed) */
+  content: string
   onClose: () => void
-}
-
-/** Default placeholder when no content is supplied */
-function defaultPlaceholder(stackName: string): string {
-  return `# docker-compose.yml \u2014 ${stackName}
-# Compose file viewer coming soon
-# This feature requires the /stacks/:name/compose API endpoint
-version: '3'
-services:
-  # Stack services will appear here`
+  /** saving is an admin call on the API: a viewer reads */
+  isAdmin?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +267,7 @@ function computeDiff(original: string, edited: string): DiffResult {
 // because Tailwind JIT requires complete literal class strings for detection.
 //   Font: text-[13px]   Line height: leading-6   Gutter: w-12   BG: bg-slate-950
 
-export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProps) {
+export function ComposeViewer({ stackName, content, onClose, isAdmin = false }: ComposeViewerProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   // focus stays inside and returns to what opened it (Escape steps back through search and edit mode first: handled below)
   useModalA11y(overlayRef, () => {}, { closeOnEscape: false })
@@ -309,7 +302,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   const [envEditMode, setEnvEditMode] = useState(false)
   const [envError, setEnvError] = useState<string | null>(null)
 
-  const yaml = content ?? defaultPlaceholder(stackName)
+  const yaml = content
   const lines = useMemo(() => yaml.split('\n'), [yaml])
 
   // ---- Plugin state (compose-linter toggle) ----
@@ -532,8 +525,12 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
     if (!validationResult?.valid) return
     setSaving(true)
     try {
-      await saveStackCompose(stackName, editContent)
-      addToast({ type: 'success', message: `Compose file saved for ${stackName}` })
+      const res = await saveStackCompose(stackName, editContent)
+      // HTTP 200 with success:false is a compose file Docker refused: nothing was written, the editor stays open
+      if (!res.success) throw new Error(res.validation_errors || res.message || 'Validation failed')
+      // a VM stack: the hub's copy is saved either way; pushed:false means the VM did not take it yet
+      if (res.pushed === false) addToast({ type: 'warning', message: res.message, duration: 8000 })
+      else addToast({ type: 'success', message: `Compose file saved for ${stackName}` })
       setEditMode(false)
       setShowDiff(false)
       setValidationResult(null)
@@ -549,9 +546,11 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
   const handleEnvSave = useCallback(async () => {
     setEnvSaving(true)
     try {
-      await saveStackEnv(stackName, envEditContent)
+      const res = await saveStackEnv(stackName, envEditContent)
+      if (!res.success) throw new Error(res.message || 'Save failed')
       setEnvContent(envEditContent)
-      addToast({ type: 'success', message: `.env saved for ${stackName}` })
+      if (res.pushed === false) addToast({ type: 'warning', message: res.message, duration: 8000 })
+      else addToast({ type: 'success', message: `.env saved for ${stackName}` })
       setEnvEditMode(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Save failed'
@@ -1084,29 +1083,31 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             {/* ---- Compose tab buttons ---- */}
             {activeTab === 'compose' && (
               <>
-                {/* Edit / View toggle */}
-                <Hint label={editMode ? 'Switch to view mode' : 'Switch to edit mode'}>
-                  <button
-                    type="button"
-                    aria-label="Edit mode"
-                    aria-pressed={editMode}
-                    onClick={() => {
-                      if (editMode) {
-                        setEditMode(false)
-                        setShowDiff(false)
-                        setValidationResult(null)
-                      } else {
-                        setEditMode(true)
-                        setSearchOpen(false)
-                        setSearchQuery('')
-                      }
-                    }}
-                    className={`${BTN_TOOLBAR} ${editMode ? TONE_ON : TONE_QUIET}`}
-                  >
-                    <Pencil size={14} />
-                    <span className="hidden sm:inline">{editMode ? 'Editing' : 'Edit'}</span>
-                  </button>
-                </Hint>
+                {/* Edit / View toggle (saving is an admin call on the API: a viewer only reads) */}
+                {isAdmin && (
+                  <Hint label={editMode ? 'Switch to view mode' : 'Switch to edit mode'}>
+                    <button
+                      type="button"
+                      aria-label="Edit mode"
+                      aria-pressed={editMode}
+                      onClick={() => {
+                        if (editMode) {
+                          setEditMode(false)
+                          setShowDiff(false)
+                          setValidationResult(null)
+                        } else {
+                          setEditMode(true)
+                          setSearchOpen(false)
+                          setSearchQuery('')
+                        }
+                      }}
+                      className={`${BTN_TOOLBAR} ${editMode ? TONE_ON : TONE_QUIET}`}
+                    >
+                      <Pencil size={14} />
+                      <span className="hidden sm:inline">{editMode ? 'Editing' : 'Edit'}</span>
+                    </button>
+                  </Hint>
+                )}
 
                 {/* Diff toggle (edit mode only) */}
                 {editMode && (
@@ -1141,7 +1142,7 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
                 )}
 
                 {/* Save (edit mode only, disabled until validated) */}
-                {editMode && (
+                {isAdmin && editMode && (
                   <Hint label={!validationResult?.valid ? 'Validate first, then save' : 'Save the compose file'}>
                     <span className="inline-flex">
                       <button
@@ -1197,32 +1198,34 @@ export function ComposeViewer({ stackName, content, onClose }: ComposeViewerProp
             {/* ---- .env tab buttons ---- */}
             {activeTab === 'env' && (
               <>
-                {/* Edit / View toggle */}
-                <Hint label={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}>
-                  <span className="inline-flex">
-                    <button
-                      type="button"
-                      aria-label="Edit mode"
-                      aria-pressed={envEditMode}
-                      onClick={() => {
-                        if (envEditMode) {
-                          setEnvEditMode(false)
-                        } else {
-                          setEnvEditMode(true)
-                          setEnvEditContent(envContent ?? '')
-                        }
-                      }}
-                      disabled={envLoading || envError !== null}
-                      className={`${BTN_TOOLBAR} ${envEditMode ? TONE_ON : TONE_QUIET}`}
-                    >
-                      <Pencil size={14} />
-                      <span className="hidden sm:inline">{envEditMode ? 'Editing' : 'Edit'}</span>
-                    </button>
-                  </span>
-                </Hint>
+                {/* Edit / View toggle (saving is an admin call on the API: a viewer only reads) */}
+                {isAdmin && (
+                  <Hint label={envEditMode ? 'Switch to view mode' : 'Switch to edit mode'}>
+                    <span className="inline-flex">
+                      <button
+                        type="button"
+                        aria-label="Edit mode"
+                        aria-pressed={envEditMode}
+                        onClick={() => {
+                          if (envEditMode) {
+                            setEnvEditMode(false)
+                          } else {
+                            setEnvEditMode(true)
+                            setEnvEditContent(envContent ?? '')
+                          }
+                        }}
+                        disabled={envLoading || envError !== null}
+                        className={`${BTN_TOOLBAR} ${envEditMode ? TONE_ON : TONE_QUIET}`}
+                      >
+                        <Pencil size={14} />
+                        <span className="hidden sm:inline">{envEditMode ? 'Editing' : 'Edit'}</span>
+                      </button>
+                    </span>
+                  </Hint>
+                )}
 
                 {/* Save (edit mode only) */}
-                {envEditMode && (
+                {isAdmin && envEditMode && (
                   <button
                     type="button"
                     aria-label="Save the .env file"

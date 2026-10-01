@@ -291,7 +291,8 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/5"
             onClick={(e) => e.stopPropagation()}
           >
-            {actionButtons.filter((b) => b.action !== 'update' || isAdmin).map(({ action, icon: Icon, label, tone, disabled }) => {
+            {/* start, stop, restart and update are admin calls on the API: a viewer sees the state, not the controls */}
+            {isAdmin && actionButtons.map(({ action, icon: Icon, label, tone, disabled }) => {
               const isDisabled = disabled || isActionLoading
 
               return (

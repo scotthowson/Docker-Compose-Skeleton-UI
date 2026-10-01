@@ -153,6 +153,8 @@ export interface StackInfo {
   member_url?: string | null
   vmid?: number | null
   node?: string | null
+  /** the guest kind of a VM stack as the hub reports it ("qemu" | "lxc"); power actions need it */
+  type?: string
   reachable?: boolean
   version?: string
 }
@@ -931,8 +933,19 @@ export interface ComposeValidateResponse {
   output: string
 }
 
+/**
+ * A write to a VM stack's files (compose, .env, rollback) is saved on the hub and then pushed into the VM: the answer
+ * says whether the VM took it. `pushed: false` means the hub's copy is saved but the VM is behind (push again later).
+ */
+export interface FleetPushOutcome {
+  placement?: 'hub' | 'vm'
+  member?: string
+  pushed?: boolean
+  push_error?: string
+}
+
 // POST /stacks/:name/compose
-export interface ComposeSaveResponse {
+export interface ComposeSaveResponse extends FleetPushOutcome {
   success: boolean
   stack: string
   message: string
@@ -955,7 +968,7 @@ export interface StackEnvResponse {
 }
 
 // POST /stacks/:name/env
-export interface StackEnvSaveResponse {
+export interface StackEnvSaveResponse extends FleetPushOutcome {
   success: boolean
   stack: string
   message: string
@@ -1882,7 +1895,7 @@ export interface ComposeVersionContentResponse {
   size: number
 }
 
-export interface ComposeRollbackResponse {
+export interface ComposeRollbackResponse extends FleetPushOutcome {
   success: boolean
   stack: string
   restored_version: string
@@ -2055,6 +2068,18 @@ export interface TemplateDryRunResponse {
   env_existing?: { key: string; current_value: string; new_value: string }[]
   lines_added: number
   compose_preview: string
+  /** the template runs once per server */
+  is_singleton?: boolean
+  /** a singleton that is already deployed: the service names, comma-separated */
+  singleton_conflict?: string
+  has_singleton_conflict?: boolean
+  /** required variables with no value, comma-separated */
+  missing_required_vars?: string
+  has_missing_vars?: boolean
+  /** what the security scan of the compose found */
+  security_warnings?: string[]
+  /** what the pre-deploy plugin hooks said (dry run) */
+  plugin_results?: { plugin: string; output: string }[]
 }
 
 // Automations
@@ -2665,7 +2690,6 @@ export interface ImageSearchResult {
   description: string
   stars: number
   official: string
-  automated: string
 }
 
 export interface ImageSearchResponse {
@@ -3759,6 +3783,20 @@ export interface FleetMemberTestResponse { reachable: boolean; error: string; id
 
 export interface FleetJoinHubResponse { success: boolean; member: FleetMember; hub: { name: string; version: string; url: string } }
 export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: string }
+
+/** POST /stacks/:name/push — the hub's Stacks/<name>/ into the VM that runs it (`pushed` = files the VM took) */
+export interface StackPushResponse { success: boolean; stack: string; member: string; member_name: string; pushed: number; message: string }
+/** POST /stacks/:name/pull — the VM's files into the hub's Stacks/<name>/, file for file (the copy replaced is kept in the compose history) */
+export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
+/** POST /fleet/members/:id/sync — the files of every stack a member runs, pulled into the hub (or pushed into the VM) */
+export interface FleetMemberSyncResponse {
+  success: boolean
+  member: string
+  direction: 'pull' | 'push'
+  stacks: { name: string; files: number }[]
+  failed: { name: string; error: string }[]
+  message: string
+}
 
 /** GET /proxmox/capabilities — what the token may do */
 export interface ProxmoxCapabilities {
