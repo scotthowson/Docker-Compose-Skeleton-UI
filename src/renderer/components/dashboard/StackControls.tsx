@@ -14,9 +14,10 @@ import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
 import Hint from '../common/Hint'
 import { BTN_ICON_SM, TONE_GHOST, TONE_GHOST_DANGER, TONE_GHOST_OK } from '../../lib/ui'
+import { activityOutcome, opGerund, startedInBackground, waitForStackActivity, type StackOp } from '../../lib/stackActivity'
 import { Card, CardBody, CardEmpty, CardError, CardLoading } from './cardShared'
 
-type Op = 'start' | 'stop' | 'restart' | 'update'
+type Op = StackOp
 
 export default function StackControls({ stacks, error, onRetry, onRefresh }: {
   stacks: StackInfo[] | null
@@ -40,7 +41,15 @@ export default function StackControls({ stacks, error, onRetry, onRefresh }: {
     try {
       const fn = { start: startStack, stop: stopStack, restart: restartStack, update: updateStack }[op]
       const res = await fn(stack)
-      addToast({ type: res.success ? 'success' : 'error', message: res.success ? `${stack}: ${op} done` : `${stack}: ${op} failed — ${(res as { output?: string }).output || 'see the stack activity'}`, duration: res.success ? 3500 : 8000 })
+      const output = (res as { output?: string }).output
+      if (res.success && startedInBackground(output)) {
+        // the API answered before anything ran: follow the stack's activity, then say how it ended
+        addToast({ type: 'info', message: `${stack}: ${opGerund(op).toLowerCase()}…`, duration: 4000 })
+        onRefresh?.()
+        addToast(activityOutcome(await waitForStackActivity(stack), stack, op))
+      } else {
+        addToast({ type: res.success ? 'success' : 'error', message: res.success ? `${stack}: ${op} done` : `${stack}: ${op} failed — ${output || 'see the stack activity'}`, duration: res.success ? 3500 : 8000 })
+      }
     } catch (err) {
       addToast({ type: 'error', message: `${stack}: ${err instanceof Error ? err.message : 'request failed'}` })
     } finally {
