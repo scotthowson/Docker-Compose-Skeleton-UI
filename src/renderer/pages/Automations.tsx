@@ -12,7 +12,7 @@ import {
   CalendarClock, RefreshCw,
   AlertTriangle, Box, Layers, HardDrive, Bell, Archive,
   X, History, CheckCircle, XCircle, ChevronDown, ChevronUp,
-  BookOpen, ChevronRight, Terminal, Pencil, PlayCircle,
+  BookOpen, ChevronRight, Terminal, Pencil, PlayCircle, ArrowUpCircle, LifeBuoy,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
@@ -71,7 +71,27 @@ const ACTION_TYPES = [
   { value: 'docker_prune', label: 'Docker prune' },
   { value: 'backup_trigger', label: 'Start a backup' },
   { value: 'notification_send', label: 'Send notification' },
+  { value: 'dcs_update', label: 'DCS self-update' },
+  { value: 'recovery_bundle', label: 'Recovery bundle' },
 ]
+
+/** what the target field means for the actions that do not take a stack or a container */
+const ACTION_TARGET_HINTS: Record<string, string> = {
+  dcs_update: 'Leave empty, or "images" to pull image updates for every stack as well. Rolls back by itself when the health score drops.',
+  recovery_bundle: `No target. Needs the RECOVERY_PASSPHRASE secret (${pageLabel('backup')} page); copies to RECOVERY_REMOTE when set.`,
+  notification_send: 'The text of the notification.',
+}
+const ACTION_TARGET_PLACEHOLDERS: Record<string, string> = {
+  dcs_update: 'Leave empty, or "images"',
+  recovery_bundle: 'No target',
+  notification_send: 'The message',
+}
+
+/** the conditions a rule may set its own threshold for (a percentage); the others are yes-or-no */
+const THRESHOLD_CONDITIONS = new Set(['high_cpu', 'high_memory', 'disk_full'])
+/** the engine's own defaults, shown as placeholders (its cooldown is 900 s) */
+const DEFAULT_THRESHOLD = 90
+const DEFAULT_COOLDOWN_MIN = 15
 
 /** what an action does to the system decides its colour: start emerald, stop and prune rose, restart amber, the rest information */
 function actionTone(actionType: string): 'emerald' | 'rose' | 'amber' | 'cyan' | 'slate' {
@@ -82,7 +102,9 @@ function actionTone(actionType: string): 'emerald' | 'rose' | 'amber' | 'cyan' |
     case 'stack_restart':
     case 'container_restart': return 'amber'
     case 'backup_trigger':
-    case 'notification_send': return 'cyan'
+    case 'notification_send':
+    case 'recovery_bundle': return 'cyan'
+    case 'dcs_update': return 'amber'
     default: return 'slate'
   }
 }
@@ -103,6 +125,10 @@ function actionIcon(actionType: string) {
       return <Archive size={10} />
     case 'notification_send':
       return <Bell size={10} />
+    case 'dcs_update':
+      return <ArrowUpCircle size={10} />
+    case 'recovery_bundle':
+      return <LifeBuoy size={10} />
     default:
       return <Zap size={10} />
   }
@@ -165,6 +191,8 @@ disk_full             The installation's disk is 90% full
 Conditions are checked every minute. After firing, a
 rule waits 15 minutes before it can fire again, so a
 flapping container does not trigger a restart storm.
+A rule can set its own cooldown, and its own threshold
+for the percentage conditions (90% unless it does).
 With target "*", container actions apply to the
 containers that matched the condition.`,
   },
@@ -178,10 +206,14 @@ container_restart    Restart a specific container
 docker_prune         Run Docker system prune
 backup_trigger       Start a configuration backup
 notification_send    Send a notification alert
+dcs_update           Update DCS itself (rolls back
+                     when the health score drops)
+recovery_bundle      Write an encrypted recovery bundle
 
 Set target to * to apply to all, or specify
 a stack/container name. For "Send notification"
-the target is the message text.
+the target is the message text; for dcs_update
+"images" pulls image updates as well.
 
 "Run now" on a card executes the action immediately
 and records the outcome in its history.`,
@@ -221,6 +253,9 @@ export default function Automations() {
   const [formCondition, setFormCondition] = useState('container_unhealthy')
   const [formActionType, setFormActionType] = useState('stack_restart')
   const [formActionTarget, setFormActionTarget] = useState('')
+  // condition rules only, both optional: the percentage to reach and the minutes to wait after a fire (the engine keeps seconds)
+  const [formThreshold, setFormThreshold] = useState('')
+  const [formCooldown, setFormCooldown] = useState('')
 
   // Delete in progress (the question itself is the shared confirmation)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -318,21 +353,33 @@ export default function Automations() {
   const handleCreate = useCallback(async () => {
     if (!formName.trim()) return
     if (scope === 'all') { addToast({ type: 'info', message: 'Everywhere is a view: pick the hub or one VM above, then change it there' }); return }
+    // the two tuning fields: whole numbers (a percentage, minutes); empty leaves the engine's default
+    const threshold = formTriggerType === 'condition' && THRESHOLD_CONDITIONS.has(formCondition) && formThreshold.trim() ? Number(formThreshold) : null
+    const cooldownMin = formTriggerType === 'condition' && formCooldown.trim() ? Number(formCooldown) : null
+    if (threshold !== null && (!Number.isInteger(threshold) || threshold < 1 || threshold > 100)) { addToast({ type: 'error', message: 'The threshold is a whole number of percent, 1 to 100' }); return }
+    if (cooldownMin !== null && (!Number.isInteger(cooldownMin) || cooldownMin < 0)) { addToast({ type: 'error', message: 'The cooldown is a whole number of minutes' }); return }
     setCreating(true)
     try {
       const triggerValue = formTriggerType === 'schedule' ? formCron : formCondition
+      const tuning = { threshold, cooldown: cooldownMin === null ? null : cooldownMin * 60 }
       const payload = {
         name: formName.trim(),
         trigger_type: formTriggerType,
         trigger_value: triggerValue,
         action_type: formActionType,
         action_target: formActionTarget.trim() || '*',
+        ...tuning,
       }
       if (editingId) {
         await updateAutomation(editingId, payload, scopeMember)
         addToast({ type: 'success', message: 'Automation rule updated' })
       } else {
-        await createAutomation({ ...payload, enabled: true }, scopeMember)
+        const created = await createAutomation({ ...payload, enabled: true }, scopeMember)
+        // POST /automations keeps a fixed set of fields and drops the tuning, while the update merges the whole body:
+        // a rule created with a threshold or a cooldown gets them in a second call (skipped once the server keeps them)
+        if ((tuning.threshold !== null || tuning.cooldown !== null) && created?.id && created.threshold == null && created.cooldown == null) {
+          await updateAutomation(created.id, tuning, scopeMember)
+        }
         addToast({ type: 'success', message: 'Automation rule created' })
       }
       setShowCreateModal(false)
@@ -344,7 +391,7 @@ export default function Automations() {
       setCreating(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, editingId, addToast, refresh, scope, scopeMember])
+  }, [formName, formTriggerType, formCron, formCondition, formActionType, formActionTarget, formThreshold, formCooldown, editingId, addToast, refresh, scope, scopeMember])
 
   const resetForm = useCallback(() => {
     setEditingId(null)
@@ -354,6 +401,8 @@ export default function Automations() {
     setFormCondition('container_unhealthy')
     setFormActionType('stack_restart')
     setFormActionTarget('')
+    setFormThreshold('')
+    setFormCooldown('')
   }, [])
 
   const openCreateModal = useCallback(() => {
@@ -369,6 +418,9 @@ export default function Automations() {
     else setFormCondition(rule.trigger_value || 'container_unhealthy')
     setFormActionType(rule.action_type)
     setFormActionTarget(rule.action_target === '*' ? '' : rule.action_target)
+    setFormThreshold(rule.threshold != null ? String(rule.threshold) : '')
+    // (the engine ticks once a minute, so a cooldown set in seconds by hand loses nothing by rounding)
+    setFormCooldown(rule.cooldown != null ? String(Math.round(rule.cooldown / 60)) : '')
     setShowCreateModal(true)
   }, [])
 
@@ -380,14 +432,15 @@ export default function Automations() {
     setExpandedHistoryIdx(null)
     setHistoryLoading(true)
     try {
-      const result = await fetchAutomationHistory(rule.id)
+      // the runs live where the rule does: a VM's rule is asked on that VM, not the hub
+      const result = await fetchAutomationHistory(rule.id, rule.member ?? scopeMember)
       setHistoryEntries(result.history ?? [])
     } catch {
       addToast({ type: 'error', message: `Could not load the history of ${rule.name}` })
     } finally {
       setHistoryLoading(false)
     }
-  }, [addToast])
+  }, [addToast, scopeMember])
 
   const closeHistory = useCallback(() => {
     setHistoryRuleId(null)
@@ -631,6 +684,16 @@ export default function Automations() {
                   <dt className="text-slate-500 shrink-0 w-16">Runs:</dt>
                   <dd className="text-slate-400 tabular-nums">{rule.run_count}</dd>
                 </div>
+
+                {/* the rule's own tuning, when it set any */}
+                {rule.trigger_type === 'condition' && (rule.threshold != null || rule.cooldown != null) && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-slate-500 shrink-0 w-16">Tuning:</dt>
+                    <dd className="text-slate-400 tabular-nums">
+                      {[rule.threshold != null ? `${rule.threshold}%` : null, rule.cooldown != null ? `${Math.round(rule.cooldown / 60)} min cooldown` : null].filter(Boolean).join(' · ')}
+                    </dd>
+                  </div>
+                )}
               </dl>
 
               {/* Actions row */}
@@ -873,6 +936,47 @@ export default function Automations() {
                       </option>
                     ))}
                   </select>
+
+                  {/* the rule's own tuning (optional): the engine's defaults stand where a field is empty */}
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    {THRESHOLD_CONDITIONS.has(formCondition) && (
+                      <div>
+                        <label htmlFor={`${uid}-threshold`} className={LABEL}>Threshold (%)</label>
+                        <input
+                          id={`${uid}-threshold`}
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={100}
+                          step={1}
+                          value={formThreshold}
+                          onChange={(e) => setFormThreshold(e.target.value)}
+                          placeholder={String(DEFAULT_THRESHOLD)}
+                          autoComplete="off"
+                          className={FIELD}
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label htmlFor={`${uid}-cooldown`} className={LABEL}>Cooldown (minutes)</label>
+                      <input
+                        id={`${uid}-cooldown`}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        step={1}
+                        value={formCooldown}
+                        onChange={(e) => setFormCooldown(e.target.value)}
+                        placeholder={String(DEFAULT_COOLDOWN_MIN)}
+                        autoComplete="off"
+                        className={FIELD}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {THRESHOLD_CONDITIONS.has(formCondition) ? `Fires at ${formThreshold.trim() || DEFAULT_THRESHOLD}%, then waits ` : 'After it fired, the rule waits '}
+                    {formCooldown.trim() || DEFAULT_COOLDOWN_MIN} minute{(formCooldown.trim() || String(DEFAULT_COOLDOWN_MIN)) === '1' ? '' : 's'} before it can fire again.
+                  </p>
                 </div>
               )}
 
@@ -901,12 +1005,12 @@ export default function Automations() {
                   type="text"
                   value={formActionTarget}
                   onChange={(e) => setFormActionTarget(e.target.value)}
-                  placeholder='Stack name, container name, or "*" for all'
+                  placeholder={ACTION_TARGET_PLACEHOLDERS[formActionType] ?? 'Stack name, container name, or "*" for all'}
                   autoComplete="off"
                   className={FIELD}
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Leave empty or use "*" to target all stacks/containers.
+                  {ACTION_TARGET_HINTS[formActionType] ?? 'Leave empty or use "*" to target all stacks/containers.'}
                 </p>
               </div>
             </div>

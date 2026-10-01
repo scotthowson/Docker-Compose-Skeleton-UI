@@ -857,9 +857,9 @@ export function cancelBackup(): Promise<{ success: boolean; message: string }> {
   return apiClient.post<{ success: boolean; message: string }>('/backups/cancel')
 }
 
-/** POST /schedules/:id/run — Run a schedule immediately */
+/** POST /schedules/:id/run — Run a schedule immediately (the server runs the action before it answers: a backup or a prune outlasts the 30 s default) */
 export function runSchedule(id: string, member?: string | null): Promise<{ success: boolean; action: string; output: string }> {
-  return apiClient.post<{ success: boolean; action: string; output: string }>(memberPath(member, `/schedules/${encodeURIComponent(id)}/run`))
+  return apiClient.post<{ success: boolean; action: string; output: string }>(memberPath(member, `/schedules/${encodeURIComponent(id)}/run`), undefined, 120000)
 }
 
 // ---------------------------------------------------------------------------
@@ -1411,6 +1411,8 @@ export function createAutomation(rule: {
   action_type: string
   action_target?: string
   enabled?: boolean
+  threshold?: number | null
+  cooldown?: number | null
 }, member?: string | null): Promise<AutomationRule> {
   return apiClient.post<AutomationRule>(memberPath(member, '/automations'), rule)
 }
@@ -1425,14 +1427,14 @@ export function deleteAutomation(id: string, member?: string | null): Promise<{ 
   return apiClient.delete<{ success: boolean; deleted: string }>(memberPath(member, `/automations/${encodeURIComponent(id)}`))
 }
 
-/** POST /automations/:id/run — Run an automation now (admin) */
+/** POST /automations/:id/run — Run an automation now (admin; the server runs the action before it answers, so longer than the 30 s default) */
 export function runAutomation(id: string, member?: string | null): Promise<{ success: boolean; id: string; action: string; message: string }> {
-  return apiClient.post(memberPath(member, `/automations/${encodeURIComponent(id)}/run`))
+  return apiClient.post(memberPath(member, `/automations/${encodeURIComponent(id)}/run`), undefined, 120000)
 }
 
-/** GET /automations/:id/history — Automation run history */
-export function fetchAutomationHistory(id: string): Promise<AutomationHistoryResponse> {
-  return apiClient.get<AutomationHistoryResponse>(`/automations/${encodeURIComponent(id)}/history`)
+/** GET /automations/:id/history — Automation run history (asked on the fleet member that owns the rule when one is given) */
+export function fetchAutomationHistory(id: string, member?: string | null): Promise<AutomationHistoryResponse> {
+  return apiClient.get<AutomationHistoryResponse>(memberPath(member, `/automations/${encodeURIComponent(id)}/history`))
 }
 
 /** GET /topology — Network topology graph data */
@@ -1559,8 +1561,9 @@ export function toggleSchedule(id: string, member?: string | null): Promise<Sche
   return apiClient.post<Schedule>(memberPath(member, `/schedules/${encodeURIComponent(id)}/toggle`))
 }
 
-export function fetchScheduleHistory(id: string): Promise<ScheduleHistoryResponse> {
-  return apiClient.get<ScheduleHistoryResponse>(`/schedules/${encodeURIComponent(id)}/history`)
+/** GET /schedules/:id/history — asked on the fleet member that owns the schedule when one is given (a VM's runs are not on the hub) */
+export function fetchScheduleHistory(id: string, member?: string | null): Promise<ScheduleHistoryResponse> {
+  return apiClient.get<ScheduleHistoryResponse>(memberPath(member, `/schedules/${encodeURIComponent(id)}/history`))
 }
 
 // ---------------------------------------------------------------------------

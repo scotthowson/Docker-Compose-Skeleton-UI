@@ -2049,6 +2049,10 @@ export interface AutomationRule {
   trigger_value: string
   action_type: string
   action_target: string
+  /** condition rules: the percentage a high_cpu, high_memory or disk_full condition must reach (the engine assumes 90 without it) */
+  threshold?: number | null
+  /** condition rules: seconds the rule waits after it fired before it can fire again (the engine assumes 900 without it) */
+  cooldown?: number | null
   created_at: string
   run_count: number
   last_run: string | null
