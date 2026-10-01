@@ -20,11 +20,11 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import {
-  fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete,
+  fetchSetupDefaults, fetchSetupStatus, setupConfigure, setupComplete, renameStack,
   authSetup, authLogin, deployTemplate, setSecret, setupRestore, proxmoxTest, fetchFleetStatus,
   fetchFleetProvisionDefaults, fetchProxmoxCapabilities, provisionFleet, fetchFleetJobs, fetchProxmoxStatus,
 } from '../api/endpoints'
-import { apiClient, ApiNetworkError } from '../api/client'
+import { apiClient, ApiError, ApiNetworkError } from '../api/client'
 import { isWebMode } from '../lib/env'
 import type { SetupDefaultsResponse, FleetStatus, FleetJoinHubResponse, FleetProvisionDefaults, ProxmoxCapabilities } from '../../shared/types'
 import { usePolling } from '../hooks/usePolling'
@@ -96,6 +96,29 @@ const COMMON_TIMEZONES = [
   'Pacific/Auckland', 'Pacific/Honolulu', 'Africa/Cairo',
   'Africa/Johannesburg', 'Africa/Lagos',
 ]
+
+// Every zone the runtime knows, the common ones first. Intl.supportedValuesOf is missing in older WebViews (then the
+// common ones are the whole list) and leaves "UTC" out in some engines, which is why the common ones are never dropped.
+const ALL_TIMEZONES: string[] = (() => {
+  let known: string[] = []
+  try {
+    if (typeof Intl.supportedValuesOf === 'function') known = Intl.supportedValuesOf('timeZone')
+  } catch { /* an engine without the list */ }
+  const common = new Set(COMMON_TIMEZONES)
+  return [...COMMON_TIMEZONES, ...known.filter((z) => !common.has(z))]
+})()
+
+/** A typed zone in its proper spelling ("europe/zurich" → "Europe/Zurich"), or '' when the runtime does not know it.
+ *  The list decides; where it is missing or leaves a link name out (US/Pacific), the formatter is the judge — it throws
+ *  on a zone it does not know. Only names shaped like an IANA zone are asked, so an offset ("+05:00") never passes. */
+function knownTimezone(typed: string): string {
+  const t = typed.trim()
+  if (!t) return ''
+  const hit = ALL_TIMEZONES.find((z) => z.toLowerCase() === t.toLowerCase())
+  if (hit) return hit
+  if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/.test(t)) return ''
+  try { return new Intl.DateTimeFormat('en-US', { timeZone: t }).resolvedOptions().timeZone || '' } catch { return '' }
+}
 
 // ---------------------------------------------------------------------------
 // Step Indicator
@@ -523,9 +546,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     (notifyMode === 'self' && /^\d{2,5}$/.test(ntfyPort) && Number(ntfyPort) > 0 && Number(ntfyPort) < 65536 && notifyTopicValid) ||
     (notifyMode === 'external' && /^https?:\/\/\S+$/.test((envVars.NTFY_URL || '').trim()) && notifyTopicValid)
 
+  // HTTPS through Traefik needs a domain of the person's own and a mailbox Let's Encrypt accepts: with the
+  // example.com placeholder (as the domain, or in the address) the certificate request is refused, and the wizard
+  // used to deploy Traefik anyway and leave every route without a certificate
+  const traefikDomainValid = !!(envVars.PROXY_DOMAIN || '').trim() && (envVars.PROXY_DOMAIN || '').trim().toLowerCase() !== 'example.com'
+  const traefikEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(traefikEmail.trim()) && !/@example\.(com|org|net)$/i.test(traefikEmail.trim())
+  const traefikValid = !enableTraefik || (traefikDomainValid && traefikEmailValid)
+
   const isStep3Valid = useCallback(() => {
-    return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim()) && notifyValid
-  }, [envVars, notifyValid])
+    return !!(envVars.SERVER_NAME?.trim() && envVars.TZ?.trim()) && notifyValid && traefikValid
+  }, [envVars, notifyValid, traefikValid])
 
   const isStep4Valid = useCallback(() => {
     if (!(stacks.length >= 1 && stacks.every((s) => /^[a-z0-9][a-z0-9_-]*$/.test(s.name)))) return false
@@ -612,6 +642,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     setCompleting(true)
 
     try {
+      // 0. A stack renamed on the Stacks step that stays on the hub: its folder is renamed on the server first
+      //    (POST /stacks/rename). The configure call only takes names, so a renamed row used to make a NEW empty
+      //    stack beside the old folder and its files. A refusal (containers run from it, the new name is taken) stops
+      //    the run with the server's reason before anything else is written. Rows placed in a VM carry their source
+      //    to the build instead (vmPlan).
+      for (const s of stacks) {
+        if (!s.source || s.source === s.name || placementOf(s.name) !== 'hub') continue
+        try {
+          await renameStack(s.source, s.name)
+        } catch (err) {
+          // no folder of that name on the server (a default it never created): nothing to carry over, configure makes the new one
+          if (!(err instanceof ApiError && err.status === 404)) {
+            throw new Error(`Could not rename the stack ${s.source} to ${s.name}: ${err instanceof Error ? err.message : 'the server refused'}`)
+          }
+        }
+        // done on the server: the row now starts as its new name, so a retry of this run does not rename again
+        const renamed = s.name
+        setStacks((prev) => prev.map((row) => (row.name === renamed ? { ...row, source: undefined } : row)))
+      }
+
       // 1. Build ALL env vars in one go — includes API, Traefik, DDNS settings
       const allEnvVars: Record<string, string> = {
         ...envVars,
@@ -644,8 +694,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         if (cfTokenValue) allEnvVars.CF_DNS_API_TOKEN = cfTokenValue
       }
 
-      // Add DDNS vars if enabled
-      if (enableDDNS && cfDnsToken) {
+      // Add DDNS vars if enabled — its switch lives in the Traefik block, so with HTTPS off there is no domain for it
+      // to keep pointed here (a switch left on before HTTPS was turned off used to write the keys anyway)
+      if (enableTraefik && enableDDNS && cfDnsToken) {
         allEnvVars.DDNS_ENABLED = 'true'
         allEnvVars.DDNS_SUBDOMAINS = ddnsSubdomains || '@'
         allEnvVars.DDNS_INTERVAL = String(ddnsInterval)
@@ -654,6 +705,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       // Push notifications: the API runs on the host, so a self-hosted ntfy is
       // reached on the loopback port; the topic is appended by the server.
       const ntfyTopic = (envVars.NTFY_TOPIC || 'dcs').trim()
+      // The access token is a secret the wizard never reads back, so its field is empty on a resumed setup: it is
+      // only sent when someone typed one (an empty value used to blank the token saved before). The ntfy the wizard
+      // deploys itself is reached without one, so a token left from another server is cleared rather than sent to it.
+      const ntfyTokenTyped = (envVars.NTFY_TOKEN || '').trim()
+      delete allEnvVars.NTFY_TOKEN
       if (notifyMode === 'self') {
         allEnvVars.NTFY_URL = `http://127.0.0.1:${ntfyPort}`
         allEnvVars.NTFY_TOPIC = ntfyTopic
@@ -661,10 +717,9 @@ export default function SetupWizard({ onComplete }: WizardProps) {
       } else if (notifyMode === 'external') {
         allEnvVars.NTFY_URL = (envVars.NTFY_URL || '').trim().replace(/\/+$/, '')
         allEnvVars.NTFY_TOPIC = ntfyTopic
-        allEnvVars.NTFY_TOKEN = (envVars.NTFY_TOKEN || '').trim()
+        if (ntfyTokenTyped) allEnvVars.NTFY_TOKEN = ntfyTokenTyped
       } else {
         allEnvVars.NTFY_URL = ''
-        allEnvVars.NTFY_TOKEN = ''
       }
       // Proxmox link: only when every field is filled (the page can be linked later).
       // The token secret goes to the secret store like the Cloudflare token; .env only if that fails.
@@ -936,9 +991,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     setLabelEditValue('')
   }
 
-  const filteredTimezones = COMMON_TIMEZONES.filter((tz) =>
-    tz.toLowerCase().includes(tzFilter.toLowerCase()),
+  // every zone the runtime knows, the common ones first (only 34 could be chosen before)
+  const filteredTimezones = ALL_TIMEZONES.filter((tz) =>
+    tz.toLowerCase().includes(tzFilter.trim().toLowerCase()),
   )
+  /** take a zone into the form and close the list */
+  const pickTimezone = (tz: string) => {
+    setEnvVars((prev) => ({ ...prev, TZ: tz }))
+    setTzFilter('')
+    setTzDropdownOpen(false)
+  }
 
   // ── Render ──
 
@@ -1345,8 +1407,21 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                         setTzFilter('')
                         setTzDropdownOpen(true)
                       }}
-                      onBlur={() => setTimeout(() => setTzDropdownOpen(false), 200)}
-                      placeholder="Select timezone..."
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || !tzDropdownOpen) return
+                        e.preventDefault()
+                        // a typed zone the runtime knows is taken as typed; a filter that leaves one zone takes that one
+                        const tz = knownTimezone(tzFilter) || (filteredTimezones.length === 1 ? filteredTimezones[0] : '')
+                        if (tz) pickTimezone(tz)
+                      }}
+                      onBlur={() => {
+                        // a typed zone the runtime knows is kept: it used to be thrown away unless it was clicked in the list
+                        const tz = knownTimezone(tzFilter)
+                        if (tz) setEnvVars((prev) => ({ ...prev, TZ: tz }))
+                        setTimeout(() => setTzDropdownOpen(false), 200)
+                      }}
+                      placeholder="Select or type a timezone…"
+                      autoComplete="off"
                       className={W_INPUT_ICON}
                     />
                     {tzDropdownOpen && (
@@ -1357,8 +1432,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             type="button"
                             onMouseDown={(e) => {
                               e.preventDefault()
-                              setEnvVars({ ...envVars, TZ: tz })
-                              setTzDropdownOpen(false)
+                              pickTimezone(tz)
                             }}
                             className={`w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors ${
                               envVars.TZ === tz ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-300'
@@ -1367,6 +1441,12 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                             {tz}
                           </button>
                         ))}
+                        {/* nothing in the list: a zone the runtime still knows (a link name such as US/Pacific) can be taken with Enter */}
+                        {filteredTimezones.length === 0 && (
+                          <p className="px-3 py-2 text-xs text-slate-500">
+                            {knownTimezone(tzFilter) ? `Press Enter to use ${knownTimezone(tzFilter)}` : 'No timezone matches — type an IANA name such as Europe/Zurich'}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1806,7 +1886,8 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                           <p className="text-xs font-medium text-slate-300">Enable HTTPS with Traefik</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">Automatic TLS certificates via Let's Encrypt</p>
                         </div>
-                        <Switch aria-label="Enable HTTPS with Traefik" checked={enableTraefik} onChange={() => setEnableTraefik(!enableTraefik)} className="shrink-0" />
+                        {/* dynamic DNS is switched inside this block: with HTTPS off it goes off too, not left on unseen */}
+                        <Switch aria-label="Enable HTTPS with Traefik" checked={enableTraefik} onChange={() => { if (enableTraefik) setEnableDDNS(false); setEnableTraefik(!enableTraefik) }} className="shrink-0" />
                       </div>
 
                       {enableTraefik && (
@@ -1823,6 +1904,10 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               />
                               <span className="text-[9px] text-slate-500 shrink-0">from Domain above</span>
                             </div>
+                            {/* the step cannot be left with the placeholder: say why, where the eye is */}
+                            {!traefikDomainValid && (
+                              <p className="text-[10px] text-amber-400 mt-1">Needed to continue: set your own domain in the Domain field above — example.com cannot get a certificate.</p>
+                            )}
                           </div>
 
                           {/* Where the proxy services are deployed */}
@@ -1847,10 +1932,16 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                               type="email"
                               value={traefikEmail}
                               onChange={(e) => setTraefikEmail(e.target.value)}
-                              placeholder="admin@example.com"
+                              placeholder="you@your-domain.com"
+                              aria-invalid={!!traefikEmail.trim() && !traefikEmailValid}
                               className={W_INPUT}
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">Used for certificate expiry notifications</p>
+                            {/* the step cannot be left without it: an empty field says so calmly, a wrong address is an error */}
+                            {traefikEmailValid
+                              ? <p className="text-[10px] text-slate-500 mt-1">Used for certificate expiry notifications</p>
+                              : traefikEmail.trim()
+                                ? <p className="text-[10px] text-rose-400 mt-1" role="alert">Enter a real address — Let's Encrypt refuses example.com and malformed ones.</p>
+                                : <p className="text-[10px] text-amber-400 mt-1">Needed to continue: Let's Encrypt registers the certificates to this address.</p>}
                           </div>
 
                           {/* Trusted LAN */}
