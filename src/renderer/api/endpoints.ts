@@ -1739,7 +1739,7 @@ export function testWebhook(id: string): Promise<WebhookTestResponse> {
 
 /** POST /images/pull — Pull an image from Docker Hub */
 export function pullImage(image: string, member?: string | null): Promise<ImagePullResponse> {
-  return apiClient.post<ImagePullResponse>(memberPath(member, '/images/pull'), { image })
+  return apiClient.post<ImagePullResponse>(memberPath(member, '/images/pull'), { image }, 600000)   // a pull takes as long as the registry does
 }
 
 // ---------------------------------------------------------------------------
