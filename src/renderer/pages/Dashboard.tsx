@@ -265,7 +265,7 @@ export default function Dashboard() {
   }, [healthReport])
 
   // --- Poll /events every 3s ---
-  const eventsPoll = usePolling(fetchEvents, 3000, {
+  const eventsPoll = usePolling(fetchEvents, 8000, {
     enabled: isConnected,
     onError: onPollError,
   })

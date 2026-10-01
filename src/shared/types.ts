@@ -2081,7 +2081,10 @@ export interface TopologyNodeIP {
 }
 
 export interface TopologyNode {
+  /** unique in the answer: on a fleet map a VM's container is "<vm name>/<container>" */
   id: string
+  /** the container's own name (a fleet map only; the hub's own containers carry it too) */
+  name?: string
   state: string
   health: string
   image: string
@@ -2089,6 +2092,9 @@ export interface TopologyNode {
   networks: string[]
   ports: string
   ip_addresses?: TopologyNodeIP[]
+  /** the VM that runs it (null: the hub itself); only on a fleet map */
+  member?: string | null
+  member_name?: string | null
 }
 
 export interface TopologyEdge {
@@ -2102,12 +2108,28 @@ export interface TopologyNetwork {
   driver: string
   subnet: string
   container_count: number
+  /** the network's own name (a fleet map prefixes name with the VM's) */
+  plain_name?: string
+  member?: string | null
+  member_name?: string | null
+}
+
+/** One server of a fleet map: the hub first, then every VM the hub asked */
+export interface TopologyServer {
+  id: string | null
+  name: string
+  hub: boolean
+  /** the VM answered with its map (false: unreachable or an older DCS) */
+  answered: boolean
+  reachable?: boolean
 }
 
 export interface TopologyResponse {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
   networks: TopologyNetwork[]
+  /** GET /topology?fleet=1 on a hub: who is on the map */
+  servers?: TopologyServer[]
 }
 
 // ---------------------------------------------------------------------------

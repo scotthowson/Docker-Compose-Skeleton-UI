@@ -69,6 +69,10 @@ export function fetchEventsScoped(scope: string): Promise<EventsResponse> {
 export function fetchTopologyOn(member: RowMember): Promise<TopologyResponse> {
   return apiClient.get<TopologyResponse>(memberPath(member, '/topology'))
 }
+/** GET /topology?fleet=1 — the hub's map and every reachable VM's in one answer (servers says who answered) */
+export function fetchTopologyFleet(): Promise<TopologyResponse> {
+  return apiClient.get<TopologyResponse>('/topology?fleet=1')
+}
 
 // ---------------------------------------------------------------------------
 // One container, on the hub or on a VM

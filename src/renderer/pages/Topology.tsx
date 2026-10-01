@@ -16,6 +16,7 @@ import {
   Box,
   X,
   Layers,
+  Server,
   WifiOff,
   ExternalLink, Download, Copy, Expand, Shrink, Link2,
 } from 'lucide-react'
@@ -28,9 +29,9 @@ import { useToast } from '../components/common/Toast'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import FleetScopeChips from '../components/fleet/FleetScopeChips'
 import VmCapsule from '../components/fleet/VmCapsule'
-import { fetchTopologyOn } from '../api/fleetScoped'
+import { fetchTopologyOn, fetchTopologyFleet } from '../api/fleetScoped'
 import type {
-  TopologyResponse, TopologyNode, TopologyNetwork,
+  TopologyResponse, TopologyNode, TopologyNetwork, TopologyServer,
 } from '../../shared/types'
 import { LoadingState, ErrorState, EmptyState } from '../components/common/PageState'
 import ModalOverlay from '../components/common/ModalOverlay'
@@ -63,6 +64,9 @@ const LEVEL_GAP = 130
 const NODE_GAP = 26
 const STACK_GROUP_GAP = 56
 const PAD = 40
+const SERVER_H = 40          // a server's band on a fleet map (the tier above the stacks)
+const SERVER_GAP = 48
+const SERVER_LEVEL_GAP = 64
 const TIER_LABEL_OFFSET = 18   // vertical space above each tier for the label
 const HEALTH_R = 4
 
@@ -114,6 +118,16 @@ interface StackL {
   y: number      // top
   width: number
   count: number
+  /** the server it runs on (a fleet map), '' otherwise */
+  server: string
+}
+
+interface ServerL {
+  server: TopologyServer
+  x: number      // center
+  y: number      // top
+  width: number
+  stacks: number
 }
 
 interface ContainerL {
@@ -131,6 +145,7 @@ interface NetworkL {
 }
 
 interface Layout {
+  servers: ServerL[]
   stacks: StackL[]
   containers: ContainerL[]
   networks: NetworkL[]
@@ -145,36 +160,48 @@ interface Layout {
 // ---------------------------------------------------------------------------
 
 function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
-  // Group containers by stack
-  const groups = new Map<string, TopologyNode[]>()
+  // A fleet map (servers present) groups by server first: the hub, then every VM in the order the hub lists them
+  const serverList: TopologyServer[] = data.servers && data.servers.length > 0 ? data.servers : []
+  const fleet = serverList.length > 0
+  const serverOf = (n: TopologyNode): string => (fleet ? (n.member_name || serverList[0].name) : '')
+
+  // Group containers by (server, stack)
+  const groups = new Map<string, { server: string; stack: string; nodes: TopologyNode[] }>()
   for (const n of data.nodes) {
-    const key = n.stack || 'Standalone'
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(n)
+    const stack = n.stack || 'Standalone'
+    const server = serverOf(n)
+    const key = `${server}\u0001${stack}`
+    if (!groups.has(key)) groups.set(key, { server, stack, nodes: [] })
+    groups.get(key)!.nodes.push(n)
   }
 
-  // Sort: largest stacks first, Standalone always last
-  const entries = [...groups.entries()].sort((a, b) => {
-    if (a[0] === 'Standalone') return 1
-    if (b[0] === 'Standalone') return -1
-    return b[1].length - a[1].length
+  // Sort: servers in the hub's order, then largest stacks first, Standalone always last
+  const serverRank = (name: string): number => { const i = serverList.findIndex((sv) => sv.name === name); return i < 0 ? serverList.length : i }
+  const entries = [...groups.values()].sort((a, b) => {
+    if (a.server !== b.server) return serverRank(a.server) - serverRank(b.server)
+    if (a.stack === 'Standalone') return 1
+    if (b.stack === 'Standalone') return -1
+    return b.nodes.length - a.nodes.length
   })
 
-  // Position stacks (top tier) and containers (middle tier)
-  // Leave room for tier labels above each row
-  const stackY = PAD + TIER_LABEL_OFFSET
+  // Position servers (fleet map only), stacks and containers; leave room for tier labels above each row
+  const serverY = PAD + TIER_LABEL_OFFSET
+  const stackY = fleet ? serverY + SERVER_H + SERVER_LEVEL_GAP : PAD + TIER_LABEL_OFFSET
   const containerY = stackY + STACK_H + LEVEL_GAP
 
   const stacks: StackL[] = []
   const containers: ContainerL[] = []
   let cx = PAD
+  let lastServer: string | null = null
 
-  for (const [name, nodes] of entries) {
+  for (const { server, stack: name, nodes } of entries) {
+    if (fleet && lastServer !== null && server !== lastServer) cx += SERVER_GAP   // a wider gap between two servers' stacks
+    lastServer = server
     const fanW = nodes.length * (CONTAINER_W + NODE_GAP) - NODE_GAP
     const stackW = Math.max(240, fanW + 32)
     const center = cx + stackW / 2
 
-    stacks.push({ name, x: center, y: stackY, width: stackW, count: nodes.length })
+    stacks.push({ name, x: center, y: stackY, width: stackW, count: nodes.length, server })
 
     const fanStart = center - fanW / 2 + CONTAINER_W / 2
     nodes.forEach((node, i) => {
@@ -187,6 +214,23 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
     })
 
     cx += stackW + STACK_GROUP_GAP
+  }
+
+  // A server's band spans its stacks; a server without any (unreachable, empty, an older DCS) gets a narrow one after the last
+  const servers: ServerL[] = []
+  if (fleet) {
+    let sx = Math.max(cx, PAD)
+    for (const sv of serverList) {
+      const mine = stacks.filter((st) => st.server === sv.name)
+      if (mine.length > 0) {
+        const left = Math.min(...mine.map((st) => st.x - st.width / 2)), right = Math.max(...mine.map((st) => st.x + st.width / 2))
+        servers.push({ server: sv, x: (left + right) / 2, y: serverY, width: right - left, stacks: mine.length })
+      } else {
+        servers.push({ server: sv, x: sx + 120, y: serverY, width: 240, stacks: 0 })
+        sx += 240 + SERVER_GAP
+      }
+    }
+    cx = Math.max(cx, sx)
   }
 
   // Separate connected vs unused networks
@@ -243,6 +287,7 @@ function computeLayout(data: TopologyResponse, netNames: string[]): Layout {
   const totalH = bottomY + NETWORK_H + PAD * 2
 
   return {
+    servers,
     stacks,
     containers,
     networks,
@@ -316,7 +361,7 @@ function DetailPanel({
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-slate-100 truncate font-mono">
-                {node.id}
+                {node.name ?? node.id}
               </h2>
               <p className="text-[11px] text-slate-500">Container details</p>
             </div>
@@ -441,11 +486,11 @@ function DetailPanel({
 export default function Topology() {
   const isConnected = useConnectionStore((s) => s.status) === 'connected'
 
-  // a hub: the hub's own map or one VM's (through the hub's proxy). Everywhere is a
-  // view of lists; one graph of sixteen VMs would say nothing, so it shows the hub's
-  // map and says a VM's is one chip away.
+  // a hub: everywhere is the fleet map (the hub's own map with every reachable VM's, each under its server's band),
+  // the hub alone is its own map, and a VM's map comes through the hub's proxy
   const { scope, setScope, member: scopeMember, memberName, members: scopeMembers, hasFleet } = useFleetScope()
-  const fetchScoped = useCallback(async () => ({ member: scopeMember, res: await fetchTopologyOn(scopeMember) }), [scopeMember])
+  const fleetMap = scope === 'all' && hasFleet
+  const fetchScoped = useCallback(async () => ({ member: scopeMember, res: await (fleetMap ? fetchTopologyFleet() : fetchTopologyOn(scopeMember)) }), [scopeMember, fleetMap])
   const { data: tagged, loading, error, refresh } = usePolling<{ member: string | null; res: TopologyResponse }>(
     fetchScoped, 15000, { enabled: isConnected },
   )
@@ -807,6 +852,7 @@ export default function Topology() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {[
+          ...(layout && layout.servers.length > 0 ? [{ icon: Server, label: 'Servers', value: layout.servers.length }] : []),
           { icon: Layers, label: 'Stacks', value: layout?.stacks.length ?? 0 },
           { icon: Box, label: 'Containers', value: totalContainers },
           { icon: Network, label: 'Networks', value: totalNetworks },
@@ -1046,6 +1092,57 @@ export default function Topology() {
                   }),
                 )}
 
+                {/* =========== SERVER BANDS (a fleet map: the hub and every VM, above their stacks) =========== */}
+                {layout.servers.map((sv) => {
+                  const accent = sv.server.hub ? '#f59e0b' : sv.server.answered ? '#38bdf8' : '#64748b'
+                  const mine = layout.stacks.filter((st) => st.server === sv.server.name)
+                  const label = sv.server.hub ? `${sv.server.name} · hub` : sv.server.answered ? sv.server.name : `${sv.server.name} · ${sv.server.reachable === false ? 'unreachable' : 'no answer'}`
+                  return (
+                    <g key={`server-${sv.server.name}`} data-node="true">
+                      {mine.map((st) => (
+                        <path
+                          key={`sw-${sv.server.name}-${st.name}`}
+                          d={`M ${sv.x} ${sv.y + SERVER_H} C ${sv.x} ${sv.y + SERVER_H + SERVER_LEVEL_GAP / 2}, ${st.x} ${st.y - SERVER_LEVEL_GAP / 2}, ${st.x} ${st.y}`}
+                          fill="none"
+                          stroke={accent}
+                          strokeWidth={1}
+                          strokeOpacity={0.3}
+                        />
+                      ))}
+                      <rect x={sv.x - sv.width / 2 + 1} y={sv.y + 2} width={sv.width} height={SERVER_H} rx={STACK_RX} fill="black" fillOpacity={0.25} style={SHADOW} />
+                      <rect
+                        x={sv.x - sv.width / 2}
+                        y={sv.y}
+                        width={sv.width}
+                        height={SERVER_H}
+                        rx={STACK_RX}
+                        fill="rgba(15, 23, 42, 0.88)"
+                        stroke={accent}
+                        strokeWidth={1}
+                        strokeOpacity={0.45}
+                        strokeDasharray={sv.server.answered ? 'none' : '4 3'}
+                      />
+                      <rect x={sv.x - sv.width / 2 + 4} y={sv.y + 4} width={sv.width - 8} height={2} rx={1} fill={accent} fillOpacity={0.45} />
+                      <g transform={`translate(${sv.x - sv.width / 2 + 14}, ${sv.y + SERVER_H / 2 - 7})`}>
+                        <rect width={14} height={14} rx={3} fill={`${accent}20`} />
+                        <rect x={3} y={3} width={8} height={3} rx={1} fill={accent} fillOpacity={0.9} />
+                        <rect x={3} y={8} width={8} height={3} rx={1} fill={accent} fillOpacity={0.6} />
+                      </g>
+                      <text
+                        x={sv.x - sv.width / 2 + 34}
+                        y={sv.y + SERVER_H / 2 + 4}
+                        fill="#e2e8f0"
+                        fontSize={12}
+                        fontWeight={600}
+                        fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
+                      >
+                        <title>{`${sv.server.name}: ${sv.stacks} stack${sv.stacks === 1 ? '' : 's'}`}</title>
+                        {trunc(label, Math.max(8, Math.floor((sv.width - 48) / 7)))}
+                      </text>
+                    </g>
+                  )
+                })}
+
                 {/* =========== STACK CARDS (top tier) =========== */}
                 {layout.stacks.map((s) => {
                   const isStandalone = s.name === 'Standalone'
@@ -1272,7 +1369,7 @@ export default function Topology() {
                         fontWeight={600}
                         fontFamily="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace"
                       >
-                        {trunc(c.node.id, 19)}
+                        {trunc(c.node.name ?? c.node.id, 19)}
                       </text>
 
                       {/* Subtitle: first IP or image name */}
@@ -1419,6 +1516,23 @@ export default function Topology() {
                 })}
 
                 {/* =========== TIER LABELS (above each tier) =========== */}
+                {layout.servers.length > 0 && (
+                  <>
+                    <text
+                      x={PAD}
+                      y={layout.servers[0].y - 8}
+                      fill="#f59e0b"
+                      fontSize={10}
+                      fontWeight={700}
+                      letterSpacing={2.5}
+                      opacity={0.8}
+                      fontFamily="ui-sans-serif, system-ui, -apple-system, sans-serif"
+                    >
+                      SERVERS
+                    </text>
+                    <line x1={PAD} y1={layout.servers[0].y - 3} x2={PAD + 62} y2={layout.servers[0].y - 3} stroke="#f59e0b" strokeWidth={1} strokeOpacity={0.15} strokeLinecap="round" />
+                  </>
+                )}
                 {layout.stacks.length > 0 && (
                   <>
                     {/* Stacks label — above stack row */}

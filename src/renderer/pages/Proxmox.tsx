@@ -52,8 +52,8 @@ import {
 import { useModalA11y } from '../hooks/useModalA11y'
 import Hint from '../components/common/Hint'
 
-const STATUS_POLL = 15_000
-const LIST_POLL = 10_000
+const STATUS_POLL = 20_000
+const LIST_POLL = 15_000
 const TASK_POLL = 30_000
 const VIEW_KEY = 'dcs-proxmox-view'
 

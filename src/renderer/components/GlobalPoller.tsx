@@ -11,9 +11,11 @@ import { useContainerStore } from '../stores/containerStore'
 import { fetchServerStatus, fetchHealthReport, fetchContainers, checkSystemUpdate, fetchVersion } from '../api/endpoints'
 import { useFleetScope } from '../hooks/useFleetScope'
 
-const STATUS_INTERVAL = 5000
-const HEALTH_INTERVAL = 10000
-const CONTAINERS_INTERVAL = 10000
+// Every poll is a bash process on the server (about 0.15 s of CPU on a small VM, cached or not): the cadence below keeps one open
+// dashboard under one request a second. The hook pauses them in a hidden tab; an action refreshes its list at once.
+const STATUS_INTERVAL = 10000
+const HEALTH_INTERVAL = 15000
+const CONTAINERS_INTERVAL = 15000
 const UPDATE_CHECK_DELAY = 15000 // delay initial check to avoid competing with startup
 
 export function GlobalPoller() {
