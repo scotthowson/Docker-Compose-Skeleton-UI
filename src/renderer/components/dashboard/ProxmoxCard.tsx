@@ -86,7 +86,7 @@ export default function ProxmoxCard() {
                 <span className="text-[10px] text-slate-500 tabular-nums w-16 text-right">{v.status === 'running' ? `${v.cpu}% · ${fmtGb(v.mem)}` : v.status}</span>
               </button>
             ))}
-            {(vms.data?.vms.length ?? 0) > 60 && <button type="button" onClick={() => setCurrentPage('proxmox')} className="w-full text-[11px] text-slate-400 hover:text-slate-200 py-1.5">and {(vms.data?.vms.length ?? 0) - 8} more…</button>}
+            {(vms.data?.vms.length ?? 0) > 60 && <button type="button" onClick={() => setCurrentPage('proxmox')} className="w-full text-[11px] text-slate-400 hover:text-slate-200 py-1.5">and {(vms.data?.vms.length ?? 0) - 60} more…</button>}
           </div>
         </CardBody>
       )}

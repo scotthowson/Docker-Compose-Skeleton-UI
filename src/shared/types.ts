@@ -1814,6 +1814,9 @@ export interface SnapshotEntry {
   vmid?: number | null
   filename: string
   label: string
+  /** from the archive's manifest: the DCS that took it and its version ('' on an archive without one) */
+  hostname?: string
+  dcs_version?: string
   size: string
   timestamp: string
   epoch: number
@@ -1833,6 +1836,13 @@ export interface SnapshotCreateResponse {
   label: string
   size: string
   timestamp: string
+  message?: string
+  /** POST …?fleet=1 on a hub: one snapshot here and one on every VM — what each DCS did (id null = the hub);
+   *  `success` is false as soon as one of them failed, so read taken / failed / results */
+  fleet?: boolean
+  results?: { id: string | null; name: string; success: boolean; filename: string; message: string }[]
+  taken?: number
+  failed?: number
 }
 
 export interface SnapshotRestoreResponse {
@@ -2433,7 +2443,8 @@ export interface HealthScoreResponse {
     images: { score: number; weight: number; total: number; stale: number }
     uptime: { score: number; weight: number; seconds: number }
   }
-  stacks: StackHealthScore[]
+  /** per-stack scores: the API does not emit them today (the fleet view sends an empty list) — shown only when they come */
+  stacks?: StackHealthScore[]
   /** GET /health/score?fleet=1 on a hub: the members were folded in */
   fleet?: boolean
   members?: { id: string | null; name: string; vmid: number | null; reachable: boolean; error: string; score: number | null; grade: string | null }[]
@@ -3512,7 +3523,8 @@ export interface ProxmoxVmDetail {
   maxmem: number
   disk: number
   maxdisk: number
-  /** the memory balloon as Proxmox reports it while the VM runs, in bytes; 0 = no balloon device, so `mem` is the host's view of the whole allocation (page cache included) */
+  /** the balloon floor in MiB — the API emits the VM's config value as is (and divides the live figure down to it);
+   *  0 = no balloon device, so `mem` is the host's view of the whole allocation (page cache included) */
   balloon: number
   /** what the guest itself reports through its balloon driver, in bytes (0 when there is no device or the guest has not answered yet) */
   guest_mem_free: number
@@ -3770,7 +3782,21 @@ export interface FleetTemplatesResponse { total: number; templates: FleetTemplat
 /** GET /fleet/versions — the hub's DCS version next to every member's (asked live) */
 export interface FleetMemberVersion { id: string; name: string; vmid: number | null; url: string; /** the version recorded at join/last update */ recorded: string; version: string; reachable: boolean; /** answering, on another version than the hub */ behind: boolean }
 export interface FleetUpdateResult { id: string; success: boolean; message: string; from?: string; to?: string; restart?: string }
-export interface FleetUpdateRound { at: number; hub_version: string; results: FleetUpdateResult[]; updated: number; failed: number }
+/** one update round as GET /fleet/versions `last_round` keeps it: `running` while the members fetch the hub's code and
+ *  re-execute (results empty, the counts 0), `done` afterwards, `aborted` when the hub went down in the middle of it;
+ *  a hub before 4.0.4 sends no status (its rounds were always finished) */
+export interface FleetUpdateRound {
+  status?: 'running' | 'done' | 'aborted'
+  at: number
+  started_at?: number
+  finished_at?: number
+  /** the member ids a running round addresses */
+  members?: string[]
+  hub_version: string
+  results: FleetUpdateResult[]
+  updated: number
+  failed: number
+}
 /** GET /system/docker-engine — the Docker Engine here and what its package source offers */
 export interface DockerEngineStatus { status: 'idle' | 'running' | 'done' | 'failed'; started_at?: string; finished_at?: string; version?: string; exit_code?: number; output?: string; by?: string }
 export interface DockerEngineInfo {
@@ -3800,7 +3826,9 @@ export interface DockerEngineUpdateResponse { success: boolean; status: string; 
 export interface FleetDockerEngineUpdateResponse { success: boolean; results: { id: string; success: boolean; message: string }[]; started: number; failed: number }
 
 export interface FleetVersions { hub: { version: string }; members: FleetMemberVersion[]; behind: number; unreachable: number; /** a round is queued for after the hub's own restart */ pending: boolean; last_round: FleetUpdateRound | null; /** when the members were asked (epoch seconds) */ checked_at: number }
-export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean }
+/** POST /fleet/update: the finished round — or 202 with `running: true` when it did not finish within the API's wait (a
+ *  member's self-update takes minutes); the result then comes from GET /fleet/versions `last_round` once that is no longer running */
+export interface FleetUpdateResponse extends FleetUpdateRound { success: boolean; running?: boolean; message?: string }
 /** firewalld on the hub and the API port the VMs fetch DCS from and join on (certain: firewalld itself said; else read from the zone as shipped) */
 export interface HubFirewall { active: boolean; port: number; zone: string; open: boolean | null; certain: boolean }
 

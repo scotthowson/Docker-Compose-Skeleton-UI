@@ -10,7 +10,7 @@
 // bottom sheets, 36 px targets).
 // =============================================================================
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Badge, SegmentedControl, Tooltip } from '@mantine/core'
 import {
@@ -90,6 +90,8 @@ function ago(epoch: number): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 function fmtPct(p: number): string { return Number.isInteger(p) ? String(p) : p.toFixed(1) }
+/** one guest, told apart across nodes and types */
+function guestKey(v: Pick<ProxmoxVm, 'node' | 'type' | 'vmid'>): string { return `${v.node}/${v.type}/${v.vmid}` }
 function pctColor(p: number): string {
   return p >= 90 ? 'bg-rose-500' : p >= 75 ? 'bg-amber-500' : 'bg-emerald-500'
 }
@@ -394,7 +396,7 @@ function TemplatesCard({ templates, defaults, isAdmin, removing, onRemove, onBak
       )}
       <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-600 truncate">A clone builds in about half a minute</span>
-        {isAdmin && <Hint label="Open the New VM sheet: pick a cloud image and turn on “Bake a DCS template first”"><button type="button" onClick={onBake} className={BTN_CARD_QUIET}><Rocket size={12} /> Bake one</button></Hint>}
+        {isAdmin && <Hint label="Open the New VM sheet: pick a cloud image and press “Bake only” — or build a VM with “Bake a DCS template first” on"><button type="button" onClick={onBake} className={BTN_CARD_QUIET}><Rocket size={12} /> Bake one</button></Hint>}
       </div>
     </div>
   )
@@ -831,22 +833,36 @@ function Tile({ label, value, note }: { label: string; value: ReactNode; note?: 
 }
 
 /** A guest's details: live load, memory with its balloon state, the configuration, the DCS inside, the power actions */
-function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction, onStackAction, onOpen, onChanged }: {
+function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, onClose, onAction, onStackAction, onOpen, onChanged, onPaused }: {
   vm: ProxmoxVm; member?: FleetMemberBase; live?: FleetMemberLive; isAdmin: boolean; busyKey: string; pveUrl: string
+  /** bumped by the page after a power action went through: the sheet reads the guest again right away instead of at its next poll */
+  refreshTick?: number
   onClose: () => void; onAction: (vm: ProxmoxVm, a: ProxmoxVmAction) => void; onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void; onOpen: (stack: string, edit: boolean) => void; onChanged: () => void
+  /** Proxmox's list keeps "running" for a paused VM; the sheet reads the QEMU state and tells the page, so the card shows it while the sheet is open */
+  onPaused: (key: string, paused: boolean) => void
 }) {
   const detail = usePolling(() => fetchProxmoxVm(vm.node, vm.type, vm.vmid), LIST_POLL)
   const confirm = useConfirm()
   const { addToast } = useToast()
   const [busy, setBusy] = useState(false)
   const d = detail.data
+  const { refresh: refreshDetail } = detail
+  useEffect(() => { if (refreshTick) refreshDetail() }, [refreshTick, refreshDetail])
+  // after Suspend the list still says "running": only the detail's qmpstatus says paused — the state shown and the actions
+  // offered (Resume) follow it, and the page hears about it for the card
+  const paused = vm.type === 'qemu' && d?.qmpstatus === 'paused'
+  const shown: ProxmoxVm = paused ? { ...vm, status: 'paused' } : vm
+  const key = guestKey(vm)
+  useEffect(() => { onPaused(key, paused); return () => onPaused(key, false) }, [key, paused, onPaused])
   const running = (d?.status ?? vm.status) === 'running'
   const mem = d?.mem ?? vm.mem, maxmem = d?.maxmem ?? vm.maxmem
   const pct = maxmem > 0 ? Math.round((mem / maxmem) * 1000) / 10 : 0
-  const balloon = d?.balloon ?? 0
+  // the API emits the balloon floor in MiB (the VM's config value as is)
+  const balloonBytes = (d?.balloon ?? 0) * 1048576
   const agentOn = /^(1|enabled=1)/.test(d?.agent ?? '')
   const enableBalloon = async () => {
-    if (!(await confirm({ title: 'Enable ballooning', message: `Give ${vm.name} a memory balloon with half its memory as the floor? Proxmox then reports the guest's real memory use and can reclaim idle memory. It takes effect at the next reboot.`, confirmLabel: 'Enable ballooning' }))) return
+    // the floor the API sets: the memory minus a quarter, at most 512 MB — three quarters or more stay with the guest
+    if (!(await confirm({ title: 'Enable ballooning', message: `Give ${vm.name} a memory balloon with three quarters or more of its memory as the floor? Proxmox then reports the guest's real memory use and can reclaim idle memory. It takes effect at the next reboot.`, confirmLabel: 'Enable ballooning' }))) return
     setBusy(true)
     try { const r = await proxmoxVmBalloon(vm.node, vm.vmid); addToast({ type: 'success', message: r.message || `Balloon set to ${r.balloon} MB of ${r.memory} MB` }); detail.refresh(); onChanged() }
     catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'Ballooning could not be enabled' }) }
@@ -877,11 +893,11 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
   }
   return (
     <Sheet title={vm.name} subtitle={<>
-      {`${vm.type === 'qemu' ? 'VM' : 'Container'} ${vm.vmid} on ${vm.node} · ${vm.status}${running ? ` · up ${fmtUptime(d?.uptime ?? vm.uptime)}` : ''}`}
+      {`${vm.type === 'qemu' ? 'VM' : 'Container'} ${vm.vmid} on ${vm.node} · ${shown.status}${running ? ` · up ${fmtUptime(d?.uptime ?? vm.uptime)}` : ''}`}
       {vm.tags.length > 0 && <span className="flex flex-wrap items-center gap-1 mt-1.5"><TagChips tags={vm.tags} /></span>}
     </>} icon={<Server size={18} />} onClose={onClose} wide footer={(isAdmin || pveUrl) ? (
       <div className="flex items-center gap-1.5 flex-wrap">
-        {isAdmin && actionsFor(vm).map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled />)}
+        {isAdmin && actionsFor(shown).map((a) => <ActionButton key={a} a={a} onClick={() => onAction(shown, a)} labeled />)}
         <span className="flex-1" />
         {pveUrl && <a href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_TOOLBAR_QUIET}><ExternalLink size={14} /> Open in Proxmox</a>}
       </div>
@@ -904,8 +920,8 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, onClose, onAction
             <p className="text-[11px] text-slate-500 mt-2">A container's memory is what its processes use — no balloon needed.</p>
           ) : !d ? (
             <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Reading the balloon state…</p>
-          ) : balloon > 0 ? (
-            <p className="text-[11px] text-slate-400 mt-2">Balloon device on — floor {fmtBytes(balloon)}{d.guest_mem_total ? ` · the guest sees ${fmtBytes(d.guest_mem_total)} with ${fmtBytes(d.guest_mem_free)} free` : ''}. Proxmox reports the guest's real use and can reclaim idle memory.</p>
+          ) : balloonBytes > 0 ? (
+            <p className="text-[11px] text-slate-400 mt-2">Balloon device on — floor {fmtBytes(balloonBytes)}{d.guest_mem_total ? ` · the guest sees ${fmtBytes(d.guest_mem_total)} with ${fmtBytes(d.guest_mem_free)} free` : ''}. Proxmox reports the guest's real use and can reclaim idle memory.</p>
           ) : (
             <div className="mt-2 flex items-start gap-2 flex-wrap">
               <p className="text-[11px] text-amber-200/90 flex-1 min-w-[14rem] flex items-start gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-px" /><span>{running ? "Proxmox shows the host's view of this VM's memory — enable ballooning (takes effect at the next reboot)" : 'No balloon device is reported while the VM is off — enabling ballooning now takes effect at the next boot'}</span></p>
@@ -1070,6 +1086,13 @@ export default function Proxmox() {
   const [editing, setEditing] = useState<FleetMemberBase | null>(null)
   const [menu, setMenu] = useState<FleetMemberBase | null>(null)
   const [details, setDetails] = useState<{ node: string; type: ProxmoxVm['type']; vmid: number } | null>(null)
+  // a paused VM: Proxmox's list keeps saying "running" — the open details sheet reads the QEMU state and reports it here,
+  // so that guest's card shows "paused" (and offers Resume) while the sheet knows it
+  const [pausedGuest, setPausedGuest] = useState<string | null>(null)
+  const reportPaused = useCallback((key: string, paused: boolean) => setPausedGuest((cur) => (paused ? key : cur === key ? null : cur)), [])
+  const withState = (v: ProxmoxVm): ProxmoxVm => (pausedGuest === guestKey(v) ? { ...v, status: 'paused' } : v)
+  // bumped after a power action went through: the open sheet reads its guest again
+  const [refreshTick, setRefreshTick] = useState(0)
   const [busyKey, setBusyKey] = useState('')
   // the cards whose containers block is open, per guest, for this visit
   const [openCards, setOpenCards] = useState<Record<number, boolean>>({})
@@ -1112,7 +1135,8 @@ export default function Proxmox() {
   const s = status.data
   const pveUrl = s?.url ?? ''
   // the guest whose details sheet is open, kept fresh from the list
-  const detailsVm = details ? all.find((v) => v.vmid === details.vmid && v.node === details.node && v.type === details.type) ?? null : null
+  const detailsRaw = details ? all.find((v) => v.vmid === details.vmid && v.node === details.node && v.type === details.type) ?? null : null
+  const detailsVm = detailsRaw && withState(detailsRaw)
   const showFilters = show !== 'all' || !!query.trim()
 
   const stackAction = async (m: FleetMemberBase, stack: string, a: StackAct) => {
@@ -1126,14 +1150,17 @@ export default function Proxmox() {
       addToast({ type: 'error', message: `${stack} on ${m.name}: ${e instanceof Error ? e.message : 'failed'}` })
     } finally { setBusyKey(''); setTimeout(() => overview.refresh(), 1200) }
   }
-  // "Deploy here": the VM is the stack — open Templates with that stack preselected (the hub forwards the deploy)
+  // "Deploy here": the VM is the stack — open Templates with that stack preselected and the member named, so the deploy
+  // goes to that VM through the hub (a stack the hub never placed there is unknown to it: by the stack name alone the
+  // deploy would land on the hub)
   const deployTo = (m: FleetMemberBase & { stacks?: unknown[] }) => {
     const first = Array.isArray(m.stacks) && m.stacks.length ? m.stacks[0] : null
     const stack = typeof first === 'string' ? first : first && typeof first === 'object' && 'name' in first ? String((first as { name: string }).name) : m.name
-    setCurrentPage('templates', { targetStack: stack })
+    setCurrentPage('templates', { targetStack: stack, member: { id: m.id, name: m.name } })
   }
   const openStack = (st: string, edit: boolean) => setCurrentPage('stacks', edit ? { highlight: st, editCompose: true } : { highlight: st })
-  const rowProps = (vm: ProxmoxVm): VmRowProps => {
+  const rowProps = (raw: ProxmoxVm): VmRowProps => {
+    const vm = withState(raw)
     const m = memberByVm.get(vm.vmid)
     return {
       vm, isAdmin, isHub: isHub || role === 'standalone', member: m, live: m ? liveById.get(m.id) : undefined, scan: scanByVm.get(vm.vmid), isSelf: !!pveSelf.data?.guest && pveSelf.data.guest.vmid === vm.vmid && pveSelf.data.guest.node === vm.node, busyKey, pveUrl,
@@ -1186,15 +1213,15 @@ export default function Proxmox() {
         </>}
       />
 
-      {/* a member: the hub it belongs to */}
+      {/* a member: the hub it belongs to (leaving and joining are an admin's: the API answers 403 to anyone else) */}
       {fleet.data && role === 'member' && (
-        <JoinHubPanel hub={fleet.data.hub} onLeft={() => { addToast({ type: 'success', message: 'Left the hub' }); refreshFleet() }} />
+        <JoinHubPanel hub={fleet.data.hub} readOnly={!isAdmin} onLeft={() => { addToast({ type: 'success', message: 'Left the hub' }); refreshFleet() }} />
       )}
       {fleet.data?.pending_join && role !== 'member' && (
         <div className={`${CARD} p-4`}>
           <p className="text-sm font-semibold text-slate-100 flex items-center gap-2"><Satellite size={15} className="text-violet-300" /> setup.sh saved a join to {fleet.data.pending_join.hub_url}</p>
-          <p className="text-xs text-slate-400 mt-1 mb-3">It runs here, on the progress card.</p>
-          <JoinHubPanel pending={fleet.data.pending_join} onJoined={() => refreshFleet()} />
+          <p className="text-xs text-slate-400 mt-1 mb-3">{isAdmin ? 'It runs here, on the progress card.' : 'An admin runs it from this page.'}</p>
+          {isAdmin && <JoinHubPanel pending={fleet.data.pending_join} onJoined={() => refreshFleet()} />}
         </div>
       )}
 
@@ -1360,9 +1387,9 @@ export default function Proxmox() {
 
       {detailsVm && (() => {
         const m = memberByVm.get(detailsVm.vmid)
-        return <VmSheet key={`${detailsVm.node}/${detailsVm.type}/${detailsVm.vmid}`} vm={detailsVm} member={m} live={m ? liveById.get(m.id) : undefined} isAdmin={isAdmin} busyKey={busyKey} pveUrl={pveUrl} onClose={() => setDetails(null)} onAction={(v, a) => setPending({ vm: v, action: a })} onStackAction={stackAction} onOpen={openStack} onChanged={() => { vms.refresh(); tasks.refresh() }} />
+        return <VmSheet key={guestKey(detailsVm)} vm={detailsVm} member={m} live={m ? liveById.get(m.id) : undefined} isAdmin={isAdmin} busyKey={busyKey} pveUrl={pveUrl} refreshTick={refreshTick} onClose={() => setDetails(null)} onAction={(v, a) => setPending({ vm: v, action: a })} onStackAction={stackAction} onOpen={openStack} onChanged={() => { vms.refresh(); tasks.refresh() }} onPaused={reportPaused} />
       })()}
-      {pending && <ConfirmSheet vm={pending.vm} action={pending.action} onClose={() => setPending(null)} onDone={() => { setTimeout(() => { vms.refresh(); tasks.refresh(); status.refresh() }, 1500) }} />}
+      {pending && <ConfirmSheet vm={pending.vm} action={pending.action} onClose={() => setPending(null)} onDone={() => { setTimeout(() => { vms.refresh(); tasks.refresh(); status.refresh(); setRefreshTick((t) => t + 1) }, 1500) }} />}
       {sheet === 'link' && (
         <Sheet title="Link the VMs" subtitle="Scan the guests for DCS installs and link them; VMs without one get the join code" icon={<Radar size={18} />} onClose={() => setSheet(null)} wide>
           <FleetLinkPanel vms={vms.data?.vms} onChanged={refreshFleet} />
@@ -1376,7 +1403,7 @@ export default function Proxmox() {
       {adding && <MemberSheet prefill={adding} vms={vms.data?.vms ?? []} onClose={() => setAdding(null)} onSaved={(m) => { setAdding(null); addToast({ type: 'success', message: `${m.name} joined the fleet` }); refreshFleet() }} />}
       {editing && <MemberSheet member={editing} vms={vms.data?.vms ?? []} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); addToast({ type: 'success', message: `${m.name} saved` }); refreshFleet() }} />}
       {menu && <MemberMenuSheet member={menu} vms={vms.data?.vms ?? []} onClose={() => setMenu(null)} onEdit={() => { setEditing(menu); setMenu(null) }} onChanged={refreshFleet} />}
-      {newVm !== null && <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} initialStack={newVm} onClose={() => setNewVm(null)} onQueued={() => { addToast({ type: 'success', message: 'The VM is being built — follow it on the card' }); refreshFleet() }} />}
+      {newVm !== null && <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} initialStack={newVm} onClose={() => setNewVm(null)} onQueued={() => { addToast({ type: 'success', message: 'The VM is being built — follow it on the card' }); refreshFleet() }} onBaked={(image) => { addToast({ type: 'success', message: `Baking a DCS template from ${image} — follow it on the card` }); refreshFleet(); templates.refresh() }} />}
     </div>
   )
 }

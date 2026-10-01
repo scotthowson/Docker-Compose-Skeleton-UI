@@ -256,13 +256,12 @@ export default function Updates() {
   // with the hub's own update: bring the VMs along (the server queues the round for after its restart)
   const [fleetAfter, setFleetAfter] = useState(true)
   const [fleetReport, setFleetReport] = useState<FleetUpdateRound | null>(null)
-  const handleUpdateFleet = useCallback(async (members: string[] | 'all' = 'all') => {
-    if (fleetUpdating) return
-    setFleetUpdating(true)
-    setFleetReport(null)
-    try {
-      const r = await updateFleet(members)
-      setFleetReport(r)
+  // a round that finished: the toast and the card's report
+  const finishRound = useCallback((r: FleetUpdateRound) => {
+    setFleetReport(r)
+    if (r.status === 'aborted') {
+      addToast({ type: 'error', message: 'The update round was cut short — the hub went down in the middle of it; check the VMs on the fleet card', duration: 8000 })
+    } else {
       addToast({
         type: r.failed ? (r.updated ? 'warning' : 'error') : 'success',
         message: r.failed
@@ -270,15 +269,58 @@ export default function Updates() {
           : `${r.updated} VM${r.updated === 1 ? '' : 's'} now on DCS ${r.hub_version}`,
         duration: 8000,
       })
-      // the members re-execute on the new code: ask again once they are back
-      setTimeout(refreshFleetVersions, 6000)
-      setTimeout(refreshFleetVersions, 15000)
+    }
+    // the members re-execute on the new code: ask again once they are back
+    setTimeout(refreshFleetVersions, 6000)
+    setTimeout(refreshFleetVersions, 15000)
+  }, [addToast, refreshFleetVersions])
+  // A round runs on its own on the hub (a member's self-update takes minutes): POST /fleet/update answers 202 {running: true}
+  // when it did not finish within the API's wait, and GET /fleet/versions last_round carries {status: "running"} meanwhile —
+  // the page then asks every 5 s until the status changes (the hub gives a round up after 30 min; so does this)
+  const roundTimer = useRef<number | null>(null)
+  const stopFollowing = useCallback(() => { if (roundTimer.current) { window.clearInterval(roundTimer.current); roundTimer.current = null } }, [])
+  const followRound = useCallback(() => {
+    stopFollowing()
+    setFleetUpdating(true)
+    const since = Date.now()
+    roundTimer.current = window.setInterval(async () => {
+      try {
+        const v = await fetchFleetVersions()
+        if (!v.last_round || v.last_round.status !== 'running') {
+          stopFollowing(); setFleetUpdating(false)
+          if (v.last_round) finishRound(v.last_round)
+          refreshFleetVersions()
+          return
+        }
+      } catch { /* the hub is busy or restarting under the round: ask again */ }
+      if (Date.now() - since > 30 * 60_000) { stopFollowing(); setFleetUpdating(false) }
+    }, 5000)
+  }, [stopFollowing, finishRound, refreshFleetVersions])
+  useEffect(() => stopFollowing, [stopFollowing])
+  // a round already running when the page opens (started before, or from the hub's own update): follow it
+  const lastRoundStatus = fv?.last_round?.status
+  useEffect(() => { if (lastRoundStatus === 'running' && !roundTimer.current) followRound() }, [lastRoundStatus, followRound])
+  const handleUpdateFleet = useCallback(async (members: string[] | 'all' = 'all') => {
+    if (fleetUpdating) return
+    setFleetUpdating(true)
+    setFleetReport(null)
+    try {
+      const r = await updateFleet(members)
+      if (r.running || r.status === 'running') {
+        // 202: the round goes on without the request — the card follows it
+        const n = members === 'all' ? fleetMembers.length : members.length
+        addToast({ type: 'info', message: `Update round started for ${n} VM${n === 1 ? '' : 's'} — the fleet card follows it`, duration: 8000 })
+        setFleetReport(r)
+        followRound()
+        return
+      }
+      finishRound(r)
+      setFleetUpdating(false)
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'The fleet update failed' })
-    } finally {
       setFleetUpdating(false)
     }
-  }, [fleetUpdating, addToast, refreshFleetVersions])
+  }, [fleetUpdating, fleetMembers.length, addToast, finishRound, followRound])
 
   const ingestCheck = useCallback((res: SystemUpdateCheckResponse) => {
     setSysUpdate(res)
@@ -1126,7 +1168,8 @@ export default function Updates() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {fleetMembers.map((m) => {
-                const r = fleetReport?.results.find((x) => x.id === m.id)
+                // a running round has no results yet
+                const r = (fleetReport?.results ?? []).find((x) => x.id === m.id)
                 return (
                   <Pill
                     key={m.id}
@@ -1148,19 +1191,30 @@ export default function Updates() {
                 warnText={fv.behind > 0 ? `${fv.behind} VM${fv.behind === 1 ? '' : 's'} behind` : `${fv.unreachable} not answering`}
                 tone={fv.behind > 0 ? 'cyan' : 'amber'}
                 checkedAt={fv.checked_at}
-                updatedAt={fleetReport?.at ?? fv.last_round?.at}
+                updatedAt={(() => { const lr = fleetReport ?? fv.last_round; return lr && lr.status !== 'running' ? lr.at : null })()}
               />
             </div>
             {(fleetReport ?? fv.last_round) && (
               <div className="mt-3 pt-3 border-t border-white/[0.03] text-[10px] text-slate-400 space-y-1">
                 {(() => {
                   const lr = (fleetReport ?? fv.last_round) as FleetUpdateRound
+                  const results = lr.results ?? []
+                  if (lr.status === 'running') {
+                    // in progress: no counts and no results yet — what it addresses and since when
+                    const n = lr.members?.length ?? fleetMembers.length
+                    return (
+                      <p className="text-cyan-300 font-medium flex items-center gap-1.5">
+                        <Loader2 size={11} className="animate-spin shrink-0" aria-hidden />
+                        Update round running for {n} VM{n === 1 ? '' : 's'} · to DCS {lr.hub_version} · since {new Date((lr.started_at ?? lr.at) * 1000).toLocaleTimeString()}
+                      </p>
+                    )
+                  }
                   return (
                     <>
                       <p className="text-slate-300 font-medium">
-                        {fleetReport ? 'This round' : 'Last round'}: {lr.updated} updated{lr.failed ? `, ${lr.failed} failed` : ''} · DCS {lr.hub_version} · {new Date(lr.at * 1000).toLocaleString()}
+                        {fleetReport ? 'This round' : 'Last round'}{lr.status === 'aborted' ? ' (cut short — the hub went down during it)' : ''}: {lr.updated} updated{lr.failed ? `, ${lr.failed} failed` : ''} · DCS {lr.hub_version} · {new Date(lr.at * 1000).toLocaleString()}
                       </p>
-                      {lr.results.filter((x) => !x.success).map((x) => (
+                      {results.filter((x) => !x.success).map((x) => (
                         <p key={x.id} className="text-rose-300">{x.id}: {x.message}</p>
                       ))}
                     </>

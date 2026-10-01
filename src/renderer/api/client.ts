@@ -44,10 +44,13 @@ const CREDENTIAL_CHECK_PATHS = [
   '/terminal/auth',
   '/terminal/exec',
   '/system/os-update',
+  '/system/docker-engine/update',
 ]
 
 function isCredentialCheckPath(path: string): boolean {
-  const clean = path.split('?')[0]
+  // the same calls made on a VM through the hub (/fleet/members/<id>/api/…) relay the VM's answer: its 401 is about the
+  // Linux account or terminal session sent along, not about this session on the hub
+  const clean = path.split('?')[0].replace(/^\/fleet\/members\/[^/]+\/api(?=\/)/, '')
   return CREDENTIAL_CHECK_PATHS.some((p) => clean === p || clean.startsWith(`${p}/`))
 }
 

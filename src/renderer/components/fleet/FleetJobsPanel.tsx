@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Progress, RingProgress, Text, Tooltip } from '@mantine/core'
 import { Loader2, RefreshCw, Trash2, ChevronDown, CheckCircle2, XCircle, Clock, Server, Layers, Circle, MinusCircle } from 'lucide-react'
-import { retryFleetJob, deleteFleetJob } from '../../api/endpoints'
+import { retryFleetJob, deleteFleetJob, fetchFleetJob } from '../../api/endpoints'
 import type { FleetJob, FleetJobStep } from '../../../shared/types'
 import { useConfirm } from '../common/ConfirmDialog'
 import Hint from '../common/Hint'
@@ -107,9 +107,8 @@ function StepChecklist({ job }: { job: FleetJob }) {
   )
 }
 
-function LogView({ job }: { job: FleetJob }) {
+function LogView({ lines }: { lines: FleetJob['log'] }) {
   const ref = useRef<HTMLDivElement>(null)
-  const lines = (job.log ?? []).slice(-60)
   useEffect(() => { const el = ref.current; if (el) el.scrollTop = el.scrollHeight }, [lines.length])
   if (lines.length === 0) return <p className="text-[11px] text-slate-500 italic">Nothing logged yet.</p>
   return (
@@ -128,15 +127,33 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
   const wasFailed = useRef(job.status === 'failed')
   // a build that fails opens by itself: the reason is what the person needs to see
   useEffect(() => { if (job.status === 'failed' && !wasFailed.current) setOpen(true); wasFailed.current = job.status === 'failed' }, [job.status])
+  // GET /fleet/jobs trims every log to its last 60 lines: an open card reads the whole job, and again as the build moves on
+  const [full, setFull] = useState<FleetJob | null>(null)
+  const lastLogAt = job.log?.[job.log.length - 1]?.t ?? 0
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    fetchFleetJob(job.id).then((j) => { if (alive) setFull(j) }).catch(() => { /* the trimmed log stays */ })
+    return () => { alive = false }
+  }, [open, job.id, job.updated_at, lastLogAt])
+  const log = (full && full.id === job.id && full.updated_at >= job.updated_at ? full.log : job.log) ?? []
   const t = tone(job)
   const cur = jobCurrent(job)
   const doneCount = job.steps.filter((s) => s.state === 'done').length
   const retry = async () => { setBusy('retry'); try { await retryFleetJob(job.id); onChanged() } finally { setBusy('') } }
   const dismiss = async () => {
-    // a failed build may have left a VM behind: offer to take it with the job
+    // a failed build, or a by-hand install whose VM never joined, may have left a VM behind: offer to take it with the job
+    // (the API destroys it on ?destroy=true in both cases)
+    const leftover = !!job.vmid && (job.status === 'failed' || (!!job.manual && !job.member_id))
     let destroy = false
-    if (job.status === 'failed' && job.vmid) {
-      destroy = await confirm({ title: 'Forget this build', message: `Also destroy VM #${job.vmid} on Proxmox? Cancel keeps the VM and only forgets the job.`, confirmLabel: 'Destroy VM', danger: true })
+    if (leftover) {
+      destroy = await confirm({
+        title: 'Forget this build',
+        message: job.status === 'failed'
+          ? `Also destroy VM #${job.vmid} on Proxmox? Cancel keeps the VM and only forgets the job.`
+          : `VM #${job.vmid} never joined — also destroy it on Proxmox? Cancel keeps the VM and only forgets the build.`,
+        confirmLabel: 'Destroy VM', danger: true,
+      })
     }
     setBusy('dismiss')
     try { await deleteFleetJob(job.id, destroy); onChanged() } finally { setBusy('') }
@@ -190,7 +207,7 @@ export function FleetJobCard({ job, onChanged, compact = false }: { job: FleetJo
           <StepChecklist job={job} />
           <div className="min-w-0 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Log</p>
-            <LogView job={job} />
+            <LogView lines={log} />
           </div>
         </div>
       )}
@@ -218,7 +235,8 @@ export function JobsSummary({ jobs, onChanged, compact = false, title = 'VMs bei
   const runningLeft = running.reduce((a, j) => a + Math.max(10, avg - (j.started_at ? now - j.started_at : 0)), 0)
   const eta = Math.round((runningLeft + queued.length * avg) / 60)
   const pct = Math.round(((done.length + failed.length + running.reduce((a, j) => a + (j.steps.filter((s) => s.state === 'done').length / Math.max(1, j.steps.length)), 0)) / jobs.length) * 100)
-  // finished builds are cleared together; a failed one and a by-hand install still waiting for its join stay
+  // finished builds are cleared together; a failed one and a by-hand install still waiting for its join stay (that one is
+  // dismissed on its own card, which asks about the VM it left behind)
   const clearable = done.filter((j) => !(j.manual && !j.member_id))
   const clearFinished = async () => { setClearing(true); try { for (const j of clearable) await deleteFleetJob(j.id); onChanged() } finally { setClearing(false) } }
   const what = `${vmJobs.length} VM${vmJobs.length === 1 ? '' : 's'}${templateJobs.length ? ` and ${templateJobs.length === 1 ? 'a template' : `${templateJobs.length} templates`}` : ''}`

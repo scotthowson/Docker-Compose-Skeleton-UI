@@ -74,8 +74,11 @@ export default function MemberSheet({ member, prefill, vms = [], onClose, onSave
         setStatus(`Saving ${member.name}…`); push(`Checking ${u} with the account ${username}…`)
         const body: Parameters<typeof updateFleetMember>[1] = { name: name.trim() || undefined, url: u, username: username.trim(), insecure }
         if (password) body.password = password
-        const m = mapping()
-        if ((m.vmid ?? null) !== (member.vmid ?? null) || (m.node ?? null) !== (member.node ?? null)) { body.vmid = m.vmid; body.node = m.node; body.type = m.type }
+        // "Keep the current guest" (no choice): vmid/node/type stay out of the request — sent as null they would unmap the guest
+        if (vmKey) {
+          const m = mapping()
+          if ((m.vmid ?? null) !== (member.vmid ?? null) || (m.node ?? null) !== (member.node ?? null) || (m.type ?? null) !== (member.type ?? null)) { body.vmid = m.vmid; body.node = m.node; body.type = m.type }
+        }
         setCurrent(1)
         const r = await updateFleetMember(member.id, body)
         setCurrent(4); setState('done'); setStatus(`Saved ${r.member.name}.`); push(`Kept: ${r.member.name} at ${r.member.url}`, 'ok')

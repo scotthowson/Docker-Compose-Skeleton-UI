@@ -36,6 +36,7 @@ import VmCapsule from '../components/fleet/VmCapsule'
 import { useSystemStore } from '../stores/systemStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useAuthStore } from '../stores/authStore'
+import { ApiError } from '../api/client'
 import type { SystemInfo, DockerDiskUsage, OsUpdateCheckResponse } from '../../shared/types'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useToast } from '../components/common/Toast'
@@ -270,6 +271,9 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
     setSudoPassword(null)
     if (!member) sessionStorage.removeItem('terminal-session')
   }
+  // the terminal session is gone (401), or it is not enough on its own (403 "Sudo password required": a session restored
+  // from the Terminal page carries no password): sign in again. The API's message has no status code in it — the error's own is read.
+  const sessionRefused = (err: unknown) => err instanceof ApiError && (err.status === 401 || err.status === 403)
 
   const handleAuth = async () => {
     if (!authUsername.trim() || !authPassword) return
@@ -292,8 +296,9 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sign-in failed'
-      if (msg.includes('429')) setAuthError('Too many attempts. Try again in 15 minutes.')
-      else if (msg.includes('401')) setAuthError('Invalid Linux username or password.')
+      const status = err instanceof ApiError ? err.status : 0
+      if (status === 429) setAuthError('Too many attempts. Try again in 15 minutes.')
+      else if (status === 401) setAuthError('Invalid Linux username or password.')
       else setAuthError(msg)
     } finally {
       setAuthing(false)
@@ -313,7 +318,7 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Check failed'
-      if (msg.includes('401') && !unattended) forgetSession()
+      if (sessionRefused(err) && !unattended) forgetSession()
       addToast({ type: 'error', message: msg })
     } finally {
       setChecking(false)
@@ -357,7 +362,7 @@ function OsUpdatesPanel({ member, whereLabel }: ScopedProps) {
       }, 600000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed'
-      if (msg.includes('401') && !unattended) forgetSession()
+      if (sessionRefused(err) && !unattended) forgetSession()
       addToast({ type: 'error', message: msg })
       setApplying(false)
     }

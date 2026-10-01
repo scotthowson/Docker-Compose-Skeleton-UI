@@ -8,8 +8,8 @@
 import { useConnectionStore } from '../../stores/connectionStore'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Select, Switch, type ComboboxItem, type ComboboxParsedItem, type OptionsFilter } from '@mantine/core'
-import { Check, Loader2, Rocket, Server } from 'lucide-react'
-import { fetchFleetProvisionDefaults, provisionFleet } from '../../api/endpoints'
+import { Check, Layers, Loader2, Rocket, Server } from 'lucide-react'
+import { fetchFleetProvisionDefaults, provisionFleet, bakeFleetTemplate } from '../../api/endpoints'
 import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
 import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
 import { VmSizeControl } from './VmSizeControl'
@@ -234,10 +234,12 @@ interface Props {
   caps: ProxmoxCapabilities | null
   onClose: () => void
   onQueued: () => void
+  /** given: the sheet also offers "Bake only" — a DCS template from the chosen cloud image, no VM (the image's name for the toast) */
+  onBaked?: (image: string) => void
   initialStack?: string
 }
 
-export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialStack = '' }: Props) {
+export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked, initialStack = '' }: Props) {
   const uid = useId()
   const [stack, setStack] = useState(initialStack)
   const [cores, setCores] = useState(defaults?.defaults.cores ?? 2)
@@ -249,6 +251,9 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
   const [err, setErr] = useState('')
   useEffect(() => { if (defaults) setSettings((s) => (s.node ? s : settingsFromDefaults(defaults, loadVmSettings()))) }, [defaults])
   const ok = /^[a-z0-9][a-z0-9-]{0,40}$/.test(stack) && settings.node && settings.storage && settings.gateway && (ip || settings.ip_start)
+  // a template is baked from a cloud image alone: a DCS image needs none, a baked template is one, an installer cannot be
+  const bakeable = !!onBaked && !settings.os.startsWith('iso:') && !settings.os.startsWith('tpl:') && !settings.os.startsWith('cat:dcs-') && (settings.os !== 'url' || /^https?:\/\//.test(settings.image_url))
+  const okBake = bakeable && settings.node && settings.storage && settings.gateway && settings.ip_start
   const submit = async () => {
     setErr(''); setBusy(true)
     try {
@@ -257,6 +262,15 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
       await provisionFleet({ ...vmSettingsToRequest(settings), vms: [vm] })
       saveVmSettings(settings)
       onQueued(); onClose()
+    } catch (e) { setErr(e instanceof Error ? e.message : 'The request failed') } finally { setBusy(false) }
+  }
+  // "Bake only": POST /fleet/templates takes the VM settings without vms and queues the one bake job (no stack name needed)
+  const bakeOnly = async () => {
+    setErr(''); setBusy(true)
+    try {
+      await bakeFleetTemplate(vmSettingsToRequest({ ...settings, bake: true }))
+      saveVmSettings(settings)
+      onBaked?.(osLabel(settings, defaults) || 'the image'); onClose()
     } catch (e) { setErr(e instanceof Error ? e.message : 'The request failed') } finally { setBusy(false) }
   }
   return (
@@ -270,6 +284,11 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, initialS
         {err && <p role="alert" className="text-xs text-rose-300 mb-3">{err}</p>}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
+          {bakeable && (
+            <button type="button" onClick={bakeOnly} disabled={busy || !okBake || (caps ? !caps.can_provision : false)} title="Bake a DCS template from this image now, without building a VM" className={`${BTN_SHEET_QUIET} flex-1`}>
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />} Bake only
+            </button>
+          )}
           <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Build the VM
           </button>

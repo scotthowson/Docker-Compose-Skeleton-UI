@@ -1003,9 +1003,9 @@ export function fetchAppLogsLive(lines = 100, since?: string): Promise<LiveLogsR
 //       Compose History, Templates, Automations, Network Topology
 // ---------------------------------------------------------------------------
 
-/** POST /metrics/snapshot — Capture and persist current metrics */
-export function captureMetricsSnapshot(): Promise<MetricsSnapshotResponse> {
-  return apiClient.post<MetricsSnapshotResponse>('/metrics/snapshot')
+/** POST /metrics/snapshot — Capture and persist current metrics (on a fleet member when one is given: its own trends) */
+export function captureMetricsSnapshot(member?: string | null): Promise<MetricsSnapshotResponse> {
+  return apiClient.post<MetricsSnapshotResponse>(memberPath(member, '/metrics/snapshot'))
 }
 
 /** GET /metrics/trends — Query historical metrics */
@@ -2077,7 +2077,7 @@ export function proxmoxVmAction(node: string, type: ProxmoxGuestType, vmid: numb
   return apiClient.post<ProxmoxActionResponse>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}/${action}`, {}, 60000)
 }
 
-/** POST /proxmox/vms/:node/qemu/:vmid/balloon — give a VM a memory balloon (floor: half its memory) so Proxmox reports the guest's real use and can reclaim idle memory; takes effect at the next boot */
+/** POST /proxmox/vms/:node/qemu/:vmid/balloon — give a VM a memory balloon (floor: its memory minus a quarter, at most 512 MB — three quarters or more stay with the guest) so Proxmox reports the guest's real use and can reclaim idle memory; takes effect at the next boot */
 export function proxmoxVmBalloon(node: string, vmid: number): Promise<ProxmoxBalloonResponse> {
   return apiClient.post<ProxmoxBalloonResponse>(`/proxmox/vms/${encodeURIComponent(node)}/qemu/${vmid}/balloon`, {}, 60000)
 }
@@ -2224,6 +2224,12 @@ export function checkFleetImageRegistry(): Promise<FleetImagesCheckResponse> {
 /** GET /fleet/templates — the DCS templates the hub baked (a full clone of one is a 25-second build) */
 export function fetchFleetTemplates(): Promise<FleetTemplatesResponse> {
   return apiClient.get<FleetTemplatesResponse>('/fleet/templates')
+}
+
+/** POST /fleet/templates — bake a DCS template from a cloud image without building a VM: the VM settings (node, storage,
+ *  network, image | image_url | image_file) and no vms; the answer lists the one bake job */
+export function bakeFleetTemplate(body: Omit<FleetProvisionRequest, 'vms'>): Promise<FleetProvisionResponse> {
+  return apiClient.post<FleetProvisionResponse>('/fleet/templates', body, 60000)
 }
 
 /** DELETE /fleet/templates/{vmid} — remove a baked template with its VM */

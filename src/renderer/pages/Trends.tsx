@@ -319,8 +319,9 @@ export default function Trends() {
   const handleCaptureSnapshot = useCallback(async () => {
     setCapturing(true)
     try {
-      await captureMetricsSnapshot()
-      addToast({ type: 'success', message: 'Snapshot captured' })
+      // a VM's trends are its own: the snapshot is taken there, through the hub (like the trends shown)
+      await captureMetricsSnapshot(trendsMember)
+      addToast({ type: 'success', message: trendsMember ? `Snapshot captured on ${scopeName}` : 'Snapshot captured' })
       // Refresh trends data after capturing
       setTimeout(() => refresh(), 500)
     } catch (err) {
@@ -328,7 +329,7 @@ export default function Trends() {
     } finally {
       setCapturing(false)
     }
-  }, [refresh, addToast])
+  }, [refresh, addToast, trendsMember, scopeName])
 
   // Manual refresh (also performs a one-time fetch when autoRefresh is off)
   const handleRefresh = useCallback(() => {
