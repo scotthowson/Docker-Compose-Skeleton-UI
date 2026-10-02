@@ -3809,6 +3809,71 @@ export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: s
 export interface StackPushResponse { success: boolean; stack: string; member: string; member_name: string; pushed: number; message: string }
 /** POST /stacks/:name/pull — the VM's files into the hub's Stacks/<name>/, file for file (the copy replaced is kept in the compose history) */
 export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
+/** One step of sharing or removing a host folder (GET /fleet/members/:id/folders?op=1) */
+export interface HostFolderStep { id: string; label: string; state: 'pending' | 'running' | 'done' | 'failed' | 'skipped'; detail: string }
+/** The steps under way for a VM's host folders, or the last ones */
+export interface HostFolderOperation {
+  id: string
+  action: 'add' | 'remove'
+  folder: string
+  state: 'running' | 'done' | 'failed'
+  error: string
+  note: string
+  by?: string
+  started_at: number
+  updated_at: number
+  finished_at?: number
+  steps: HostFolderStep[]
+}
+/** A container of the VM that binds a host folder (from the hub's copy of the stack's compose file) */
+export interface HostFolderUser { stack: string; service: string; source: string; target: string; readonly: boolean }
+/** A folder of the Proxmox host a VM was given (a virtiofs device of the VM) */
+export interface HostFolder {
+  /** the mapping's name on Proxmox, and the tag the VM mounts */
+  id: string
+  slot: string
+  /** the folder on the Proxmox host */
+  host_path: string
+  /** the device is on the VM's configuration and appears at its next full restart */
+  pending: boolean
+  /** the device goes away at the VM's next full restart */
+  removing: boolean
+  /** where the VM mounts it ('' = nowhere yet) */
+  mount: string
+  mounted: boolean
+  in_fstab: boolean
+  /** the running VM sees the device */
+  in_vm: boolean
+  readonly: boolean
+  used_by: HostFolderUser[]
+}
+/** GET /fleet/members/:id/folders — the folders of the Proxmox host a VM of the fleet has, what the token may do, what can be shared */
+export interface MemberFolders {
+  member: string
+  member_name: string
+  /** false: not a Proxmox VM the hub knows (reason says why) */
+  supported: boolean
+  reason?: string
+  vmid?: number
+  node?: string
+  vm_status?: string
+  can?: { list: boolean; create: boolean; attach: boolean }
+  missing?: string[]
+  /** what to do when the token lacks a permission ('' = nothing) */
+  hint?: string
+  vm_reached?: boolean
+  vm_sudo?: boolean
+  restart_needed?: boolean
+  /** the directory mappings Proxmox has for the VM's node */
+  mappings: { id: string; path: string; description: string }[]
+  /** starting points for a path: the host's directory storages and ZFS pools */
+  suggestions: string[]
+  stacks?: string[]
+  /** the services of each of the VM's stacks */
+  services?: Record<string, string[]>
+  folders: HostFolder[]
+  operation: HostFolderOperation | null
+}
 /** GET /stacks/:name/appdata — where a stack's App-Data is. A VM's stack on a hub: Stacks/<name>/VM-App-Data on the hub is a live view of the VM's App-Data (a mount over the hub's ssh key), with whether it is mounted and why not */
 export interface StackAppDataStatus {
   stack: string

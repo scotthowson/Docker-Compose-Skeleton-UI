@@ -17,7 +17,7 @@ import {
   RotateCcw, Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
   Satellite, Link2, KeyRound, Radar, Rocket, MoreHorizontal, PlugZap, Pencil, Trash2, Layers, ExternalLink, Home,
-  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp, FolderSync,
+  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp, FolderSync, FolderInput,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -42,6 +42,7 @@ import { Sheet, MATCH_LABEL, hostOf, TONE_ATTN, inputCls, labelCls } from '../co
 import { FleetJobCard, JobsSummary, orderJobs } from '../components/fleet/FleetJobsPanel'
 import NewVmSheet, { CapabilityNote, settingsFromDefaults, loadVmSettings, osLabel } from '../components/fleet/NewVmSheet'
 import VmCapsule from '../components/fleet/VmCapsule'
+import HostFoldersSheet from '../components/fleet/HostFoldersSheet'
 import PageHeader from '../components/common/PageHeader'
 import { pageLabel } from '../constants/pageTitles'
 import {
@@ -576,6 +577,8 @@ interface VmRowProps {
   onAction: (vm: ProxmoxVm, a: ProxmoxVmAction) => void
   onStackAction: (m: FleetMemberBase, stack: string, a: StackAct) => void
   onDeploy: (m: FleetMemberBase) => void
+  /** the folders of the Proxmox host this VM has (a hub's member VM) */
+  onFolders: (m: FleetMemberBase) => void
   onLink: (p: MemberSheetPrefill) => void
   onMemberMenu: (m: FleetMemberBase) => void
   onDetails: (vm: ProxmoxVm) => void
@@ -666,7 +669,7 @@ function ContainersBlock({ vm, member, live, isAdmin, busyKey, expanded, onToggl
 // (e) the containers (a member only; folded to one line), (f) the actions on the bottom edge. The grid stretches
 // the cards of a row to the tallest, so the actions line up.
 function VmCard(p: VmRowProps) {
-  const { vm, isAdmin, isHub, member, live, scan, busyKey, pveUrl, expanded, onToggleExpand, onAction, onStackAction, onDeploy, onLink, onMemberMenu, onDetails, onOpen } = p
+  const { vm, isAdmin, isHub, member, live, scan, busyKey, pveUrl, expanded, onToggleExpand, onAction, onStackAction, onDeploy, onFolders, onLink, onMemberMenu, onDetails, onOpen } = p
   const acts = actionsFor(vm)
   const running = vm.status === 'running'
   return (
@@ -715,6 +718,7 @@ function VmCard(p: VmRowProps) {
         {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} labeled={a === 'start' || a === 'resume'} />)}
         <span className="flex-1" />
         {member && isAdmin && <Hint label="Deploy a template into this VM"><button type="button" onClick={() => onDeploy(member)} aria-label="Deploy a template into this VM" className={`${BTN_ICON} ${TONE_OK}`}><Rocket size={14} /></button></Hint>}
+        {member && isAdmin && isHub && vm.type === 'qemu' && <Hint label="Host folders: give this VM a folder of the Proxmox host (media for Jellyfin, Sonarr, Radarr)"><button type="button" onClick={() => onFolders(member)} aria-label={`Host folders of ${member.name}`} className={BTN_ICON_QUIET}><FolderInput size={14} /></button></Hint>}
         {/* the two outbound links stay in the details sheet on a phone, where the row would wrap */}
         {member && member.identity?.dashboard !== false && <Hint label="Its own dashboard (port 3000)"><a aria-label="Its own dashboard (port 3000)" href={member.url.replace(/:\d+$/, ':3000')} target="_blank" rel="noreferrer" className={`${BTN_ICON_QUIET} hidden sm:flex`}><LayoutDashboard size={14} /></a></Hint>}
         {pveUrl && <Hint label="Open in Proxmox"><a aria-label="Open in Proxmox" href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={`${BTN_ICON_QUIET} hidden sm:flex`}><ExternalLink size={14} /></a></Hint>}
@@ -761,7 +765,7 @@ function MiniMeter({ pct, text, note, hostView, onHostView }: { pct: number; tex
 }
 
 function VmTableRow(p: VmRowProps) {
-  const { vm, isAdmin, isHub, member, live, scan, pveUrl, onAction, onDeploy, onLink, onMemberMenu, onDetails, showNode = true } = p
+  const { vm, isAdmin, isHub, member, live, scan, pveUrl, onAction, onDeploy, onFolders, onLink, onMemberMenu, onDetails, showNode = true } = p
   const acts = actionsFor(vm)
   const running = vm.status === 'running'
   const th = 'px-3 py-2 align-middle'
@@ -796,6 +800,7 @@ function VmTableRow(p: VmRowProps) {
         <div className="flex items-center justify-end gap-1">
           {isAdmin && acts.map((a) => <ActionButton key={a} a={a} onClick={() => onAction(vm, a)} small />)}
           {member && isAdmin && <Hint label="Deploy a template into this VM"><button aria-label="Deploy a template into this VM" type="button" onClick={() => onDeploy(member)} className={`${BTN_ICON_SM} ${TONE_OK}`}><Rocket size={12} /></button></Hint>}
+          {member && isAdmin && isHub && vm.type === 'qemu' && <Hint label="Host folders: give this VM a folder of the Proxmox host"><button aria-label={`Host folders of ${member.name}`} type="button" onClick={() => onFolders(member)} className={BTN_ICON_SM_QUIET}><FolderInput size={12} /></button></Hint>}
           {pveUrl && <Hint label="Open in Proxmox"><a aria-label="Open in Proxmox" href={proxmoxLink(pveUrl, vm)} target="_blank" rel="noreferrer" className={BTN_ICON_SM_QUIET}><ExternalLink size={12} /></a></Hint>}
           <Hint label="Details, memory and ballooning"><button aria-label="Details" type="button" onClick={() => onDetails(vm)} className={BTN_ICON_SM_QUIET}><Info size={12} /></button></Hint>
           {member && isAdmin && <Hint label={`Manage ${member.name}`}><button aria-label={`Manage ${member.name}`} type="button" onClick={() => onMemberMenu(member)} className={BTN_ICON_SM_QUIET}><MoreHorizontal size={12} /></button></Hint>}
@@ -1097,6 +1102,7 @@ export default function Proxmox() {
   const [adding, setAdding] = useState<MemberSheetPrefill | null>(null)
   const [editing, setEditing] = useState<FleetMemberBase | null>(null)
   const [menu, setMenu] = useState<FleetMemberBase | null>(null)
+  const [foldersOf, setFoldersOf] = useState<FleetMemberBase | null>(null)
   const [details, setDetails] = useState<{ node: string; type: ProxmoxVm['type']; vmid: number } | null>(null)
   // a paused VM: Proxmox's list keeps saying "running" — the open details sheet reads the QEMU state and reports it here,
   // so that guest's card shows "paused" (and offers Resume) while the sheet knows it
@@ -1177,7 +1183,7 @@ export default function Proxmox() {
     return {
       vm, isAdmin, isHub: isHub || role === 'standalone', member: m, live: m ? liveById.get(m.id) : undefined, scan: scanByVm.get(vm.vmid), isSelf: !!pveSelf.data?.guest && pveSelf.data.guest.vmid === vm.vmid && pveSelf.data.guest.node === vm.node, busyKey, pveUrl,
       expanded: !!openCards[vm.vmid], onToggleExpand: () => toggleCard(vm.vmid),
-      onAction: (v, a) => setPending({ vm: v, action: a }), onStackAction: stackAction, onDeploy: deployTo, onLink: (p) => setAdding(p), onMemberMenu: (mm) => setMenu(mm),
+      onAction: (v, a) => setPending({ vm: v, action: a }), onStackAction: stackAction, onDeploy: deployTo, onLink: (p) => setAdding(p), onMemberMenu: (mm) => setMenu(mm), onFolders: (mm) => setFoldersOf(mm),
       onDetails: (v) => setDetails({ node: v.node, type: v.type, vmid: v.vmid }), onOpen: openStack, showNode: multiNode,
     }
   }
@@ -1414,6 +1420,7 @@ export default function Proxmox() {
       )}
       {adding && <MemberSheet prefill={adding} vms={vms.data?.vms ?? []} onClose={() => setAdding(null)} onSaved={(m) => { setAdding(null); addToast({ type: 'success', message: `${m.name} joined the fleet` }); refreshFleet() }} />}
       {editing && <MemberSheet member={editing} vms={vms.data?.vms ?? []} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); addToast({ type: 'success', message: `${m.name} saved` }); refreshFleet() }} />}
+      {foldersOf && <HostFoldersSheet member={foldersOf} onClose={() => { setFoldersOf(null); refreshFleet() }} />}
       {menu && <MemberMenuSheet member={menu} vms={vms.data?.vms ?? []} onClose={() => setMenu(null)} onEdit={() => { setEditing(menu); setMenu(null) }} onChanged={refreshFleet} />}
       {newVm !== null && <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} initialStack={newVm} onClose={() => setNewVm(null)} onQueued={() => { addToast({ type: 'success', message: 'The VM is being built — follow it on the card' }); refreshFleet() }} onBaked={(image) => { addToast({ type: 'success', message: `Baking a DCS template from ${image} — follow it on the card` }); refreshFleet(); templates.refresh() }} />}
     </div>

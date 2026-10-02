@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -2173,6 +2173,32 @@ export function updateFleetMember(id: string, body: { name?: string; url?: strin
 /** DELETE /fleet/members/:id — forget a member; destroy=true also stops and destroys its VM on Proxmox */
 export function removeFleetMember(id: string, destroy = false): Promise<{ success: boolean; id: string; vm_destroyed?: boolean }> {
   return apiClient.delete<{ success: boolean; id: string; vm_destroyed?: boolean }>(`/fleet/members/${encodeURIComponent(id)}${destroy ? '?destroy=true' : ''}`)
+}
+
+/** GET /fleet/members/:id/folders — The folders of the Proxmox host this VM has (virtiofs), where it mounts them, which containers use them, what could be shared (admin) */
+export function fetchMemberFolders(id: string): Promise<MemberFolders> {
+  return apiClient.get<MemberFolders>(`/fleet/members/${encodeURIComponent(id)}/folders`)
+}
+/** GET /fleet/members/:id/folders?op=1 — Only the steps under way (cheap: asks neither Proxmox nor the VM) */
+export function fetchMemberFolderOperation(id: string): Promise<{ operation: HostFolderOperation | null }> {
+  return apiClient.get<{ operation: HostFolderOperation | null }>(`/fleet/members/${encodeURIComponent(id)}/folders?op=1`)
+}
+/** POST /fleet/members/:id/folders — Share a folder of the Proxmox host with the VM; answers at once, the steps follow */
+export function shareMemberFolder(id: string, body: { name: string; path?: string; mount?: string; readonly?: boolean; restart?: boolean }): Promise<{ success: boolean; started: boolean; folder: string; mount: string; operation: HostFolderOperation | null }> {
+  return apiClient.post(`/fleet/members/${encodeURIComponent(id)}/folders`, body)
+}
+/** DELETE /fleet/members/:id/folders/:name — Take a shared folder from the VM (nothing is deleted on the host) */
+export function removeMemberFolder(id: string, name: string, opts: { restart?: boolean; mapping?: boolean } = {}): Promise<{ success: boolean; started: boolean; folder: string; operation: HostFolderOperation | null }> {
+  const q = [opts.restart === false ? 'restart=false' : '', opts.mapping ? 'mapping=true' : ''].filter(Boolean).join('&')
+  return apiClient.delete(`/fleet/members/${encodeURIComponent(id)}/folders/${encodeURIComponent(name)}${q ? `?${q}` : ''}`)
+}
+/** POST /fleet/members/:id/folders/:name/mount — Mount a folder the VM has, in the VM, now; restarts the stacks that use it */
+export function mountMemberFolder(id: string, name: string, body: { mount?: string; readonly?: boolean } = {}): Promise<{ success: boolean; folder: string; mount: string; restarted: string[]; message: string }> {
+  return apiClient.post(`/fleet/members/${encodeURIComponent(id)}/folders/${encodeURIComponent(name)}/mount`, body, 300000)
+}
+/** POST /fleet/members/:id/folders/:name/use — One volume line more on a service of the VM's stack, and the stack is started again */
+export function attachMemberFolder(id: string, name: string, body: { stack: string; service: string; target: string; subfolder?: string; readonly?: boolean; start?: boolean }): Promise<{ success: boolean; changed: boolean; stack: string; service: string; source: string; target: string; message: string }> {
+  return apiClient.post(`/fleet/members/${encodeURIComponent(id)}/folders/${encodeURIComponent(name)}/use`, body, 300000)
 }
 
 /** GET /proxmox/capabilities — what the API token may do (creating VMs needs more than power); POST with Proxmox values before they are saved */
