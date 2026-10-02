@@ -24,6 +24,7 @@ import {
 import { fetchSecretReferences } from '../api/endpoints'
 import type { SecretEntry, SecretReferencesResponse } from '../../shared/types'
 import ModalOverlay from '../components/common/ModalOverlay'
+import DashboardFeedCard from '../components/secrets/DashboardFeedCard'
 
 // Same rule as the server (.lib/secrets.sh): a compose-safe variable name.
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
@@ -389,6 +390,8 @@ export default function Secrets() {
       )}
 
       {/* Add dialog */}
+      {/* the token a dashboard that cannot sign in reads the server with (this server's own; not a VM's) */}
+      {isAdmin && !scopeMember && <DashboardFeedCard />}
       {showAddModal && createPortal(
         <ModalOverlay onClose={closeAdd} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeAdd}>
           <div className="glass rounded-2xl p-6 w-full max-w-md mx-4 max-h-[92vh] overflow-y-auto border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>

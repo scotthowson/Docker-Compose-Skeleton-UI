@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -2175,6 +2175,12 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
   return apiClient.delete<{ success: boolean; id: string; vm_destroyed?: boolean }>(`/fleet/members/${encodeURIComponent(id)}${destroy ? '?destroy=true' : ''}`)
 }
 
+/** GET /feed/status — The dashboard feed: on or off, and its two addresses (admin) */
+export function fetchDashboardFeedStatus(): Promise<DashboardFeedStatus> { return apiClient.get<DashboardFeedStatus>('/feed/status') }
+/** POST /feed/token — Switch the dashboard feed on with a new token; the token is answered once (admin) */
+export function createDashboardFeedToken(): Promise<{ success: boolean; token: string; message: string }> { return apiClient.post('/feed/token', {}) }
+/** DELETE /feed/token — Switch the dashboard feed off (admin) */
+export function deleteDashboardFeedToken(): Promise<{ success: boolean; enabled: boolean }> { return apiClient.delete('/feed/token') }
 /** GET /fleet/members/:id/folders — The folders of the Proxmox host this VM has (virtiofs), where it mounts them, which containers use them, what could be shared (admin) */
 export function fetchMemberFolders(id: string): Promise<MemberFolders> {
   return apiClient.get<MemberFolders>(`/fleet/members/${encodeURIComponent(id)}/folders`)

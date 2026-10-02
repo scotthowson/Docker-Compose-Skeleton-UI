@@ -3809,6 +3809,8 @@ export interface FleetLeaveResponse { success: boolean; hub_url: string; hint: s
 export interface StackPushResponse { success: boolean; stack: string; member: string; member_name: string; pushed: number; message: string }
 /** POST /stacks/:name/pull — the VM's files into the hub's Stacks/<name>/, file for file (the copy replaced is kept in the compose history) */
 export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
+/** GET /feed/status — the dashboard feed: a read-only token for dashboards that cannot sign in */
+export interface DashboardFeedStatus { enabled: boolean; summary_url: string; crowdsec_url: string; auth: string }
 /** One step of sharing or removing a host folder (GET /fleet/members/:id/folders?op=1) */
 export interface HostFolderStep { id: string; label: string; state: 'pending' | 'running' | 'done' | 'failed' | 'skipped'; detail: string }
 /** The steps under way for a VM's host folders, or the last ones */
