@@ -7,7 +7,7 @@ import React, { useState, useEffect, useCallback, useRef, createContext, useCont
 import { Switch as MantineSwitch } from '@mantine/core'
 import {
   Cog, Info, HardDrive, Pencil, Check, X, Trash2,
-  Keyboard, Timer, Image, Sun, Moon, Palette, Eye,
+  Keyboard, Timer, Image, Sun, Moon, Palette, Eye, TerminalSquare,
   Monitor, Shield, Lock, User, UserCircle, Mail,
   Camera, Save, Key, AlertTriangle, XCircle, Plus, FolderPlus,
   Download, Upload, Bell, BellOff, Clock, LockKeyhole,
@@ -18,6 +18,7 @@ import { isMobile as isMobileDevice } from '../hooks/useMobile'
 import ConnectionForm from '../components/settings/ConnectionForm'
 import AppSettingsForm from '../components/settings/AppSettings'
 import ThemesPanel from '../components/settings/ThemesPanel'
+import WebTerminalCard from '../components/settings/WebTerminalCard'
 import { useSystemMode } from '../lib/colorMode'
 import { CSS_SANITIZE_NOTE } from '../lib/cssSanitize'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -2637,6 +2638,16 @@ export default function Settings() {
         )}
 
         </div>
+        {/* Web terminal — admin only: a real terminal on the server, behind Authelia */}
+        {isAdmin && (
+          <SectionCard
+            icon={<TerminalSquare size={16} className="accent-text" />}
+            title="Web terminal"
+            fullWidth
+          >
+            <WebTerminalCard />
+          </SectionCard>
+        )}
         {/* Themes — everyone picks their own; admins set the one every dashboard follows */}
         <SectionCard
           icon={<Palette size={16} className="accent-text" />}

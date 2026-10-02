@@ -3811,6 +3811,13 @@ export interface StackPushResponse { success: boolean; stack: string; member: st
 export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
 /** GET /feed/status — the dashboard feed: a read-only token for dashboards that cannot sign in */
 export interface DashboardFeedStatus { enabled: boolean; summary_url: string; crowdsec_url: string; auth: string }
+/** GET /terminal/web — the web terminal: a real terminal on the server in a browser tab, always behind Authelia */
+export interface WebTerminalStatus {
+  deployed: boolean; stack: string; state: string; running: boolean; url: string; protected: boolean; key_installed: boolean
+  user: string; ssh_port: number; theme: Record<string, string>; font_size: number
+  requirements: { traefik_domain: boolean; authelia: boolean; ssh_keygen: boolean }
+  ready: boolean; template: string; service: string; default_stack: string
+}
 /** One step of sharing or removing a host folder (GET /fleet/members/:id/folders?op=1) */
 export interface HostFolderStep { id: string; label: string; state: 'pending' | 'running' | 'done' | 'failed' | 'skipped'; detail: string }
 /** The steps under way for a VM's host folders, or the last ones */

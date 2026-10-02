@@ -774,10 +774,15 @@ export function isThemePreviewing(): boolean {
  * palette reach the page: the light/dark class, data-theme, color-scheme (native
  * controls and scrollbars), the page colour, the meta theme-color, the stylesheet.
  */
+let appliedPalette: ThemePalette | null = null
+/** the palette the page is dressed in right now (null before the first theme is applied) */
+export function appliedThemePalette(): ThemePalette | null { return appliedPalette }
+
 export function applyTheme(theme: Theme, mode: ThemeMode): void {
   const html = document.documentElement
   const style = ensureStyle()
   const palette = themeLook(theme, mode)
+  appliedPalette = palette
   const light = mode === 'light'
   html.setAttribute('data-theme', theme.name || 'draft')
   html.classList.toggle('light', light)

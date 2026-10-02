@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -2177,6 +2177,12 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
 
 /** GET /feed/status — The dashboard feed: on or off, and its two addresses (admin) */
 export function fetchDashboardFeedStatus(): Promise<DashboardFeedStatus> { return apiClient.get<DashboardFeedStatus>('/feed/status') }
+/** GET /terminal/web — the web terminal's state (admin) */
+export function fetchWebTerminalStatus(): Promise<WebTerminalStatus> { return apiClient.get<WebTerminalStatus>('/terminal/web') }
+/** POST /terminal/web/theme — the web terminal's colours and text size; it restarts with them */
+export function setWebTerminalTheme(theme: Record<string, string>, font_size: number): Promise<{ success: boolean; message: string }> {
+  return apiClient.post('/terminal/web/theme', { theme, font_size }, 60000)
+}
 /** POST /feed/token — Switch the dashboard feed on with a new token; the token is answered once (admin) */
 export function createDashboardFeedToken(): Promise<{ success: boolean; token: string; message: string }> { return apiClient.post('/feed/token', {}) }
 /** DELETE /feed/token — Switch the dashboard feed off (admin) */
