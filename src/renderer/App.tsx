@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { Loader2, Lock } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Header } from './components/layout/Header'
-import { pageLabel } from './constants/pageTitles'
+import { pageLabel, pageMeta } from './constants/pageTitles'
 import { StatusBar } from './components/layout/StatusBar'
 import { ToastProvider } from './components/common/Toast'
 import { ConfirmDialogHost } from './components/common/ConfirmDialog'
@@ -175,6 +175,25 @@ export default function App() {
     }
     prevAuthForPageRef.current = isAuthenticated
   }, [isAuthenticated, defaultPage, setCurrentPage])
+
+  // A link to a page (https://dashboard/#/stacks, from Homarr, a bookmark, a chat message) opens that page: once signed in, and
+  // again whenever the address changes. The mark is then taken out of the address, so a later reload returns to the page
+  // you were on last rather than to the linked one.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const open = () => {
+      const m = /^#\/([a-z-]+)\/?$/.exec(window.location.hash)
+      if (!m) return
+      const page = m[1] as PageId
+      if (!(page in pageMeta) || page === 'setup') return
+      setCurrentPage(page)
+      try { window.history.replaceState(null, '', window.location.pathname + window.location.search) } catch { /* a sandboxed frame */ }
+    }
+    // after the page-after-sign-in preference, so a link wins over it
+    const t = setTimeout(open, 0)
+    window.addEventListener('hashchange', open)
+    return () => { clearTimeout(t); window.removeEventListener('hashchange', open) }
+  }, [isAuthenticated, setCurrentPage])
 
   // Load settings first, then sync server URL to the connection layer
   useEffect(() => {

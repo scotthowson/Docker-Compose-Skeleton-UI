@@ -598,6 +598,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [enableRouting, setEnableRouting] = useState(true)
   const [connectProxy, setConnectProxy] = useState(true)
   const [enableAuthelia, setEnableAuthelia] = useState(false)
+  // the sign-in default is applied once: a later status refresh (the connection blinked) must not switch it back on
+  const authDefaultApplied = useRef(false)
+  // a route's own Auth chip wins over the switch for all (null = follows the switch)
+  const authFor = useCallback((svc: { authelia: boolean | null }) => svc.authelia ?? enableAuthelia, [enableAuthelia])
   // What this install can offer per route: the Authelia middleware name and Sablier
   const [autheliaMw, setAutheliaMw] = useState('')
   const [sablierOnHub, setSablierPresent] = useState(false)
@@ -619,7 +623,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const [showAdvancedRoutes, setShowAdvancedRoutes] = useState(false)
   const [customRoutes, setCustomRoutes] = useState<Record<string, string>>({})
   // Per-service subdomain + enabled state
-  const [routeServices, setRouteServices] = useState<{ name: string; containerName: string; port: string; subdomain: string; enabled: boolean; authelia: boolean; onDemand: boolean }[]>([])
+  const [routeServices, setRouteServices] = useState<{ name: string; containerName: string; port: string; subdomain: string; enabled: boolean; authelia: boolean | null; onDemand: boolean }[]>([])
 
   // Fetch Traefik status on mount (skip for traefik template itself)
   const isConnected = useConnectionStore((s) => s.status === 'connected')
@@ -633,7 +637,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         const mw = res.authelia_middleware || ''
         setAutheliaMw(mw)
         // Authelia here: routes sit behind the portal by default, except templates whose apps bring their own clients
-        setEnableAuthelia(!!mw && template.auth !== 'bypass')
+        if (!authDefaultApplied.current) { authDefaultApplied.current = true; setEnableAuthelia(!!mw && template.auth !== 'bypass') }
         setSablierPresent(!!res.sablier)
       })
       .catch(() => {})
@@ -704,7 +708,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       // the name this app was last deployed under, when there was one: a re-deploy keeps its address
       subdomain: rememberedSubdomain(template.name, svc.name) ?? svc.name,
       enabled: true,
-      authelia: false,
+      authelia: null,
       onDemand: false,
     })))
   }, [traefikActive, traefikDomain, detail, template.name])
@@ -723,14 +727,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         containerNameFor(svc),
         svc.port,
         traefikDomain,
-        (enableAuthelia || svc.authelia) && !!autheliaMw,
+        authFor(svc) && !!autheliaMw,
         autheliaMw || 'authelia-forwardauth',
         svc.onDemand && sablierPresent,
         sablierOpts,
       )
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain, enableAuthelia, autheliaMw, sablierPresent, sablierOpts, containerNameFor])
+  }, [enableRouting, routeServices, traefikDomain, authFor, autheliaMw, sablierPresent, sablierOpts, containerNameFor])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -960,7 +964,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
     const switches: DeploySwitches | undefined = routing || routable
       ? {
           ...(routing ? {
-            authelia_services: routeServices.filter((s) => s.enabled && (s.authelia || enableAuthelia) && !!autheliaMw).map((s) => s.name),
+            authelia_services: routeServices.filter((s) => s.enabled && authFor(s) && !!autheliaMw).map((s) => s.name),
             on_demand_services: routeServices.filter((s) => s.enabled && s.onDemand && sablierPresent).map((s) => s.name),
           } : {}),
           ...(routable ? {
@@ -1613,10 +1617,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <button
                               type="button"
                               disabled={!svc.enabled}
-                              onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, authelia: !s.authelia } : s))}
-                              aria-pressed={enableAuthelia || svc.authelia}
-                              title={(enableAuthelia || svc.authelia) ? 'Protected by Authelia (click to serve without sign-in)' : 'Protect this route with Authelia sign-in'}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${(enableAuthelia || svc.authelia) ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
+                              onClick={() => setRouteServices((prev) => prev.map((s, i) => i === idx ? { ...s, authelia: !authFor(s) } : s))}
+                              aria-pressed={authFor(svc)}
+                              title={authFor(svc) ? 'Protected by Authelia (click to serve this one without sign-in)' : 'Protect this route with Authelia sign-in'}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all shrink-0 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${authFor(svc) ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'}`}
                             >
                               <Shield size={9} /> Auth
                             </button>
@@ -1744,7 +1748,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <Shield size={12} className="text-slate-500" />
                       <span className="text-[11px] text-slate-400">Protect with <span className="text-slate-200 font-medium">Authelia</span> SSO</span>
                     </div>
-                    <Switch size="sm" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => setEnableAuthelia(!enableAuthelia)} className="shrink-0" />
+                    <Switch size="sm" aria-label="Protect with Authelia SSO" checked={enableAuthelia} onChange={() => { setEnableAuthelia(!enableAuthelia); setRouteServices((prev) => prev.map((s) => ({ ...s, authelia: null }))) }} className="shrink-0" />
                   </div>
                 </div>
               )}
