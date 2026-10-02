@@ -3814,6 +3814,8 @@ export interface DashboardFeedStatus { enabled: boolean; summary_url: string; cr
 /** GET /terminal/web — the web terminal: a real terminal on the server in a browser tab, always behind Authelia */
 export interface WebTerminalStatus {
   deployed: boolean; stack: string; state: string; running: boolean; url: string; protected: boolean; key_installed: boolean
+  /** the pages that may show the terminal in a frame (a Homarr card); missing on a server before 4.0.16 */
+  embed_origins?: string[]
   user: string; ssh_port: number; theme: Record<string, string>; font_size: number
   requirements: { traefik_domain: boolean; authelia: boolean; ssh_keygen: boolean }
   ready: boolean; template: string; service: string; default_stack: string

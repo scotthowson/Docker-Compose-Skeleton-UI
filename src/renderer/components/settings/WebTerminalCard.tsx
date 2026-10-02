@@ -7,10 +7,10 @@
 // =============================================================================
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { TerminalSquare, ExternalLink, Loader2, Power, Palette, ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
+import { TerminalSquare, ExternalLink, Loader2, Power, Palette, ShieldCheck, ShieldAlert, Check, X, AppWindow } from 'lucide-react'
 import { useToast } from '../common/Toast'
 import { useConfirm } from '../common/ConfirmDialog'
-import { fetchWebTerminalStatus, setWebTerminalTheme, deployTemplate, undeployTemplate } from '../../api/endpoints'
+import { fetchWebTerminalStatus, setWebTerminalTheme, setWebTerminalEmbed, deployTemplate, undeployTemplate } from '../../api/endpoints'
 import type { WebTerminalStatus } from '../../../shared/types'
 import { BTN_CARD, BTN_CARD_QUIET, TONE_OK, TONE_DANGER } from '../../lib/ui'
 import { appliedThemePalette } from '../../lib/themeEngine'
@@ -48,6 +48,7 @@ export default function WebTerminalCard() {
   const [missing, setMissing] = useState(false)   // a server from before the web terminal existed
   const [busy, setBusy] = useState('')
   const [size, setSize] = useState(15)
+  const [origin, setOrigin] = useState('')
 
   const load = useCallback(() => {
     fetchWebTerminalStatus().then((s) => { setStatus(s); setSize(s.font_size || 15); setMissing(false) }).catch(() => setMissing(true))
@@ -80,6 +81,19 @@ export default function WebTerminalCard() {
     setBusy('look')
     try { const r = await setWebTerminalTheme(terminalThemeFromPalette(), size); addToast({ type: 'success', message: r.message }); load() }
     catch (e) { fail(e, 'Could not change the look') } finally { setBusy('') }
+  }
+
+  const embeds = status.embed_origins ?? []
+  const embed = async (next: string[]) => {
+    setBusy('embed')
+    try { const r = await setWebTerminalEmbed(next); addToast({ type: 'success', message: r.message }); setOrigin(''); load() }
+    catch (e) { fail(e, 'Could not change which pages may show the terminal') } finally { setBusy('') }
+  }
+  const addOrigin = () => {
+    // an address as people paste it (with a path, a trailing slash) becomes its origin
+    let o = origin.trim()
+    try { o = new URL(/^https?:\/\//i.test(o) ? o : `https://${o}`).origin } catch { addToast({ type: 'error', message: 'That is not an address (https://dash.example.com)' }); return }
+    if (!embeds.includes(o)) void embed([...embeds, o])
   }
 
   const t = status.theme || {}
@@ -140,6 +154,33 @@ export default function WebTerminalCard() {
             {busy === 'look' ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />} Match this dashboard's theme
           </button>
           {status.url && <code className="text-[11px] font-mono text-slate-400 truncate min-w-0">{status.url}</code>}
+        </div>
+      )}
+
+      {status.deployed && status.embed_origins !== undefined && (
+        <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 space-y-2">
+          <p className="text-xs text-slate-300 flex items-center gap-2"><AppWindow size={12} className="accent-text" /> Show it inside another page</p>
+          <p className="text-[11px] text-slate-500">
+            A card on a Homarr board shows the terminal in a frame, and browsers only allow that for the pages named here. Authelia stays in front:
+            the card shows the terminal to a browser that is signed in, and stays empty for one that is not (open the terminal once in a tab to sign in).
+          </p>
+          {embeds.length > 0 && (
+            <ul className="space-y-1">
+              {embeds.map((o) => (
+                <li key={o} className="flex items-center gap-2 text-xs">
+                  <code className="font-mono text-slate-300 truncate min-w-0 flex-1">{o}</code>
+                  <button type="button" aria-label={`Stop ${o} showing the terminal`} disabled={!!busy} className={BTN_CARD_QUIET} onClick={() => void embed(embeds.filter((x) => x !== o))}><X size={12} /> Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form className="flex items-center gap-2 flex-wrap" onSubmit={(e) => { e.preventDefault(); addOrigin() }}>
+            <input type="text" value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="https://dash.example.com" aria-label="The page that may show the terminal"
+              className="flex-1 min-w-[14rem] rounded-md bg-black/20 border border-white/10 px-2 py-1 text-xs text-slate-200 font-mono" />
+            <button type="submit" disabled={!!busy || !origin.trim() || embeds.length >= 4} className={`${BTN_CARD} ${TONE_OK}`}>
+              {busy === 'embed' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Allow this page
+            </button>
+          </form>
         </div>
       )}
     </div>

@@ -2179,6 +2179,10 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
 export function fetchDashboardFeedStatus(): Promise<DashboardFeedStatus> { return apiClient.get<DashboardFeedStatus>('/feed/status') }
 /** GET /terminal/web — the web terminal's state (admin) */
 export function fetchWebTerminalStatus(): Promise<WebTerminalStatus> { return apiClient.get<WebTerminalStatus>('/terminal/web') }
+/** POST /terminal/web/embed — the pages that may show the web terminal in a frame; an empty list takes the permission away */
+export function setWebTerminalEmbed(origins: string[]): Promise<{ success: boolean; embed_origins: string[]; message: string }> {
+  return apiClient.post('/terminal/web/embed', { origins }, 30000)
+}
 /** POST /terminal/web/theme — the web terminal's colours and text size; it restarts with them */
 export function setWebTerminalTheme(theme: Record<string, string>, font_size: number): Promise<{ success: boolean; message: string }> {
   return apiClient.post('/terminal/web/theme', { theme, font_size }, 60000)
