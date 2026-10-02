@@ -4,7 +4,7 @@
 
 import {
   Play, Square, RotateCcw, Download, Loader2, Box,
-  AlertTriangle, Tag, Pencil, Check, Shield, Trash2, Clock,
+  AlertTriangle, Tag, Pencil, Check, Shield, Trash2, Clock, Server,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useStackStore } from '../../stores/stackStore'
@@ -30,6 +30,8 @@ interface Props {
   onAction: (stackName: string, action: 'start' | 'stop' | 'restart' | 'update') => void
   onSelect: (stackName: string) => void
   onEdit?: (stackName: string) => void
+  /** a hub: this stack runs on the hub itself and can move into a VM of its own, with its data */
+  onMoveToVm?: (stackName: string) => void
   onDelete?: (stackName: string) => void
   batchMode?: boolean
   isSelected?: boolean
@@ -54,7 +56,7 @@ const priorityConfig = {
   low: { label: 'Low', color: 'text-slate-500', bg: 'bg-slate-500/10 border-slate-500/20', icon: Tag },
 }
 
-export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onDelete, batchMode, isSelected, onToggleSelect, matchedContainers, isAdmin = false }: Props) {
+export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onMoveToVm, onDelete, batchMode, isSelected, onToggleSelect, matchedContainers, isAdmin = false }: Props) {
   const isRunning = stack.status === 'running'
   const lastActionTimestamps = useStackStore((s) => s.lastActionTimestamps)
   const lastAction = lastActionTimestamps[stack.name]
@@ -204,6 +206,18 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
 
           <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-1.5">
+            {!batchMode && onMoveToVm && (
+              <Hint label="Move this stack into a Proxmox VM of its own, with its data">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMoveToVm(stack.name) }}
+                  aria-label={`Move ${stack.name} into a VM`}
+                  className={`${BTN_CARD_QUIET} text-violet-300 hover:bg-violet-500/10`}
+                >
+                  <Server size={12} />
+                  <span className="hidden xl:inline">To a VM</span>
+                </button>
+              </Hint>
+            )}
             {!batchMode && onEdit && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(stack.name) }}

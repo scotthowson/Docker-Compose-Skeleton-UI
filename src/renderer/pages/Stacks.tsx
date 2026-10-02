@@ -51,6 +51,7 @@ export default function Stacks() {
   // a hub: the VMs are the stacks — the page reads "VMs", builds new ones and follows the builds
   const { isHub: hubMode } = useFleetRole()
   const [showNewVm, setShowNewVm] = useState(false)
+  const [moveStack, setMoveStack] = useState<string | null>(null)   // a hub stack on its way into a VM
   const jobs = usePolling(fetchFleetJobs, 5000, { enabled: isConnected && hubMode })
   const provDefaults = usePolling(fetchFleetProvisionDefaults, 60000, { enabled: isConnected && hubMode })
   const caps = usePolling(fetchProxmoxCapabilities, 60000, { enabled: isConnected && hubMode })
@@ -377,8 +378,15 @@ export default function Stacks() {
           onToggleBatchMode={handleToggleBatchMode}
           isAdmin={isAdmin}
           hubMode={hubMode}
+          onMoveToVm={hubMode ? (name) => setMoveStack(name) : undefined}
         />
         </>
+      )}
+
+      {/* a hub: one of its own stacks moves into a VM, with what it holds */}
+      {moveStack !== null && (
+        <NewVmSheet defaults={provDefaults.data ?? null} caps={caps.data ?? null} moveStack={moveStack} onClose={() => setMoveStack(null)}
+          onQueued={() => { setMoveStack(null); addToast({ type: 'success', message: `${moveStack} is moving into its VM — follow it on the card` }); jobs.refresh() }} />
       )}
 
       {/* a hub: a new stack is a new VM */}

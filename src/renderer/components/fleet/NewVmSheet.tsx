@@ -9,8 +9,8 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Select, Switch, type ComboboxItem, type ComboboxParsedItem, type OptionsFilter } from '@mantine/core'
 import { Check, Layers, Loader2, Rocket, Server } from 'lucide-react'
-import { fetchFleetProvisionDefaults, provisionFleet, bakeFleetTemplate } from '../../api/endpoints'
-import type { FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
+import { fetchFleetProvisionDefaults, provisionFleet, bakeFleetTemplate, fetchFleetMoveCheck } from '../../api/endpoints'
+import type { FleetMoveCheck, FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
 import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
 import { VmSizeControl } from './VmSizeControl'
 import { isMobile } from '../../hooks/useMobile'
@@ -237,11 +237,27 @@ interface Props {
   /** given: the sheet also offers "Bake only" — a DCS template from the chosen cloud image, no VM (the image's name for the toast) */
   onBaked?: (image: string) => void
   initialStack?: string
+  /** given: the sheet moves this stack of the hub into the VM with what it holds (its name is fixed) */
+  moveStack?: string
 }
 
-export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked, initialStack = '' }: Props) {
+const sizeOfKb = (kb: number) => (kb >= 1048576 ? `${(kb / 1048576).toFixed(1)} GB` : kb >= 1024 ? `${Math.round(kb / 1024)} MB` : `${kb} KB`)
+
+export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked, initialStack = '', moveStack }: Props) {
   const uid = useId()
-  const [stack, setStack] = useState(initialStack)
+  const moving = !!moveStack
+  const [stack, setStack] = useState(moveStack || initialStack)
+  // a move: what the stack holds, read once when the sheet opens
+  const [check, setCheck] = useState<FleetMoveCheck | null>(null)
+  const [checkErr, setCheckErr] = useState('')
+  useEffect(() => {
+    if (!moveStack) return
+    let alive = true
+    fetchFleetMoveCheck(moveStack)
+      .then((c) => { if (alive) { setCheck(c); setDiskGb((d) => Math.max(d, c.suggested_disk_gb)) } })
+      .catch((e) => { if (alive) setCheckErr(e instanceof Error ? e.message : 'Could not read what the stack holds') })
+    return () => { alive = false }
+  }, [moveStack])
   const [cores, setCores] = useState(defaults?.defaults.cores ?? 2)
   const [memGb, setMemGb] = useState(Math.round((defaults?.defaults.memory_mb ?? 4096) / 1024))
   const [diskGb, setDiskGb] = useState(defaults?.defaults.disk_gb ?? 32)
@@ -250,7 +266,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   useEffect(() => { if (defaults) setSettings((s) => (s.node ? s : settingsFromDefaults(defaults, loadVmSettings()))) }, [defaults])
-  const ok = /^[a-z0-9][a-z0-9-]{0,40}$/.test(stack) && settings.node && settings.storage && settings.gateway && (ip || settings.ip_start)
+  const ok = /^[a-z0-9][a-z0-9-]{0,40}$/.test(stack) && settings.node && settings.storage && settings.gateway && (ip || settings.ip_start) && !(moving && check?.earlier_vm)
   // a template is baked from a cloud image alone: a DCS image needs none, a baked template is one, an installer cannot be
   const bakeable = !!onBaked && !settings.os.startsWith('iso:') && !settings.os.startsWith('tpl:') && !settings.os.startsWith('cat:dcs-') && (settings.os !== 'url' || /^https?:\/\//.test(settings.image_url))
   const okBake = bakeable && settings.node && settings.storage && settings.gateway && settings.ip_start
@@ -258,6 +274,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
     setErr(''); setBusy(true)
     try {
       const vm: FleetVmPlan = { stack, cores, memory_mb: memGb * 1024, disk_gb: diskGb }
+      if (moving) vm.move = true
       if (ip.trim()) vm.ip = ip.trim()
       await provisionFleet({ ...vmSettingsToRequest(settings), vms: [vm] })
       saveVmSettings(settings)
@@ -275,8 +292,10 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
   }
   return (
     <Sheet
-      title="A stack in its own VM"
-      subtitle="The hub creates the VM on Proxmox, installs Docker and DCS in it and joins it; the stack then lives there"
+      title={moving ? `Move ${moveStack} into its own VM` : 'A stack in its own VM'}
+      subtitle={moving
+        ? 'The VM is built while the stack keeps running here; then the stack is stopped, its data is copied and it starts in the VM'
+        : 'The hub creates the VM on Proxmox, installs Docker and DCS in it and joins it; the stack then lives there'}
       icon={<Server size={18} />}
       onClose={busy ? () => {} : onClose}
       wide
@@ -284,13 +303,13 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
         {err && <p role="alert" className="text-xs text-rose-300 mb-3">{err}</p>}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} disabled={busy} className={`${BTN_SHEET_QUIET} flex-1`}>Cancel</button>
-          {bakeable && (
+          {bakeable && !moving && (
             <button type="button" onClick={bakeOnly} disabled={busy || !okBake || (caps ? !caps.can_provision : false)} title="Bake a DCS template from this image now, without building a VM" className={`${BTN_SHEET_QUIET} flex-1`}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />} Bake only
             </button>
           )}
           <button type="button" onClick={submit} disabled={busy || !ok || (caps ? !caps.can_provision : false)} className={`${BTN_SHEET_PRIMARY} flex-1`}>
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Build the VM
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} {moving ? 'Move it' : 'Build the VM'}
           </button>
         </div>
       </>}
@@ -299,8 +318,37 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
         <HubFirewallNote fw={defaults?.hub_firewall} />
         <div>
           <label htmlFor={`${uid}-stack`} className={labelCls}>Stack = VM name</label>
-          <input id={`${uid}-stack`} value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono sm:max-w-xs`} disabled={busy} />
+          <input id={`${uid}-stack`} value={stack} onChange={(e) => setStack(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="media-services" className={`${inputCls} font-mono sm:max-w-xs`} disabled={busy || moving} />
         </div>
+        {moving && (
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.05] p-3 space-y-2">
+            <p className="text-xs font-medium text-violet-200">What goes with it</p>
+            {checkErr && <p role="alert" className="text-xs text-rose-300">{checkErr}</p>}
+            {!check && !checkErr && <p className="text-xs text-slate-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Reading what the stack holds…</p>}
+            {check && (
+              <>
+                <ul className="text-xs text-slate-300 space-y-0.5">
+                  {check.folders.map((f) => <li key={f.name}><span className="font-mono">{f.name}</span> · {sizeOfKb(f.kb)} in {f.files.toLocaleString()} files</li>)}
+                  {check.volumes.map((v) => <li key={v.name}>volume <span className="font-mono">{v.volume}</span> · {sizeOfKb(v.kb)} in {v.files.toLocaleString()} files</li>)}
+                  {check.folders.length + check.volumes.length === 0 && <li>No data folders or volumes: the configuration alone moves.</li>}
+                  {check.routes > 0 && <li>{check.routes} route{check.routes === 1 ? '' : 's'}: the same addresses reach it in the VM</li>}
+                </ul>
+                <p className="text-[11px] text-slate-400">
+                  Owners and permissions are kept, and every copy is counted on both sides. The hub keeps its own copy of the data, and if the stack does not come up
+                  in the VM it is started here again. {check.containers_up > 0 ? `It is down for the time of the copy (${sizeOfKb(check.data_kb)}).` : ''}
+                </p>
+                {check.outside_paths.length > 0 && (
+                  <div className="rounded-md border border-amber-500/25 bg-amber-500/[0.06] p-2">
+                    <p className="text-[11px] text-amber-200">These folders are not part of the stack and stay on this server. The VM needs them at the same path (a host folder of the Proxmox host, or a network share):</p>
+                    <ul className="mt-1 text-[11px] font-mono text-amber-100/90 space-y-0.5">{check.outside_paths.map((o) => <li key={o} className="truncate">{o}</li>)}</ul>
+                  </div>
+                )}
+                {diskGb < check.suggested_disk_gb && <p className="text-[11px] text-amber-300">The data needs a disk of at least {check.suggested_disk_gb} GB.</p>}
+                {check.earlier_vm && <p role="alert" className="text-[11px] text-rose-300">{check.earlier_vm}</p>}
+              </>
+            )}
+          </div>
+        )}
         <div>
           <p className={labelCls}>Size</p>
           <VmSizeControl value={{ cores, memGb, diskGb }} disabled={busy}

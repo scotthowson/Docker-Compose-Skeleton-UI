@@ -4046,7 +4046,16 @@ export interface FleetProvisionDefaults {
   defaults: { cores: number; memory_mb: number; disk_gb: number }
 }
 
-export interface FleetVmPlan { stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string; /** per-VM operating system, one of: */ image?: string; image_url?: string; image_file?: string; iso?: string }
+export interface FleetVmPlan { /** 4.0.21: the stack runs on the hub and goes into the VM with its folders, volumes and routes; the hub keeps its copy */ move?: boolean; stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string; /** per-VM operating system, one of: */ image?: string; image_url?: string; image_file?: string; iso?: string }
+/** GET /fleet/provision/move-check — what moving a stack of the hub into a VM takes with it */
+export interface FleetMoveCheck {
+  stack: string; containers_up: number; data_kb: number; files: number
+  folders: { name: string; kb: number; files: number }[]
+  volumes: { name: string; volume: string; kb: number; files: number }[]
+  routes: number; outside_paths: string[]; suggested_disk_gb: number; reads_as: string; note: string
+  /** a VM of that name exists from an earlier try that did not finish: what to do about it */
+  earlier_vm?: string | null
+}
 export interface FleetProvisionRequest {
   node: string
   storage: string

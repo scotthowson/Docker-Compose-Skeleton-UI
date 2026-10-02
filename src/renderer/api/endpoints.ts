@@ -42,7 +42,7 @@ import type {
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
   FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus, ApiKeyInfo, ApiKeyCreated,
-  ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
+  ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetMoveCheck, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
   NetworkDetail,
@@ -2252,6 +2252,10 @@ export function fetchFleetProvisionDefaults(pve?: { url: string; token_id: strin
   return pve ? apiClient.post<FleetProvisionDefaults>('/fleet/provision/defaults', pve, 60000) : apiClient.get<FleetProvisionDefaults>('/fleet/provision/defaults')
 }
 
+/** GET /fleet/provision/move-check — what a move of this hub stack into a VM would take with it */
+export function fetchFleetMoveCheck(stack: string): Promise<FleetMoveCheck> {
+  return apiClient.get<FleetMoveCheck>(`/fleet/provision/move-check?stack=${encodeURIComponent(stack)}`)
+}
 /** POST /fleet/provision — create one VM per stack; the jobs run in the background */
 export function provisionFleet(body: FleetProvisionRequest): Promise<FleetProvisionResponse> {
   return apiClient.post<FleetProvisionResponse>('/fleet/provision', body, 60000)

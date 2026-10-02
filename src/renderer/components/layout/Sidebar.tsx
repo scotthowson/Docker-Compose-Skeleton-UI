@@ -86,6 +86,9 @@ export const navItems: NavItem[] = [
   nav('settings', 'system'),
 ]
 
+/** the count beside a page's name; `second` is a count of another kind next to it (the stacks that live in VMs) */
+interface NavBadge { value: string; color: string; title?: string; second?: { value: string; color: string; title?: string } }
+
 export function Sidebar() {
   // a hub: the badge counts the VMs (the merged stack list), not this server's own stacks
   const { isHub } = useFleetRole()
@@ -120,7 +123,7 @@ export function Sidebar() {
   const systemItems = visibleItems.filter((i) => i.section === 'system')
 
   // Build badge data
-  const badges: Partial<Record<PageId, { value: string; color: string }>> = {}
+  const badges: Partial<Record<PageId, NavBadge>> = {}
 
   if (systemStatus) {
     const runningContainers = systemStatus.docker.containers.running + fleet.containersRunning
@@ -128,9 +131,15 @@ export function Sidebar() {
       value: `${runningContainers}`,
       color: runningContainers > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
     }
-    badges.stacks = isHub && vmStacks !== null
-      ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-500/20 text-slate-400' } // a hub counts its VMs (violet: the fleet)
-      : { value: `${systemStatus.stacks.running}`, color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400' }
+    // green: the stacks that run on this server itself; violet: the ones that live in a VM of the fleet (a hub shows both)
+    badges.stacks = {
+      value: `${systemStatus.stacks.running}`,
+      color: systemStatus.stacks.running > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400',
+      title: isHub ? `${systemStatus.stacks.running} running on this server` : undefined,
+      second: isHub && vmStacks !== null && vmStacks.total > 0
+        ? { value: `${vmStacks.total}`, color: vmStacks.up > 0 ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-500/20 text-slate-400', title: `${vmStacks.total} in VMs, ${vmStacks.up} running` }
+        : undefined,
+    }
     badges.images = {
       value: `${systemStatus.docker.images + fleet.images}`,
       color: 'bg-cyan-500/20 text-cyan-400',
@@ -332,7 +341,7 @@ function NavButton({
   item: NavItem
   isActive: boolean
   collapsed: boolean
-  badge?: { value: string; color: string }
+  badge?: NavBadge
   statusIcon?: { icon: React.ElementType; color: string; title: string }
   onClick: () => void
 }) {
@@ -390,13 +399,23 @@ function NavButton({
             />
           )}
           {badge && (
-            <span className={`
+            <span title={badge.title} className={`
               z-10 inline-flex items-center justify-center min-w-[20px] h-5
               rounded-full px-1.5 text-[10px] font-bold tabular-nums
               ${badge.color}
               transition-all duration-300
             `}>
               {badge.value}
+            </span>
+          )}
+          {badge?.second && (
+            <span title={badge.second.title} className={`
+              z-10 inline-flex items-center justify-center min-w-[20px] h-5
+              rounded-full px-1.5 text-[10px] font-bold tabular-nums
+              ${badge.second.color}
+              transition-all duration-300
+            `}>
+              {badge.second.value}
             </span>
           )}
         </>

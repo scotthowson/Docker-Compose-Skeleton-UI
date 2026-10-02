@@ -36,6 +36,8 @@ interface Props {
   /** the list could not be read (shown when there is nothing to show yet) */
   error?: Error | null
   onEdit?: (stackName: string) => void
+  /** a hub: move one of its own stacks into a VM */
+  onMoveToVm?: (stackName: string) => void
   onCreateStack?: () => void
   /** a hub: a stack on the hub itself (the New menu's second choice) */
   onCreateHubStack?: () => void
@@ -148,7 +150,7 @@ function MenuButton({ ariaLabel, className, label, icon, width = 256, children }
 
 const MENU_ITEM = 'w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:opacity-50'
 
-export default function StackList({ onAction, onSelect, onRefresh, loading = false, error = null, onEdit, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
+export default function StackList({ onAction, onSelect, onRefresh, loading = false, error = null, onEdit, onMoveToVm, onCreateStack, onCreateHubStack, batchMode, selectedStacks, onToggleSelect, onToggleBatchMode, isAdmin, hubMode = false, building = 0, onOpenBuilds }: Props) {
   const { stacks, actionLoading } = useStackStore()
   const confirm = useConfirm()
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
@@ -567,6 +569,7 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
               onAction={onAction}
               onSelect={onSelect}
               onEdit={isAdmin ? onEdit : undefined}
+              onMoveToVm={isAdmin ? onMoveToVm : undefined}
               onDelete={isAdmin ? (name) => setShowDeleteModal(name) : undefined}
               batchMode={batchMode}
               isSelected={selectedStacks?.has(stack.name)}
