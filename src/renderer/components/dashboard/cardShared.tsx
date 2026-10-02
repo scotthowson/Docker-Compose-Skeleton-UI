@@ -217,7 +217,8 @@ export function CardSwitch<T extends string>({ label, value, onChange, data }: {
 
 /** a body that scrolls on its own while the header stays: room for a hover ring at the edges */
 export function CardBody({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 ${className}`}>{children}</div>
+  // (no bar, no sideways scrolling: what does not fit scrolls under the wheel or a finger, and nothing can push the card wider)
+  return <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-none -mx-1 px-1 ${className}`}>{children}</div>
 }
 
 // ── states ──────────────────────────────────────────────────────────────────

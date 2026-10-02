@@ -26,7 +26,7 @@ export default function StackStatusGrid({ stacks, error, onRetry }: Props) {
       {stacks.length === 0 ? (
         <CardEmpty icon={<Layers size={22} />} title="No stacks yet" hint={`Deploy a template or create a stack on the ${pageLabel('stacks')} page.`} />
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 content-start">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none -mx-1 px-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 content-start">
           {stacks.map((s) => (
             <div
               key={`${s.member ?? ''}|${s.name}`}

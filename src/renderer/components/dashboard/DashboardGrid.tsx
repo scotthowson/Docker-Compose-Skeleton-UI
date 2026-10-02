@@ -411,7 +411,7 @@ export default function DashboardGrid({
               style={placeCard(card)}
             >
               {editMode && chrome(entry.title, 'card', card.id === 'overview')}
-              <div className={`dash-card-body h-full rounded-xl overflow-hidden [&>*]:h-full [&>*]:overflow-y-auto [&>*]:scrollbar-thin ${
+              <div className={`dash-card-body h-full rounded-xl overflow-hidden [&>*]:h-full [&>*]:overflow-y-auto [&>*]:overflow-x-hidden [&>*]:scrollbar-none ${
                 editMode ? 'pointer-events-none select-none border border-dashed border-white/10' : ''
               }`}>
                 <Comp

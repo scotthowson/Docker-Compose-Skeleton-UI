@@ -272,7 +272,7 @@ function ActionsEditor({ initial, isAdmin, onClose, onSave, onReset }: {
           </div>
           <Hint label="Close"><button type="button" aria-label="Close" onClick={onClose} className={`${BTN_ICON_SM} ${TONE_GHOST}`}><X size={16} /></button></Hint>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-6 py-4 space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none px-6 py-4 space-y-2">
           {list.length === 0 && <p className="text-xs text-slate-500 text-center py-6">No actions yet — add one below.</p>}
           {list.map((a, i) => {
             const acc = ACCENTS[a.color] ?? ACCENTS.cyan

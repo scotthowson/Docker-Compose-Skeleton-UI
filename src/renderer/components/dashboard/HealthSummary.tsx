@@ -319,7 +319,7 @@ export default function HealthSummary() {
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Containers</span>
               <span className="text-[10px] text-slate-500 tabular-nums">{runningCount}/{containers.length} running</span>
             </div>
-            <div className="overflow-y-auto scrollbar-thin space-y-0.5 flex-1 min-h-0">
+            <div className="overflow-y-auto scrollbar-none space-y-0.5 flex-1 min-h-0">
               {containers
                 .slice()
                 .sort((a, b) => {

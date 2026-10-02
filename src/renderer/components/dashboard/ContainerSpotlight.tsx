@@ -127,7 +127,7 @@ export default function ContainerSpotlight({ cardConfig, onSaveConfig, dashboard
                 <input aria-label="Filter containers" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter containers…" className="w-full pl-8 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30" />
               </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3 space-y-0.5">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none px-3 pb-3 space-y-0.5">
               {containers.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase())).map((c) => {
                 const on = draft.includes(c.name)
                 return (

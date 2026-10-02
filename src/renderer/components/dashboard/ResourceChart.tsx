@@ -3,7 +3,7 @@
 //                 with a Gauges / Trending switch
 // =============================================================================
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
   Tooltip as RechartsTooltip,
@@ -41,42 +41,36 @@ interface DonutProps {
   subtitle?: string
 }
 
+/** megabytes as people say them */
+const sizeOf = (mb: number) => (mb >= 1024 * 1024 ? `${(mb / 1024 / 1024).toFixed(1)} TB` : mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`)
+
+/**
+ * Every gauge is the same three rows: its name, a box of one height that holds the ring, and one line of
+ * caption under it. With the name alone above the ring and the detail below it, the rings of a row sit on one
+ * line whatever a gauge has to say (a core count, the name of a video card), and a small ring is centred in
+ * the same box as a large one.
+ */
+function GaugeFrame({ title, caption, tip, children }: { title: string; caption?: string; tip?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center min-w-0" title={tip}>
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-none">{title}</p>
+      <div className="donut-box relative flex items-center justify-center h-[5.5rem] w-[5.5rem] sm:h-24 sm:w-24 md:h-28 md:w-28">{children}</div>
+      <p className="mt-1 h-3.5 max-w-[7rem] truncate text-center text-[10px] leading-[0.875rem] text-slate-500" title={caption}>{caption || ' '}</p>
+    </div>
+  )
+}
+
 function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '', subtitle }: DonutProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const activeSegment = activeIndex !== null ? data[activeIndex] : null
+  // What a segment under the pointer says is shown in the middle of the ring: nothing floats above the card's
+  // edge, where the card's own scrolling area would cut it off
+  const shownValue = activeSegment ? (unit.trim() === 'MB' ? sizeOf(activeSegment.value) : `${activeSegment.value.toLocaleString()}${unit}`) : centerValue
+  const shownLabel = activeSegment ? activeSegment.name : centerLabel
 
   return (
-    <div className="flex flex-col items-center min-w-0">
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{title}</p>
-      {subtitle && <p className="mb-1 text-[10px] text-slate-500 truncate max-w-[100px] text-center" title={subtitle}>{subtitle}</p>}
-      <div className="donut-box relative h-[5.5rem] w-[5.5rem] sm:h-24 sm:w-24 md:h-28 md:w-28" role="img" aria-label={`${title}: ${centerValue} ${centerLabel}`}>
-        {/* Tooltip rendered outside/above the donut */}
-        <div
-          className={`
-            absolute -top-9 left-1/2 -translate-x-1/2 z-20
-            flex items-center gap-1.5 px-2.5 py-1 rounded-lg
-            backdrop-blur-md shadow-lg shadow-black/30
-            text-[11px] font-medium whitespace-nowrap pointer-events-none
-            transition-all duration-150 origin-bottom
-            ${activeSegment ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
-          `}
-          style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#e2e8f0' }}
-          aria-hidden
-        >
-          {activeSegment && (
-            <>
-              <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: colors[activeIndex!] }} />
-              <span>{activeSegment.name}</span>
-              <span className="text-slate-400">
-                {unit.trim() === 'MB' && activeSegment.value >= 1024
-                  ? `${(activeSegment.value / 1024).toFixed(1)} GB`
-                  : `${activeSegment.value.toLocaleString()}${unit}`
-                }
-              </span>
-            </>
-          )}
-        </div>
-
+    <GaugeFrame title={title} caption={subtitle}>
+      <div className="absolute inset-0" role="img" aria-label={`${title}: ${centerValue} ${centerLabel}`}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -107,20 +101,19 @@ function DonutChart({ title, data, colors, centerLabel, centerValue, unit = '', 
             </Pie>
           </PieChart>
         </ResponsiveContainer>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-bold text-white">{centerValue}</span>
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">{centerLabel}</span>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3">
+          <span className={`font-bold text-white tabular-nums leading-tight ${activeSegment ? 'text-sm' : 'text-lg'}`}>{shownValue}</span>
+          <span className="max-w-full truncate text-[10px] text-slate-500 uppercase tracking-wider">{shownLabel}</span>
         </div>
       </div>
-    </div>
+    </GaugeFrame>
   )
 }
 
-/** the small ring for swap and video memory */
+/** the small ring for swap and video memory, centred in the same box as the large rings */
 function MiniRing({ title, percent, tip, footer, color }: { title: string; percent: number; tip: string; footer?: string; color: string }) {
   return (
-    <div className="flex flex-col items-center mt-0.5" title={tip}>
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{title}</p>
+    <GaugeFrame title={title} caption={footer} tip={tip}>
       <div className="relative h-14 w-14 sm:h-12 sm:w-12 md:h-14 md:w-14" role="img" aria-label={`${title}: ${percent}% used`}>
         <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36" aria-hidden>
           <circle cx="18" cy="18" r="14" fill="none" stroke={TRACK} strokeWidth="3" />
@@ -137,8 +130,7 @@ function MiniRing({ title, percent, tip, footer, color }: { title: string; perce
           <span className="text-[10px] font-bold text-white">{percent}%</span>
         </div>
       </div>
-      {footer && <p className="text-[10px] text-slate-500 mt-0.5">{footer}</p>}
-    </div>
+    </GaugeFrame>
   )
 }
 
@@ -317,7 +309,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
       <CardBody className={activeTab === 'trending' ? 'flex flex-col' : ''}>
         {activeTab === 'gauges' ? (
           <>
-            <div className="gauge-grid grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:items-start sm:justify-around sm:gap-3">
+            <div className="gauge-grid grid grid-cols-3 gap-x-1 gap-y-3 sm:flex sm:flex-wrap sm:items-start sm:justify-around sm:gap-x-3 sm:gap-y-3">
               <DonutChart
                 title="CPU"
                 subtitle={systemInfo ? `${cpuCount}-core` : undefined}
@@ -341,11 +333,12 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                     centerLabel="util"
                     unit="%"
                   />
-                  <MiniRing title="VRAM" percent={gpuMemPercent} color={TONE_HEX[pctTone(gpuMemPercent)]} tip={`VRAM: ${gpuMemUsed} MB / ${gpuMemTotal} MB | Temp: ${gpuTemp}°C`} footer={`${gpuTemp}°C`} />
+                  <MiniRing title="VRAM" percent={gpuMemPercent} color={TONE_HEX[pctTone(gpuMemPercent)]} tip={`VRAM: ${gpuMemUsed} MB / ${gpuMemTotal} MB | Temp: ${gpuTemp}°C`} footer={`${sizeOf(gpuMemUsed)} · ${gpuTemp}°C`} />
                 </div>
               )}
               <DonutChart
                 title="Memory"
+                subtitle={`${sizeOf(memUsed)} of ${sizeOf(memTotal)}`}
                 data={memoryData}
                 colors={[TONE_HEX[pctTone(memPercent)], TRACK]}
                 centerValue={`${memPercent}%`}
@@ -353,10 +346,11 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                 unit=" MB"
               />
               {hasSwap && (
-                <MiniRing title="Swap" percent={swapPercent} color={TONE_HEX[pctTone(swapPercent)]} tip={`Swap: ${humanMb(Math.round(swapUsed))} used of ${humanMb(swapTotal)}`} />
+                <MiniRing title="Swap" percent={swapPercent} color={TONE_HEX[pctTone(swapPercent)]} tip={`Swap: ${humanMb(Math.round(swapUsed))} used of ${humanMb(swapTotal)}`} footer={`${sizeOf(swapUsed)} of ${sizeOf(swapTotal)}`} />
               )}
               <DonutChart
                 title="Disk"
+                subtitle={`${status?.system.disk.used ?? '--'} of ${status?.system.disk.total ?? '--'}`}
                 data={diskData}
                 colors={[TONE_HEX[pctTone(diskPct)], TRACK]}
                 centerValue={`${diskPercent.replace('%', '')}%`}
