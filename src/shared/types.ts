@@ -3811,6 +3811,10 @@ export interface StackPushResponse { success: boolean; stack: string; member: st
 export interface StackPullResponse { success: boolean; stack: string; member: string; member_name: string; written: number; removed: number; message: string }
 /** GET /feed/status — the dashboard feed: a read-only token for dashboards that cannot sign in */
 export interface DashboardFeedStatus { enabled: boolean; summary_url: string; crowdsec_url: string; auth: string }
+/** One API key as GET /auth/keys lists it (the key itself is only in the answer that made it) */
+export interface ApiKeyInfo { id: string; name: string; role: 'read' | 'operate'; prefix: string; created_at: number; created_by: string; expires_at: number; last_used_at: number; expired: boolean }
+/** POST /auth/keys — the key, shown once */
+export interface ApiKeyCreated { success: boolean; id: string; name: string; role: 'read' | 'operate'; key: string; expires_at: number; message: string }
 /** GET /terminal/web — the web terminal: a real terminal on the server in a browser tab, always behind Authelia */
 export interface WebTerminalStatus {
   deployed: boolean; stack: string; state: string; running: boolean; url: string; protected: boolean; key_installed: boolean

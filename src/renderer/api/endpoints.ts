@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus, ApiKeyInfo, ApiKeyCreated,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -2177,6 +2177,16 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
 
 /** GET /feed/status — The dashboard feed: on or off, and its two addresses (admin) */
 export function fetchDashboardFeedStatus(): Promise<DashboardFeedStatus> { return apiClient.get<DashboardFeedStatus>('/feed/status') }
+/** GET /auth/keys — the API keys for dashboards and scripts (admin) */
+export function fetchApiKeys(): Promise<{ keys: ApiKeyInfo[] }> { return apiClient.get<{ keys: ApiKeyInfo[] }>('/auth/keys') }
+/** POST /auth/keys — make a key; the answer holds it once */
+export function createApiKey(name: string, role: 'read' | 'operate', expires_days: number): Promise<ApiKeyCreated> {
+  return apiClient.post<ApiKeyCreated>('/auth/keys', { name, role, expires_days })
+}
+/** DELETE /auth/keys/:id — the key stops working at once */
+export function deleteApiKey(id: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.delete<{ success: boolean; message: string }>(`/auth/keys/${encodeURIComponent(id)}`)
+}
 /** GET /terminal/web — the web terminal's state (admin) */
 export function fetchWebTerminalStatus(): Promise<WebTerminalStatus> { return apiClient.get<WebTerminalStatus>('/terminal/web') }
 /** POST /terminal/web/embed — the pages that may show the web terminal in a frame; an empty list takes the permission away */
