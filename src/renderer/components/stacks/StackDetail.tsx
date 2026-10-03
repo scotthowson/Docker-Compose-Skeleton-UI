@@ -802,15 +802,15 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
                   <td className="px-3 py-3 whitespace-nowrap">
                     {c.on_demand && !running ? (
                       // asleep on purpose: Sablier starts it on the first request
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
-                        <Moon size={10} aria-hidden />
+                      <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-xs font-medium leading-none whitespace-nowrap ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
+                        <Moon size={11} aria-hidden className="shrink-0" />
                         sleeping
-                        <span className="text-[9px] text-indigo-300/80">· on demand</span>
+                        <span className="text-[10px] font-normal text-indigo-300/80">· on demand</span>
                       </span>
                     ) : (
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${stateBadge(c.state)}`}>
+                      <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-xs font-medium leading-none whitespace-nowrap ${stateBadge(c.state)}`}>
                         {c.state}
-                        {c.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle and starts it on the next request">· on demand</span>}
+                        {c.on_demand && <span className="text-[10px] font-normal text-indigo-300/80" title="Sablier stops it when idle and starts it on the next request">· on demand</span>}
                       </span>
                     )}
                   </td>

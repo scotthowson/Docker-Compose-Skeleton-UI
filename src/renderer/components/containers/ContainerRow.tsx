@@ -15,6 +15,11 @@ import Hint from '../common/Hint'
 import VmCapsule from '../fleet/VmCapsule'
 import { BTN_ICON_SM, TONE_GHOST, TONE_GHOST_OK, TONE_GHOST_DANGER } from '../../lib/ui'
 
+// one pill shape for a container's state, whatever it says (sleeping included): same height, never on two lines
+const STATE_PILL = 'inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-xs font-medium leading-none ring-1 whitespace-nowrap'
+const ON_DEMAND_TAG = 'text-[10px] font-normal text-indigo-300/80'
+
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -189,43 +194,45 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
         </Hint>
       </td>
 
-      {/* Name */}
+      {/* Name — the VM / hub capsule sits under it, so a narrow table never squeezes the two into the state column */}
       <td className="px-3 py-3">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Box className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
-          <ContainerNameWithPopover container={container} formatUptime={formatUptime} onOpen={() => onClick(container)} />
-          {showCapsule && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
+          <div className="flex flex-col items-start gap-1 min-w-0">
+            <ContainerNameWithPopover container={container} formatUptime={formatUptime} onOpen={() => onClick(container)} />
+            {showCapsule && <VmCapsule member={container.member} name={container.member_name} vmid={container.vmid} size="xs" />}
+          </div>
         </div>
       </td>
 
-      {/* State */}
-      <td className="px-3 py-3">
+      {/* State — every pill the same height, on one line; an on-demand container says so inside its pill */}
+      <td className="px-3 py-3 whitespace-nowrap">
         {container.on_demand && stateKey !== 'running' ? (
           onOnDemand ? (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOnDemand(container) }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+              className={`${STATE_PILL} bg-indigo-500/10 text-indigo-300 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors`}
               title="Stopped on purpose: Sablier starts it on the first request — click for the idle time, the waiting page, or to serve it normally"
             >
-              <Moon size={10} aria-hidden />
+              <Moon size={11} aria-hidden className="shrink-0" />
               sleeping
-              <span className="text-[9px] text-indigo-300/80">· on demand</span>
+              <span className={ON_DEMAND_TAG}>· on demand</span>
             </button>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
-              <Moon size={10} aria-hidden />
+            <span className={`${STATE_PILL} bg-indigo-500/10 text-indigo-300 ring-indigo-500/20`} title="Stopped on purpose: Sablier starts it on the first request">
+              <Moon size={11} aria-hidden className="shrink-0" />
               sleeping
-              <span className="text-[9px] text-indigo-300/80">· on demand</span>
+              <span className={ON_DEMAND_TAG}>· on demand</span>
             </span>
           )
         ) : (
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${sv.bg} ${sv.text} ${sv.ring}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
+          <span className={`${STATE_PILL} ${sv.bg} ${sv.text} ${sv.ring}`}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${sv.dot} ${stateKey === 'running' ? 'animate-pulse' : ''}`} />
             {container.state}
             {container.on_demand && (onOnDemand
-              ? <button type="button" onClick={(e) => { e.stopPropagation(); onOnDemand(container) }} className="text-[9px] text-indigo-300/80 hover:text-indigo-200 underline-offset-2 hover:underline" title="Sablier stops it when idle — click for the on-demand settings">· on demand</button>
-              : <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle">· on demand</span>)}
+              ? <button type="button" onClick={(e) => { e.stopPropagation(); onOnDemand(container) }} className={`${ON_DEMAND_TAG} hover:text-indigo-200 underline-offset-2 hover:underline`} title="Sablier stops it when idle — click for the on-demand settings">· on demand</button>
+              : <span className={ON_DEMAND_TAG} title="Sablier stops it when idle">· on demand</span>)}
           </span>
         )}
       </td>
@@ -462,7 +469,7 @@ function ContainerNameWithPopover({ container, formatUptime, onOpen }: { contain
           onClick={(e) => { e.stopPropagation(); onOpen() }}
           onFocus={handleEnter}
           onBlur={handleLeave}
-          className="rounded text-left text-slate-200 group-hover:text-white transition-colors"
+          className="rounded text-left whitespace-nowrap text-slate-200 group-hover:text-white transition-colors"
         >
           {container.name}
         </button>
