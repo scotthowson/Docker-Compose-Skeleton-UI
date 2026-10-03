@@ -143,6 +143,8 @@ export interface StackInfo {
   name: string
   status: 'running' | 'stopped'
   running_containers: number
+  /** every container of this stopped stack is one Sablier stops on purpose: asleep, not down */
+  sleeping?: boolean
   has_env: boolean
   compose_file: string
   /** Fleet (3.9): "hub" runs here, "vm" runs on a member VM the hub forwards to */
@@ -2487,7 +2489,7 @@ export interface HealthScoreResponse {
   score: number
   grade: string
   factors: {
-    stacks: { score: number; weight: number; healthy: number; unhealthy: number; total: number }
+    stacks: { score: number; weight: number; healthy: number; unhealthy: number; /** on-demand containers that sleep (outside the score) */ sleeping?: number; total: number }
     resources: { score: number; weight: number; cpu_pct: number; mem_pct: number }
     images: { score: number; weight: number; total: number; stale: number }
     uptime: { score: number; weight: number; seconds: number }

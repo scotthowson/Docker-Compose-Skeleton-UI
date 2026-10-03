@@ -20,7 +20,9 @@ import {
   Settings2,
   X,
   Save,
+  ImageDown,
 } from 'lucide-react'
+import { toPng } from 'html-to-image'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -332,6 +334,24 @@ export default function Trends() {
   }, [refresh, addToast, trendsMember, scopeName])
 
   // Manual refresh (also performs a one-time fetch when autoRefresh is off)
+  // the charts as one picture: what is on the page, in the colours of the theme, at twice the resolution
+  const chartsRef = useRef<HTMLDivElement>(null)
+  const [exporting, setExporting] = useState(false)
+  const handleExport = useCallback(async () => {
+    const node = chartsRef.current
+    if (!node || exporting) return
+    setExporting(true)
+    try {
+      const bg = getComputedStyle(document.body).backgroundColor
+      const url = await toPng(node, { pixelRatio: 2, cacheBust: true, backgroundColor: bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#0b1020', style: { padding: '16px' } })
+      const a = document.createElement('a')
+      a.href = url; a.download = `dcs-trends-${range}-${new Date().toISOString().slice(0, 10)}.png`
+      document.body.appendChild(a); a.click(); a.remove()
+      addToast({ type: 'success', message: 'The charts were saved as a picture' })
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'The picture could not be made' })
+    } finally { setExporting(false) }
+  }, [exporting, range, addToast])
   const handleRefresh = useCallback(() => {
     refresh()
   }, [refresh])
@@ -438,6 +458,16 @@ export default function Trends() {
             </button>
           </Hint>
 
+          {/* The charts as a picture */}
+          {chartData.length > 0 && (
+            <Hint label="Save the charts on this page as a picture (PNG)">
+              <button type="button" onClick={() => void handleExport()} disabled={exporting} aria-label="Save the charts as a picture" className={BTN_TOOLBAR_QUIET}>
+                {exporting ? <Loader2 size={14} className="animate-spin" /> : <ImageDown size={14} />}
+                <span className="hidden sm:inline">Picture</span>
+              </button>
+            </Hint>
+          )}
+
           {/* Manual refresh */}
           <button type="button" onClick={handleRefresh} disabled={loading} aria-label="Refresh" className={BTN_TOOLBAR_QUIET}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -535,7 +565,7 @@ export default function Trends() {
 
       {/* Charts */}
       {chartData.length > 0 && (
-        <div className="space-y-3 md:space-y-4">
+        <div ref={chartsRef} className="space-y-3 md:space-y-4">
           <TrendPanel
             title="CPU load"
             icon={Cpu}

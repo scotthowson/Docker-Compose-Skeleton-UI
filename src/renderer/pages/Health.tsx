@@ -363,6 +363,7 @@ export default function Health() {
   const healthyPct = (summary.healthy / total) * 100
   const unhealthyPct = (summary.unhealthy / total) * 100
   const stoppedPct = (summary.stopped / total) * 100
+  const sleepingPct = ((summary.sleeping ?? 0) / total) * 100
   const totalRestarts = enrichedContainers.reduce((sum, c) => sum + (c.restart_count ?? 0), 0)
   const restartingCount = enrichedContainers.filter((c) => c.state.toLowerCase() === 'restarting').length
 
@@ -604,11 +605,13 @@ export default function Health() {
               {healthyPct > 0 && <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${healthyPct}%` }} title={`Healthy: ${summary.healthy}`} />}
               {unhealthyPct > 0 && <div className="bg-rose-500 transition-all duration-500" style={{ width: `${unhealthyPct}%` }} title={`Unhealthy: ${summary.unhealthy}`} />}
               {stoppedPct > 0 && <div className="bg-slate-600 transition-all duration-500" style={{ width: `${stoppedPct}%` }} title={`Stopped: ${summary.stopped}`} />}
+              {sleepingPct > 0 && <div className="bg-indigo-400/70 transition-all duration-500" style={{ width: `${sleepingPct}%` }} title={`Sleeping: ${summary.sleeping}`} />}
             </div>
             <div className="flex flex-wrap items-center gap-3 md:gap-6 mt-3 text-[11px] md:text-xs text-slate-400">
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-emerald-500" aria-hidden /> Healthy ({summary.healthy})</span>
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-rose-500" aria-hidden /> Unhealthy ({summary.unhealthy})</span>
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-slate-600" aria-hidden /> Stopped ({summary.stopped})</span>
+              {!!summary.sleeping && <span className="flex items-center gap-1.5" title={ON_DEMAND_HINT}><span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-indigo-400" aria-hidden /> Sleeping ({summary.sleeping})</span>}
             </div>
           </Panel>
         )}

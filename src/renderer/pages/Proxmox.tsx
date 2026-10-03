@@ -39,6 +39,7 @@ import JoinHubPanel from '../components/fleet/JoinHubPanel'
 import JoinCodeCard from '../components/fleet/JoinCodeCard'
 import MemberSheet, { type MemberSheetPrefill } from '../components/fleet/MemberSheet'
 import { Sheet, MATCH_LABEL, hostOf, TONE_ATTN, inputCls, labelCls } from '../components/fleet/fleetShared'
+import { proxmoxVmResize } from '../api/endpoints'
 import { FleetJobCard, JobsSummary, orderJobs } from '../components/fleet/FleetJobsPanel'
 import NewVmSheet, { CapabilityNote, settingsFromDefaults, loadVmSettings, osLabel } from '../components/fleet/NewVmSheet'
 import VmCapsule from '../components/fleet/VmCapsule'
@@ -940,6 +941,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
           )}
         </div>
 
+        {isAdmin && d && <ResizePanel vm={vm} running={running} cores={d.config.cores ?? d.cpus ?? 1} memoryMb={Number(String(d.config.memory ?? Math.round(maxmem / 1048576)).split(',')[0]) || 0} diskBytes={d.maxdisk ?? vm.maxdisk} onDone={() => { detail.refresh(); onChanged() }} />}
         {detail.error && !d && <p className="text-xs text-rose-300">{detail.error.message}</p>}
         {facts.length > 0 && (
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[11px]">
@@ -963,6 +965,57 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
 
       </div>
     </Sheet>
+  )
+}
+
+/** More room for a guest: disk added on top (the filesystem of a fleet VM grows at once), cores and memory (a reboot applies them) */
+function ResizePanel({ vm, running, cores, memoryMb, diskBytes, onDone }: { vm: ProxmoxVm; running: boolean; cores: number; memoryMb: number; diskBytes: number; onDone: () => void }) {
+  const { addToast } = useToast()
+  const confirm = useConfirm()
+  const [open, setOpen] = useState(false)
+  const [addGb, setAddGb] = useState('0')
+  const [c, setC] = useState(String(cores))
+  const [memGb, setMemGb] = useState(String(Math.round((memoryMb / 1024) * 10) / 10))
+  const [restart, setRestart] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const add = Math.max(0, Math.floor(Number(addGb) || 0))
+  const newCores = Math.floor(Number(c) || 0)
+  const newMem = Math.round((Number(memGb) || 0) * 1024)
+  const coresChanged = newCores > 0 && newCores !== cores
+  const memChanged = newMem >= 512 && Math.abs(newMem - memoryMb) >= 64
+  const valid = add <= 4096 && (!coresChanged || (newCores >= 1 && newCores <= 128)) && (!memChanged || newMem <= 1048576)
+  const anything = add > 0 || coresChanged || memChanged
+  const submit = async () => {
+    if (!anything || !valid) return
+    const parts = [add > 0 ? `${add} GB more disk (a disk never shrinks again)` : '', coresChanged ? `${newCores} cores` : '', memChanged ? `${Math.round(newMem / 102.4) / 10} GB of memory` : ''].filter(Boolean)
+    if (!(await confirm({ title: `Resize ${vm.name}`, message: `${parts.join(', ')}.${(coresChanged || memChanged) && running ? (restart ? ' The VM reboots to apply the cores and memory.' : ' The cores and memory apply at the next reboot.') : ''}`, confirmLabel: 'Resize' }))) return
+    setBusy(true)
+    try {
+      const r = await proxmoxVmResize(vm.node, vm.type === 'lxc' ? 'lxc' : 'qemu', vm.vmid, { ...(add > 0 ? { disk_add_gb: add } : {}), ...(coresChanged ? { cores: newCores } : {}), ...(memChanged ? { memory_mb: newMem } : {}), restart })
+      addToast({ type: 'success', message: r.message, duration: 9000 }); setAddGb('0'); setOpen(false); onDone()
+    } catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'The resize failed', duration: 9000 }) } finally { setBusy(false) }
+  }
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300"><HardDrive size={12} /> Size <span className="text-slate-500 font-normal">· {fmtBytes(diskBytes)} disk · {cores} cores · {Math.round((memoryMb / 1024) * 10) / 10} GB memory</span></span>
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={BTN_CARD_QUIET}>{open ? 'Close' : 'Resize'}</button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label htmlFor={`rs-disk-${vm.vmid}`} className={labelCls}>Add disk (GB)</label><input id={`rs-disk-${vm.vmid}`} type="number" min={0} max={4096} value={addGb} onChange={(e) => setAddGb(e.target.value)} className={`${inputCls} tabular-nums`} disabled={busy} /></div>
+            <div><label htmlFor={`rs-cores-${vm.vmid}`} className={labelCls}>Cores</label><input id={`rs-cores-${vm.vmid}`} type="number" min={1} max={128} value={c} onChange={(e) => setC(e.target.value)} className={`${inputCls} tabular-nums`} disabled={busy} /></div>
+            <div><label htmlFor={`rs-mem-${vm.vmid}`} className={labelCls}>Memory (GB)</label><input id={`rs-mem-${vm.vmid}`} type="number" min={0.5} step={0.5} value={memGb} onChange={(e) => setMemGb(e.target.value)} className={`${inputCls} tabular-nums`} disabled={busy} /></div>
+          </div>
+          <p className="text-[11px] text-slate-500">A disk only grows. The filesystem of a VM the hub manages grows at once; other guests grow theirs at the next boot. Cores and memory take effect after a reboot.</p>
+          {running && (coresChanged || memChanged) && (
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" checked={restart} onChange={(e) => setRestart(e.target.checked)} className="h-4 w-4 accent-emerald-500" disabled={busy} /> Reboot now to apply the cores and memory</label>
+          )}
+          <button type="button" onClick={() => void submit()} disabled={busy || !anything || !valid} className={`${BTN_CARD} ${TONE_ATTN}`}>{busy ? <Loader2 size={12} className="animate-spin" /> : <HardDrive size={12} />} Resize</button>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -221,13 +221,14 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'running' && s.status === 'running') ||
-        (statusFilter === 'stopped' && s.status === 'stopped')
+        (statusFilter === 'stopped' && s.status === 'stopped' && !s.sleeping)
       return matchesSearch && matchesStatus
     })
   }, [sorted, search, statusFilter, stackAnnotations, containerMatches])
 
   const runningCount = stacks.filter((s) => s.status === 'running').length
-  const stoppedCount = stacks.filter((s) => s.status === 'stopped').length
+  const stoppedCount = stacks.filter((s) => s.status === 'stopped' && !s.sleeping).length
+  const sleepingCount = stacks.filter((s) => s.status === 'stopped' && s.sleeping).length
   const criticalCount = stacks.filter((s) => stackAnnotations[s.name]?.priority === 'critical').length
   const vmCount = stacks.filter((s) => s.placement === 'vm').length
 
@@ -249,7 +250,8 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
   }, [lintAllLoading, stacks])
 
   const handleStartAll = useCallback(() => {
-    stacks.filter((s) => s.status === 'stopped').forEach((s) => onAction(s.name, 'start'))
+    // a stack Sablier keeps asleep wakes on its first request: starting everything would wake what is asleep on purpose
+    stacks.filter((s) => s.status === 'stopped' && !s.sleeping).forEach((s) => onAction(s.name, 'start'))
   }, [stacks, onAction])
 
   // one click stops every running stack: ask first
@@ -343,6 +345,7 @@ export default function StackList({ onAction, onSelect, onRefresh, loading = fal
         badge={unreadable ? undefined : (
           <span className="text-sm text-slate-400">
             <span className="text-emerald-400 font-semibold">{runningCount} running</span>
+            {sleepingCount > 0 && <><span className="mx-1.5 text-slate-500">&middot;</span><span className="text-indigo-300">{sleepingCount} asleep</span></>}
             <span className="mx-1.5 text-slate-500">&middot;</span>
             <span>{stacks.length} total</span>
             {criticalCount > 0 && (

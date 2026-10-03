@@ -116,12 +116,13 @@ function FactorBar({ label, value, detail }: { label: string; value: number; det
   )
 }
 
-function SummaryBar({ healthy, unhealthy, stopped }: { healthy: number; unhealthy: number; stopped: number }) {
-  const total = healthy + unhealthy + stopped
+function SummaryBar({ healthy, unhealthy, stopped, sleeping = 0 }: { healthy: number; unhealthy: number; stopped: number; sleeping?: number }) {
+  const total = healthy + unhealthy + stopped + sleeping
   if (total === 0) return null
   const healthyPct = (healthy / total) * 100
   const unhealthyPct = (unhealthy / total) * 100
   const stoppedPct = (stopped / total) * 100
+  const sleepingPct = (sleeping / total) * 100
 
   return (
     <div>
@@ -129,11 +130,13 @@ function SummaryBar({ healthy, unhealthy, stopped }: { healthy: number; unhealth
         {healthyPct > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${healthyPct}%` }} title={`${healthy} healthy`} />}
         {unhealthyPct > 0 && <div className="bg-rose-500 transition-all duration-700" style={{ width: `${unhealthyPct}%` }} title={`${unhealthy} unhealthy`} />}
         {stoppedPct > 0 && <div className="bg-slate-600 transition-all duration-700" style={{ width: `${stoppedPct}%` }} title={`${stopped} stopped`} />}
+        {sleepingPct > 0 && <div className="bg-indigo-400/70 transition-all duration-700" style={{ width: `${sleepingPct}%` }} title={`${sleeping} sleeping`} />}
       </div>
       <div className="mt-1.5 flex items-center gap-3 text-[11px]">
         <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden /><span className="text-slate-500">{healthy} healthy</span></span>
         {unhealthy > 0 && <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden /><span className="text-slate-500">{unhealthy} unhealthy</span></span>}
         {stopped > 0 && <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-600" aria-hidden /><span className="text-slate-500">{stopped} stopped</span></span>}
+        {sleeping > 0 && <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-400" aria-hidden /><span className="text-slate-500">{sleeping} sleeping</span></span>}
       </div>
     </div>
   )
@@ -287,8 +290,8 @@ export default function HealthSummary() {
               </div>
             ) : factors ? (
               <div className="space-y-2">
-                <FactorBar label="Stacks" value={stackCounts.total > 0 ? Math.round((stackCounts.running / stackCounts.total) * 100) : 100} detail={`${stackCounts.running}/${stackCounts.total} running${hasFleet && scope === 'all' ? ' · whole fleet' : ''}`} />
-                <FactorBar label="Containers" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total} healthy`} />
+                <FactorBar label="Stacks" value={stackCounts.total > 0 ? Math.round((stackCounts.running / stackCounts.total) * 100) : 100} detail={`${stackCounts.running}/${stackCounts.total} running${stackCounts.sleeping > 0 ? ` · ${stackCounts.sleeping} asleep` : ''}${hasFleet && scope === 'all' ? ' · whole fleet' : ''}`} />
+                <FactorBar label="Containers" value={factors.stacks.score} detail={`${factors.stacks.healthy}/${factors.stacks.total} healthy${factors.stacks.sleeping ? ` · ${factors.stacks.sleeping} asleep` : ''}`} />
                 <FactorBar label="Resources" value={factors.resources.score} detail={`${factors.resources.cpu_pct}% cpu`} />
                 <FactorBar label="Images" value={factors.images.score} detail={factors.images.stale > 0 ? `${factors.images.stale} stale` : 'fresh'} />
                 <FactorBar label="Uptime" value={factors.uptime.score} detail={formatUptime(factors.uptime.seconds)} />
@@ -309,7 +312,7 @@ export default function HealthSummary() {
 
         {/* Distribution bar */}
         <div className="mt-3">
-          <SummaryBar healthy={summary.healthy} unhealthy={summary.unhealthy} stopped={summary.stopped} />
+          <SummaryBar healthy={summary.healthy} unhealthy={summary.unhealthy} stopped={summary.stopped} sleeping={summary.sleeping ?? 0} />
         </div>
 
         {/* Container list: unhealthy first, then running, then stopped */}

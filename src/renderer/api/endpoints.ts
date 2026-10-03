@@ -2127,6 +2127,11 @@ export function proxmoxVmAction(node: string, type: ProxmoxGuestType, vmid: numb
   return apiClient.post<ProxmoxActionResponse>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}/${action}`, {}, 60000)
 }
 
+/** POST /proxmox/vms/:node/:type/:vmid/resize — more disk (the filesystem of a fleet VM grows at once over the hub's ssh key), cores and memory (restart: reboot so they apply) */
+export function proxmoxVmResize(node: string, type: 'qemu' | 'lxc', vmid: number, body: { disk_add_gb?: number; cores?: number; memory_mb?: number; restart?: boolean }): Promise<{ success: boolean; message: string; filesystem: string; applied: string }> {
+  return apiClient.post<{ success: boolean; message: string; filesystem: string; applied: string }>(`/proxmox/vms/${encodeURIComponent(node)}/${type}/${vmid}/resize`, body, 240000)
+}
+
 /** POST /proxmox/vms/:node/qemu/:vmid/balloon — give a VM a memory balloon (floor: its memory minus a quarter, at most 512 MB — three quarters or more stay with the guest) so Proxmox reports the guest's real use and can reclaim idle memory; takes effect at the next boot */
 export function proxmoxVmBalloon(node: string, vmid: number): Promise<ProxmoxBalloonResponse> {
   return apiClient.post<ProxmoxBalloonResponse>(`/proxmox/vms/${encodeURIComponent(node)}/qemu/${vmid}/balloon`, {}, 60000)

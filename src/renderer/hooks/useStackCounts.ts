@@ -10,13 +10,15 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { fetchStacks } from '../api/endpoints'
 import { scopeMember, type FleetScope } from './useFleetScope'
 
-export function useStackCounts(scope: FleetScope): { total: number; running: number; loaded: boolean } {
+export function useStackCounts(scope: FleetScope): { total: number; running: number; sleeping: number; loaded: boolean } {
   const isConnected = useConnectionStore((s) => s.status === 'connected')
   const { data } = usePolling(fetchStacks, 30000, { enabled: isConnected })
   return useMemo(() => {
     const all = data?.stacks ?? []
     const member = scopeMember(scope)
     const mine = scope === 'all' ? all : scope === 'hub' ? all.filter((st) => st.placement !== 'vm') : all.filter((st) => st.member === member)
-    return { total: mine.length, running: mine.filter((st) => st.status === 'running').length, loaded: !!data }
+    const sleeping = mine.filter((st) => st.status !== 'running' && st.sleeping).length
+    // a stack Sablier keeps asleep is on purpose: it stays out of the total the score is made of
+    return { total: mine.length - sleeping, running: mine.filter((st) => st.status === 'running').length, sleeping, loaded: !!data }
   }, [data, scope])
 }

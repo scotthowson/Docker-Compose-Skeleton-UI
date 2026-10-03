@@ -58,6 +58,7 @@ const priorityConfig = {
 
 export default function StackCard({ stack, isActionLoading, onAction, onSelect, onEdit, onMoveToVm, onDelete, batchMode, isSelected, onToggleSelect, matchedContainers, isAdmin = false }: Props) {
   const isRunning = stack.status === 'running'
+  const isAsleep = !isRunning && !!stack.sleeping   // Sablier keeps every container of it asleep on purpose
   const lastActionTimestamps = useStackStore((s) => s.lastActionTimestamps)
   const lastAction = lastActionTimestamps[stack.name]
   const stackAnnotations = useSettingsStore((s) => s.stackAnnotations) ?? {}
@@ -214,7 +215,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                   className={`${BTN_CARD_QUIET} text-violet-300 hover:bg-violet-500/10`}
                 >
                   <Server size={12} />
-                  <span className="hidden xl:inline">To a VM</span>
+                  <span className="hidden sm:inline">To a VM</span>
                 </button>
               </Hint>
             )}
@@ -245,16 +246,18 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
                 ${
                   isRunning
                     ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
-                    : 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
+                    : isAsleep
+                      ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/25'
+                      : 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25'
                 }
               `}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                  isRunning ? 'bg-emerald-400 animate-pulse' : isAsleep ? 'bg-indigo-400' : 'bg-slate-500'
                 }`}
               />
-              {isRunning ? 'Running' : 'Stopped'}
+              {isRunning ? 'Running' : isAsleep ? 'Sleeping' : 'Stopped'}
             </span>
           </div>
           {stack.placement === 'vm' && (

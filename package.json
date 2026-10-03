@@ -32,6 +32,7 @@
     "@mantine/hooks": "^8.3.18",
     "@xhayper/discord-rpc": "^1.5.1",
     "electron-store": "^8.2.0",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^0.462.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
