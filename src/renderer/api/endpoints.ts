@@ -41,7 +41,7 @@ import type {
   TraefikFeedTokenResponse,
   FleetStatus, FleetMembersResponse, FleetMember, FleetMemberResponse, FleetOverview, FleetDiscoverResponse,
   FleetJoinTokensResponse, FleetJoinTokenResponse, FleetMemberTestResponse, FleetJoinHubResponse, FleetLeaveResponse,
-  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus, ApiKeyInfo, ApiKeyCreated,
+  FleetMemberSyncResponse, StackPushResponse, StackPullResponse, StackAppDataStatus, MemberFolders, HostFolderOperation, DashboardFeedStatus, WebTerminalStatus, ApiKeyInfo, ApiKeyCreated, SshAccess, SshKeyCreated,
   ProxmoxCapabilities, ProxmoxStorageResponse, FleetProvisionDefaults, FleetProvisionRequest, FleetMoveCheck, FleetProvisionResponse, FleetJob, FleetJobsResponse,
   SystemInfo,
   NetworkListResponse,
@@ -2177,6 +2177,24 @@ export function removeFleetMember(id: string, destroy = false): Promise<{ succes
 
 /** GET /feed/status — The dashboard feed: on or off, and its two addresses (admin) */
 export function fetchDashboardFeedStatus(): Promise<DashboardFeedStatus> { return apiClient.get<DashboardFeedStatus>('/feed/status') }
+/** GET /ssh/access — the VMs, the hub and the ssh keys made so far (admin) */
+export function fetchSshAccess(): Promise<SshAccess> { return apiClient.get<SshAccess>('/ssh/access') }
+/** POST /ssh/keys — a key of your own on the VMs you tick; the private half is in the answer once, after the password */
+export function createSshKey(body: { name: string; members: string[]; password: string; hub_access: boolean; via: 'hub' | 'direct'; hub_host: string }): Promise<SshKeyCreated> {
+  return apiClient.post<SshKeyCreated>('/ssh/keys', body, 120000)
+}
+/** DELETE /ssh/keys/:id — the key is taken off every VM */
+export function deleteSshKey(id: string): Promise<{ success: boolean; results: { name: string; removed: boolean }[] }> {
+  return apiClient.delete<{ success: boolean; results: { name: string; removed: boolean }[] }>(`/ssh/keys/${encodeURIComponent(id)}`)
+}
+/** GET /ssh/keys/:id/config — the ssh config for a key as the VMs are now */
+export function fetchSshKeyConfig(id: string, via: 'hub' | 'direct', hubHost: string): Promise<{ config: string; config_file: string }> {
+  return apiClient.get<{ config: string; config_file: string }>(`/ssh/keys/${encodeURIComponent(id)}/config?via=${via}&hub_host=${encodeURIComponent(hubHost)}`)
+}
+/** POST /ssh/keys/:id/vms — put an existing key on more VMs */
+export function addSshKeyVms(id: string, members: string[]): Promise<{ success: boolean; results: { id: string; name: string; ok: boolean; error: string }[] }> {
+  return apiClient.post<{ success: boolean; results: { id: string; name: string; ok: boolean; error: string }[] }>(`/ssh/keys/${encodeURIComponent(id)}/vms`, { members }, 120000)
+}
 /** GET /auth/keys — the API keys for dashboards and scripts (admin) */
 export function fetchApiKeys(): Promise<{ keys: ApiKeyInfo[] }> { return apiClient.get<{ keys: ApiKeyInfo[] }>('/auth/keys') }
 /** POST /auth/keys — make a key; the answer holds it once */

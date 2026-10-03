@@ -44,6 +44,8 @@ const CREDENTIAL_CHECK_PATHS = [
   // a wrong current password is a 401 about the body, not the session
   '/auth/password',
   '/terminal/auth',
+  // a wrong dashboard password when a personal ssh key is made is a 401 about the body, not the session
+  '/ssh/keys',
   '/terminal/exec',
   '/system/os-update',
   '/system/docker-engine/update',

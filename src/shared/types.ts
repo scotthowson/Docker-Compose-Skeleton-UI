@@ -3821,6 +3821,16 @@ export interface DashboardFeedStatus { enabled: boolean; summary_url: string; cr
 export interface ApiKeyInfo { id: string; name: string; role: 'read' | 'operate'; prefix: string; created_at: number; created_by: string; expires_at: number; last_used_at: number; expired: boolean }
 /** POST /auth/keys — the key, shown once */
 export interface ApiKeyCreated { success: boolean; id: string; name: string; role: 'read' | 'operate'; key: string; expires_at: number; message: string }
+/** GET /ssh/access — what the ssh sheet needs */
+export interface SshVm { id: string; name: string; vmid: number | null; address: string; reachable: boolean }
+export interface SshKeyInfo { id: string; name: string; owner: string; created_at: number; fingerprint: string; members: string[]; hub: boolean }
+export interface SshAccess { vms: SshVm[]; keys: SshKeyInfo[]; hub: { host: string; user: string; port: number }; vm_user: string }
+/** POST /ssh/keys — the key, shown once */
+export interface SshKeyCreated {
+  success: boolean; id: string; name: string; private_key: string; public_key: string; fingerprint: string
+  results: { id: string; name: string; ok: boolean; error: string }[]
+  hub_access: boolean; config: string; key_file: string; config_file: string; message: string
+}
 /** GET /terminal/web — the web terminal: a real terminal on the server in a browser tab, always behind Authelia */
 export interface WebTerminalStatus {
   deployed: boolean; stack: string; state: string; running: boolean; url: string; protected: boolean; key_installed: boolean
