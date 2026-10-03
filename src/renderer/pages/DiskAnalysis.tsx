@@ -22,8 +22,9 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
-import { fetchMaintenanceDisk, fetchDisks, triggerDeepPrune } from '../api/endpoints'
-import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize, DiskInfo } from '../../shared/types'
+import { fetchMaintenanceDisk, fetchDisks, fetchStorageOverview, triggerDeepPrune } from '../api/endpoints'
+import type { DiskAnalysis as DiskAnalysisData, DiskStackSize, DiskDfEntry, DiskVolumeSize, DiskInfo, StorageOverview } from '../../shared/types'
+import { StorageSummary, ProxmoxStorage, VmDisks, fmtBytes } from '../components/storage/StorageEverywhere'
 import { ErrorState, EmptyState } from '../components/common/PageState'
 import PageHeader from '../components/common/PageHeader'
 import Hint from '../components/common/Hint'
@@ -187,6 +188,10 @@ export default function DiskAnalysis() {
   const { data: disksData } = usePolling<{ total: number; disks: DiskInfo[] }>(fetchDisks, 60000, { enabled: isConnected })
   const mountedDrives = disksData?.disks ?? []
 
+  // every machine: the Proxmox nodes (disks, pools) and the VMs' disks; shown when there is more than this server
+  const { data: overview } = usePolling<StorageOverview>(fetchStorageOverview, 60000, { enabled: isConnected })
+  const everywhere = !!overview && (overview.proxmox.linked || overview.vms.length > 0)
+
   // Rename handler — writes to shared settingsStore (syncs to Dashboard + Settings)
   const handleRenameLabel = useCallback((mount: string, label: string) => {
     const next = { ...diskLabels }
@@ -201,6 +206,14 @@ export default function DiskAnalysis() {
 
   // Aggregate totals across all mounted drives (deduplicated by device)
   const storageTotals = useMemo(() => {
+    // across every machine: real capacity counted once (this server's drives and the Proxmox pools)
+    if (everywhere && overview && overview.totals.total > 0) {
+      const t = overview.totals
+      return {
+        total: fmtBytes(t.total), used: fmtBytes(t.used), free: fmtBytes(t.avail),
+        percent: Math.round((t.used / t.total) * 100), driveCount: t.drives, devices: t.devices,
+      }
+    }
     if (!mountedDrives.length) return null
     // Deduplicate by device — some devices mount at multiple paths
     const seen = new Set<string>()
@@ -220,8 +233,9 @@ export default function DiskAnalysis() {
       free: formatMB(freeMB),
       percent: pct,
       driveCount: seen.size,
+      devices: 1,
     }
-  }, [mountedDrives])
+  }, [mountedDrives, everywhere, overview])
 
   // ---- Action state ----
   const [deepPruning, setDeepPruning] = useState(false)
@@ -312,6 +326,7 @@ export default function DiskAnalysis() {
             {' across '}
             <span className="text-slate-300">{storageTotals.driveCount}</span>
             {` drive${storageTotals.driveCount !== 1 ? 's' : ''} `}
+            {storageTotals.devices > 1 && <>{'on '}<span className="text-slate-300">{storageTotals.devices}</span>{' machines '}</>}
             <span className={`font-semibold ${storageTotals.percent > 80 ? 'text-amber-400' : storageTotals.percent > 60 ? 'text-slate-300' : 'text-emerald-400'}`}>
               ({storageTotals.percent}%)
             </span>
@@ -411,8 +426,11 @@ export default function DiskAnalysis() {
             />
           </div>
 
-          {/* Aggregate storage bar */}
-          {storageTotals && (() => {
+          {/* Every machine: one bar with a segment per machine */}
+          {everywhere && overview && <StorageSummary data={overview} />}
+
+          {/* Aggregate storage bar (this server alone) */}
+          {!everywhere && storageTotals && (() => {
             const pct = storageTotals.percent
             const barGradient = pct > 90
               ? 'bg-gradient-to-r from-rose-500 to-red-500 shadow-rose-500/20'
@@ -458,7 +476,7 @@ export default function DiskAnalysis() {
                 icon={<HardDrive size={14} className="text-cyan-400" aria-hidden />}
                 aside={<Badge color="slate">{mountedDrives.length} drive{mountedDrives.length !== 1 ? 's' : ''}</Badge>}
               >
-                Mounted drives
+                {everywhere ? `${overview?.hub.name || 'This server'} — drives` : 'Mounted drives'}
               </CardTitle>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -563,6 +581,12 @@ export default function DiskAnalysis() {
               </div>
             </div>
           )}
+
+          {/* ----------------------------------------------------------------- */}
+          {/* The Proxmox nodes and the VMs                                      */}
+          {/* ----------------------------------------------------------------- */}
+          {everywhere && overview && <ProxmoxStorage data={overview} />}
+          {everywhere && overview && <VmDisks data={overview} />}
 
           {/* ----------------------------------------------------------------- */}
           {/* Docker DF breakdown — Chart + Table                                */}

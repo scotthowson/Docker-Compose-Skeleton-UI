@@ -656,6 +656,22 @@ export interface DiskInfo {
   percent: string
 }
 
+/** GET /storage/overview — storage across every machine (sizes in bytes) */
+export interface StorageDrive { device: string; mount: string; fstype: string; total: number; used: number; avail: number }
+/** a physical disk of a Proxmox node; wearout is the life left in percent (SSDs), null when unknown */
+export interface PveDisk { devpath: string; model: string; vendor: string; serial: string; size: number; type: string; health: string; wearout: number | null; used: string; rpm: number | null }
+export interface PveStorage { storage: string; type: string; content: string[]; total: number; used: number; avail: number; active: boolean; shared: boolean; network: boolean }
+export interface PveZfsPool { name: string; size: number; alloc: number; free: number; health: string; frag: number | null }
+export interface PveNodeStorage { node: string; status: string; disks: PveDisk[]; disks_error: string | null; storages: PveStorage[]; zfs: PveZfsPool[] }
+export interface StorageOverview {
+  /** counted false: this server is a Proxmox guest, its drives are inside a node's pools (note says which) */
+  hub: { name: string; counted: boolean; note: string | null; drives: StorageDrive[] }
+  proxmox: { linked: boolean; error: string | null; nodes: PveNodeStorage[] }
+  /** the VMs' own disks: they live in the Proxmox pools and are not counted again */
+  vms: { id: string; name: string; vmid: number | null; node?: string; type?: string; reachable: boolean; drives: StorageDrive[] | null }[]
+  totals: { total: number; used: number; avail: number; drives: number; devices: number; pools: number }
+}
+
 /** A user-defined custom disk location (stored locally, not from the API) */
 export interface CustomDiskEntry {
   /** Mount path, e.g. /mnt/external */

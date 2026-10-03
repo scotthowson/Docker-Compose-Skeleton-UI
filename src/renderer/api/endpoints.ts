@@ -211,7 +211,7 @@ import type {
   TotpValidateResponse,
   RouteCertificatesResponse,
   SablierToggleResponse, DockerEngineInfo, DockerEngineFleet, DockerEngineStatus, DockerEngineUpdateResponse, FleetDockerEngineUpdateResponse,
-  ProxmoxSelf,
+  ProxmoxSelf, StorageOverview,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -557,6 +557,11 @@ export function deleteVolume(name: string, member?: string | null): Promise<Volu
 /** GET /disks — Mounted filesystems */
 export function fetchDisks(): Promise<DiskListResponse> {
   return apiClient.get<DiskListResponse>('/disks')
+}
+
+/** GET /storage/overview — this server's drives, every Proxmox node's disks and pools, and the VMs' disks */
+export function fetchStorageOverview(): Promise<StorageOverview> {
+  return apiClient.get<StorageOverview>('/storage/overview')
 }
 
 // ---------------------------------------------------------------------------
