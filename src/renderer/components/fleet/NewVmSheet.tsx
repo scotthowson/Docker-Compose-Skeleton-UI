@@ -9,8 +9,8 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Select, Switch, type ComboboxItem, type ComboboxParsedItem, type OptionsFilter } from '@mantine/core'
 import { Check, Layers, Loader2, Rocket, Server } from 'lucide-react'
-import { fetchFleetProvisionDefaults, provisionFleet, bakeFleetTemplate, fetchFleetMoveCheck } from '../../api/endpoints'
-import type { FleetMoveCheck, FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest} from '../../../shared/types'
+import { fetchFleetProvisionDefaults, provisionFleet, bakeFleetTemplate, fetchFleetMoveCheck, fetchDomains } from '../../api/endpoints'
+import type { FleetMoveCheck, FleetProvisionDefaults, FleetVmPlan, ProxmoxCapabilities , FleetProvisionRequest, DomainsResponse } from '../../../shared/types'
 import { Sheet, inputCls, labelCls, HubFirewallNote } from './fleetShared'
 import { VmSizeControl } from './VmSizeControl'
 import { isMobile } from '../../hooks/useMobile'
@@ -284,6 +284,14 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
       .catch((e) => { if (alive) setCheckErr(e instanceof Error ? e.message : 'Could not read what the stack holds') })
     return () => { alive = false }
   }, [moveStack])
+  // the domain its apps answer under: offered when the hub has more than one (default: the one for new VMs)
+  const [domains, setDomains] = useState<DomainsResponse | null>(null)
+  const [domain, setDomain] = useState('')
+  useEffect(() => {
+    let alive = true
+    fetchDomains().then((d) => { if (alive) { setDomains(d); setDomain(d.vm_default ?? d.primary ?? '') } }).catch(() => { /* an older hub: one domain */ })
+    return () => { alive = false }
+  }, [])
   const [cores, setCores] = useState(defaults?.defaults.cores ?? 2)
   const [memGb, setMemGb] = useState(Math.round((defaults?.defaults.memory_mb ?? 4096) / 1024))
   const [diskGb, setDiskGb] = useState(defaults?.defaults.disk_gb ?? 32)
@@ -301,6 +309,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
     try {
       const vm: FleetVmPlan = { stack, cores, memory_mb: memGb * 1024, disk_gb: diskGb }
       if (moving) vm.move = true
+      if (domains && domains.domains.length > 1 && domain) vm.domain = domain
       if (ip.trim()) vm.ip = ip.trim()
       await provisionFleet({ ...vmSettingsToRequest(settings), vms: [vm] })
       saveVmSettings(settings)
@@ -385,6 +394,15 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
                 <MoveNotes check={check} />
               </>
             )}
+          </div>
+        )}
+        {domains && domains.domains.length > 1 && (
+          <div>
+            <label htmlFor={`${uid}-domain`} className={labelCls}>Domain</label>
+            <select id={`${uid}-domain`} value={domain} onChange={(e) => setDomain(e.target.value)} disabled={busy} className={`${inputCls} font-mono`}>
+              {domains.domains.map((d) => <option key={d.domain} value={d.domain}>{d.domain}{d.primary ? ' (the hub)' : ''}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">Its apps answer under *.{domain || domains.primary}{moving ? ' (its routes move there with it)' : ''}. Change it later on the VM.</p>
           </div>
         )}
         <div>

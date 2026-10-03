@@ -31,6 +31,7 @@ import type {
   LogRotateResponse,
   MemberTerminalStatus,
   MemberTerminalExecResponse,
+  BackupVerifyResponse,
 } from '../../shared/types'
 import type {
   FleetTarget,
@@ -159,8 +160,13 @@ export function cancelBackupScoped(member: string | null): Promise<{ success: bo
 }
 
 /** restore acts on the server that keeps the archive */
-export function restoreBackupScoped(member: string | null, filename: string): Promise<BackupRestoreResponse> {
-  return apiClient.post<BackupRestoreResponse>(memberPath(member, '/backups/restore'), { filename, confirm: 'RESTORE' }, 120000)
+export function restoreBackupScoped(member: string | null, filename: string, stack?: string): Promise<BackupRestoreResponse> {
+  return apiClient.post<BackupRestoreResponse>(memberPath(member, '/backups/restore'), { filename, confirm: 'RESTORE', ...(stack ? { stack } : {}) }, 120000)
+}
+
+/** POST /backups/verify — read a backup to the end against its checksum and manifest, without restoring it */
+export function verifyBackupScoped(member: string | null, filename: string): Promise<BackupVerifyResponse> {
+  return apiClient.post<BackupVerifyResponse>(memberPath(member, '/backups/verify'), { filename }, 300000)
 }
 
 // ---------------------------------------------------------------------------

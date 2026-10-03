@@ -656,6 +656,28 @@ export interface DiskInfo {
   percent: string
 }
 
+/** GET /domains — this server's domains: the primary (the hub's stacks) and the others, one Cloudflare token for all */
+export interface DomainEntry {
+  domain: string
+  primary: boolean
+  /** its wildcard certificate is asked for (null: Traefik asks per host, no wildcard list) */
+  certificate: boolean | null
+  /** Authelia has a sign-in for it (null: no Authelia) */
+  sign_in: boolean | null
+  /** the VMs that answer under it */
+  vms: { id: string; name: string; vmid: number | null }[]
+}
+export interface DomainsResponse {
+  primary: string | null
+  cloudflare: boolean
+  authelia: boolean
+  wildcard: boolean
+  /** the domain new VMs get; null = the primary */
+  vm_default: string | null
+  domains: DomainEntry[]
+}
+export interface DomainChangeResponse { success: boolean; domain: string; message?: string; traefik_restarted?: boolean; authelia_restarted?: boolean; dns?: { domain: string; ok: boolean; message?: string }[] }
+
 /** GET /storage/overview — storage across every machine (sizes in bytes) */
 export interface StorageDrive { device: string; mount: string; fstype: string; total: number; used: number; avail: number }
 /** a physical disk of a Proxmox node; wearout is the life left in percent (SSDs), null when unknown */
@@ -1163,7 +1185,16 @@ export interface BackupEntry {
   filename: string
   size: string
   timestamp: number
+  /** it has a .sha256 written when it was made (read back to the end then) */
+  verified?: boolean
+  /** "full" (everything), "stack" (one stack), "legacy" (an archive from before 4.0.28) */
+  kind?: 'full' | 'stack' | 'legacy'
+  stack?: string
+  /** false: something could not be read when it was made (its warnings say what); null for an old archive */
+  complete?: boolean | null
 }
+/** POST /backups/verify — the archive read to the end against its .sha256 and manifest */
+export interface BackupVerifyResponse { ok: boolean; error: string | null; sha256: string; checksum_checked: boolean; format: number; kind: string; parts: number; filename: string }
 
 export interface BackupListResponse {
   backups: BackupEntry[]
@@ -1180,6 +1211,8 @@ export interface BackupStatusResponse {
   error?: string
   started_at?: string
   filename?: string
+  /** what could not be read (the backup is then incomplete) */
+  warnings?: string[]
 }
 
 export interface BackupConfigResponse {
@@ -4088,7 +4121,7 @@ export interface FleetProvisionDefaults {
   defaults: { cores: number; memory_mb: number; disk_gb: number }
 }
 
-export interface FleetVmPlan { /** 4.0.21: the stack runs on the hub and goes into the VM with its folders, volumes and routes; the hub keeps its copy */ move?: boolean; stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string; /** per-VM operating system, one of: */ image?: string; image_url?: string; image_file?: string; iso?: string }
+export interface FleetVmPlan { /** 4.0.21: the stack runs on the hub and goes into the VM with its folders, volumes and routes; the hub keeps its copy */ move?: boolean; stack: string; /** the hub's Stacks/<source> folder that moves into the VM (default: the stack name) */ source?: string; cores?: number; memory_mb?: number; disk_gb?: number; ip?: string; /** one of the hub's domains for its apps (default: the one for new VMs, else the hub's) */ domain?: string; /** per-VM operating system, one of: */ image?: string; image_url?: string; image_file?: string; iso?: string }
 /** GET /fleet/provision/move-check — what moving a stack of the hub into a VM takes with it */
 export interface FleetMoveCheck {
   stack: string; containers_up: number; data_kb: number; files: number

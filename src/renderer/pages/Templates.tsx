@@ -71,7 +71,7 @@ import {
   TONE_QUIET, TONE_OK, TONE_DANGER, TONE_GHOST_DANGER,
 } from '../lib/ui'
 import { fetchTemplates, fetchTemplateDetail, deployTemplate, importTemplate, updateTemplate, deleteTemplate, fetchStacks, fetchDeployHistory, undeployTemplate, dryRunTemplate, fetchContainers, importTemplateFromUrl, fetchTemplateUrl, fetchTemplateGallery, fetchTraefikStatus, fetchHomarrStatus, fetchStackActivity, fetchSecrets, setSecret, startStack,
-  validateCompose,
+  validateCompose, fetchDomains,
 } from '../api/endpoints'
 import type {
   TemplateInfo,
@@ -86,6 +86,7 @@ import type {
   GalleryTemplate,
   StackActivityResponse,
   StackActivityService,
+  DomainsResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -435,7 +436,7 @@ function parseServicesWithPorts(compose: string): { name: string; containerName:
 }
 
 /** the per-route choices of the deploy sheet: who is behind Authelia, who starts on demand, and whether a route is made at all */
-type DeploySwitches = { authelia_services?: string[]; on_demand_services?: string[]; routes?: boolean; route_services?: string[] }
+type DeploySwitches = { authelia_services?: string[]; on_demand_services?: string[]; routes?: boolean; route_services?: string[]; domain?: string }
 
 interface DeployModalProps {
   template: TemplateInfo
@@ -609,6 +610,14 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // hub's proxy asks it; on the hub the Sablier template has to be there first
   const targetInVm = stacks.find((st) => st.name === targetStack)?.placement === 'vm'
   const sablierPresent = sablierOnHub || targetInVm
+  // the domain the routes answer under: a hub stack picks one of the hub's domains (default its own); a VM's stack answers
+  // under that VM's domain (the hub writes its routes there)
+  const [domainsInfo, setDomainsInfo] = useState<DomainsResponse | null>(null)
+  const [routeDomain, setRouteDomain] = useState('')
+  useEffect(() => { fetchDomains().then(setDomainsInfo).catch(() => { /* an older server: one domain */ }) }, [])
+  const targetMemberId = stacks.find((st) => st.name === targetStack)?.member
+  const vmDomain = targetInVm ? domainsInfo?.domains.find((d) => d.vms.some((v) => v.id === targetMemberId))?.domain : undefined
+  const effDomain = targetInVm ? (vmDomain || traefikDomain) : (routeDomain || traefikDomain)
   const [sablierOpts, setSablierOpts] = useState<SablierOptions>(SABLIER_DEFAULTS)
   const [showSablierOptions, setShowSablierOptions] = useState(false)
   // Homarr integration state
@@ -726,7 +735,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
         svc.subdomain,
         containerNameFor(svc),
         svc.port,
-        traefikDomain,
+        effDomain,
         authFor(svc) && !!autheliaMw,
         autheliaMw || 'authelia-forwardauth',
         svc.onDemand && sablierPresent,
@@ -734,7 +743,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       )
     }
     setCustomRoutes(routes)
-  }, [enableRouting, routeServices, traefikDomain, authFor, autheliaMw, sablierPresent, sablierOpts, containerNameFor])
+  }, [enableRouting, routeServices, traefikDomain, effDomain, authFor, autheliaMw, sablierPresent, sablierOpts, containerNameFor])
 
   // Sync variables when detail loads
   const templateVars = detail?.template.variables ?? template.variables ?? []
@@ -970,6 +979,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           ...(routable ? {
             routes: enableRouting,
             route_services: enableRouting && routeServices.length > 0 ? routeServices.filter((s) => s.enabled).map((s) => s.name) : undefined,
+            domain: !targetInVm && routeDomain && routeDomain !== traefikDomain ? routeDomain : undefined,
           } : {}),
         }
       : undefined
@@ -980,7 +990,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
       setShowOutput(true)
     }
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, traefikDomain, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, traefikDomain, routeDomain, targetInVm, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -1589,6 +1599,19 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       <p className="text-[11px] text-slate-500 leading-relaxed">
                         Each service with ports gets an HTTPS route via Traefik. Edit subdomains or disable services you don't want exposed.
                       </p>
+                      {!targetInVm && domainsInfo && domainsInfo.domains.length > 1 && (
+                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                          Domain
+                          <select value={routeDomain || traefikDomain} onChange={(e) => setRouteDomain(e.target.value === traefikDomain ? '' : e.target.value)}
+                            aria-label="The domain its routes answer under"
+                            className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/40">
+                            {domainsInfo.domains.map((d) => <option key={d.domain} value={d.domain}>{d.domain}{d.primary ? ' (this server)' : ''}</option>)}
+                          </select>
+                        </label>
+                      )}
+                      {targetInVm && vmDomain && vmDomain !== traefikDomain && (
+                        <p className="text-[11px] text-violet-300/80">This stack's VM answers under {vmDomain}: its routes are written there.</p>
+                      )}
 
                       {/* Per-service subdomain rows */}
                       {routeServices.map((svc, idx) => (
@@ -1610,7 +1633,7 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             disabled={!svc.enabled}
                             className="w-24 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/40 disabled:opacity-50 transition-all"
                           />
-                          <span className="text-[10px] text-slate-500">.{traefikDomain}</span>
+                          <span className="text-[10px] text-slate-500">.{effDomain}</span>
                           <span className="text-[10px] text-slate-500 ml-auto">:{svc.port}</span>
                           <span className="text-[10px] text-slate-500 truncate max-w-[80px]" title={containerNameFor(svc)}>{containerNameFor(svc)}</span>
                           {autheliaMw && (
@@ -1717,9 +1740,9 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                             <div key={svcName} className="rounded-lg border border-white/5 overflow-hidden">
                               <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03]">
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                <span className="text-[10px] font-semibold text-slate-400">{svcName}.{traefikDomain}</span>
+                                <span className="text-[10px] font-semibold text-slate-400">{svcName}.{effDomain}</span>
                               </div>
-                              <textarea aria-label={`Route for ${svcName}.${traefikDomain}`}
+                              <textarea aria-label={`Route for ${svcName}.${effDomain}`}
                                 value={routeYaml}
                                 onChange={(e) => setCustomRoutes((prev) => ({ ...prev, [svcName]: e.target.value }))}
                                 rows={Math.min(routeYaml.split('\n').length + 1, 16)}
@@ -3433,6 +3456,7 @@ export default function Templates() {
           // the routing switch and the per-service boxes (an empty list on purpose = no route)
           routes: switches?.routes,
           route_services: switches?.route_services,
+          domain: switches?.domain,
         }, deployMember?.id)
         if (res.success) {
           refresh()

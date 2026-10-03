@@ -17,7 +17,7 @@ import {
   RotateCcw, Server, Cpu, MemoryStick, HardDrive, Clock, Play, Power, Square, RotateCw, Zap, Pause, PlayCircle,
   RefreshCw, Search, AlertTriangle, Settings2, ShieldCheck, Boxes, Box, Tag, ListChecks, X, Loader2,
   Satellite, Link2, KeyRound, Radar, Rocket, MoreHorizontal, PlugZap, Pencil, Trash2, Layers, ExternalLink, Home,
-  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp, FolderSync, FolderInput, TerminalSquare,
+  Info, LayoutGrid, LayoutList, Hammer, LayoutDashboard, ChevronDown, ChevronUp, FolderSync, FolderInput, TerminalSquare, Globe,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -31,7 +31,7 @@ import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxVm, fetchProxmoxTasks, proxmoxVmAction, proxmoxVmBalloon,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
-  testFleetMember, relinkFleetMember, removeFleetMember, syncFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
+  testFleetMember, relinkFleetMember, removeFleetMember, syncFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf, fetchDomains, setMemberDomain,
 } from '../api/endpoints'
 import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, FleetStatus, FleetTemplate, FleetJob, FleetProvisionDefaults, StackInfo, ContainerInfo, ProxmoxSelf } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
@@ -941,6 +941,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
           )}
         </div>
 
+        {isAdmin && vm.type === 'qemu' && <VmDomainPanel vmid={vm.vmid} onDone={onChanged} />}
         {isAdmin && d && <ResizePanel vm={vm} running={running} cores={d.config.cores ?? d.cpus ?? 1} memoryMb={Number(String(d.config.memory ?? Math.round(maxmem / 1048576)).split(',')[0]) || 0} diskBytes={d.maxdisk ?? vm.maxdisk} onDone={() => { detail.refresh(); onChanged() }} />}
         {detail.error && !d && <p className="text-xs text-rose-300">{detail.error.message}</p>}
         {facts.length > 0 && (
@@ -969,6 +970,38 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
 }
 
 /** More room for a guest: disk added on top (the filesystem of a fleet VM grows at once), cores and memory (a reboot applies them) */
+// The domain a VM of the fleet answers under: one of the hub's domains (Settings → DNS & Routes), the hub's own by
+// default. Changing it moves the VM's routes there at once (sonarr.howson.dev becomes sonarr.howson.lol).
+function VmDomainPanel({ vmid, onDone }: { vmid: number; onDone: () => void }) {
+  const { addToast } = useToast()
+  const domains = usePolling(fetchDomains, 60000)
+  const [busy, setBusy] = useState(false)
+  const data = domains.data
+  const entry = data?.domains.find((d) => d.vms.some((v) => v.vmid === vmid))
+  const member = entry?.vms.find((v) => v.vmid === vmid)
+  if (!data || !entry || !member || data.domains.length < 2) return null
+  const change = async (to: string) => {
+    if (to === entry.domain) return
+    setBusy(true)
+    try {
+      const r = await setMemberDomain(member.id, to === data.primary ? '' : to)
+      addToast({ type: 'success', message: r.message, duration: 9000 }); domains.refresh(); onDone()
+    } catch (e) { addToast({ type: 'error', message: e instanceof Error ? e.message : 'The VM did not take the domain', duration: 9000 }) } finally { setBusy(false) }
+  }
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 flex flex-wrap items-center justify-between gap-2">
+      <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300"><Globe size={12} /> Domain <span className="text-slate-500 font-normal">· its apps answer under *.{entry.domain}</span></span>
+      <span className="flex items-center gap-2">
+        {busy && <Loader2 size={12} className="animate-spin text-cyan-400" aria-label="Moving its routes" />}
+        <select value={entry.domain} disabled={busy} onChange={(e) => void change(e.target.value)} aria-label={`The domain ${member.name} answers under`}
+          className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500/40">
+          {data.domains.map((d) => <option key={d.domain} value={d.domain}>{d.domain}{d.primary ? ' (the hub)' : ''}</option>)}
+        </select>
+      </span>
+    </div>
+  )
+}
+
 function ResizePanel({ vm, running, cores, memoryMb, diskBytes, onDone }: { vm: ProxmoxVm; running: boolean; cores: number; memoryMb: number; diskBytes: number; onDone: () => void }) {
   const { addToast } = useToast()
   const confirm = useConfirm()

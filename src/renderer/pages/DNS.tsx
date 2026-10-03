@@ -57,9 +57,10 @@ import { LoadingState, EmptyState, ErrorState } from '../components/common/PageS
 import {
   fetchRoutes, fetchDnsRecords, fetchDnsStatus, fetchDnsZones, checkSubdomain, updateRoute, deleteRoute, fetchRouteCertificates,
   fetchTraefikStatus, createDnsRecord, updateDnsRecord, deleteDnsRecord, syncDnsRecords,
-  type RouteEntry, type DnsRecord, type DnsRecordInput, type DnsZone,
+  type RouteEntry, type DnsRecord, type DnsRecordInput, type DnsZone, fetchDomains,
 } from '../api/endpoints'
 import ModalOverlay from '../components/common/ModalOverlay'
+import DomainsPanel from '../components/dns/DomainsPanel'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -412,6 +413,7 @@ export default function DNS() {
   const { data: dnsData, loading: dnsLoading, error: dnsError, refresh: refreshDns } = usePolling(fetchRecords, 60000, { enabled: isConnected })
   const { data: traefikStatus } = usePolling(fetchTraefikStatus, 60000, { enabled: isConnected })
   const { data: certs, loading: certsLoading, error: certsError, refresh: refreshCerts } = usePolling(fetchRouteCertificates, 120000, { enabled: isConnected && !!traefikStatus?.active })
+  const { data: domainsData, refresh: refreshDomains } = usePolling(fetchDomains, 60000, { enabled: isConnected && !!traefikStatus?.active })
 
   const routes = routesData?.routes ?? []
   const domain = routesData?.domain ?? dnsStatus?.domain ?? traefikStatus?.domain ?? ''
@@ -701,6 +703,9 @@ export default function DNS() {
 
       {/* Hidden when the API predates the endpoint (older AIO) */}
       {traefikStatus?.active && (certs || !certsError) && <CertificatesPanel data={certs ?? null} loading={certsLoading} onRefresh={refreshCerts} />}
+
+      {/* the domains this server answers for (hidden when the API predates them) */}
+      {domainsData && domainsData.primary && <DomainsPanel data={domainsData} isAdmin={isAdmin} onChanged={() => { void refreshDomains(); refreshCerts() }} />}
 
       {/* ---- Tabs + search ---- */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">

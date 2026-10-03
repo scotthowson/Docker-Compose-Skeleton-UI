@@ -26,6 +26,7 @@ import {
   fetchBackupConfigScoped,
   triggerBackupScoped,
   restoreBackupScoped,
+  verifyBackupScoped,
   cancelBackupScoped,
   fleetTargets,
   fanOut,
@@ -53,6 +54,7 @@ import {
   XCircle,
   Boxes,
   Info,
+  ShieldCheck,
 } from 'lucide-react'
 import type {
   BackupStatusResponse,
@@ -209,6 +211,7 @@ export default function Backup() {
   const [stackChoices, setStackChoices] = useState<BackupStackChoice[]>([])
   const [restoreTarget, setRestoreTarget] = useState<FleetBackupEntry | null>(null)
   const [restoreLoading, setRestoreLoading] = useState(false)
+  const [verifying, setVerifying] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [expandedGuide, setExpandedGuide] = useState<number | null>(null)
@@ -626,6 +629,11 @@ export default function Backup() {
                 <p className="mt-2 text-sm text-rose-300">
                   {statusData?.error || 'An error occurred during the last backup'}
                 </p>
+                {(statusData?.warnings?.length ?? 0) > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs text-amber-200/90 max-h-40 overflow-y-auto">
+                    {statusData!.warnings!.slice(0, 50).map((w, i) => <li key={i} className="font-mono break-all">{w}</li>)}
+                  </ul>
+                )}
               </div>
             </div>
           )}
@@ -890,6 +898,9 @@ export default function Backup() {
                           {backup.filename}
                         </span>
                         {backup.member !== undefined && <VmCapsule member={backup.member} name={backup.member_name} vmid={backup.vmid} size="xs" onClick={() => setScope(backup.member ?? 'hub')} />}
+                        {backup.kind === 'stack' && backup.stack && <Badge component="span" color="slate" title="A backup of one stack">{backup.stack}</Badge>}
+                        {backup.complete === false && <Badge component="span" color="amber" title="Something could not be read when it was made: the status above (or its manifest) says what">incomplete</Badge>}
+                        {backup.verified && <span className="inline-flex items-center text-emerald-400/80" title="Read back to the end when it was made; a checksum (.sha256) is beside it"><ShieldCheck size={12} aria-label="checked" /></span>}
                       </div>
                       {onVm && (
                         <p className="mt-1 text-[10px] text-slate-500 flex items-center gap-1" title="The hub's proxy carries JSON, not files: copy the archive over ssh from that VM's BACKUP_DEST_DIR">
@@ -906,7 +917,31 @@ export default function Backup() {
                         {formatTimestamp(backup.timestamp)}
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="px-5 py-3 text-right whitespace-nowrap">
+                      <Hint label="Read it to the end against its checksum and its list of parts, without restoring anything">
+                        <span className="inline-flex mr-2">
+                          <button
+                            type="button"
+                            disabled={verifying === backupKey(backup)}
+                            onClick={async () => {
+                              setVerifying(backupKey(backup))
+                              try {
+                                const r = await verifyBackupScoped(backup.member ?? scopeMember ?? null, backup.filename)
+                                addToast(r.ok
+                                  ? { type: 'success', message: `${backup.filename} is sound: ${r.parts ? `${r.parts} parts, ` : ''}${r.checksum_checked ? 'checksum matches' : 'read to the end (it has no checksum)'}` }
+                                  : { type: 'error', message: `${backup.filename}: ${r.error ?? 'it does not read back'}` })
+                              } catch (e) {
+                                addToast({ type: 'error', message: e instanceof Error ? e.message : 'The check failed' })
+                              } finally { setVerifying('') }
+                            }}
+                            aria-label={`Check ${backup.filename}`}
+                            className={`${BTN_CARD} ${TONE_QUIET}`}
+                          >
+                            <ShieldCheck size={12} className={verifying === backupKey(backup) ? 'animate-pulse' : ''} />
+                            Verify
+                          </button>
+                        </span>
+                      </Hint>
                       <Hint label={onVm ? `Restores on ${backup.member_name ?? memberName}` : hasFleet ? 'Restores on the hub' : 'Restore this backup'}>
                         <span className="inline-flex">
                           <button
@@ -940,8 +975,8 @@ export default function Backup() {
           title="Confirm restore"
           word="RESTORE"
           confirmLabel="Restore backup"
-          warning={<>This will overwrite the configuration and data files{hasFleet ? (restoreTarget.member ?? scopeMember) ? ` on the VM ${restoreTarget.member_name ?? memberName}` : ' on the hub' : ''}.</>}
-          detail="This action cannot be undone. Make sure you have a current backup before proceeding."
+          warning={<>The stacks it holds are stopped and their files and volumes go back to this backup{hasFleet ? (restoreTarget.member ?? scopeMember) ? ` on the VM ${restoreTarget.member_name ?? memberName}` : ' on the hub' : ''}; they start again afterwards.</>}
+          detail="What is there now is set aside first (.data/pre-restore, the newest two are kept), so it can be put back by hand. The archive is checked before anything is touched."
           subjectLabel="Restoring from"
           subject={<>
             <div className="flex items-center gap-2 flex-wrap">

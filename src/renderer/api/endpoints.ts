@@ -211,7 +211,7 @@ import type {
   TotpValidateResponse,
   RouteCertificatesResponse,
   SablierToggleResponse, DockerEngineInfo, DockerEngineFleet, DockerEngineStatus, DockerEngineUpdateResponse, FleetDockerEngineUpdateResponse,
-  ProxmoxSelf, StorageOverview,
+  ProxmoxSelf, StorageOverview, DomainsResponse, DomainChangeResponse,
 } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -557,6 +557,27 @@ export function deleteVolume(name: string, member?: string | null): Promise<Volu
 /** GET /disks — Mounted filesystems */
 export function fetchDisks(): Promise<DiskListResponse> {
   return apiClient.get<DiskListResponse>('/disks')
+}
+
+/** GET /domains — the primary domain, the others, the default for new VMs, who uses which */
+export function fetchDomains(): Promise<DomainsResponse> {
+  return apiClient.get<DomainsResponse>('/domains')
+}
+/** POST /domains — add a domain (certificate, sign-in and apex record follow) */
+export function addDomain(domain: string): Promise<DomainChangeResponse> {
+  return apiClient.post<DomainChangeResponse>('/domains', { domain }, 60000)
+}
+/** DELETE /domains/{domain} — take a domain off (no VM may still use it) */
+export function removeDomain(domain: string): Promise<DomainChangeResponse> {
+  return apiClient.delete<DomainChangeResponse>(`/domains/${encodeURIComponent(domain)}`)
+}
+/** POST /domains/vm-default — the domain new VMs get ("" = the primary) */
+export function setVmDefaultDomain(domain: string): Promise<{ success: boolean; vm_default: string | null; effective: string }> {
+  return apiClient.post('/domains/vm-default', { domain })
+}
+/** POST /fleet/members/{id}/domain — a VM answers under another domain ("" = the hub's own); its routes move at once */
+export function setMemberDomain(member: string, domain: string): Promise<{ success: boolean; member: string; domain: string; message: string }> {
+  return apiClient.post(`/fleet/members/${encodeURIComponent(member)}/domain`, { domain }, 120000)
 }
 
 /** GET /storage/overview — this server's drives, every Proxmox node's disks and pools, and the VMs' disks */
@@ -1396,6 +1417,8 @@ export function deployTemplate(name: string, opts: {
   routes?: boolean
   /** only these services get a route; an empty list sent on purpose means none */
   route_services?: string[]
+  /** one of this server's domains for the routes (a hub stack; default its own) */
+  domain?: string
 }, member?: string | null): Promise<TemplateDeployResponse> {
   // a first deploy pulls every image and Authelia hashes its secrets: well past the usual 30 s
   return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 600000)
