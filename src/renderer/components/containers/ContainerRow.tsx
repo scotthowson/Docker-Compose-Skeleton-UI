@@ -208,13 +208,15 @@ const ContainerRow: React.FC<ContainerRowProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
               title="Stopped on purpose: Sablier starts it on the first request — click for the idle time, the waiting page, or to serve it normally"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              on demand
+              <Moon size={10} aria-hidden />
+              sleeping
+              <span className="text-[9px] text-indigo-300/80">· on demand</span>
             </button>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              on demand
+              <Moon size={10} aria-hidden />
+              sleeping
+              <span className="text-[9px] text-indigo-300/80">· on demand</span>
             </span>
           )
         ) : (

@@ -956,21 +956,9 @@ const ContainerDetail: React.FC<ContainerDetailProps> = ({
 
         {/* Action buttons row — wraps on mobile: emerald starts, rose removes, the rest is neutral */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* on demand is Sablier beside the Traefik that serves the route: a VM's containers are
-              served by the hub's Traefik and Sablier cannot wake them from there (not yet); the button
-              stays visible for them, switched off, and says why */}
-          {isAdmin && member && (
-            <Hint label="Not for a container in a VM yet. Sablier has to run beside the Traefik that serves the route, and that is the hub's. Sablier has no login of its own, so it is not opened to the network the VM is on. Containers that run on the hub can start on demand.">
-              <span className="inline-flex cursor-not-allowed">
-                <button type="button" disabled aria-disabled="true" className={`${BTN_TOOLBAR} ${TONE_QUIET} !text-slate-500 opacity-60 pointer-events-none`}>
-                  <Moon size={14} />
-                  Start on demand
-                </button>
-              </span>
-            </Hint>
-          )}
-          {isAdmin && !member && (
-            <Hint label={containerInfo.on_demand ? 'Sablier stops this container when idle and starts it on the first request — change the idle time and the waiting page, or serve it normally again' : 'Let Traefik start this container on the first request and stop it when idle (needs the Sablier template and an HTTPS route)'}>
+          {/* in a VM it works the same: the VM runs its own Sablier, which only the hub's proxy can reach */}
+          {isAdmin && (
+            <Hint label={containerInfo.on_demand ? 'Sablier stops this container when idle and starts it on the first request — change the idle time and the waiting page, or serve it normally again' : member ? 'Let the hub\'s proxy start this container on the first request and stop it when idle (the VM runs its own Sablier for it, reachable by the hub only)' : 'Let Traefik start this container on the first request and stop it when idle (needs the Sablier template and an HTTPS route)'}>
               <button
                 onClick={() => setOnDemandOpen(true)}
                 disabled={!!actionLoading}

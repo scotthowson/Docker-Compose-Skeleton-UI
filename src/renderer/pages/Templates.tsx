@@ -605,10 +605,10 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   // What this install can offer per route: the Authelia middleware name and Sablier
   const [autheliaMw, setAutheliaMw] = useState('')
   const [sablierOnHub, setSablierPresent] = useState(false)
-  // Sablier runs on the hub and wakes the hub's containers only: a stack that lives in a VM has no "start on demand"
-  // (its routes are still protected by the hub's Authelia, chosen here like for any other stack)
+  // A stack that lives in a VM can start on demand too: the VM makes its own Sablier (reachable by the hub only) and the
+  // hub's proxy asks it; on the hub the Sablier template has to be there first
   const targetInVm = stacks.find((st) => st.name === targetStack)?.placement === 'vm'
-  const sablierPresent = sablierOnHub && !targetInVm
+  const sablierPresent = sablierOnHub || targetInVm
   const [sablierOpts, setSablierOpts] = useState<SablierOptions>(SABLIER_DEFAULTS)
   const [showSablierOptions, setShowSablierOptions] = useState(false)
   // Homarr integration state

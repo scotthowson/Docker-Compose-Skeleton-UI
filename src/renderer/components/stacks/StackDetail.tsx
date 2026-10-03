@@ -28,6 +28,7 @@ import {
   X,
   CloudUpload,
   CloudDownload,
+  Moon,
 } from 'lucide-react'
 import type { StackDetail as StackDetailType, ContainerInfo, StackInfo, ProxmoxVmAction, StackAppDataStatus } from '../../../shared/types'
 import { fetchStack, fetchStackLogs, fetchStackCompose, cloneStack, renameStack, startContainer, stopContainer, restartContainer, proxmoxVmAction, pushStackFiles, pullStackFiles, fetchStackAppData, mountStackAppData, unmountStackAppData } from '../../api/endpoints'
@@ -534,7 +535,9 @@ export default function StackDetail({ stackName, onBack, onAction, isActionLoadi
                 <span className="font-semibold text-slate-200">
                   {detail?.running_containers ?? 0}
                 </span>{' '}
-                container{(detail?.running_containers ?? 0) !== 1 ? 's' : ''}
+                {(detail?.sleeping_containers ?? 0) > 0
+                  ? <>running<span className="text-slate-600">{' · '}</span><span className="font-semibold text-indigo-300">{detail?.sleeping_containers}</span> sleeping</>
+                  : <>container{(detail?.running_containers ?? 0) !== 1 ? 's' : ''}</>}
               </span>
             </div>
 
@@ -796,12 +799,20 @@ function ContainersTable({ containers, onContainerClick, member = null, isAdmin 
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${stateBadge(c.state)}`}
-                    >
-                      {c.state}
-                    </span>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {c.on_demand && !running ? (
+                      // asleep on purpose: Sablier starts it on the first request
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ring-1 bg-indigo-500/10 text-indigo-300 ring-indigo-500/20" title="Stopped on purpose: Sablier starts it on the first request">
+                        <Moon size={10} aria-hidden />
+                        sleeping
+                        <span className="text-[9px] text-indigo-300/80">· on demand</span>
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${stateBadge(c.state)}`}>
+                        {c.state}
+                        {c.on_demand && <span className="text-[9px] text-indigo-300/80" title="Sablier stops it when idle and starts it on the next request">· on demand</span>}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-1.5">

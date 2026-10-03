@@ -170,6 +170,8 @@ export interface StackDetail {
   name: string
   status: 'running' | 'stopped'
   running_containers: number
+  /** its on-demand containers asleep right now */
+  sleeping_containers?: number
   has_env: boolean
   services: string[]
   containers: ContainerInfo[]
@@ -216,6 +218,8 @@ export interface StackUpdateResponse {
 // GET /containers, /stacks/:name/containers
 export interface ContainerInfo {
   /** Sablier starts this container on the first request and stops it when idle */
+  /** an on-demand container that is not running: Sablier stopped it on purpose (the stack page says so) */
+  sleeping?: boolean
   on_demand?: boolean
   /** Compose project (the stack) this container belongs to, "" for containers Compose does not manage */
   stack?: string
