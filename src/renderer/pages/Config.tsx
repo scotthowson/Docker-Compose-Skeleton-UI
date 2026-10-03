@@ -1065,7 +1065,7 @@ export default function Config() {
             description="Watch a UPS, alert on battery, stop the stacks cleanly before it runs out"
           >
             <ToggleRow label="UPS watch" description="Poll the UPS from the API (restart the API after changing these settings)" configKey="UPS_ENABLED" value={Boolean(edits.UPS_ENABLED ?? cfg.ups_enabled)} onChange={handleBoolChange} />
-            <SelectRow label="Source" description="auto tries a NUT server first, then apcupsd" configKey="UPS_SOURCE" value={String(edits.UPS_SOURCE ?? cfg.ups_source ?? 'auto')} options={['auto', 'nut', 'apcupsd']} onChange={handleStringChange} />
+            <SelectRow label="Source" description="auto tries a NUT server, then apcupsd, then CyberPower's pwrstat (PowerPanel)" configKey="UPS_SOURCE" value={String(edits.UPS_SOURCE ?? cfg.ups_source ?? 'auto')} options={['auto', 'nut', 'apcupsd', 'pwrstat']} onChange={handleStringChange} />
             <TextRow label="NUT host" description="NUT server address (the nut-upsd template listens on this host)" configKey="UPS_NUT_HOST" value={String(edits.UPS_NUT_HOST ?? cfg.ups_nut_host ?? '127.0.0.1')} onChange={handleStringChange} placeholder="127.0.0.1" />
             <NumberRow label="NUT port" description="NUT server port" configKey="UPS_NUT_PORT" value={Number(edits.UPS_NUT_PORT ?? cfg.ups_nut_port ?? 3493)} onChange={handleNumberChange} min={1} max={65535} />
             <TextRow label="UPS name" description="Name of the UPS on the NUT server" configKey="UPS_NAME" value={String(edits.UPS_NAME ?? cfg.ups_name ?? 'ups')} onChange={handleStringChange} placeholder="ups" />

@@ -1302,7 +1302,7 @@ export interface TraefikStatusResponse {
 // GET /power
 export interface PowerStatus {
   enabled: boolean
-  source: 'nut' | 'apcupsd' | 'none' | string
+  source: 'nut' | 'apcupsd' | 'pwrstat' | 'none' | string
   ups?: string
   ok?: boolean
   error?: string
@@ -1313,6 +1313,12 @@ export interface PowerStatus {
   runtime_seconds?: number | null
   load?: number | null
   input_voltage?: number | null
+  /** 4.0.22 (pwrstat): the output voltage, the load in watts, the rated watts, the last power event and the self-test result */
+  output_voltage?: number | null
+  load_watts?: number | null
+  rated_watts?: number | null
+  last_power_event?: string | null
+  test_result?: string | null
   model?: string
   sampled_at?: string
   stacks_stopped?: boolean

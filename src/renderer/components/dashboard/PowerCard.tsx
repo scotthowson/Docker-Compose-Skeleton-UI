@@ -33,7 +33,7 @@ export default function PowerCard(_props: CardCommonProps) {
         <CardEmpty
           icon={<BatteryCharging size={22} />}
           title="No UPS is watched"
-          hint="Point DCS at a NUT server (the nut-upsd template serves a USB unit) or apcupsd, and it will alert you and stop the stacks cleanly before the battery runs out."
+          hint="Point DCS at a NUT server (the nut-upsd template serves a USB unit), apcupsd or a CyberPower unit (pwrstat), and it will alert you and stop the stacks cleanly before the battery runs out."
           action={<button type="button" onClick={() => setCurrentPage('config')} className={`${BTN_CARD} ${TONE_OK}`}>Set it up in {pageLabel('config')}</button>}
         />
       </Card>
@@ -70,7 +70,7 @@ export default function PowerCard(_props: CardCommonProps) {
       <CardBody>
         <div className="flex items-end gap-3 mb-2">
           <span className={`text-3xl font-bold tabular-nums ${TONE_TEXT[tone]}`}>{charge === null ? '—' : `${charge}%`}</span>
-          <span className="text-[11px] text-slate-500 mb-1.5">{fmtRuntime(data.runtime_seconds)} left{data.load !== null && data.load !== undefined ? ` · load ${data.load}%` : ''}</span>
+          <span className="text-[11px] text-slate-500 mb-1.5">{fmtRuntime(data.runtime_seconds)} left{data.load !== null && data.load !== undefined ? ` · load ${data.load}%` : ''}{data.load_watts !== null && data.load_watts !== undefined ? ` (${data.load_watts} W${data.rated_watts ? ` of ${data.rated_watts}` : ''})` : ''}</span>
         </div>
         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden mb-3" role="meter" aria-label="Battery charge" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, charge ?? 0))}>
           <div className={`h-full rounded-full transition-all duration-700 ${TONE_FILL[tone]}`} style={{ width: `${Math.max(0, Math.min(100, charge ?? 0))}%` }} />
@@ -78,7 +78,9 @@ export default function PowerCard(_props: CardCommonProps) {
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
           <span>Source</span><span className="text-slate-300 text-right font-mono">{data.source}{data.ups ? ` · ${data.ups}` : ''}</span>
           {data.model && (<><span>Model</span><span className="text-slate-300 text-right truncate">{data.model}</span></>)}
-          {data.input_voltage !== null && data.input_voltage !== undefined && (<><span>Input</span><span className="text-slate-300 text-right tabular-nums">{data.input_voltage} V</span></>)}
+          {data.input_voltage !== null && data.input_voltage !== undefined && (<><span>Input</span><span className="text-slate-300 text-right tabular-nums">{data.input_voltage} V{data.output_voltage !== null && data.output_voltage !== undefined ? ` → ${data.output_voltage} V` : ''}</span></>)}
+          {data.test_result && data.test_result !== 'Unknown' && (<><span>Self-test</span><span className="text-slate-300 text-right truncate" title={data.test_result}>{data.test_result}</span></>)}
+          {data.last_power_event && (<><span>Last event</span><span className="text-slate-300 text-right truncate" title={data.last_power_event}>{data.last_power_event}</span></>)}
           {data.status && (<><span>Status</span><span className="text-slate-300 text-right font-mono">{data.status}</span></>)}
         </div>
         {data.stacks_stopped && <p className="mt-2 text-[11px] text-amber-300">The stacks were stopped for the battery. Start them from the {pageLabel('stacks')} page once mains is back.</p>}
