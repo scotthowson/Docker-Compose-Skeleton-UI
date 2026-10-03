@@ -207,7 +207,7 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
 
           <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-1.5">
-            {!batchMode && onMoveToVm && (
+            {!batchMode && onMoveToVm && !stack.hub_only && (
               <Hint label="Move this stack into a Proxmox VM of its own, with its data">
                 <button
                   onClick={(e) => { e.stopPropagation(); onMoveToVm(stack.name) }}
@@ -292,7 +292,15 @@ export default function StackCard({ stack, isActionLoading, onAction, onSelect, 
             <span className={`font-semibold ${isRunning ? 'text-emerald-400' : 'text-slate-300'}`}>
               {stack.running_containers}
             </span>{' '}
-            container{stack.running_containers !== 1 ? 's' : ''} running
+            {(stack.sleeping_containers ?? 0) > 0
+              ? 'running'
+              : <>container{stack.running_containers !== 1 ? 's' : ''} running</>}
+            {(stack.sleeping_containers ?? 0) > 0 && (
+              <>
+                <span className="text-slate-600">{' · '}</span>
+                <span className="font-semibold text-indigo-300">{stack.sleeping_containers}</span> sleeping
+              </>
+            )}
           </span>
           {lastAction && (
             <span className="flex items-center gap-1 text-[10px] text-slate-500">

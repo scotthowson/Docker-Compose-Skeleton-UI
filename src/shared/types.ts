@@ -145,6 +145,10 @@ export interface StackInfo {
   running_containers: number
   /** every container of this stopped stack is one Sablier stops on purpose: asleep, not down */
   sleeping?: boolean
+  /** its on-demand containers that are asleep right now (Sablier wakes them on a request) */
+  sleeping_containers?: number
+  /** the hub needs it (proxy, sign-in, firewall): it never moves into a VM */
+  hub_only?: boolean
   has_env: boolean
   compose_file: string
   /** Fleet (3.9): "hub" runs here, "vm" runs on a member VM the hub forwards to */
@@ -4073,6 +4077,23 @@ export interface FleetMoveCheck {
   routes: number; outside_paths: string[]; suggested_disk_gb: number; reads_as: string; note: string
   /** a VM of that name exists from an earlier try that did not finish: what to do about it */
   earlier_vm?: string | null
+  /** false: something would be lost in a VM (a hub-only stack, a service that cannot move): blockers says what */
+  movable?: boolean
+  blockers?: string[]
+  /** host devices its services use (/dev/dri …): the VM needs them passed through */
+  devices?: string[]
+  /** ports it publishes on the host: in the VM they open on the VM's address */
+  ports?: { service: string; port: string; protocol: string }[]
+  /** services that drive Docker through its socket: in the VM they see the VM's Docker */
+  docker_socket?: string[]
+  /** its settings that reach other stacks by container name, and other stacks' settings that reach it */
+  links_out?: { file: string; name: string }[]
+  links_in?: { stack: string; file: string; name: string }[]
+  /** cpus: limits of its services, largest first; Docker refuses a limit above the VM's cores */
+  cpu_limits?: { service: string; cpus: number }[]
+  min_cores?: number
+  /** its services' memory limits added up (MB) */
+  memory_limits_mb?: number
 }
 export interface FleetProvisionRequest {
   node: string

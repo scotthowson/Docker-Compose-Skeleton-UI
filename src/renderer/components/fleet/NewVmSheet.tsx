@@ -243,6 +243,26 @@ interface Props {
 
 const sizeOfKb = (kb: number) => (kb >= 1048576 ? `${(kb / 1048576).toFixed(1)} GB` : kb >= 1024 ? `${Math.round(kb / 1024)} MB` : `${kb} KB`)
 
+// What changes for the stack in a VM, said before anything moves: nothing here stops the move, but each needs a look after it
+function MoveNotes({ check }: { check: FleetMoveCheck }) {
+  const notes: { key: string; text: ReactNode }[] = []
+  const ports = check.ports ?? []
+  if (ports.length > 0) notes.push({ key: 'ports', text: <>Ports it opens on the host move to the VM&apos;s address: <span className="font-mono">{ports.map((p) => `${p.port}/${p.protocol}`).join(', ')}</span> — whatever reaches them by this server&apos;s address needs the VM&apos;s.</> })
+  if ((check.devices ?? []).length > 0) notes.push({ key: 'dev', text: <>It uses host devices (<span className="font-mono">{(check.devices ?? []).join(', ')}</span>): the move waits until the VM has them (PCI passthrough).</> })
+  if ((check.docker_socket ?? []).length > 0) notes.push({ key: 'sock', text: <>{(check.docker_socket ?? []).join(', ')} drive{(check.docker_socket ?? []).length === 1 ? 's' : ''} Docker: in the VM {(check.docker_socket ?? []).length === 1 ? 'it sees' : 'they see'} the VM&apos;s containers, not the hub&apos;s.</> })
+  const out = check.links_out ?? []
+  if (out.length > 0) notes.push({ key: 'out', text: <>Its settings reach other stacks by name ({[...new Set(out.map((l) => l.name))].join(', ')}): from the VM those names go through the hub&apos;s address instead — check them after the move.</> })
+  const inn = check.links_in ?? []
+  if (inn.length > 0) notes.push({ key: 'in', text: <>Other stacks reach it by name ({[...new Set(inn.map((l) => `${l.stack} → ${l.name}`))].join(', ')}): point them at its route or the VM&apos;s address after the move.</> })
+  if (notes.length === 0) return null
+  return (
+    <div className="rounded-md border border-sky-500/25 bg-sky-500/[0.05] p-2">
+      <p className="text-[11px] font-medium text-sky-200">Good to know</p>
+      <ul className="mt-1 text-[11px] text-sky-100/85 space-y-1 list-disc pl-4">{notes.map((n) => <li key={n.key}>{n.text}</li>)}</ul>
+    </div>
+  )
+}
+
 export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked, initialStack = '', moveStack }: Props) {
   const uid = useId()
   const moving = !!moveStack
@@ -254,7 +274,13 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
     if (!moveStack) return
     let alive = true
     fetchFleetMoveCheck(moveStack)
-      .then((c) => { if (alive) { setCheck(c); setDiskGb((d) => Math.max(d, c.suggested_disk_gb)) } })
+      .then((c) => {
+        if (!alive) return
+        setCheck(c); setDiskGb((d) => Math.max(d, c.suggested_disk_gb))
+        // a service with cpus: 4 is refused by Docker on a VM of fewer cores, and memory limits want room
+        if (c.min_cores) setCores((n) => Math.max(n, c.min_cores ?? 0))
+        if (c.memory_limits_mb) setMemGb((g) => Math.max(g, Math.min(64, Math.ceil(((c.memory_limits_mb ?? 0) + 1024) / 1024))))
+      })
       .catch((e) => { if (alive) setCheckErr(e instanceof Error ? e.message : 'Could not read what the stack holds') })
     return () => { alive = false }
   }, [moveStack])
@@ -266,7 +292,7 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   useEffect(() => { if (defaults) setSettings((s) => (s.node ? s : settingsFromDefaults(defaults, loadVmSettings()))) }, [defaults])
-  const ok = /^[a-z0-9][a-z0-9-]{0,40}$/.test(stack) && settings.node && settings.storage && settings.gateway && (ip || settings.ip_start) && !(moving && check?.earlier_vm)
+  const ok = /^[a-z0-9][a-z0-9-]{0,40}$/.test(stack) && settings.node && settings.storage && settings.gateway && (ip || settings.ip_start) && !(moving && (check?.earlier_vm || check?.movable === false || cores < (check?.min_cores ?? 0)))
   // a template is baked from a cloud image alone: a DCS image needs none, a baked template is one, an installer cannot be
   const bakeable = !!onBaked && !settings.os.startsWith('iso:') && !settings.os.startsWith('tpl:') && !settings.os.startsWith('cat:dcs-') && (settings.os !== 'url' || /^https?:\/\//.test(settings.image_url))
   const okBake = bakeable && settings.node && settings.storage && settings.gateway && settings.ip_start
@@ -345,6 +371,18 @@ export default function NewVmSheet({ defaults, caps, onClose, onQueued, onBaked,
                 )}
                 {diskGb < check.suggested_disk_gb && <p className="text-[11px] text-amber-300">The data needs a disk of at least {check.suggested_disk_gb} GB.</p>}
                 {check.earlier_vm && <p role="alert" className="text-[11px] text-rose-300">{check.earlier_vm}</p>}
+                {(check.blockers ?? []).length > 0 && (
+                  <div role="alert" className="rounded-md border border-rose-500/30 bg-rose-500/[0.07] p-2">
+                    <p className="text-[11px] font-medium text-rose-200">This stack stays on the hub:</p>
+                    <ul className="mt-1 text-[11px] text-rose-100/90 space-y-0.5 list-disc pl-4">{(check.blockers ?? []).map((b) => <li key={b}>{b}</li>)}</ul>
+                  </div>
+                )}
+                {cores < (check.min_cores ?? 0) && (
+                  <p role="alert" className="text-[11px] text-rose-300">
+                    Give the VM at least {check.min_cores} cores: {(check.cpu_limits ?? []).filter((c) => c.cpus > cores).map((c) => `${c.service} (cpus: ${c.cpus})`).join(', ')} — Docker refuses a container whose limit is above the machine's cores.
+                  </p>
+                )}
+                <MoveNotes check={check} />
               </>
             )}
           </div>
