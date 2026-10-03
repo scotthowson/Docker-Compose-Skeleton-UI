@@ -48,7 +48,7 @@ import { pageLabel } from '../constants/pageTitles'
 import { BTN_TOOLBAR, BTN_TOOLBAR_QUIET, BTN_CARD, BTN_CARD_QUIET, BTN_SHEET_PRIMARY, TONE_OK } from '../lib/ui'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory, fetchFleetVersions, updateFleet, fetchFleetImages, checkFleetImageRegistry } from '../api/endpoints'
+import { relinkFleetMember, fetchImageUpdates, checkImageRegistry, updateImage, checkSystemUpdate, applySystemUpdate, rollbackSystemUpdate, fetchVersion, applyUiUpdate, restartApiServer, fetchSystemUpdateHistory, fetchFleetVersions, updateFleet, fetchFleetImages, checkFleetImageRegistry } from '../api/endpoints'
 import type { ImageCheckResponse, ImageUpdateInfo, SystemUpdateCheckResponse, SystemUpdateApplyResponse, SystemUpdateHistoryResponse, APIVersion, FleetVersions, FleetUpdateRound } from '../../shared/types'
 import { BUILD_VERSION, BUILD_DATE } from '../constants/buildInfo'
 
@@ -257,6 +257,13 @@ export default function Updates() {
   const [fleetAfter, setFleetAfter] = useState(true)
   const [fleetReport, setFleetReport] = useState<FleetUpdateRound | null>(null)
   // a round that finished: the toast and the card's report
+  // a VM the hub cannot log in to any more (its password secret was deleted, or the VM locked the hub out): it joins again
+  const [relinking, setRelinking] = useState('')
+  const relink = async (id: string) => {
+    setRelinking(id)
+    try { const r = await relinkFleetMember(id); addToast({ type: 'success', message: r.message, duration: 6000 }); refreshFleetVersions() }
+    catch (err) { addToast({ type: 'error', message: err instanceof Error ? err.message : 'The relink failed', duration: 12000 }) } finally { setRelinking('') }
+  }
   const finishRound = useCallback((r: FleetUpdateRound) => {
     setFleetReport(r)
     if (r.status === 'aborted') {
@@ -1215,7 +1222,14 @@ export default function Updates() {
                         {fleetReport ? 'This round' : 'Last round'}{lr.status === 'aborted' ? ' (cut short — the hub went down during it)' : ''}: {lr.updated} updated{lr.failed ? `, ${lr.failed} failed` : ''} · DCS {lr.hub_version} · {new Date(lr.at * 1000).toLocaleString()}
                       </p>
                       {results.filter((x) => !x.success).map((x) => (
-                        <p key={x.id} className="text-rose-300">{x.id}: {x.message}</p>
+                        <p key={x.id} className="text-rose-300">
+                          {x.id}: {x.message}
+                          {/\password|rate-limit|refused the account|log ?in/i.test(x.message ?? '') && (
+                            <button type="button" disabled={relinking === x.id} onClick={() => void relink(x.id)} className="ml-2 underline underline-offset-2 text-cyan-300 hover:text-cyan-200 disabled:opacity-50">
+                              {relinking === x.id ? 'Relinking…' : 'Relink to the hub'}
+                            </button>
+                          )}
+                        </p>
                       ))}
                     </>
                   )

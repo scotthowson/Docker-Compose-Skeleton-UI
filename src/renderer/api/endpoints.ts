@@ -2304,6 +2304,11 @@ export function testFleetMember(id: string): Promise<FleetMemberTestResponse> {
   return apiClient.post<FleetMemberTestResponse>(`/fleet/members/${encodeURIComponent(id)}/test`, {}, 90000)
 }
 
+/** POST /fleet/members/:id/relink — take a VM back after the hub lost its password: the hub lifts its lock-out on the VM, the VM joins again over the hub's ssh key (a failure answers with the command to run on the VM by hand) */
+export function relinkFleetMember(id: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.post<{ success: boolean; message: string }>(`/fleet/members/${encodeURIComponent(id)}/relink`, {}, 180000)
+}
+
 /** POST /fleet/members/:id/sync — pull the files of every stack the member runs into the hub's Stacks/ (direction "push" sends the hub's copies into the VM); stacks limits it */
 export function syncFleetMember(id: string, body: { direction?: 'pull' | 'push'; stacks?: string[] } = {}): Promise<FleetMemberSyncResponse> {
   // one call per stack inside, 90 s each on the member's side

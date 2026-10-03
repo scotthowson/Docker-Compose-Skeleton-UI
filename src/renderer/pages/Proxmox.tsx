@@ -31,7 +31,7 @@ import {
   fetchProxmoxStatus, fetchProxmoxNodes, fetchProxmoxVms, fetchProxmoxVm, fetchProxmoxTasks, proxmoxVmAction, proxmoxVmBalloon,
   fetchFleetStatus, fetchFleetOverview, fetchFleetDiscover, fetchStacks, startStack, stopStack, restartStack,
   startContainer, stopContainer, restartContainer,
-  testFleetMember, removeFleetMember, syncFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
+  testFleetMember, relinkFleetMember, removeFleetMember, syncFleetMember, fetchFleetJobs, deleteFleetJob, fetchFleetProvisionDefaults, fetchProxmoxCapabilities, fetchFleetTemplates, deleteFleetTemplate, fetchProxmoxSelf, tagProxmoxSelf,
 } from '../api/endpoints'
 import type { ProxmoxVm, ProxmoxNode, ProxmoxTask, ProxmoxVmAction, FleetMemberBase, FleetMemberLive, FleetGuestScan, FleetStatus, FleetTemplate, FleetJob, FleetProvisionDefaults, StackInfo, ContainerInfo, ProxmoxSelf } from '../../shared/types'
 import FleetLinkPanel from '../components/fleet/FleetLinkPanel'
@@ -969,7 +969,7 @@ function VmSheet({ vm, member, live, isAdmin, busyKey, pveUrl, refreshTick = 0, 
 function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: FleetMemberBase; vms: ProxmoxVm[]; onClose: () => void; onEdit: () => void; onChanged: () => void }) {
   const { addToast } = useToast()
   const confirm = useConfirm()
-  const [busy, setBusy] = useState<'test' | 'sync' | 'remove' | ''>('')
+  const [busy, setBusy] = useState<'test' | 'sync' | 'relink' | 'remove' | ''>('')
   const [note, setNote] = useState('')
   // destroying the VM asks for its name first, here in the sheet (a native prompt is not drawn by every window)
   const [destroying, setDestroying] = useState(false)
@@ -984,6 +984,15 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
       setNote(`Answers as ${r.identity?.hostname || member.url}${r.version ? ` (DCS ${r.version})` : ''}${r.match ? ` · guest ${r.match.vmid} ${r.match.name} — ${MATCH_LABEL[r.match.matched_by]}` : ' · no guest matched'}`)
       onChanged()
     } catch (e) { setNote(e instanceof Error ? e.message : 'The test failed') } finally { setBusy('') }
+  }
+  // the hub lost the VM's password (the secret was deleted, the account changed) or is locked out of it: the VM joins again
+  const relink = async () => {
+    if (!(await confirm({ title: `Relink ${member.name}`, message: `The hub opens ${member.name} over its ssh key, lifts its own lock-out there and has the VM join the hub again with a new password. Stacks, placement and settings stay as they are.`, confirmLabel: 'Relink' }))) return
+    setBusy('relink'); setNote('')
+    try {
+      const r = await relinkFleetMember(member.id)
+      addToast({ type: 'success', message: r.message, duration: 6000 }); onChanged()
+    } catch (e) { setNote(e instanceof Error ? e.message : 'The relink failed') } finally { setBusy('') }
   }
   // the hub keeps a copy of every stack a VM runs: pull what the VM has now (a change made inside the VM, a stack
   // the hub never saw); the answer names what moved and what did not
@@ -1017,6 +1026,7 @@ function MemberMenuSheet({ member, vms, onClose, onEdit, onChanged }: { member: 
         {note && <p className="text-xs text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">{note}</p>}
         <button type="button" onClick={test} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />} Test the link and re-match the guest</button>
         <button type="button" onClick={sync} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'sync' ? <Loader2 size={15} className="animate-spin" /> : <FolderSync size={15} />} Sync stack files from the VM</button>
+        <button type="button" onClick={() => void relink()} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}>{busy === 'relink' ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />} Relink to the hub (password lost, or "rate limiting login")</button>
         <button type="button" onClick={onEdit} disabled={!!busy} className={`${BTN_SHEET} ${TONE_QUIET} w-full`}><Pencil size={15} /> Edit name, address, account or guest</button>
         <button type="button" onClick={remove} disabled={!!busy} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}>{busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove from the fleet</button>
         {canDestroy && <button ref={destroyRef} type="button" onClick={() => setDestroying(true)} disabled={!!busy || destroying} aria-expanded={destroying} className={`${BTN_SHEET} ${TONE_DANGER} w-full`}><Trash2 size={15} /> Stop and destroy the VM on Proxmox</button>}
