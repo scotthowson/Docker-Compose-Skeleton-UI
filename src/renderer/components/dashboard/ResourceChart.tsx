@@ -13,6 +13,7 @@ import { Activity } from 'lucide-react'
 import { useSystemStore } from '../../stores/systemStore'
 import { useConnectionStore } from '../../stores/connectionStore'
 import { Card, CardBody, CardEmpty, CardError, CardLoading, CardOffline, CardSwitch, loadTone, METRIC_HEX, pctTone, TONE_HEX, TONE_TEXT } from './cardShared'
+import type { GpuInfo } from '../../../shared/types'
 
 // The unused part of a ring (the theme engine restyles these two slate hexes)
 const TRACK = '#1e293b'
@@ -131,6 +132,43 @@ function MiniRing({ title, percent, tip, footer, color }: { title: string; perce
         </div>
       </div>
     </GaugeFrame>
+  )
+}
+
+/** "AMD Radeon RX 6800 XT" -> "RX 6800 XT", "NVIDIA GeForce RTX 3080" -> "RTX 3080" */
+const gpuShortName = (name: string) => name.replace(/^(NVIDIA|AMD|Intel)\s+/i, '').replace(/^(GeForce|Radeon)\s+/i, '').replace(/\s*\(no driver\)$/, '')
+
+/** one graphics card: how busy it is, and a small ring for its video memory (with the temperature, or "asleep") */
+function GpuGauges({ gpu, title }: { gpu: GpuInfo; title: string }) {
+  const util = Math.max(0, Math.min(100, Math.round(gpu.utilization ?? 0)))
+  const used = gpu.memory_used_mb ?? 0
+  const total = gpu.memory_total_mb ?? 0
+  const memPct = total > 0 ? Math.round((used / total) * 100) : 0
+  const tip = [
+    gpu.name,
+    gpu.asleep ? 'Asleep: the driver powers it down while nothing uses it' : null,
+    total > 0 ? `VRAM: ${used} MB / ${total} MB` : null,
+    gpu.temperature != null ? `Temp: ${gpu.temperature}°C${gpu.temperature_hotspot != null && gpu.temperature_hotspot !== gpu.temperature ? ` (hotspot ${gpu.temperature_hotspot}°C)` : ''}` : null,
+    gpu.power_w != null ? `Power: ${gpu.power_w} W${gpu.power_cap_w ? ` of ${gpu.power_cap_w} W` : ''}` : null,
+    gpu.fan_rpm != null ? `Fan: ${gpu.fan_rpm} rpm${gpu.fan_speed != null ? ` (${gpu.fan_speed}%)` : ''}` : (gpu.fan_speed != null && gpu.vendor === 'nvidia' ? `Fan: ${gpu.fan_speed}%` : null),
+  ].filter(Boolean).join(' | ')
+  const footer = gpu.asleep ? `${sizeOf(used)} · asleep` : `${sizeOf(used)}${gpu.temperature != null ? ` · ${gpu.temperature}°C` : ''}`
+  return (
+    <div className="gpu-gauges contents">
+      <DonutChart
+        title={title}
+        subtitle={gpuShortName(gpu.name)}
+        data={[
+          { name: 'Used', value: util || 1 },
+          { name: 'Available', value: Math.max(0, 100 - util) || 1 },
+        ]}
+        colors={[gpu.asleep ? TRACK : METRIC_HEX.gpu, TRACK]}
+        centerValue={`${util}%`}
+        centerLabel={gpu.asleep ? 'asleep' : 'util'}
+        unit="%"
+      />
+      {total > 0 && <MiniRing title="VRAM" percent={memPct} color={TONE_HEX[pctTone(memPct)]} tip={tip} footer={footer} />}
+    </div>
   )
 }
 
@@ -274,7 +312,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
   ]
 
   // Swap
-  const swapInfo = (status?.system as Record<string, unknown>)?.swap_mb as { total: number; free: number } | undefined
+  const swapInfo = status?.system.swap_mb
   const swapTotal = swapInfo?.total ?? 0
   const swapFree = swapInfo?.free ?? 0
   const swapUsed = Math.max(0, swapTotal - swapFree)
@@ -292,14 +330,9 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
     { name: 'Available', value: cpuFree },
   ]
 
-  // GPU (NVIDIA)
-  const gpuInfo = (status?.system as Record<string, unknown>)?.gpu as { name: string; utilization: number; memory_used_mb: number; memory_total_mb: number; temperature: number; fan_speed: number } | null | undefined
-  const hasGpu = !!gpuInfo
-  const gpuUtil = gpuInfo?.utilization ?? 0
-  const gpuMemUsed = gpuInfo?.memory_used_mb ?? 0
-  const gpuMemTotal = gpuInfo?.memory_total_mb ?? 0
-  const gpuMemPercent = gpuMemTotal > 0 ? Math.round((gpuMemUsed / gpuMemTotal) * 100) : 0
-  const gpuTemp = gpuInfo?.temperature ?? 0
+  // graphics cards: NVIDIA, AMD (and Intel, listed but without readings, so no gauge); older servers send one "gpu"
+  const sys = status?.system
+  const gpus: GpuInfo[] = (sys?.gpus ?? (sys?.gpu ? [sys.gpu] : [])).filter((g) => g.utilization != null)
 
   return (
     <Card
@@ -319,23 +352,7 @@ export default function ResourceChart({ history = [] }: { history?: ResourceHist
                 centerLabel="load"
                 unit="%"
               />
-              {hasGpu && (
-                <div className="gpu-gauges contents">
-                  <DonutChart
-                    title="GPU"
-                    subtitle={gpuInfo?.name?.replace('NVIDIA ', '').replace('GeForce ', '') ?? undefined}
-                    data={[
-                      { name: 'Used', value: gpuUtil || 1 },
-                      { name: 'Available', value: Math.max(0, 100 - gpuUtil) || 1 },
-                    ]}
-                    colors={[METRIC_HEX.gpu, TRACK]}
-                    centerValue={`${gpuUtil}%`}
-                    centerLabel="util"
-                    unit="%"
-                  />
-                  <MiniRing title="VRAM" percent={gpuMemPercent} color={TONE_HEX[pctTone(gpuMemPercent)]} tip={`VRAM: ${gpuMemUsed} MB / ${gpuMemTotal} MB | Temp: ${gpuTemp}°C`} footer={`${sizeOf(gpuMemUsed)} · ${gpuTemp}°C`} />
-                </div>
-              )}
+              {gpus.map((g, i) => <GpuGauges key={g.slot ?? i} gpu={g} title={gpus.length > 1 ? `GPU ${i + 1}` : 'GPU'} />)}
               <DonutChart
                 title="Memory"
                 subtitle={`${sizeOf(memUsed)} of ${sizeOf(memTotal)}`}

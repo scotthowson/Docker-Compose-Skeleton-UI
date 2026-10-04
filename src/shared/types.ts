@@ -88,7 +88,31 @@ export interface ServerStatus {
       percent: string
     }
     cpu_count: number
+    swap_mb?: { total: number; free: number }
+    /** the busiest graphics card in the old shape (null without one) */
+    gpu?: GpuInfo | null
+    /** every graphics card, busiest kind first (server 4.0.29+) */
+    gpus?: GpuInfo[]
   }
+}
+
+/** one graphics card from GET /status: NVIDIA (nvidia-smi), AMD (amdgpu sysfs), Intel (name only); a reading the card does not give is null */
+export interface GpuInfo {
+  vendor?: 'nvidia' | 'amd' | 'intel'
+  name: string
+  slot?: string
+  render?: string | null
+  utilization: number | null
+  memory_used_mb: number | null
+  memory_total_mb: number | null
+  temperature: number | null
+  temperature_hotspot?: number | null
+  fan_speed?: number | null
+  fan_rpm?: number | null
+  power_w?: number | null
+  power_cap_w?: number | null
+  /** the driver has powered the card down while idle: it is not woken to read it */
+  asleep?: boolean
 }
 
 // GET /health
