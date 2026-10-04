@@ -47,7 +47,7 @@ import {
   KeyRound,
   Wand2,
   Terminal, Moon,
-  Satellite, Home, Check,
+  Satellite, Home, Check, Cpu,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { Badge, SegmentedControl, Select, Switch } from '@mantine/core'
@@ -59,6 +59,7 @@ import { isMobile } from '../hooks/useMobile'
 import { EmptyState, ErrorState, LoadingState } from '../components/common/PageState'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useSystemStore } from '../stores/systemStore'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/common/Toast'
 import { useConfirm } from '../components/common/ConfirmDialog'
@@ -436,7 +437,7 @@ function parseServicesWithPorts(compose: string): { name: string; containerName:
 }
 
 /** the per-route choices of the deploy sheet: who is behind Authelia, who starts on demand, and whether a route is made at all */
-type DeploySwitches = { authelia_services?: string[]; on_demand_services?: string[]; routes?: boolean; route_services?: string[]; domain?: string }
+type DeploySwitches = { authelia_services?: string[]; on_demand_services?: string[]; routes?: boolean; route_services?: string[]; domain?: string; gpu?: string }
 
 interface DeployModalProps {
   template: TemplateInfo
@@ -618,6 +619,22 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
   const targetMemberId = stacks.find((st) => st.name === targetStack)?.member
   const vmDomain = targetInVm ? domainsInfo?.domains.find((d) => d.vms.some((v) => v.id === targetMemberId))?.domain : undefined
   const effDomain = targetInVm ? (vmDomain || traefikDomain) : (routeDomain || traefikDomain)
+  // a graphics card for the services the template names (template.json "gpu"): this server's cards, from /status; a
+  // stack in a VM has none. Compute (AI) defaults to the AMD or NVIDIA card, video (transcoding) to Intel's built-in one
+  // when there is one (AMD's HDR tone mapping is unreliable on Linux), else the first card
+  const gpuSpec = useMemo(() => detail?.template.gpu ?? template.gpu ?? [], [detail, template.gpu])
+  const hostGpus = useSystemStore((st) => st.status?.system.gpus)
+  const gpuCards = useMemo(() => (member || targetInVm || gpuSpec.length === 0 ? [] : (hostGpus ?? []).filter((g) => !!g.slot)), [member, targetInVm, gpuSpec, hostGpus])
+  const gpuUse: 'compute' | 'video' = gpuSpec.some((g) => g.use === 'compute') ? 'compute' : 'video'
+  const gpuDefault = useMemo(() => {
+    const pick = gpuUse === 'compute'
+      ? gpuCards.find((g) => g.vendor === 'amd' || g.vendor === 'nvidia')
+      : gpuCards.find((g) => g.vendor === 'intel') ?? gpuCards[0]
+    return pick?.slot ?? 'none'
+  }, [gpuCards, gpuUse])
+  const [gpuChoice, setGpuChoice] = useState('')
+  const gpuSlot = gpuChoice && (gpuChoice === 'none' || gpuCards.some((g) => g.slot === gpuChoice)) ? gpuChoice : gpuDefault
+  const gpuPicked = gpuCards.find((g) => g.slot === gpuSlot)
   const [sablierOpts, setSablierOpts] = useState<SablierOptions>(SABLIER_DEFAULTS)
   const [showSablierOptions, setShowSablierOptions] = useState(false)
   // Homarr integration state
@@ -983,14 +1000,16 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
           } : {}),
         }
       : undefined
-    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names, switches)
+    const gpuSend = gpuCards.length > 0 && gpuSlot !== 'none' ? gpuSlot : undefined
+    const switchesAll: DeploySwitches | undefined = gpuSend ? { ...(switches ?? {}), gpu: gpuSend } : switches
+    const result = await onDeploy(targetStack, varsToSend, autoStart, replaceServices || undefined, exclude, routes, proxyFlag, resLimits, homarrFlag, names, switchesAll)
     if (result) {
       setDeployResult(result)
       setOutcome(result.started ? 'pending' : 'not-started')
       setShowOutput(true)
     }
     setLocalDeploying(false)
-  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, traefikDomain, routeDomain, targetInVm, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, addToast])
+  }, [confirming, onDeploy, targetStack, variables, autoStart, replaceServices, excludedServices, traefikActive, traefikDomain, routeDomain, targetInVm, enableRouting, customRoutes, connectProxy, enableResourceLimits, memLimit, cpuLimit, homarrActive, addToHomarr, storeAsSecret, secretNames, customContainerNames, routeServices, enableAuthelia, autheliaMw, sablierPresent, gpuCards, gpuSlot, addToast])
 
   // F4: Handle "View Stack" navigation
   const handleViewStack = useCallback(() => {
@@ -1569,6 +1588,29 @@ function DeployModal({ template, detail, detailLoading, stacks, onClose, onDeplo
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* A graphics card for the template's services (AI models, hardware transcoding) */}
+              {gpuCards.length > 0 && (
+                <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.03] px-3 py-2.5 space-y-1.5">
+                  <label className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="flex items-center gap-2 font-medium text-cyan-300"><Cpu size={13} aria-hidden /> Graphics card</span>
+                    <select value={gpuSlot} onChange={(e) => setGpuChoice(e.target.value)} aria-label="The graphics card its services use"
+                      className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/40 max-w-full">
+                      {gpuCards.map((g) => <option key={g.slot} value={g.slot}>{g.name}{g.memory_total_mb ? ` · ${Math.round(g.memory_total_mb / 1024)} GB` : ''}</option>)}
+                      <option value="none">None: the processor</option>
+                    </select>
+                  </label>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {gpuPicked
+                      ? <>{gpuSpec.map((g) => g.service).join(', ')} {gpuSpec.length > 1 ? 'get' : 'gets'} {gpuPicked.vendor === 'nvidia'
+                          ? 'a GPU reservation (the NVIDIA Container Toolkit must be installed)'
+                          : <><span className="font-mono text-slate-400">/dev/dri/{gpuPicked.render}</span>{gpuUse === 'compute' && gpuPicked.vendor === 'amd' ? <> and <span className="font-mono text-slate-400">/dev/kfd</span></> : null}</>}
+                          {(() => { const img = gpuSpec.map((g) => g.images?.[gpuPicked.vendor as 'amd' | 'nvidia' | 'intel']).find(Boolean); return img ? <>, with the image <span className="font-mono text-slate-400">{img}</span></> : null })()}
+                          {gpuUse === 'video' && gpuPicked.vendor !== 'nvidia' ? <>: choose that device in the app's transcoding settings</> : null}.</>
+                      : gpuUse === 'compute' ? 'Models run on the processor: slower, but nothing else is needed.' : 'Transcoding runs on the processor.'}
+                  </p>
                 </div>
               )}
 
@@ -3457,6 +3499,7 @@ export default function Templates() {
           routes: switches?.routes,
           route_services: switches?.route_services,
           domain: switches?.domain,
+          gpu: switches?.gpu,
         }, deployMember?.id)
         if (res.success) {
           refresh()

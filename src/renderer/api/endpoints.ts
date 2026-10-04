@@ -1419,6 +1419,8 @@ export function deployTemplate(name: string, opts: {
   route_services?: string[]
   /** one of this server's domains for the routes (a hub stack; default its own) */
   domain?: string
+  /** a graphics card's PCI slot (GET /status → system.gpus[].slot) for the template's gpu services */
+  gpu?: string
 }, member?: string | null): Promise<TemplateDeployResponse> {
   // a first deploy pulls every image and Authelia hashes its secrets: well past the usual 30 s
   return apiClient.post<TemplateDeployResponse>(memberPath(member, `/templates/${encodeURIComponent(name)}/deploy`), opts, 600000)

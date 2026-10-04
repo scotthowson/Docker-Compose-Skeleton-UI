@@ -2013,6 +2013,15 @@ export interface TemplateInfo {
   variables?: TemplateVariable[]
   optional_services?: TemplateOptionalService[]
   singleton?: boolean
+  /** services that can use one of the server's graphics cards (4.0.30): picked on the deploy sheet */
+  gpu?: TemplateGpuUse[]
+}
+
+/** template.json "gpu": compute = AI (AMD also gets /dev/kfd), video = transcoding; images swaps the image per vendor */
+export interface TemplateGpuUse {
+  service: string
+  use?: 'compute' | 'video'
+  images?: Partial<Record<'amd' | 'nvidia' | 'intel', string>>
 }
 
 export interface TemplateVariable {
@@ -2057,6 +2066,8 @@ export interface TemplateDeployResponse {
   success: boolean
   target_stack: string
   services_added: string[]
+  /** the graphics card the services were given (4.0.30) */
+  gpu?: { vendor: string; name: string; slot: string; render: string | null } | null
   started: boolean
   message: string
   backup_file?: string
